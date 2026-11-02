@@ -101,7 +101,25 @@ Release-приложение: `build/macos/Build/Products/Release/local_assistan
 
 На macOS sandbox-файл находится по пути `~/Library/Containers/com.example.localAssistant/Data/Documents/assistant/tasks.json`. На других платформах используется аналогичный подкаталог `assistant/tasks.json` в каталоге документов приложения.
 
-Сборки Android, Windows и Linux, а также GitHub Actions в этой локальной проверке не запускались. Workflow CI использует runners из репозитория и не вызывает `flutter create` повторно.
+### GitHub Actions и Android APK
+
+Первый полный CI-запуск [41519500051](https://github.com/halogaloreontc/qenqritec/actions/runs/41519500051) успешно выполнил format/analyze/test и release-сборки всех четырёх платформ. Артефакты того запуска остаются доступны в GitHub Actions.
+
+Для экономии минут текущий workflow использует более узкую схему:
+
+- на каждый `push` и pull request запускается только `verify`: `flutter pub get`, format, analyze и test;
+- Android APK дополнительно собирается после `verify` для тегов вида `v*`;
+- ту же Android-сборку можно запустить вручную через **Actions → test-and-build → Run workflow**;
+- Windows, Linux и macOS jobs в CI отключены, но их runners остаются в проекте для локальных сборок.
+
+Для версионного обновления, например:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Обычный `push` ветки не создаёт новый APK и не тратит минуты release-сборок. Workflow использует runners из репозитория и не вызывает `flutter create` повторно.
 
 ## Архитектурная граница
 
