@@ -31,7 +31,7 @@ final class AssistantController {
         case CommandIntent.listTasks:
           return await _list();
         case CommandIntent.completeTask:
-          return await _complete();
+          return await _complete(command);
         case CommandIntent.rescheduleTask:
           return await _reschedule(command);
         case CommandIntent.unknown:
@@ -54,6 +54,14 @@ final class AssistantController {
   }
 
   Future<AssistantResponse> _create(ParsedCommand command) async {
+    final titleQuestion = _titleClarification(command.titleIssue);
+    if (titleQuestion != null) {
+      return AssistantResponse(
+        message: titleQuestion,
+        intent: 'task.create',
+        status: AssistantStatus.needsClarification,
+      );
+    }
     final title = command.title;
     if (title == null || title.isEmpty) {
       return const AssistantResponse(
@@ -101,16 +109,15 @@ final class AssistantController {
     );
   }
 
-  Future<AssistantResponse> _complete() async {
-    final id = _context.lastTaskId;
-    if (id == null) {
-      return const AssistantResponse(
-        message:
-            'Какую задачу завершить? Сначала создайте или выберите задачу.',
-        intent: 'task.complete',
-        status: AssistantStatus.needsClarification,
-      );
-    }
+  Future<AssistantResponse> _complete(ParsedCommand command) async {
+    final target = await _resolveTarget(
+      command,
+      intent: 'task.complete',
+      noContextQuestion:
+          'Какую задачу завершить? Сначала создайте или выберите задачу.',
+    );
+    if (target.clarification != null) return target.clarification!;
+    final id = target.id!;
     final task = await _tasks.complete(id);
     // Завершённая задача больше не «её»: следующий перенос или завершение
     // требует нового выбора, а не тихо открывает её снова.
@@ -124,16 +131,15 @@ final class AssistantController {
   }
 
   Future<AssistantResponse> _reschedule(ParsedCommand command) async {
-    final id = _context.lastTaskId;
+    final target = await _resolveTarget(
+      command,
+      intent: 'task.reschedule',
+      noContextQuestion:
+          'Какую задачу перенести? Пока в контексте нет выбранной задачи.',
+    );
+    if (target.clarification != null) return target.clarification!;
+    final id = target.id!;
     final dueAt = command.dueAt;
-    if (id == null) {
-      return const AssistantResponse(
-        message:
-            'Какую задачу перенести? Пока в контексте нет выбранной задачи.',
-        intent: 'task.reschedule',
-        status: AssistantStatus.needsClarification,
-      );
-    }
     final dueQuestion = _dueClarification(command.dueIssue);
     if (dueQuestion != null) {
       return AssistantResponse(
@@ -150,6 +156,7 @@ final class AssistantController {
       );
     }
     final task = await _tasks.reschedule(id, dueAt, command.duePrecision);
+    _context = _context.withLastTask(task.id);
     return AssistantResponse(
       message: 'Перенёс задачу «${task.title}»${_dueDescription(task)}.',
       intent: 'task.reschedule',
@@ -167,9 +174,60 @@ final class AssistantController {
             'например: «на завтра в 10:00».';
       case DueIssue.invalidDate:
         return 'Такой даты нет. Укажите дату в формате ДД.ММ, например 15.11.';
+      case DueIssue.invalidTime:
+        return 'Не понял время. Укажите его в формате ЧЧ:ММ, например 18:30.';
       case DueIssue.conflictingDays:
         return 'В команде несколько разных дней. На какой день поставить задачу?';
+      case DueIssue.conflictingTimes:
+        return 'В команде несколько разных времён. На какое время поставить задачу?';
     }
+  }
+
+  String? _titleClarification(TitleIssue issue) {
+    switch (issue) {
+      case TitleIssue.none:
+        return null;
+      case TitleIssue.unbalancedQuotes:
+        return 'Кавычка не закрыта. Повторите команду, указав название '
+            'в парных кавычках, например «Отчёт».';
+      case TitleIssue.multipleTitles:
+        return 'В команде несколько названий. Давайте по одной задаче за раз.';
+    }
+  }
+
+  /// Задача, к которой относится перенос или завершение: названная в кавычках
+  /// или выбранная в контексте. Без однозначного ответа — уточнение.
+  Future<_Target> _resolveTarget(
+    ParsedCommand command, {
+    required String intent,
+    required String noContextQuestion,
+  }) async {
+    AssistantResponse ask(String message) => AssistantResponse(
+          message: message,
+          intent: intent,
+          status: AssistantStatus.needsClarification,
+        );
+
+    final titleQuestion = _titleClarification(command.titleIssue);
+    if (titleQuestion != null) return _Target.ask(ask(titleQuestion));
+
+    final title = command.title;
+    if (title != null) {
+      final matches = await _tasks.findActiveByTitle(title);
+      if (matches.isEmpty) {
+        return _Target.ask(ask('Не нашёл активную задачу «$title».'));
+      }
+      if (matches.length > 1) {
+        return _Target.ask(
+          ask('Нашёл несколько задач «$title». Выберите нужную в списке.'),
+        );
+      }
+      return _Target.id(matches.single.id);
+    }
+
+    final id = _context.lastTaskId;
+    if (id == null) return _Target.ask(ask(noContextQuestion));
+    return _Target.id(id);
   }
 
   String _dueDescription(Task task) {
@@ -182,4 +240,13 @@ final class AssistantController {
         '${due.hour.toString().padLeft(2, '0')}:${due.minute.toString().padLeft(2, '0')}';
     return ' на $day в $time';
   }
+}
+
+final class _Target {
+  const _Target.id(String this.id) : clarification = null;
+
+  const _Target.ask(AssistantResponse this.clarification) : id = null;
+
+  final String? id;
+  final AssistantResponse? clarification;
 }

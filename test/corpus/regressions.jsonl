@@ -17,3 +17,34 @@
 {"id":"reg-017","now":"2026-12-31T23:00","text":"Добавь задачу «Салют» на 00:30","intent":"createTask","title":"Салют","due":"2027-01-01T00:30","precision":"dateTime"}
 {"id":"reg-018","text":"Добавь задачу выполнить отчёт","intent":"createTask","title":null,"note":"самый ранний маркер — «добавь»"}
 {"id":"reg-019","text":"Добавь задачу «Отчёт» на 15.11","intent":"createTask","title":"Отчёт","due":"2026-11-15","precision":"date","note":"раньше 15.11 разбиралось как 15:11"}
+{"id":"reg-020","text":"Что мне нужно выполнить сегодня?","intent":"unknown","note":"вопрос не должен завершать задачу из контекста"}
+{"id":"reg-021","text":"Выполненные задачи","intent":"unknown"}
+{"id":"reg-022","text":"Нет, не выполнено","intent":"unknown","note":"отрицание"}
+{"id":"reg-023","text":"Я ещё не сделал","intent":"unknown"}
+{"id":"reg-024","text":"Нужно выполнить «Отчёт» завтра","intent":"unknown","note":"инфинитив не в начале — не команда завершения"}
+{"id":"reg-025","text":"Напомни выполнить «Отчёт» завтра","intent":"createTask","title":"Отчёт","due":"2026-11-03","precision":"date"}
+{"id":"reg-026","text":"Перенеси задачу «Отчёт» на завтра","intent":"rescheduleTask","title":"Отчёт","due":"2026-11-03","precision":"date","note":"название указывает целевую задачу"}
+{"id":"reg-027","text":"Заверши задачу «Отчёт»","intent":"completeTask","title":"Отчёт"}
+{"id":"reg-028","text":"Добавь задачу «Отчёт «Q3» завтра","intent":"createTask","title":null,"titleIssue":"unbalancedQuotes","note":"незакрытая внешняя кавычка"}
+{"id":"reg-029","text":"Добавь задачу «Купить» и «Позвонить» завтра","intent":"createTask","title":null,"titleIssue":"multipleTitles"}
+{"id":"reg-030","text":"Добавь задачу “Отчёт“ на завтра","intent":"createTask","title":"Отчёт","due":"2026-11-03","precision":"date"}
+{"id":"reg-031","text":"Добавь задачу »Звонок« завтра","intent":"createTask","title":"Звонок","due":"2026-11-03","precision":"date"}
+{"id":"reg-032","text":"Перенеси встречу с 15:00 на 17:00","intent":"rescheduleTask","due":"2026-11-02T17:00","precision":"dateTime","note":"берётся время после «на», а не после «с»"}
+{"id":"reg-033","text":"Перенеси с 10.11 на 12.11","intent":"rescheduleTask","due":"2026-11-12","precision":"date"}
+{"id":"reg-034","text":"Перенеси на 18.30","intent":"rescheduleTask","due":"2026-11-02T18:30","precision":"dateTime","note":"такой даты нет, но это корректное время"}
+{"id":"reg-035","text":"Добавь задачу «Отчёт» к 18.00","intent":"createTask","title":"Отчёт","due":"2026-11-02T18:00","precision":"dateTime"}
+{"id":"reg-036","text":"Добавь задачу «Отчёт» завтра в 18.00.","intent":"createTask","title":"Отчёт","due":"2026-11-03T18:00","precision":"dateTime","note":"точка в конце предложения"}
+{"id":"reg-037","text":"Добавь задачу «Отчёт» 01.01.2025","intent":"createTask","title":"Отчёт","issue":"inPast"}
+{"id":"reg-038","text":"Добавь задачу «Отчёт» 10.12.25","intent":"createTask","title":"Отчёт","issue":"inPast","note":"двузначный год"}
+{"id":"reg-039","text":"Добавь задачу «Отчёт» 10.12.27","intent":"createTask","title":"Отчёт","due":"2027-12-10","precision":"date"}
+{"id":"reg-040","text":"Добавь задачу «Обновление» до версии 2.10 завтра","intent":"createTask","title":"Обновление","due":"2026-11-03","precision":"date","note":"номер версии не дата"}
+{"id":"reg-041","text":"Добавь задачу «Отчёт» сегодня 02.11","intent":"createTask","title":"Отчёт","due":"2026-11-02","precision":"date","note":"один и тот же день двумя способами"}
+{"id":"reg-042","text":"Добавь задачу «Отчёт» сегодня, 02.11 в 18:00","intent":"createTask","title":"Отчёт","due":"2026-11-02T18:00","precision":"dateTime"}
+{"id":"reg-043","now":"2027-03-01T10:00","text":"Добавь задачу «Високосный» 29.02","intent":"createTask","title":"Високосный","due":"2028-02-29","precision":"date"}
+{"id":"reg-044","text":"Добавь задачу «Отчёт» 10.11 или 12.11","intent":"createTask","title":"Отчёт","issue":"conflictingDays"}
+{"id":"reg-045","text":"Добавь задачу «Отчёт» сегодня в 24:00","intent":"createTask","title":"Отчёт","issue":"invalidTime"}
+{"id":"reg-046","text":"Добавь задачу «Отчёт» в 18:00:00","intent":"createTask","title":"Отчёт","due":"2026-11-02T18:00","precision":"dateTime"}
+{"id":"reg-047","text":"Добавь задачу «Отчёт» в 7.5","intent":"createTask","title":"Отчёт","issue":"invalidTime"}
+{"id":"reg-048","text":"Добавь задачу «Отчёт» в 10:00 или в 11:00","intent":"createTask","title":"Отчёт","issue":"conflictingTimes"}
+{"id":"reg-049","text":"Готово?","intent":"unknown"}
+{"id":"reg-050","text":"Добавь задачу «Отчёт» в 15.11","intent":"createTask","title":"Отчёт","due":"2026-11-03T15:11","precision":"dateTime","note":"после «в» число с точкой — время; 15:11 сегодня уже прошло"}

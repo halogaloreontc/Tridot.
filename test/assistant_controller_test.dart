@@ -125,4 +125,44 @@ void main() {
     final tasks = await repository.list();
     expect(tasks.single.status, TaskStatus.done);
   });
+
+  test('перенос по названию меняет названную задачу, а не выбранную', () async {
+    final report = await assistant.handle('Добавь задачу «Отчёт»');
+    final bread = await assistant.handle('Добавь задачу «Купить хлеб»');
+
+    final moved = await assistant.handle('Перенеси задачу «отчёт» на завтра');
+
+    expect(moved.status, AssistantStatus.completed);
+    expect(moved.task?.id, report.task!.id);
+    expect((await repository.get(bread.task!.id))?.dueAt, isNull);
+  });
+
+  test('завершение несуществующей задачи по названию требует уточнения',
+      () async {
+    final bread = await assistant.handle('Добавь задачу «Купить хлеб»');
+
+    final response = await assistant.handle('Заверши задачу «Отчёт»');
+
+    expect(response.status, AssistantStatus.needsClarification);
+    expect((await repository.get(bread.task!.id))?.isActive, isTrue);
+  });
+
+  test('отрицание не завершает задачу из контекста', () async {
+    final bread = await assistant.handle('Добавь задачу «Купить хлеб»');
+
+    final response = await assistant.handle('Нет, не выполнено');
+
+    expect(response.status, AssistantStatus.noAction);
+    expect((await repository.get(bread.task!.id))?.isActive, isTrue);
+  });
+
+  test('несколько задач с одним названием требуют выбора', () async {
+    await assistant.handle('Добавь задачу «Звонок»');
+    await assistant.handle('Добавь задачу «Звонок»');
+
+    final response = await assistant.handle('Заверши задачу «Звонок»');
+
+    expect(response.status, AssistantStatus.needsClarification);
+    expect(await service.listActive(), hasLength(2));
+  });
 }

@@ -70,6 +70,20 @@ final class TaskService {
     return tasks;
   }
 
+  /// Активные задачи с таким названием без учёта регистра и «ё».
+  Future<List<Task>> findActiveByTitle(String title) async {
+    final wanted = _titleKey(title);
+    return (await listActive())
+        .where((Task task) => _titleKey(task.title) == wanted)
+        .toList(growable: false);
+  }
+
+  static String _titleKey(String title) => title
+      .trim()
+      .toLowerCase()
+      .replaceAll('ё', 'е')
+      .replaceAll(RegExp(r'\s+'), ' ');
+
   Future<Task> complete(String id) async {
     final task = await _requireTask(id);
     if (task.status == TaskStatus.done) return task;
