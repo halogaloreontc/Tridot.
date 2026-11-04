@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'app/assistant_theme.dart';
 import 'app/home_page.dart';
-import 'app/theme.dart';
 import 'core/scenario/assistant_controller.dart';
 import 'core/scenario/scenario_parser.dart';
 import 'core/services/clock.dart';
@@ -22,30 +22,24 @@ Future<void> main() async {
     parser: ScenarioParser(clock: clock),
     clock: clock,
   );
-  runApp(AssistantApp(assistant: assistant, tasks: tasks, clock: clock));
+  runApp(AssistantApp(assistant: assistant, tasks: tasks));
 }
 
 final class AssistantApp extends StatelessWidget {
-  const AssistantApp({
-    super.key,
-    required this.assistant,
-    required this.tasks,
-    this.clock = const SystemClock(),
-  });
+  const AssistantApp({super.key, required this.assistant, required this.tasks});
 
   final AssistantController assistant;
   final TaskService tasks;
-  final Clock clock;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Помощник',
+      title: 'Личный помощник',
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
-      themeMode: ThemeMode.system,
-      home: HomePage(assistant: assistant, tasks: tasks, clock: clock),
+      theme: AssistantTheme.dark(),
+      darkTheme: AssistantTheme.dark(),
+      themeMode: ThemeMode.dark,
+      home: HomePage(assistant: assistant, tasks: tasks),
     );
   }
 }
