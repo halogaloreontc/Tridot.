@@ -22,14 +22,20 @@ Future<void> main() async {
     parser: ScenarioParser(clock: clock),
     clock: clock,
   );
-  runApp(AssistantApp(assistant: assistant, tasks: tasks));
+  runApp(AssistantApp(assistant: assistant, tasks: tasks, clock: clock));
 }
 
 final class AssistantApp extends StatelessWidget {
-  const AssistantApp({super.key, required this.assistant, required this.tasks});
+  const AssistantApp({
+    super.key,
+    required this.assistant,
+    required this.tasks,
+    this.clock = const SystemClock(),
+  });
 
   final AssistantController assistant;
   final TaskService tasks;
+  final Clock clock;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +45,7 @@ final class AssistantApp extends StatelessWidget {
       theme: AssistantTheme.dark(),
       darkTheme: AssistantTheme.dark(),
       themeMode: ThemeMode.dark,
-      home: HomePage(assistant: assistant, tasks: tasks),
+      home: HomePage(assistant: assistant, tasks: tasks, clock: clock),
     );
   }
 }

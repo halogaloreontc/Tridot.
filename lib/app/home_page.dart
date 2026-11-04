@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../core/formatting/due_format.dart';
 import '../core/models/assistant_types.dart';
 import '../core/models/task.dart';
 import '../core/scenario/assistant_controller.dart';
+import '../core/services/clock.dart';
 import '../core/services/task_service.dart';
 import 'assistant_theme.dart';
 import 'widgets/command_composer.dart';
@@ -11,10 +13,16 @@ import 'widgets/history_rail.dart';
 import 'widgets/status_cube.dart';
 
 final class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.assistant, required this.tasks});
+  const HomePage({
+    super.key,
+    required this.assistant,
+    required this.tasks,
+    this.clock = const SystemClock(),
+  });
 
   final AssistantController assistant;
   final TaskService tasks;
+  final Clock clock;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -32,15 +40,16 @@ final class _HomePageState extends State<HomePage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final GlobalKey _contentStackKey = GlobalKey();
   final GlobalKey _liveAnswerKey = GlobalKey();
-  final List<_ChatMessage> _messages = <_ChatMessage>[
+  late final List<_ChatMessage> _messages = <_ChatMessage>[
     _ChatMessage(
       text: 'Я готов к первому сценарию. Создайте задачу, например: '
-          '«Добавь задачу “Позвонить клиенту” на завтра в 11:00».',
+          '${AssistantController.exampleCommand}',
       fromUser: false,
-      timestamp: DateTime.now(),
+      timestamp: widget.clock.now(),
     ),
   ];
   List<Task> _tasks = <Task>[];
+  Object? _loadError;
   bool _sending = false;
   AssistantViewMode _mode = AssistantViewMode.dialogue;
   AssistantStatus _status = AssistantStatus.noAction;
@@ -62,9 +71,17 @@ final class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _refreshTasks() async {
-    final tasks = await widget.tasks.listActive();
-    if (!mounted) return;
-    setState(() => _tasks = tasks);
+    try {
+      final tasks = await widget.tasks.listActive();
+      if (!mounted) return;
+      setState(() {
+        _tasks = tasks;
+        _loadError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadError = error);
+    }
   }
 
   Future<void> _send() async {
@@ -77,7 +94,7 @@ final class _HomePageState extends State<HomePage> {
         _ChatMessage(
           text: text,
           fromUser: true,
-          timestamp: DateTime.now(),
+          timestamp: widget.clock.now(),
         ),
       );
       _input.clear();
@@ -91,7 +108,7 @@ final class _HomePageState extends State<HomePage> {
         _ChatMessage(
           text: response.message,
           fromUser: false,
-          timestamp: DateTime.now(),
+          timestamp: widget.clock.now(),
         ),
       );
       _sending = false;
@@ -385,7 +402,7 @@ final class _HomePageState extends State<HomePage> {
           message: _ChatMessage(
             text: 'Команда обрабатывается локально…',
             fromUser: false,
-            timestamp: DateTime.now(),
+            timestamp: widget.clock.now(),
           ),
           latest: true,
         ),
@@ -432,24 +449,43 @@ final class _HomePageState extends State<HomePage> {
             child: Text('Задачи', style: TextStyle(fontSize: 22)),
           ),
           Expanded(
-            child: _tasks.isEmpty
-                ? const Center(child: Text('Пока пусто'))
-                : ListView.separated(
-                    itemCount: _tasks.length,
-                    separatorBuilder: (_, __) => const Divider(),
-                    itemBuilder: (context, index) {
-                      final task = _tasks[index];
-                      return ListTile(
-                        leading: const Icon(Icons.radio_button_unchecked),
-                        title: Text(task.title),
-                        subtitle: Text(
-                          _taskDetails(task),
-                          style: technicalTextStyle,
-                        ),
-                        onTap: () => _selectTask(task),
-                      );
-                    },
-                  ),
+            child: _loadError != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          const Text('Не удалось загрузить задачи'),
+                          const SizedBox(height: 4),
+                          Text('$_loadError', style: technicalTextStyle),
+                          const SizedBox(height: 12),
+                          OutlinedButton(
+                            onPressed: _refreshTasks,
+                            child: const Text('Повторить'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : _tasks.isEmpty
+                    ? const Center(child: Text('Пока пусто'))
+                    : ListView.separated(
+                        itemCount: _tasks.length,
+                        separatorBuilder: (_, __) => const Divider(),
+                        itemBuilder: (context, index) {
+                          final task = _tasks[index];
+                          return ListTile(
+                            leading: const Icon(Icons.radio_button_unchecked),
+                            title: Text(task.title),
+                            subtitle: Text(
+                              _taskDetails(task),
+                              style: technicalTextStyle,
+                            ),
+                            onTap: () => _selectTask(task),
+                          );
+                        },
+                      ),
           ),
         ],
       ),
@@ -459,7 +495,8 @@ final class _HomePageState extends State<HomePage> {
   String _taskDetails(Task task) {
     final due = task.dueAt;
     if (due == null) return 'Без срока';
-    return '${_formatTimestamp(due)} · нажмите, чтобы открыть';
+    final when = formatDue(due, task.duePrecision, widget.clock.now());
+    return isOverdue(task, widget.clock.now()) ? 'просрочено · $when' : when;
   }
 
   static String _formatTimestamp(DateTime value) {
