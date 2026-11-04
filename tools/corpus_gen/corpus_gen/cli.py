@@ -137,7 +137,11 @@ def _review(config: Config, store: CandidateStore, args: argparse.Namespace) -> 
             confident = "" if label.get("confident", True) else "  [не уверен]"
             print(f"  {number}. {name}: {json.dumps(fields, ensure_ascii=False)}{confident}{comment}")
         while True:
-            answer = input("> ").strip().lower()
+            try:
+                answer = input("> ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                answer = "q"
+                print()
             if answer == "q":
                 store.save()
                 return 0
@@ -147,15 +151,23 @@ def _review(config: Config, store: CandidateStore, args: argparse.Namespace) -> 
                 row["status"] = "rejected"
                 break
             if answer == "e":
-                final = _ask_json()
+                try:
+                    final = _ask_json()
+                except (EOFError, KeyboardInterrupt):
+                    print()
+                    store.save()
+                    return 0
                 if final is not None:
                     row["final"], row["status"] = final, "accepted"
+                    row["final_by"] = ["manual"]
                     break
                 continue
             if answer.isdigit() and 1 <= int(answer) <= len(names):
-                label = row["labels"][names[int(answer) - 1]]
+                chosen = names[int(answer) - 1]
+                label = row["labels"][chosen]
                 row["final"] = {k: label[k] for k in prompts.LABEL_FIELDS}
                 row["status"] = "accepted"
+                row["final_by"] = [chosen, "manual"]
                 break
             print("Не понял. Номер разметки, e, r, s или q.")
         store.save()
@@ -164,10 +176,13 @@ def _review(config: Config, store: CandidateStore, args: argparse.Namespace) -> 
 
 def _ask_json() -> dict[str, Any] | None:
     print('Введите JSON одной строкой, например {"intent":"createTask","title":"Отчёт","due":null}')
+    text = input("json> ")  # EOFError/KeyboardInterrupt обрабатывает вызывающий
     try:
-        data = json.loads(input("json> "))
+        data = json.loads(text)
+        if not isinstance(data, dict):
+            raise ValueError("нужен JSON-объект")
         label = pipeline.normalize_label({"confident": True, **data})
-    except (json.JSONDecodeError, Exception) as error:  # noqa: BLE001
+    except (ValueError, pipeline.ProviderError) as error:
         print(f"Ошибка: {error}")
         return None
     return {k: label[k] for k in prompts.LABEL_FIELDS}
@@ -187,7 +202,15 @@ def _promote(config: Config, store: CandidateStore, args: argparse.Namespace) ->
 
 
 def _import_manual(config: Config, store: CandidateStore, args: argparse.Namespace) -> int:
-    lines = args.file.read_text(encoding="utf-8").splitlines()
+    try:
+        # utf-8-sig убирает BOM, который добавляют некоторые редакторы.
+        lines = args.file.read_text(encoding="utf-8-sig").split("\n")
+    except FileNotFoundError:
+        print(f"Нет файла {args.file}", file=sys.stderr)
+        return 2
+    except UnicodeDecodeError:
+        print(f"{args.file}: файл должен быть в UTF-8", file=sys.stderr)
+        return 2
     report = pipeline.import_manual(config, store, lines, args.source, args.topic)
     print(f"Добавлено фраз: {report.added}, дублей пропущено: {report.duplicates}")
     return 0

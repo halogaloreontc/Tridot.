@@ -10,6 +10,13 @@ from pathlib import Path
 from typing import Any, Iterable
 
 _SPACES = re.compile(r"\s+")
+# Разделители строк Unicode и управляющие символы ломают JSON Lines у читателей,
+# которые режут по ним строки; во фразах они не нужны.
+_UNSAFE = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029\ufeff]")
+
+
+def clean_phrase(text: str) -> str:
+    return _UNSAFE.sub(" ", text).strip()
 
 
 def normalize_text(text: str) -> str:
@@ -25,7 +32,8 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     rows = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    # Только "\n": str.splitlines() режет и по U+2028/U+0085 внутри JSON-строк.
+    for number, line in enumerate(path.read_text(encoding="utf-8").split("\n"), start=1):
         line = line.strip()
         if not line or line.startswith("//"):
             continue

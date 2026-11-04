@@ -20,7 +20,15 @@ class Completion:
 
 
 class ProviderError(RuntimeError):
-    """Ответ модели нельзя использовать: отказ, обрезка, не-JSON."""
+    """Ответ модели нельзя использовать: отказ, обрезка, не-JSON.
+
+    Токены оплаченного, но непригодного ответа сохраняются, чтобы попасть в расход.
+    """
+
+    def __init__(self, message: str, input_tokens: int = 0, output_tokens: int = 0) -> None:
+        super().__init__(message)
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
 
 
 class Provider(Protocol):
@@ -77,21 +85,25 @@ class AnthropicProvider:
         else:
             response = self._client.messages.create(**request)
 
+        usage = response.usage
+        tokens = (
+            getattr(usage, "input_tokens", 0) or 0,
+            getattr(usage, "output_tokens", 0) or 0,
+        )
         if response.stop_reason == "refusal":
             details = getattr(response, "stop_details", None)
             category = getattr(details, "category", None)
-            raise ProviderError(f"{self.source.name}: модель отказалась (category={category})")
+            raise ProviderError(f"{self.source.name}: модель отказалась (category={category})", *tokens)
         if response.stop_reason == "max_tokens":
-            raise ProviderError(f"{self.source.name}: ответ обрезан по max_tokens")
-        text = next((b.text for b in response.content if b.type == "text"), None)
-        if text is None:
-            raise ProviderError(f"{self.source.name}: в ответе нет текста")
-        usage = response.usage
-        return Completion(
-            data=_load_json(text, self.source.name),
-            input_tokens=getattr(usage, "input_tokens", 0) or 0,
-            output_tokens=getattr(usage, "output_tokens", 0) or 0,
-        )
+            raise ProviderError(f"{self.source.name}: ответ обрезан по max_tokens", *tokens)
+        # При серверном fallback ответ отказавшейся модели идёт до блока
+        # type="fallback", ответ запасной — после последнего такого блока.
+        blocks = list(response.content)
+        last_fallback = max((i for i, b in enumerate(blocks) if b.type == "fallback"), default=-1)
+        text = "".join(b.text for b in blocks[last_fallback + 1 :] if b.type == "text")
+        if not text:
+            raise ProviderError(f"{self.source.name}: в ответе нет текста", *tokens)
+        return Completion(_load_json(text, self.source.name, tokens), *tokens)
 
 
 class OpenAICompatProvider:
@@ -121,22 +133,24 @@ class OpenAICompatProvider:
         if self.source.json_mode:
             request["response_format"] = {"type": "json_object"}
         response = self._client.chat.completions.create(**request)
+        usage = response.usage
+        tokens = (
+            getattr(usage, "prompt_tokens", 0) or 0,
+            getattr(usage, "completion_tokens", 0) or 0,
+        )
+        if not response.choices:
+            raise ProviderError(f"{self.source.name}: пустой ответ", *tokens)
         choice = response.choices[0]
         if choice.finish_reason == "length":
-            raise ProviderError(f"{self.source.name}: ответ обрезан по длине")
+            raise ProviderError(f"{self.source.name}: ответ обрезан по длине", *tokens)
         text = choice.message.content or ""
-        usage = response.usage
-        return Completion(
-            data=_load_json(text, self.source.name),
-            input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
-            output_tokens=getattr(usage, "completion_tokens", 0) or 0,
-        )
+        return Completion(_load_json(text, self.source.name, tokens), *tokens)
 
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
 
-def _load_json(text: str, name: str) -> dict[str, Any]:
+def _load_json(text: str, name: str, tokens: tuple[int, int] = (0, 0)) -> dict[str, Any]:
     """Разбирает JSON-объект, допуская markdown-ограждение и текст вокруг."""
     cleaned = _FENCE.sub("", text.strip()).strip()
     try:
@@ -144,13 +158,13 @@ def _load_json(text: str, name: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         start, end = cleaned.find("{"), cleaned.rfind("}")
         if start == -1 or end <= start:
-            raise ProviderError(f"{name}: ответ не JSON: {text[:200]!r}") from None
+            raise ProviderError(f"{name}: ответ не JSON: {text[:200]!r}", *tokens) from None
         try:
             value = json.loads(cleaned[start : end + 1])
         except json.JSONDecodeError as error:
-            raise ProviderError(f"{name}: ответ не JSON: {error}") from None
+            raise ProviderError(f"{name}: ответ не JSON: {error}", *tokens) from None
     if not isinstance(value, dict):
-        raise ProviderError(f"{name}: ожидался JSON-объект")
+        raise ProviderError(f"{name}: ожидался JSON-объект", *tokens)
     return value
 
 

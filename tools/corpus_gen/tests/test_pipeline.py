@@ -174,7 +174,7 @@ def test_normalize_label_cleans_fields() -> None:
         {"intent": "listTasks", "title": "x", "due": "2026-11-03", "precision": "date", "issue": "none", "titleIssue": "none"}
     )
     assert label["title"] is None and label["due"] is None and label["precision"] is None
-    timed = pipeline.normalize_label({**LABEL_CREATE, "due": "2026-11-03T10:00:00", "precision": "date"})
+    timed = pipeline.normalize_label({**LABEL_CREATE, "due": "2026-11-03T10:00:00", "precision": "dateTime"})
     assert (timed["due"], timed["precision"]) == ("2026-11-03T10:00", "dateTime")
     with pytest.raises(ProviderError):
         pipeline.normalize_label({**LABEL_CREATE, "due": "завтра"})
@@ -224,7 +224,8 @@ def test_corpus_line_omits_defaults() -> None:
         "now": pipeline.CORPUS_DEFAULT_NOW,
         "source": "s",
         "topic": "list",
-        "labels": {"a": {}, "b": {}},
+        "labels": {"a": {}, "b": {}, "stale": {}},
+        "final_by": ["a", "b"],
         "final": {"intent": "listTasks", "title": None, "due": None, "precision": None, "issue": "none", "titleIssue": "none"},
     }
     assert pipeline.corpus_line(row) == {

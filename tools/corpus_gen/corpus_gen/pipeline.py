@@ -15,7 +15,7 @@ from typing import Any, Callable
 from . import prompts
 from .config import Config, Source
 from .providers import Provider, ProviderError, make_provider
-from .store import CandidateStore, append_jsonl, candidate_id, corpus_rows, normalize_text
+from .store import CandidateStore, append_jsonl, candidate_id, clean_phrase, corpus_rows, normalize_text
 
 ProviderFactory = Callable[[Source], Provider]
 ParserRunner = Callable[[Config, list[dict[str, Any]]], dict[str, dict[str, Any]]]
@@ -82,6 +82,7 @@ def generate(
             except Exception as error:  # noqa: BLE001 — сеть, лимиты, отказ, не-JSON
                 with lock:
                     report.error(f"{source.name}: {error}")
+                    usage.append(_usage_row(source, "generate", error))
                 return
             phrases = completion.data.get("phrases")
             with lock:
@@ -114,7 +115,7 @@ def import_manual(
     report = Report()
     known = _known_texts(config, store)
     for raw in lines:
-        phrase = re.sub(r"^\s*(?:\d+[.)]\s+|[-*•–—]\s+)", "", raw).strip()
+        phrase = re.sub(r"^\s*(?:\d+[.)]\s+|[-*•–—]\s+)", "", clean_phrase(raw)).strip()
         if not phrase:
             continue
         if _add_candidate(store, known, phrase, source_name, f"manual:{source_name}", topic, config):
@@ -134,8 +135,9 @@ def _add_candidate(
     topic: str,
     config: Config,
 ) -> bool:
+    phrase = clean_phrase(phrase)
     key = normalize_text(phrase)
-    if key in known:
+    if not key or key in known:
         return False
     known.add(key)
     store.rows.append(
@@ -190,7 +192,11 @@ def label(
     limit: int | None = None,
     factory: ProviderFactory = make_provider,
 ) -> Counter[str]:
-    pending = [row for row in store.rows if row["status"] in {"new", "error"}]
+    # Новые раньше упавших, чтобы --limit не застревал на одной ошибочной фразе;
+    # фразы без подходящих разметчиков пропускаются.
+    pending = [row for row in store.rows if row["status"] == "new"]
+    pending += [row for row in store.rows if row["status"] == "error"]
+    pending = [row for row in pending if choose_labelers(row, labelers)]
     if limit is not None:
         pending = pending[:limit]
     providers: dict[str, Provider] = {}
@@ -215,14 +221,17 @@ def label(
                     prompts.label_prompt(row["text"], row["now"]),
                     prompts.LABEL_SCHEMA,
                 )
-                result = normalize_label(completion.data)
             except Exception as error:  # noqa: BLE001
                 with lock:
                     row.setdefault("errors", []).append(f"{source.name}: {error}")
+                    usage.append(_usage_row(source, "label", error))
                 return
         with lock:
-            row["labels"][source.name] = result
             usage.append(_usage_row(source, "label", completion))
+            try:
+                row["labels"][source.name] = normalize_label(completion.data)
+            except ProviderError as error:
+                row.setdefault("errors", []).append(f"{source.name}: {error}")
 
     workers = max(1, sum(s.max_concurrency for s in labelers))
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -264,7 +273,7 @@ def normalize_label(data: dict[str, Any]) -> dict[str, Any]:
     if due is None:
         precision = None
     else:
-        due, precision = _normalize_due(due)
+        due, precision = _normalize_due(due, precision)
 
     return {
         "intent": intent,
@@ -278,15 +287,32 @@ def normalize_label(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _normalize_due(due: str) -> tuple[str, str]:
-    """«2026-11-03» → date; «2026-11-03T10:00[:00]» → dateTime, без секунд."""
+def _normalize_due(due: str, precision: Any) -> tuple[str, str]:
+    """Приводит срок к формату корпуса и сверяет его с precision модели.
+
+    «2026-11-03» → date; «2026-11-03T10:00[:00]» → dateTime. Противоречие
+    (precision=date при времени не 00:00, dateTime без времени) — ошибка
+    разметки, а не повод угадывать.
+    """
+    if precision not in (None, "date", "dateTime"):
+        raise ProviderError(f"недопустимый precision: {precision!r}")
+    has_time = "T" in due or " " in due
     try:
-        if "T" not in due and " " not in due:
-            return datetime.strptime(due, "%Y-%m-%d").strftime("%Y-%m-%d"), "date"
-        moment = datetime.fromisoformat(due.replace(" ", "T"))
+        moment = datetime.fromisoformat(due.replace(" ", "T")) if has_time else datetime.strptime(due, "%Y-%m-%d")
     except ValueError:
         raise ProviderError(f"недопустимый due: {due!r}") from None
-    return moment.strftime("%Y-%m-%dT%H:%M"), "dateTime"
+    if not 2000 <= moment.year <= 2100:
+        raise ProviderError(f"недопустимый год в due: {due!r}")
+    if precision is None:
+        precision = "dateTime" if has_time else "date"
+    if precision == "dateTime" and not has_time:
+        raise ProviderError(f"precision=dateTime, но в due нет времени: {due!r}")
+    if precision == "date" and has_time and (moment.hour, moment.minute, moment.second) != (0, 0, 0):
+        raise ProviderError(f"precision=date, но в due есть время: {due!r}")
+    date = f"{moment.year:04d}-{moment.month:02d}-{moment.day:02d}"
+    if precision == "date":
+        return date, "date"
+    return f"{date}T{moment.hour:02d}:{moment.minute:02d}", "dateTime"
 
 
 def comparable(label_: dict[str, Any]) -> tuple[Any, ...]:
@@ -304,6 +330,7 @@ def decide(row: dict[str, Any], labelers: list[Source]) -> str:
         return "disputed"
     if len({comparable(l) for l in labels}) == 1:
         row["final"] = {k: labels[0][k] for k in prompts.LABEL_FIELDS}
+        row["final_by"] = sorted(names)
         return "agreed"
     return "disputed"
 
@@ -329,7 +356,7 @@ def run_dart_parser(config: Config, items: list[dict[str, Any]]) -> dict[str, di
     if completed.returncode != 0:
         raise RuntimeError(f"dart run завершился с кодом {completed.returncode}:\n{completed.stderr}")
     results: dict[str, dict[str, Any]] = {}
-    for line in completed.stdout.splitlines():
+    for line in completed.stdout.split("\n"):
         start = line.find("{")  # dart может печатать служебный текст перед JSON
         if start == -1:
             continue
@@ -401,7 +428,7 @@ def corpus_line(row: dict[str, Any]) -> dict[str, Any]:
     if final["titleIssue"] != "none":
         line["titleIssue"] = final["titleIssue"]
     line["source"] = row["source"]
-    line["tags"] = [f"topic:{row['topic']}", "labels:" + ",".join(sorted(row["labels"]))]
+    line["tags"] = [f"topic:{row['topic']}", "labels:" + ",".join(row.get("final_by") or ["manual"])]
     return line
 
 
@@ -412,9 +439,11 @@ def _usage_row(source: Source, stage: str, completion: Any) -> dict[str, Any]:
     return {
         "source": source.name,
         "stage": stage,
-        "input_tokens": completion.input_tokens,
-        "output_tokens": completion.output_tokens,
-        "cost_usd": round(source.cost(completion.input_tokens, completion.output_tokens), 6),
+        "input_tokens": getattr(completion, "input_tokens", 0),
+        "output_tokens": getattr(completion, "output_tokens", 0),
+        "cost_usd": round(
+            source.cost(getattr(completion, "input_tokens", 0), getattr(completion, "output_tokens", 0)), 6
+        ),
     }
 
 
