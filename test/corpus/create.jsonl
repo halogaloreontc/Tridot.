@@ -1,0 +1,17 @@
+{"id":"create-001","text":"Добавь задачу «Позвонить клиенту» на завтра в 11:00","intent":"createTask","title":"Позвонить клиенту","due":"2026-11-03T11:00","precision":"dateTime"}
+{"id":"create-002","text":"Создай задачу «Отчёт» на сегодня","intent":"createTask","title":"Отчёт","due":"2026-11-02","precision":"date"}
+{"id":"create-003","text":"Добавь задачу «Купить хлеб»","intent":"createTask","title":"Купить хлеб","due":null}
+{"id":"create-004","text":"Новая задача «Оплатить счёт» завтра","intent":"createTask","title":"Оплатить счёт","due":"2026-11-03","precision":"date"}
+{"id":"create-005","text":"Запиши задачу «Сдать ключи» послезавтра в 9:30","intent":"createTask","title":"Сдать ключи","due":"2026-11-04T09:30","precision":"dateTime"}
+{"id":"create-006","text":"Добавь задачу “Позвонить маме” на 18:00","intent":"createTask","title":"Позвонить маме","due":"2026-11-02T18:00","precision":"dateTime","note":"английские типографские кавычки"}
+{"id":"create-007","text":"Добавь задачу „Встреча“ в 10:00","intent":"createTask","title":"Встреча","due":"2026-11-03T10:00","precision":"dateTime","note":"немецкие кавычки; время уже прошло без указания дня — переносится на завтра"}
+{"id":"create-008","text":"Добавь задачу \"Купить молоко\" сегодня в 20:15","intent":"createTask","title":"Купить молоко","due":"2026-11-02T20:15","precision":"dateTime"}
+{"id":"create-009","text":"добавь задачу «Ремонт» на 15.11","intent":"createTask","title":"Ремонт","due":"2026-11-15","precision":"date"}
+{"id":"create-010","text":"Добавь задачу «Ремонт» на 15.11 в 12:00","intent":"createTask","title":"Ремонт","due":"2026-11-15T12:00","precision":"dateTime"}
+{"id":"create-011","text":"Добавь задачу «Отпуск» на 10.01","intent":"createTask","title":"Отпуск","due":"2027-01-10","precision":"date","note":"дата без года уже прошла — следующий год"}
+{"id":"create-012","text":"Добавь задачу «Годовщина» на 01.03.2027","intent":"createTask","title":"Годовщина","due":"2027-03-01","precision":"date"}
+{"id":"create-013","text":"Добавь задачу «Ужин» сегодня в 19.30","intent":"createTask","title":"Ужин","due":"2026-11-02T19:30","precision":"dateTime","note":"время через точку только после «в»"}
+{"id":"create-014","text":"ДОБАВЬ ЗАДАЧУ «Проверить почту» ЗАВТРА В 08:05","intent":"createTask","title":"Проверить почту","due":"2026-11-03T08:05","precision":"dateTime"}
+{"id":"create-015","text":"Добавь задачу позвонить клиенту завтра","intent":"createTask","title":null,"due":"2026-11-03","precision":"date","note":"без кавычек название намеренно не угадывается"}
+{"id":"create-016","text":"Создай задачу «»","intent":"createTask","title":null}
+{"id":"create-017","text":"  добавь   задачу   «Полить цветы»   завтра  ","intent":"createTask","title":"Полить цветы","due":"2026-11-03","precision":"date"}

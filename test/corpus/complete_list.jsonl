@@ -1,0 +1,16 @@
+{"id":"done-001","text":"Заверши её","intent":"completeTask"}
+{"id":"done-002","text":"Задача выполнена","intent":"completeTask"}
+{"id":"done-003","text":"Готово","intent":"completeTask"}
+{"id":"done-004","text":"Я выполнил","intent":"completeTask"}
+{"id":"done-005","text":"Отметь выполненной","intent":"completeTask"}
+{"id":"done-006","text":"Завершить задачу","intent":"completeTask"}
+{"id":"list-001","text":"Покажи задачи","intent":"listTasks"}
+{"id":"list-002","text":"Покажи мои задачи","intent":"listTasks"}
+{"id":"list-003","text":"Список задач","intent":"listTasks"}
+{"id":"list-004","text":"Что запланировано?","intent":"listTasks"}
+{"id":"list-005","text":"Какие у меня задачи?","intent":"listTasks"}
+{"id":"list-006","text":"Покажи все дела","intent":"listTasks"}
+{"id":"unk-001","text":"Расскажи что-нибудь","intent":"unknown"}
+{"id":"unk-002","text":"","intent":"unknown"}
+{"id":"unk-003","text":"Привет","intent":"unknown"}
+{"id":"unk-004","text":"Покажи погоду","intent":"unknown"}

@@ -1,0 +1,8 @@
+{"id":"move-001","text":"Перенеси её на сегодня в 18:00","intent":"rescheduleTask","due":"2026-11-02T18:00","precision":"dateTime"}
+{"id":"move-002","text":"перенеси её на 15:00","intent":"rescheduleTask","due":"2026-11-03T15:00","precision":"dateTime"}
+{"id":"move-003","text":"Перенести задачу на завтра","intent":"rescheduleTask","due":"2026-11-03","precision":"date"}
+{"id":"move-004","text":"Сдвинь на послезавтра в 10:00","intent":"rescheduleTask","due":"2026-11-04T10:00","precision":"dateTime"}
+{"id":"move-005","text":"Отложи на 20.11","intent":"rescheduleTask","due":"2026-11-20","precision":"date"}
+{"id":"move-006","text":"Передвинь её","intent":"rescheduleTask","due":null}
+{"id":"move-007","text":"Перенеси на сегодня в 08:00","intent":"rescheduleTask","issue":"inPast"}
+{"id":"move-008","text":"Перенесите на завтра в 9:15","intent":"rescheduleTask","due":"2026-11-03T09:15","precision":"dateTime"}

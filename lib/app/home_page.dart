@@ -19,7 +19,7 @@ final class _HomePageState extends State<HomePage> {
   final List<_ChatMessage> _messages = <_ChatMessage>[
     const _ChatMessage(
       text: 'Я готов к первому сценарию. Создайте задачу, например: '
-          '«Добавь задачу “Позвонить клиенту” на завтра в 11:00».',
+          '${AssistantController.exampleCommand}',
       fromUser: false,
     ),
   ];

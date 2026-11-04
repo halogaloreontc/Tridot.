@@ -10,6 +10,10 @@ final class AssistantController {
   })  : _tasks = taskService,
         _parser = parser;
 
+  /// Пример из подсказок интерфейса. Тест проверяет, что парсер его понимает.
+  static const String exampleCommand =
+      'Добавь задачу «Позвонить клиенту» на завтра в 11:00';
+
   final TaskService _tasks;
   final ScenarioParser _parser;
   ConversationContext _context = const ConversationContext();
@@ -34,7 +38,8 @@ final class AssistantController {
           return const AssistantResponse(
             message:
                 'Пока понимаю создание, список, перенос и завершение задач. '
-                'Для создания используйте название в кавычках: «Добавь задачу “Пример” на завтра в 11:00».',
+                'Для создания укажите название в кавычках, например: '
+                '$exampleCommand',
             intent: 'unknown',
             status: AssistantStatus.noAction,
           );
@@ -54,6 +59,14 @@ final class AssistantController {
       return const AssistantResponse(
         message:
             'Как называется задача? В прототипе укажите название в кавычках.',
+        intent: 'task.create',
+        status: AssistantStatus.needsClarification,
+      );
+    }
+    final dueQuestion = _dueClarification(command.dueIssue);
+    if (dueQuestion != null) {
+      return AssistantResponse(
+        message: dueQuestion,
         intent: 'task.create',
         status: AssistantStatus.needsClarification,
       );
@@ -99,6 +112,9 @@ final class AssistantController {
       );
     }
     final task = await _tasks.complete(id);
+    // Завершённая задача больше не «её»: следующий перенос или завершение
+    // требует нового выбора, а не тихо открывает её снова.
+    _context = _context.withoutTask();
     return AssistantResponse(
       message: 'Задача «${task.title}» завершена.',
       intent: 'task.complete',
@@ -118,6 +134,14 @@ final class AssistantController {
         status: AssistantStatus.needsClarification,
       );
     }
+    final dueQuestion = _dueClarification(command.dueIssue);
+    if (dueQuestion != null) {
+      return AssistantResponse(
+        message: dueQuestion,
+        intent: 'task.reschedule',
+        status: AssistantStatus.needsClarification,
+      );
+    }
     if (dueAt == null) {
       return const AssistantResponse(
         message: 'На когда перенести задачу? Например: «на завтра в 15:00».',
@@ -132,6 +156,20 @@ final class AssistantController {
       status: AssistantStatus.completed,
       task: task,
     );
+  }
+
+  String? _dueClarification(DueIssue issue) {
+    switch (issue) {
+      case DueIssue.none:
+        return null;
+      case DueIssue.inPast:
+        return 'Это время уже прошло. Укажите другое время или день, '
+            'например: «на завтра в 10:00».';
+      case DueIssue.invalidDate:
+        return 'Такой даты нет. Укажите дату в формате ДД.ММ, например 15.11.';
+      case DueIssue.conflictingDays:
+        return 'В команде несколько разных дней. На какой день поставить задачу?';
+    }
   }
 
   String _dueDescription(Task task) {

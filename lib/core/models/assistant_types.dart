@@ -23,4 +23,6 @@ final class ConversationContext {
 
   ConversationContext withLastTask(String id) =>
       ConversationContext(lastTaskId: id);
+
+  ConversationContext withoutTask() => const ConversationContext();
 }

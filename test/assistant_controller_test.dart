@@ -84,4 +84,45 @@ void main() {
     expect(response.status, AssistantStatus.failed);
     expect(response.message, contains('Хранилище недоступно'));
   });
+
+  test('пример из подсказки интерфейса создаёт задачу', () async {
+    final response = await assistant.handle(AssistantController.exampleCommand);
+
+    expect(response.status, AssistantStatus.completed);
+    expect(response.task?.title, 'Позвонить клиенту');
+    expect(response.task?.dueAt, DateTime(2026, 11, 3, 11));
+  });
+
+  test('слово «завершить» в названии не завершает предыдущую задачу', () async {
+    final first = await assistant.handle('Добавь задачу «Позвонить клиенту»');
+    final second = await assistant.handle('Добавь задачу «Завершить отчёт»');
+
+    expect(second.intent, 'task.create');
+    expect(second.task?.title, 'Завершить отчёт');
+    final active = await service.listActive();
+    expect(
+      active.map((Task t) => t.id),
+      containsAll(<String>[first.task!.id, second.task!.id]),
+    );
+  });
+
+  test('прошедшее время «сегодня» требует уточнения и ничего не создаёт',
+      () async {
+    final response =
+        await assistant.handle('Добавь задачу «Звонок» сегодня в 9:00');
+
+    expect(response.status, AssistantStatus.needsClarification);
+    expect(await repository.list(), isEmpty);
+  });
+
+  test('после завершения «её» больше не указывает на задачу', () async {
+    await assistant.handle('Добавь задачу «Отчёт» на завтра');
+    await assistant.handle('Заверши её');
+
+    final moved = await assistant.handle('Перенеси её на завтра в 12:00');
+
+    expect(moved.status, AssistantStatus.needsClarification);
+    final tasks = await repository.list();
+    expect(tasks.single.status, TaskStatus.done);
+  });
 }
