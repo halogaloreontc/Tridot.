@@ -1,0 +1,105 @@
+# Скопируйте в config.toml (он в .gitignore) и поправьте под себя.
+# Ключи API сюда НЕ пишутся — только имя переменной окружения (api_key_env).
+# Источник без ключа или с моделью-заглушкой «<…>» просто пропускается.
+#
+# kind:     anthropic      — официальный SDK Anthropic;
+#           openai_compat  — любой OpenAI-совместимый API (Ollama, Kimi, DeepSeek, Qwen, Grok, OpenAI).
+# family:   семейство моделей. Разметчики всегда берутся из семейств, отличных от генератора
+#           и друг от друга, — так ошибки одной модели не попадают в корпус.
+# roles:    generate — придумывает фразы, label — размечает.
+# price_in / price_out: долларов за 1M токенов, только для отчёта `corpus-gen stats`.
+#
+# Адреса и имена моделей сторонних провайдеров меняются — сверяйтесь с их документацией.
+
+[settings]
+project_root = "../.."          # корень Flutter-проекта относительно этого файла
+corpus_dir = "test/corpus"      # относительно project_root
+work_dir = "work"               # кандидаты и расход, относительно этого файла
+default_now = "2026-11-02T16:30"
+dart = "dart"                   # или полный путь к dart из Flutter SDK
+
+# --- Локально, бесплатно. Установите Ollama и скачайте модель: ollama pull <имя>
+[[source]]
+name = "ollama"
+kind = "openai_compat"
+family = "local"
+base_url = "http://localhost:11434/v1"
+model = "<модель из `ollama list`>"
+roles = ["generate", "label"]
+max_concurrency = 1
+requests_per_minute = 60
+
+# --- Anthropic. Ключ: https://platform.claude.com → API keys; export ANTHROPIC_API_KEY=...
+[[source]]
+name = "claude-haiku"
+kind = "anthropic"
+family = "anthropic"
+model = "claude-haiku-5-5"
+effort = "low"
+api_key_env = "ANTHROPIC_API_KEY"
+roles = ["generate", "label"]
+max_concurrency = 4
+requests_per_minute = 50
+price_in = 0.10
+price_out = 0.50
+
+[[source]]
+name = "claude-sonnet"
+kind = "anthropic"
+family = "anthropic"
+model = "claude-sonnet-5-5"
+effort = "low"
+# При отказе модели сервер сам повторит запрос на запасной модели.
+fallbacks = "default"
+api_key_env = "ANTHROPIC_API_KEY"
+roles = ["generate"]            # трудные случаи: --topic tricky / gaps
+max_concurrency = 2
+requests_per_minute = 30
+price_in = 2.00
+price_out = 10.00
+
+# --- Kimi (Moonshot). Подписка на чат и API оплачиваются отдельно.
+[[source]]
+name = "kimi"
+kind = "openai_compat"
+family = "moonshot"
+base_url = "https://api.moonshot.ai/v1"
+model = "<модель из консоли Moonshot>"
+api_key_env = "MOONSHOT_API_KEY"
+roles = ["generate", "label"]
+
+[[source]]
+name = "deepseek"
+kind = "openai_compat"
+family = "deepseek"
+base_url = "https://api.deepseek.com"
+model = "deepseek-chat"
+api_key_env = "DEEPSEEK_API_KEY"
+roles = ["generate", "label"]
+
+[[source]]
+name = "qwen"
+kind = "openai_compat"
+family = "qwen"
+base_url = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+model = "<модель из консоли DashScope>"
+api_key_env = "DASHSCOPE_API_KEY"
+roles = ["generate", "label"]
+
+[[source]]
+name = "grok"
+kind = "openai_compat"
+family = "xai"
+base_url = "https://api.x.ai/v1"
+model = "<модель из консоли xAI>"
+api_key_env = "XAI_API_KEY"
+roles = ["generate", "label"]
+
+[[source]]
+name = "openai"
+kind = "openai_compat"
+family = "openai"
+base_url = "https://api.openai.com/v1"
+model = "<модель из консоли OpenAI>"
+api_key_env = "OPENAI_API_KEY"
+roles = ["generate", "label"]
