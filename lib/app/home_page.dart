@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/formatting/due_format.dart';
 import '../core/models/assistant_types.dart';
@@ -26,10 +30,11 @@ final class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-final class _HomePageState extends State<HomePage> {
+final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
-  final FocusNode _inputFocus = FocusNode();
+  late final FocusNode _inputFocus = FocusNode(onKeyEvent: _onInputKey);
+  Timer? _tick;
   final List<_ChatMessage> _messages = <_ChatMessage>[
     const _ChatMessage(
       text: 'Привет! Я веду ваши задачи без интернета. Напишите, что сделать, '
@@ -48,11 +53,14 @@ final class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refreshTasks();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _tick?.cancel();
     _input.dispose();
     _scroll.dispose();
     _inputFocus.dispose();
@@ -66,6 +74,11 @@ final class _HomePageState extends State<HomePage> {
       if (task.id == id) return task;
     }
     return null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshTasks();
   }
 
   Future<void> _refreshTasks() async {
@@ -84,6 +97,41 @@ final class _HomePageState extends State<HomePage> {
         _loading = false;
       });
     }
+    _scheduleTick();
+  }
+
+  /// Перерисовка к ближайшему моменту, когда меняются группы и подписи:
+  /// полночь или срок ближайшей задачи со временем.
+  void _scheduleTick() {
+    _tick?.cancel();
+    if (!mounted) return;
+    final now = widget.clock.now();
+    var next = DateTime(now.year, now.month, now.day + 1);
+    for (final task in _tasks) {
+      final due = task.dueAt;
+      if (task.duePrecision == DuePrecision.dateTime &&
+          due != null &&
+          due.isAfter(now) &&
+          due.isBefore(next)) {
+        next = due;
+      }
+    }
+    final wait = next.difference(now) + const Duration(seconds: 1);
+    _tick = Timer(wait, () {
+      if (!mounted) return;
+      setState(() {});
+      _scheduleTick();
+    });
+  }
+
+  /// Enter отправляет команду с клавиатуры компьютера; перевод строки в
+  /// командах не нужен, поэтому Shift+Enter тоже отправляет всю строку.
+  KeyEventResult _onInputKey(FocusNode node, KeyEvent event) {
+    final enter = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (!enter || event is KeyUpEvent) return KeyEventResult.ignored;
+    if (event is KeyDownEvent) _send();
+    return KeyEventResult.handled;
   }
 
   Future<void> _send([String? preset]) async {
@@ -139,6 +187,7 @@ final class _HomePageState extends State<HomePage> {
 
   void _toggleSelection(Task task, {required bool wide}) {
     final selected = widget.assistant.selectedTaskId == task.id;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     setState(() {
       if (selected) {
         widget.assistant.clearSelection();
@@ -147,8 +196,7 @@ final class _HomePageState extends State<HomePage> {
       }
     });
     if (selected || wide) return;
-    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
-    messenger.showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Выбрана «${task.title}»'),
         duration: const Duration(seconds: 3),
@@ -240,12 +288,14 @@ final class _HomePageState extends State<HomePage> {
               NavigationDestination(
                 icon: Badge(
                   backgroundColor: Theme.of(context).colorScheme.primary,
+                  textColor: Theme.of(context).colorScheme.onPrimary,
                   isLabelVisible: _tasks.isNotEmpty,
                   label: Text('${_tasks.length}'),
                   child: const Icon(Icons.checklist_outlined),
                 ),
                 selectedIcon: Badge(
                   backgroundColor: Theme.of(context).colorScheme.primary,
+                  textColor: Theme.of(context).colorScheme.onPrimary,
                   isLabelVisible: _tasks.isNotEmpty,
                   label: Text('${_tasks.length}'),
                   child: const Icon(Icons.checklist),
@@ -305,8 +355,18 @@ final class _ChatPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) =>
+          _build(context, constraints.maxHeight),
+    );
+  }
+
+  Widget _build(BuildContext context, double height) {
     final scheme = Theme.of(context).colorScheme;
     final selected = selectedTask;
+    // Мало места (клавиатура в горизонтальной ориентации, крупный шрифт):
+    // прячем подсказки, чтобы лента сообщений не схлопнулась.
+    final compact = height < 420;
     return Column(
       children: <Widget>[
         Expanded(
@@ -320,72 +380,80 @@ final class _ChatPane extends StatelessWidget {
           ),
         ),
         _Centered(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                if (selected != null)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: InputChip(
-                        key: const Key('selected-task-chip'),
-                        avatar: Icon(
-                          Icons.push_pin_outlined,
-                          size: 18,
-                          color: scheme.primary,
-                        ),
-                        label: Text(
-                          'Работаю с «${selected.title}»',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onDeleted: onClearSelection,
-                        deleteButtonTooltipMessage: 'Снять выбор',
-                      ),
-                    ),
-                  ),
-                _Suggestions(
-                  hasSelection: selected != null,
-                  onSend: onSend,
-                  onTemplate: onTemplate,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    Expanded(
-                      child: TextField(
-                        key: const Key('chat-input'),
-                        controller: input,
-                        focusNode: inputFocus,
-                        minLines: 1,
-                        maxLines: 4,
-                        textInputAction: TextInputAction.send,
-                        textCapitalization: TextCapitalization.sentences,
-                        onSubmitted: (_) => onSend(),
-                        decoration: const InputDecoration(
-                          hintText: 'Напишите, что сделать…',
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: math.max(56, height * 0.6)),
+            child: SingleChildScrollView(
+              reverse: true,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  if (selected != null && !compact)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: InputChip(
+                          key: const Key('selected-task-chip'),
+                          avatar: Icon(
+                            Icons.push_pin_outlined,
+                            size: 18,
+                            color: scheme.primary,
+                          ),
+                          label: Text(
+                            'Работаю с «${selected.title}»',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onDeleted: onClearSelection,
+                          deleteButtonTooltipMessage: 'Снять выбор',
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    IconButton.filled(
-                      key: const Key('send'),
-                      onPressed: sending ? null : () => onSend(),
-                      icon: sending
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.arrow_upward),
-                      tooltip: 'Отправить',
+                  if (!compact) ...<Widget>[
+                    _Suggestions(
+                      hasSelection: selected != null,
+                      sending: sending,
+                      onSend: onSend,
+                      onTemplate: onTemplate,
                     ),
+                    const SizedBox(height: 8),
                   ],
-                ),
-              ],
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Expanded(
+                        child: TextField(
+                          key: const Key('chat-input'),
+                          controller: input,
+                          focusNode: inputFocus,
+                          minLines: 1,
+                          maxLines: compact ? 2 : 4,
+                          textInputAction: TextInputAction.send,
+                          textCapitalization: TextCapitalization.sentences,
+                          onSubmitted: (_) => onSend(),
+                          decoration: const InputDecoration(
+                            hintText: 'Напишите, что сделать…',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        key: const Key('send'),
+                        onPressed: sending ? null : () => onSend(),
+                        icon: sending
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.arrow_upward),
+                        tooltip: 'Отправить',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -397,11 +465,13 @@ final class _ChatPane extends StatelessWidget {
 final class _Suggestions extends StatelessWidget {
   const _Suggestions({
     required this.hasSelection,
+    required this.sending,
     required this.onSend,
     required this.onTemplate,
   });
 
   final bool hasSelection;
+  final bool sending;
   final Future<void> Function([String? preset]) onSend;
   final void Function(String template) onTemplate;
 
@@ -416,7 +486,7 @@ final class _Suggestions extends StatelessWidget {
       ActionChip(
         avatar: const Icon(Icons.checklist, size: 18),
         label: const Text('Мои задачи'),
-        onPressed: () => onSend('Покажи задачи'),
+        onPressed: sending ? null : () => onSend('Покажи задачи'),
       ),
       if (hasSelection) ...<Widget>[
         ActionChip(
@@ -427,7 +497,7 @@ final class _Suggestions extends StatelessWidget {
         ActionChip(
           avatar: const Icon(Icons.check, size: 18),
           label: const Text('Завершить'),
-          onPressed: () => onSend('Заверши её'),
+          onPressed: sending ? null : () => onSend('Заверши её'),
         ),
       ],
     ];

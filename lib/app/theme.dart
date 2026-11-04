@@ -19,10 +19,7 @@ ThemeData buildTheme(Brightness brightness) {
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      titleTextStyle: base.textTheme.titleLarge?.copyWith(
-        fontWeight: FontWeight.w600,
-        color: scheme.onSurface,
-      ),
+      foregroundColor: scheme.onSurface,
     ),
     dividerTheme: DividerThemeData(
       color: scheme.outlineVariant.withValues(alpha: 0.6),
@@ -42,7 +39,8 @@ ThemeData buildTheme(Brightness brightness) {
     chipTheme: base.chipTheme.copyWith(
       side: BorderSide(color: scheme.outlineVariant),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      labelStyle: base.textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
+      // Только цвет: размер и высоту строки подставит локализованная тема.
+      labelStyle: TextStyle(color: scheme.onSurface),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: scheme.surfaceContainer,

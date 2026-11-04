@@ -165,4 +165,13 @@ void main() {
     expect(response.status, AssistantStatus.needsClarification);
     expect(await service.listActive(), hasLength(2));
   });
+
+  test('завершение другой задачи по названию сохраняет выбранную', () async {
+    await assistant.handle('Добавь задачу «B»');
+    final a = await assistant.handle('Добавь задачу «A»');
+
+    await assistant.handle('Заверши задачу «B»');
+
+    expect(assistant.selectedTaskId, a.task!.id);
+  });
 }

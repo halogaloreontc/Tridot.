@@ -144,7 +144,7 @@ final class AssistantController {
     final task = await _tasks.complete(id);
     // Завершённая задача больше не «её»: следующий перенос или завершение
     // требует нового выбора, а не тихо открывает её снова.
-    _context = _context.withoutTask();
+    forgetTask(task.id);
     return AssistantResponse(
       message: 'Задача «${task.title}» завершена.',
       intent: 'task.complete',
