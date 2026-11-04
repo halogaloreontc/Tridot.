@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'app/assistant_theme.dart';
 import 'app/home_page.dart';
 import 'core/scenario/assistant_controller.dart';
 import 'core/scenario/scenario_parser.dart';
@@ -34,14 +35,9 @@ final class AssistantApp extends StatelessWidget {
     return MaterialApp(
       title: 'Личный помощник',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF176B68),
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF4F6F5),
-      ),
+      theme: AssistantTheme.dark(),
+      darkTheme: AssistantTheme.dark(),
+      themeMode: ThemeMode.dark,
       home: HomePage(assistant: assistant, tasks: tasks),
     );
   }
