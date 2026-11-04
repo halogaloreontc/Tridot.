@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'app/home_page.dart';
+import 'app/theme.dart';
 import 'core/scenario/assistant_controller.dart';
 import 'core/scenario/scenario_parser.dart';
 import 'core/services/clock.dart';
@@ -19,30 +20,32 @@ Future<void> main() async {
   final assistant = AssistantController(
     taskService: tasks,
     parser: ScenarioParser(clock: clock),
+    clock: clock,
   );
-  runApp(AssistantApp(assistant: assistant, tasks: tasks));
+  runApp(AssistantApp(assistant: assistant, tasks: tasks, clock: clock));
 }
 
 final class AssistantApp extends StatelessWidget {
-  const AssistantApp({super.key, required this.assistant, required this.tasks});
+  const AssistantApp({
+    super.key,
+    required this.assistant,
+    required this.tasks,
+    this.clock = const SystemClock(),
+  });
 
   final AssistantController assistant;
   final TaskService tasks;
+  final Clock clock;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Личный помощник',
+      title: 'Помощник',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF176B68),
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF4F6F5),
-      ),
-      home: HomePage(assistant: assistant, tasks: tasks),
+      theme: buildTheme(Brightness.light),
+      darkTheme: buildTheme(Brightness.dark),
+      themeMode: ThemeMode.system,
+      home: HomePage(assistant: assistant, tasks: tasks, clock: clock),
     );
   }
 }

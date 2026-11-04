@@ -1,5 +1,7 @@
+import '../formatting/due_format.dart';
 import '../models/assistant_types.dart';
 import '../models/task.dart';
+import '../services/clock.dart';
 import '../services/task_service.dart';
 import 'scenario_parser.dart';
 
@@ -7,8 +9,10 @@ final class AssistantController {
   AssistantController({
     required TaskService taskService,
     required ScenarioParser parser,
+    Clock clock = const SystemClock(),
   })  : _tasks = taskService,
-        _parser = parser;
+        _parser = parser,
+        _clock = clock;
 
   /// Пример из подсказок интерфейса. Тест проверяет, что парсер его понимает.
   static const String exampleCommand =
@@ -16,10 +20,23 @@ final class AssistantController {
 
   final TaskService _tasks;
   final ScenarioParser _parser;
+  final Clock _clock;
   ConversationContext _context = const ConversationContext();
+
+  /// Задача, к которой относятся «её», «перенеси», «заверши».
+  String? get selectedTaskId => _context.lastTaskId;
 
   void selectTask(String id) {
     _context = _context.withLastTask(id);
+  }
+
+  void clearSelection() {
+    _context = _context.withoutTask();
+  }
+
+  /// Задачу завершили или удалили не через диалог.
+  void forgetTask(String id) {
+    if (_context.lastTaskId == id) clearSelection();
   }
 
   Future<AssistantResponse> handle(String message) async {
@@ -102,8 +119,14 @@ final class AssistantController {
         status: AssistantStatus.completed,
       );
     }
+    final next = tasks.first;
+    final nextDue = switch (next.dueAt) {
+      null => '',
+      final due => ', ${formatDue(due, next.duePrecision, _clock.now())}',
+    };
     return AssistantResponse(
-      message: 'Активных задач: ${tasks.length}. Они показаны в списке.',
+      message: 'Активных задач: ${tasks.length}. '
+          'Ближайшая — «${next.title}»$nextDue.',
       intent: 'task.list',
       status: AssistantStatus.completed,
     );
@@ -233,12 +256,7 @@ final class AssistantController {
   String _dueDescription(Task task) {
     final due = task.dueAt;
     if (due == null) return '';
-    final day =
-        '${due.day.toString().padLeft(2, '0')}.${due.month.toString().padLeft(2, '0')}.${due.year}';
-    if (task.duePrecision == DuePrecision.date) return ' на $day';
-    final time =
-        '${due.hour.toString().padLeft(2, '0')}:${due.minute.toString().padLeft(2, '0')}';
-    return ' на $day в $time';
+    return ' на ${formatDue(due, task.duePrecision, _clock.now())}';
   }
 }
 
