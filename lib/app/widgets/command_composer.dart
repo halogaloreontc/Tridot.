@@ -157,9 +157,9 @@ final class _CommandComposerState extends State<CommandComposer> {
         final voice = !hasText && !widget.sending;
         return Container(
           key: const Key('assistant-composer'),
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           decoration: BoxDecoration(
-            color: const Color(0xFF272B28),
+            color: AssistantColors.raised,
             border: Border.all(color: AssistantColors.border),
             borderRadius: BorderRadius.circular(16),
           ),
@@ -177,10 +177,14 @@ final class _CommandComposerState extends State<CommandComposer> {
                 onSubmitted: (_) {
                   if (!widget.sending) widget.onSend();
                 },
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: AssistantColors.textStrong,
+                ),
                 decoration: const InputDecoration(
-                  hintText: 'Напишите команду…',
+                  hintText: 'Напишите или скажите команду…',
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.fromLTRB(8, 6, 8, 12),
+                  contentPadding: EdgeInsets.fromLTRB(4, 6, 4, 10),
                   isDense: true,
                 ),
               ),
@@ -265,35 +269,29 @@ final class _CommandComposerState extends State<CommandComposer> {
                             size: 20,
                           ),
                   );
-                  final modes = _ModeSwitch(
-                    mode: widget.mode,
-                    onChanged: widget.onModeChanged,
-                  );
-                  // Переключатель не сжимается: если места мало (узкий
-                  // экран, крупный шрифт), он встаёт отдельной строкой.
+                  // Две строки: сверху ввод, снизу «+», переключатель режимов
+                  // ровно посередине и микрофон или отправка. На широком поле
+                  // у иконок режимов есть подписи, на узком — только иконки.
                   final scale = MediaQuery.textScalerOf(context).scale(1);
-                  final needed = 112 + 200 * scale;
-                  if (constraints.maxWidth >= needed) {
-                    return Row(
-                      children: <Widget>[
-                        plus,
-                        Expanded(child: Center(child: modes)),
-                        send,
-                      ],
-                    );
-                  }
-                  return Column(
+                  final labels = constraints.maxWidth >= 300 + 120 * scale;
+                  return Row(
                     children: <Widget>[
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: _ModeSwitch(
-                          mode: widget.mode,
-                          onChanged: widget.onModeChanged,
-                          stretch: true,
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: plus,
                         ),
                       ),
-                      Row(
-                        children: <Widget>[plus, const Spacer(), send],
+                      _ModeSwitch(
+                        mode: widget.mode,
+                        onChanged: widget.onModeChanged,
+                        labels: labels,
+                      ),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: send,
+                        ),
                       ),
                     ],
                   );
@@ -317,77 +315,102 @@ final class _RoundIcon extends StatelessWidget {
     return Container(
       width: 40,
       height: 40,
-      decoration: const BoxDecoration(
-        color: Colors.black,
+      decoration: BoxDecoration(
         shape: BoxShape.circle,
+        border: Border.all(color: AssistantColors.border),
       ),
       child: Icon(icon, size: 20, color: AssistantColors.textStrong),
     );
   }
 }
 
+/// Компактный переключатель «Диалог / Документ»: капсула из двух иконок,
+/// на широком поле — с подписями справа от иконок.
 final class _ModeSwitch extends StatelessWidget {
   const _ModeSwitch({
     required this.mode,
     required this.onChanged,
-    this.stretch = false,
+    required this.labels,
   });
 
   final AssistantViewMode mode;
   final ValueChanged<AssistantViewMode> onChanged;
-
-  /// На всю ширину строки: сегменты делят её поровну, подписи обрезаются.
-  final bool stretch;
+  final bool labels;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(3),
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: Colors.black,
+        color: AssistantColors.panel,
+        border: Border.all(color: AssistantColors.borderSoft),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
-        mainAxisSize: stretch ? MainAxisSize.max : MainAxisSize.min,
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          for (final (label, value, key)
-              in <(String, AssistantViewMode, String)>[
-            ('Диалог', AssistantViewMode.dialogue, 'mode-dialogue'),
-            ('Документ', AssistantViewMode.document, 'mode-document'),
-          ])
-            stretch
-                ? Expanded(child: _button(label, value, key))
-                : _button(label, value, key),
+          _button(
+            'Диалог',
+            Icons.chat_bubble_outline,
+            AssistantViewMode.dialogue,
+            'mode-dialogue',
+          ),
+          _button(
+            'Документ',
+            Icons.edit_document,
+            AssistantViewMode.document,
+            'mode-document',
+          ),
         ],
       ),
     );
   }
 
-  Widget _button(String label, AssistantViewMode value, String key) {
+  Widget _button(
+    String label,
+    IconData icon,
+    AssistantViewMode value,
+    String key,
+  ) {
     final active = mode == value;
-    return Semantics(
-      button: true,
-      selected: active,
-      child: InkWell(
-        key: Key(key),
-        onTap: () => onChanged(value),
-        borderRadius: BorderRadius.circular(999),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          constraints: const BoxConstraints(minHeight: 40),
-          alignment: Alignment.center,
-          padding: EdgeInsets.symmetric(horizontal: stretch ? 6 : 14),
-          decoration: BoxDecoration(
-            color: active ? AssistantColors.textStrong : Colors.transparent,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: active ? const Color(0xFF171917) : AssistantColors.muted,
-              fontSize: 12,
+    final color = active ? AssistantColors.textStrong : AssistantColors.muted;
+    return Tooltip(
+      message: label,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        selected: active,
+        label: 'Режим: $label',
+        excludeSemantics: true,
+        child: InkWell(
+          key: Key(key),
+          onTap: () => onChanged(value),
+          borderRadius: BorderRadius.circular(999),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            constraints: const BoxConstraints(minHeight: 40, minWidth: 40),
+            alignment: Alignment.center,
+            padding: EdgeInsets.symmetric(horizontal: labels ? 12 : 8),
+            decoration: BoxDecoration(
+              color: active ? AssistantColors.bubble : Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(icon, size: 17, color: color),
+                if (labels) ...<Widget>[
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 13,
+                      fontWeight: active ? FontWeight.w500 : FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),

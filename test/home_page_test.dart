@@ -611,4 +611,109 @@ void main() {
     expect((await byTitle(service, 'Alpha')).description, 'срочно');
     expect((await byTitle(service, 'Beta')).description, '');
   });
+
+  testWidgets('поиск в верхней строке фильтрует панель задач', (tester) async {
+    final service =
+        TaskService(repository: InMemoryTaskRepository(), clock: _clock);
+    await service.create(title: 'Отчёт за квартал', tags: <String>['работа']);
+    await service.create(title: 'Купить краску', tags: <String>['дача']);
+    await _pump(tester, service: service);
+
+    await tester.enterText(find.byKey(const Key('task-search')), 'краск');
+    await tester.pumpAndSettle();
+    expect(find.text('Купить краску'), findsWidgets);
+    expect(find.text('Отчёт за квартал'), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('task-search')), '#работа');
+    await tester.pumpAndSettle();
+    expect(find.text('Отчёт за квартал'), findsWidgets);
+    expect(find.text('Купить краску'), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('task-search')), 'нет такого');
+    await tester.pumpAndSettle();
+    expect(find.text('Ничего не нашлось'), findsOneWidget);
+  });
+
+  testWidgets('подписи режимов есть на широком экране и скрыты на узком',
+      (tester) async {
+    await _pump(tester);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('mode-dialogue')),
+        matching: find.text('Диалог'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(const SizedBox());
+    await _pump(tester, size: _phone);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('mode-dialogue')),
+        matching: find.text('Диалог'),
+      ),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('mode-document')), findsOneWidget);
+  });
+
+  testWidgets('последняя полоса хроники выделена цветом успеха',
+      (tester) async {
+    await _pump(tester);
+    await _say(tester, 'Покажи задачи');
+    await _say(tester, 'Привет');
+
+    Color colorOf(String key) {
+      final box = tester.widget<AnimatedContainer>(
+        find.descendant(
+          of: find.byKey(Key(key)),
+          matching: find.byType(AnimatedContainer),
+        ),
+      );
+      return (box.decoration! as BoxDecoration).color!;
+    }
+
+    expect(colorOf('history-1'), AssistantColors.success);
+    expect(colorOf('history-0'), isNot(AssistantColors.success));
+  });
+
+  testWidgets('на телефоне хроника открывает список команд', (tester) async {
+    await _pump(tester, size: _phone);
+    await _say(tester, 'Покажи задачи');
+    await _say(tester, 'Привет');
+
+    await tester.tap(find.byKey(const Key('history-rail-open')));
+    await tester.pumpAndSettle();
+    expect(find.text('Хроника команд'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('history-item-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('Хроника команд'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('кнопка панели прижата к правому краю, знак виден',
+      (tester) async {
+    for (final size in <Size>[_desktop, _phone]) {
+      await tester.pumpWidget(const SizedBox());
+      await _pump(tester, size: size);
+      final toggle = tester.getRect(find.byKey(const Key('tasks-toggle')));
+      expect(
+        size.width - toggle.right,
+        lessThan(48),
+        reason: 'ширина ${size.width}',
+      );
+    }
+    await tester.pumpWidget(const SizedBox());
+    await _pump(tester);
+    final cells = find.descendant(
+      of: find.byKey(const Key('app-sidebar')),
+      matching: find.byType(Container),
+    );
+    final visible = tester
+        .widgetList<Container>(cells)
+        .map((c) => tester.getSize(find.byWidget(c)))
+        .where((s) => s.width > 2 && s.height > 2 && s.width < 10);
+    expect(visible.length, 9, reason: 'девять клеток знака');
+  });
 }

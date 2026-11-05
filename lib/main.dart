@@ -16,10 +16,13 @@ import 'core/storage/storage_info.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Лицензия шрифта Inter (SIL OFL) — в «Настройки → Лицензии».
+  // Лицензии шрифтов Inter и JetBrains Mono (SIL OFL) — в «Настройки → Лицензии».
   LicenseRegistry.addLicense(() async* {
     final text = await rootBundle.loadString('assets/fonts/Inter-OFL.txt');
     yield LicenseEntryWithLineBreaks(<String>['Inter'], text);
+    final mono =
+        await rootBundle.loadString('assets/fonts/JetBrainsMono-OFL.txt');
+    yield LicenseEntryWithLineBreaks(<String>['JetBrains Mono'], mono);
   });
   final documents = await getApplicationDocumentsDirectory();
   final folder = p.join(documents.path, 'assistant');

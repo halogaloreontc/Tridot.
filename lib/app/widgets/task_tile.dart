@@ -17,6 +17,7 @@ final class TaskTile extends StatelessWidget {
     this.onToggleDone,
     this.showProject = true,
     this.dense = false,
+    this.highlightSelected = true,
   });
 
   final Task task;
@@ -28,6 +29,10 @@ final class TaskTile extends StatelessWidget {
   final VoidCallback? onToggleDone;
   final bool showProject;
   final bool dense;
+
+  /// Подсвечивать выбранную задачу фоном и рамкой. В карточке внутри ответа
+  /// рамка уже есть, там выбор показывает только булавка.
+  final bool highlightSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -42,8 +47,17 @@ final class TaskTile extends StatelessWidget {
       if (showProject && task.project != null) '#${task.project}',
     ];
     return Material(
-      color: selected ? AssistantColors.bubble : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
+      color: selected && highlightSelected
+          ? AssistantColors.raised
+          : Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: selected && highlightSelected
+              ? AssistantColors.border
+              : Colors.transparent,
+        ),
+      ),
       child: InkWell(
         key: ValueKey<String>('task-${task.id}'),
         onTap: onTap,
@@ -62,7 +76,11 @@ final class TaskTile extends StatelessWidget {
                 icon: Icon(
                   done ? Icons.check_circle : Icons.radio_button_unchecked,
                   size: 20,
-                  color: done ? AssistantColors.success : AssistantColors.muted,
+                  color: done
+                      ? AssistantColors.success
+                      : overdue
+                          ? AssistantColors.danger
+                          : AssistantColors.muted,
                 ),
               ),
               const SizedBox(width: 4),

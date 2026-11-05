@@ -104,6 +104,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _loaded = false;
   bool _sending = false;
   bool _panelOpen = true;
+
+  /// Строка поиска по задачам в верхней строке (фильтрует панель задач).
+  final TextEditingController _taskSearch = TextEditingController();
+  String _taskQuery = '';
   CubeState _cube = CubeState.idle;
 
   String? _docTaskId;
@@ -154,6 +158,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
     }
     _input.dispose();
+    _taskSearch.dispose();
     _inputFocus.dispose();
     _chatScroll.dispose();
     _docTitle.dispose();
@@ -620,7 +625,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget _buildSidebar({required bool expanded}) {
-    final width = expanded ? 240.0 : 64.0;
+    final width = expanded ? 232.0 : 64.0;
     final items = <AppSection>[
       AppSection.overview,
       AppSection.projects,
@@ -635,7 +640,27 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const SizedBox(height: 12),
+          Padding(
+            padding: EdgeInsets.fromLTRB(expanded ? 24 : 0, 20, 16, 16),
+            child: Row(
+              mainAxisAlignment:
+                  expanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+              children: <Widget>[
+                const _BrandMark(),
+                if (expanded) ...<Widget>[
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Помощник',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AssistantColors.textStrong,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -659,6 +684,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             active: _section == AppSection.settings,
             onTap: () => _goTo(AppSection.settings),
           ),
+          const SizedBox(height: 8),
+          const Divider(),
           Tooltip(
             message: widget.storage.location ?? widget.storage.label,
             child: InkWell(
@@ -712,9 +739,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       child: Column(
         children: <Widget>[
           SizedBox(
-            height: 48,
+            height: 56,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: EdgeInsets.symmetric(horizontal: narrow ? 4 : 16),
               child: Row(
                 children: <Widget>[
                   if (narrow)
@@ -726,24 +753,50 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     )
                   else
                     const SizedBox(width: 8),
+                  // Заголовок с подписью занимает всё свободное место, поэтому
+                  // поиск и кнопка панели прижаты к правому краю.
                   Expanded(
-                    child: Text(
-                      _section.title,
-                      style: technicalTextStyle,
-                      overflow: TextOverflow.ellipsis,
+                    child: Row(
+                      children: <Widget>[
+                        Flexible(
+                          child: Text(
+                            _section.title,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AssistantColors.textStrong,
+                            ),
+                          ),
+                        ),
+                        if (_section == AppSection.tasks &&
+                            _active.isNotEmpty &&
+                            !narrow) ...<Widget>[
+                          const SizedBox(width: 8),
+                          Text(
+                            '${_active.length} активных',
+                            style: technicalTextStyle,
+                          ),
+                        ],
+                      ],
                     ),
                   ),
+                  if (_section == AppSection.tasks && !narrow) ...<Widget>[
+                    _SearchField(
+                      controller: _taskSearch,
+                      onChanged: (String value) {
+                        setState(() => _taskQuery = value.trim().toLowerCase());
+                        if (!wide && value.isNotEmpty) _openTasksPanel(wide);
+                      },
+                    ),
+                    const SizedBox(width: 12),
+                  ],
                   if (_section == AppSection.tasks)
-                    IconButton(
-                      key: const Key('tasks-toggle'),
+                    _PanelToggle(
+                      wide: wide,
+                      open: wide && _panelOpen,
+                      count: _active.length,
                       onPressed: () => _openTasksPanel(wide),
-                      tooltip: wide && _panelOpen
-                          ? 'Скрыть список задач'
-                          : 'Список задач',
-                      icon: _CountBadge(
-                        count: _active.length,
-                        child: const Icon(Icons.checklist),
-                      ),
                     ),
                 ],
               ),
@@ -909,19 +962,24 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
     }
     final entries = <HistoryEntry>[
-      for (final message in _messages.where((m) => m.fromUser))
-        HistoryEntry(
-          command: message.text,
-          timestamp: _timeLabel(message.timestamp),
-        ),
+      for (var i = 0; i < _messages.length; i++)
+        if (_messages[i].fromUser)
+          HistoryEntry(
+            command: _messages[i].text,
+            timestamp: _timeLabel(_messages[i].timestamp),
+            result: i + 1 < _messages.length && !_messages[i + 1].fromUser
+                ? _messages[i + 1].text
+                : null,
+          ),
     ];
+    final compactRail = MediaQuery.sizeOf(context).width < narrowBreakpoint;
     return Row(
       children: <Widget>[
         Expanded(
           child: Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 820),
+              constraints: const BoxConstraints(maxWidth: 760),
               child: ListView(
                 controller: _chatScroll,
                 reverse: true,
@@ -931,17 +989,23 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
           ),
         ),
+        // Закреплена у правого края и выровнена по центру средней части:
+        // зеркальная пара кубику у последнего ответа.
         HistoryRail(
           entries: entries,
           activeIndex: _highlightedCommand,
           onSelect: _jumpToCommand,
+          compact: compactRail,
         ),
       ],
     );
   }
 
-  Widget _cubeWidget() =>
-      StatusCube(state: _cube, reduceMotion: _settings.reduceMotion);
+  Widget _cubeWidget() => StatusCube(
+        state: _cube,
+        reduceMotion: _settings.reduceMotion,
+        size: 16,
+      );
 
   Widget _latestAnswer() {
     final index = _messages.lastIndexWhere((m) => !m.fromUser);
@@ -965,7 +1029,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return Align(
       alignment: Alignment.bottomCenter,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 820, maxHeight: available * .55),
+        constraints: BoxConstraints(maxWidth: 760, maxHeight: available * .55),
         child: SingleChildScrollView(
           reverse: true,
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
@@ -1042,6 +1106,12 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
       );
+    } else if (_active.isNotEmpty && _visibleTasks.isEmpty) {
+      body = EmptyState(
+        icon: Icons.search_off,
+        title: 'Ничего не нашлось',
+        hint: 'По запросу «$_taskQuery» нет активных задач',
+      );
     } else if (_active.isEmpty) {
       body = const EmptyState(
         icon: Icons.check_circle_outline,
@@ -1054,7 +1124,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       body = ListView(
         padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
         children: <Widget>[
-          for (final (group, items) in groupTasks(_active, now)) ...<Widget>[
+          for (final (group, items)
+              in groupTasks(_visibleTasks, now)) ...<Widget>[
             SectionLabel(
               '${group.title} · ${items.length}',
               danger: group == TaskGroup.overdue,
@@ -1078,23 +1149,47 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 4),
-            child: Text(
-              _active.isEmpty ? 'Задачи' : 'Задачи · ${_active.length}',
-              style: const TextStyle(fontSize: 20),
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(18, 0, 18, 4),
-            child: Text(
-              'Нажмите на задачу, чтобы помощник работал с ней',
-              style: technicalTextStyle,
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+            child: Row(
+              children: <Widget>[
+                const Expanded(
+                  child: Text(
+                    'Активные',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AssistantColors.textStrong,
+                    ),
+                  ),
+                ),
+                Text(_panelSummary(), style: technicalTextStyle),
+              ],
             ),
           ),
           Expanded(child: body),
         ],
       ),
     );
+  }
+
+  /// Активные задачи с учётом строки поиска (название или проект).
+  List<Task> get _visibleTasks {
+    final query = _taskQuery;
+    if (query.isEmpty) return _active;
+    final tag = query.replaceFirst('#', '');
+    return _active
+        .where(
+          (Task task) =>
+              task.title.toLowerCase().contains(query) ||
+              (task.project ?? '').contains(tag),
+        )
+        .toList(growable: false);
+  }
+
+  String _panelSummary() {
+    final overdue = _active.where((Task t) => isOverdue(t, _now)).length;
+    final base = '${_active.length}';
+    return overdue == 0 ? base : '$base · просрочено $overdue';
   }
 
   String _dayLabel(DateTime day) {
@@ -1143,11 +1238,8 @@ final class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final decoration = BoxDecoration(
-      color: active ? const Color(0xFF202420) : Colors.transparent,
-      border: Border.all(
-        color: active ? const Color(0xFF414741) : Colors.transparent,
-      ),
-      borderRadius: BorderRadius.circular(999),
+      color: active ? AssistantColors.raised : Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
     );
     final icon = Icon(
       section.icon,
@@ -1166,9 +1258,9 @@ final class _NavItem extends StatelessWidget {
           child: InkWell(
             key: Key('nav-${section.name}'),
             onTap: onTap,
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(8),
             child: Container(
-              height: 44,
+              height: 40,
               padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0),
               decoration: decoration,
               child: expanded
@@ -1189,7 +1281,20 @@ final class _NavItem extends StatelessWidget {
                           ),
                         ),
                         if (badge != null)
-                          Text(badge!, style: technicalTextStyle),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: AssistantColors.bubble,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              badge!,
+                              style: technicalTextStyle.copyWith(
+                                color: AssistantColors.text,
+                                height: 20 / 12,
+                              ),
+                            ),
+                          ),
                       ],
                     )
                   : Center(
@@ -1281,7 +1386,7 @@ final class _MessageRow extends StatelessWidget {
           ),
         Container(
           padding: fromUser
-              ? const EdgeInsets.symmetric(horizontal: 14, vertical: 9)
+              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
               : EdgeInsets.zero,
           decoration: BoxDecoration(
             color: fromUser ? AssistantColors.bubble : Colors.transparent,
@@ -1293,21 +1398,39 @@ final class _MessageRow extends StatelessWidget {
                     width: highlighted ? 1 : .5,
                   )
                 : null,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: fromUser
+                ? const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(4),
+                  )
+                : BorderRadius.zero,
           ),
-          child: SelectableText(message.text),
+          child: SelectableText(
+            message.text,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              color:
+                  fromUser ? AssistantColors.textStrong : AssistantColors.text,
+            ),
+          ),
         ),
         if (current != null)
           Container(
             margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.symmetric(vertical: 4),
             decoration: BoxDecoration(
+              color: AssistantColors.raised,
               border: Border.all(color: AssistantColors.borderSoft),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: TaskTile(
               task: current,
               now: now,
               dense: true,
+              highlightSelected: false,
               selected: current.id == selectedId,
               onTap: () => onOpenTask(current),
               onToggleDone: () => onToggleDone(current),
@@ -1328,7 +1451,16 @@ final class _MessageRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          SizedBox(width: 44, child: cube),
+          // Кубик (16 px) только у последнего ответа; колонка держит ритм.
+          SizedBox(
+            width: 28,
+            child: cube == null
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Align(alignment: Alignment.topLeft, child: cube),
+                  ),
+          ),
           Expanded(
             child: Align(
               alignment:
@@ -1364,25 +1496,33 @@ final class _SelectedTaskStrip extends StatelessWidget {
     return Container(
       key: const Key('selected-task-strip'),
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.only(left: 12),
+      padding: const EdgeInsets.only(left: 12, right: 4),
+      constraints: const BoxConstraints(minHeight: 44),
       decoration: BoxDecoration(
-        color: AssistantColors.raised,
+        color: AssistantColors.panel,
         border: Border.all(color: AssistantColors.borderSoft),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: <Widget>[
           const Icon(
             Icons.push_pin_outlined,
             size: 16,
-            color: AssistantColors.success,
+            color: AssistantColors.textStrong,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Expanded(
             child: Text.rich(
               TextSpan(
                 children: <InlineSpan>[
-                  TextSpan(text: task.title),
+                  const TextSpan(text: '«её» — ', style: technicalTextStyle),
+                  TextSpan(
+                    text: task.title,
+                    style: const TextStyle(
+                      color: AssistantColors.textStrong,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   if (due != null)
                     TextSpan(
                       text: '  ${formatDue(due, task.duePrecision, now)}',
@@ -1466,7 +1606,8 @@ final class _QuickActions extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: AssistantColors.text,
                 side: const BorderSide(color: AssistantColors.border),
-                minimumSize: const Size(0, 40),
+                minimumSize: const Size(0, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 shape: const StadiumBorder(),
               ),
             ),
@@ -1517,4 +1658,152 @@ final class _DocSnapshot {
 
   @override
   int get hashCode => Object.hash(id, title, project, body);
+}
+
+/// Знак приложения: кубик 3×3 в шахматном порядке.
+final class _BrandMark extends StatelessWidget {
+  const _BrandMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: SizedBox(
+        width: 20,
+        height: 20,
+        child: Column(
+          children: <Widget>[
+            for (var row = 0; row < 3; row++) ...<Widget>[
+              if (row > 0) const SizedBox(height: 2),
+              Expanded(
+                child: Row(
+                  children: <Widget>[
+                    for (var column = 0; column < 3; column++) ...<Widget>[
+                      if (column > 0) const SizedBox(width: 2),
+                      // Container без потомка занимает всю ячейку; пустой
+                      // DecoratedBox схлопнулся бы в ноль по высоте.
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: (row * 3 + column).isEven
+                                ? AssistantColors.textStrong
+                                : AssistantColors.border,
+                            borderRadius: BorderRadius.circular(1),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Поиск по задачам в верхней строке: фильтрует панель задач.
+final class _SearchField extends StatelessWidget {
+  const _SearchField({required this.controller, required this.onChanged});
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280, minWidth: 160),
+      child: SizedBox(
+        height: 36,
+        child: TextField(
+          key: const Key('task-search'),
+          controller: controller,
+          onChanged: onChanged,
+          style: const TextStyle(
+            fontSize: 14,
+            color: AssistantColors.textStrong,
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            labelText: 'Поиск по задачам…',
+            floatingLabelBehavior: FloatingLabelBehavior.never,
+            labelStyle: const TextStyle(
+              fontSize: 14,
+              color: AssistantColors.muted,
+            ),
+            prefixIcon: const Icon(
+              Icons.search,
+              size: 16,
+              color: AssistantColors.muted,
+            ),
+            prefixIconConstraints: const BoxConstraints(minWidth: 36),
+            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: controller,
+              builder: (BuildContext context, TextEditingValue value, _) =>
+                  value.text.isEmpty
+                      ? const SizedBox.shrink()
+                      : IconButton(
+                          tooltip: 'Очистить поиск',
+                          iconSize: 16,
+                          onPressed: () {
+                            controller.clear();
+                            onChanged('');
+                          },
+                          icon: const Icon(Icons.close),
+                        ),
+            ),
+            filled: true,
+            fillColor: AssistantColors.panel,
+            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AssistantColors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: AssistantColors.muted),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Кнопка панели задач: на широком экране скрывает и показывает колонку,
+/// на узком — открывает выдвижную панель, а число задач стоит рядом.
+final class _PanelToggle extends StatelessWidget {
+  const _PanelToggle({
+    required this.wide,
+    required this.open,
+    required this.count,
+    required this.onPressed,
+  });
+
+  final bool wide;
+  final bool open;
+  final int count;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      key: const Key('tasks-toggle'),
+      onPressed: onPressed,
+      tooltip: wide && open ? 'Скрыть панель задач' : 'Панель задач',
+      style: IconButton.styleFrom(
+        fixedSize: const Size(40, 40),
+        minimumSize: const Size(40, 40),
+        padding: EdgeInsets.zero,
+        backgroundColor: open ? AssistantColors.raised : Colors.transparent,
+        side: const BorderSide(color: AssistantColors.border),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      icon: _CountBadge(
+        count: wide ? 0 : count,
+        child: const Icon(Icons.view_sidebar_outlined, size: 18),
+      ),
+    );
+  }
 }

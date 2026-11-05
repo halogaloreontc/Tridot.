@@ -21,7 +21,11 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fonts/Inter-OFL.txt
+    - assets/fonts/JetBrainsMono-OFL.txt
   fonts:
     - family: Inter
       fonts:
         - asset: assets/fonts/InterVariable.ttf
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMonoVariable.ttf

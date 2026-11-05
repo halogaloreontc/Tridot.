@@ -27,10 +27,18 @@ CubeState cubeStateFor(AssistantStatus status) => switch (status) {
 /// Кубик 3×3 — индикатор состояния помощника. Сообщает о событии и
 /// замирает: в покое не тратит кадры.
 final class StatusCube extends StatelessWidget {
-  const StatusCube({super.key, required this.state, this.reduceMotion = false});
+  const StatusCube({
+    super.key,
+    required this.state,
+    this.reduceMotion = false,
+    this.size = 32,
+  });
 
   final CubeState state;
   final bool reduceMotion;
+
+  /// Сторона кубика: 16 у ответа в чате, 32 — крупный вариант.
+  final double size;
 
   static const _scatter = <Offset>[
     Offset(-2, -2),
@@ -82,17 +90,17 @@ final class StatusCube extends StatelessWidget {
         excludeFromSemantics: true,
         child: SizedBox(
           key: const Key('status-cube'),
-          width: 32,
-          height: 32,
+          width: size,
+          height: size,
           child: Column(
             children: <Widget>[
               for (var row = 0; row < 3; row++) ...<Widget>[
-                if (row > 0) const SizedBox(height: 1.92),
+                if (row > 0) SizedBox(height: size * .06),
                 Expanded(
                   child: Row(
                     children: <Widget>[
                       for (var column = 0; column < 3; column++) ...<Widget>[
-                        if (column > 0) const SizedBox(width: 1.92),
+                        if (column > 0) SizedBox(width: size * .06),
                         Expanded(
                           child: _cell(
                             row * 3 + column,

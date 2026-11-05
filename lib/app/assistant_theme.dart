@@ -60,8 +60,9 @@ abstract final class AssistantColors {
 
 /// Метаданные: время, пути, подписи. 11 px — минимум для читаемости.
 const technicalTextStyle = TextStyle(
-  fontFamily: 'monospace',
-  fontSize: 11,
+  fontFamily: 'JetBrains Mono',
+  fontFamilyFallback: <String>['monospace'],
+  fontSize: 12,
   height: 1.45,
   color: AssistantColors.muted,
 );
