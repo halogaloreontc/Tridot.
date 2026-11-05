@@ -5,7 +5,15 @@ import '../../core/models/task.dart';
 import '../assistant_theme.dart';
 
 /// Состояние сохранения документа.
-enum DocumentSaveState { saved, dirty, saving, failed }
+enum DocumentSaveState {
+  saved,
+  dirty,
+  saving,
+  failed,
+
+  /// Заметки сохранены, но пустое название — нет.
+  titleRequired,
+}
 
 /// Документ задачи: название, проект и описание с простой разметкой.
 /// Хозяин отвечает за загрузку, автосохранение и обработку ошибок.
@@ -124,7 +132,8 @@ final class DocumentView extends StatelessWidget {
           decoration: const InputDecoration(
             border: InputBorder.none,
             isDense: true,
-            hintText: 'Название задачи',
+            labelText: 'Название задачи',
+            floatingLabelBehavior: FloatingLabelBehavior.never,
             contentPadding: EdgeInsets.symmetric(vertical: 12),
           ),
         ),
@@ -136,8 +145,9 @@ final class DocumentView extends StatelessWidget {
             border: InputBorder.none,
             isDense: true,
             prefixText: '#',
-            hintText: 'проект',
-            contentPadding: EdgeInsets.only(bottom: 8),
+            labelText: 'Проект',
+            floatingLabelBehavior: FloatingLabelBehavior.never,
+            contentPadding: EdgeInsets.symmetric(vertical: 12),
           ),
         ),
         _FormattingToolbar(controller: bodyController, focus: bodyFocus),
@@ -149,7 +159,8 @@ final class DocumentView extends StatelessWidget {
           maxLines: null,
           decoration: const InputDecoration(
             border: InputBorder.none,
-            hintText: 'Заметки, шаги, ссылки…',
+            labelText: 'Заметки, шаги, ссылки…',
+            floatingLabelBehavior: FloatingLabelBehavior.never,
             contentPadding: EdgeInsets.symmetric(vertical: 12),
           ),
         ),
@@ -160,7 +171,8 @@ final class DocumentView extends StatelessWidget {
                 _saveLabel(),
                 key: const Key('document-save-status'),
                 style: technicalTextStyle.copyWith(
-                  color: saveState == DocumentSaveState.failed
+                  color: saveState == DocumentSaveState.failed ||
+                          saveState == DocumentSaveState.titleRequired
                       ? AssistantColors.danger
                       : null,
                 ),
@@ -188,6 +200,8 @@ final class DocumentView extends StatelessWidget {
         DocumentSaveState.dirty => 'Есть несохранённые изменения',
         DocumentSaveState.saving => 'Сохраняю…',
         DocumentSaveState.failed => 'Не удалось сохранить',
+        DocumentSaveState.titleRequired =>
+          'Заметки сохранены · у задачи должно быть название',
       };
 }
 

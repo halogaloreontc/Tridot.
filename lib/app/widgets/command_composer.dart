@@ -184,9 +184,9 @@ final class _CommandComposerState extends State<CommandComposer> {
                   isDense: true,
                 ),
               ),
-              Row(
-                children: <Widget>[
-                  PopupMenuButton<Object>(
+              LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) {
+                  final plus = PopupMenuButton<Object>(
                     key: const Key('templates-button'),
                     tooltip: 'Документы и шаблоны команд',
                     onSelected: (Object value) {
@@ -238,21 +238,8 @@ final class _CommandComposerState extends State<CommandComposer> {
                         ),
                     ],
                     child: const _RoundIcon(icon: Icons.add),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Center(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: _ModeSwitch(
-                          mode: widget.mode,
-                          onChanged: widget.onModeChanged,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
+                  );
+                  final send = IconButton(
                     key: const Key('assistant-send'),
                     onPressed: widget.sending
                         ? null
@@ -277,8 +264,40 @@ final class _CommandComposerState extends State<CommandComposer> {
                             voice ? Icons.mic_none : Icons.arrow_upward,
                             size: 20,
                           ),
-                  ),
-                ],
+                  );
+                  final modes = _ModeSwitch(
+                    mode: widget.mode,
+                    onChanged: widget.onModeChanged,
+                  );
+                  // Переключатель не сжимается: если места мало (узкий
+                  // экран, крупный шрифт), он встаёт отдельной строкой.
+                  final scale = MediaQuery.textScalerOf(context).scale(1);
+                  final needed = 112 + 200 * scale;
+                  if (constraints.maxWidth >= needed) {
+                    return Row(
+                      children: <Widget>[
+                        plus,
+                        Expanded(child: Center(child: modes)),
+                        send,
+                      ],
+                    );
+                  }
+                  return Column(
+                    children: <Widget>[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: _ModeSwitch(
+                          mode: widget.mode,
+                          onChanged: widget.onModeChanged,
+                          stretch: true,
+                        ),
+                      ),
+                      Row(
+                        children: <Widget>[plus, const Spacer(), send],
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),
@@ -308,10 +327,17 @@ final class _RoundIcon extends StatelessWidget {
 }
 
 final class _ModeSwitch extends StatelessWidget {
-  const _ModeSwitch({required this.mode, required this.onChanged});
+  const _ModeSwitch({
+    required this.mode,
+    required this.onChanged,
+    this.stretch = false,
+  });
 
   final AssistantViewMode mode;
   final ValueChanged<AssistantViewMode> onChanged;
+
+  /// На всю ширину строки: сегменты делят её поровну, подписи обрезаются.
+  final bool stretch;
 
   @override
   Widget build(BuildContext context) {
@@ -322,10 +348,16 @@ final class _ModeSwitch extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: stretch ? MainAxisSize.max : MainAxisSize.min,
         children: <Widget>[
-          _button('Диалог', AssistantViewMode.dialogue, 'mode-dialogue'),
-          _button('Документ', AssistantViewMode.document, 'mode-document'),
+          for (final (label, value, key)
+              in <(String, AssistantViewMode, String)>[
+            ('Диалог', AssistantViewMode.dialogue, 'mode-dialogue'),
+            ('Документ', AssistantViewMode.document, 'mode-document'),
+          ])
+            stretch
+                ? Expanded(child: _button(label, value, key))
+                : _button(label, value, key),
         ],
       ),
     );
@@ -342,15 +374,17 @@ final class _ModeSwitch extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          constraints: const BoxConstraints(minHeight: 36),
+          constraints: const BoxConstraints(minHeight: 40),
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          padding: EdgeInsets.symmetric(horizontal: stretch ? 6 : 14),
           decoration: BoxDecoration(
             color: active ? AssistantColors.textStrong : Colors.transparent,
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: active ? const Color(0xFF171917) : AssistantColors.muted,
               fontSize: 12,

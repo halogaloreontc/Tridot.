@@ -73,6 +73,40 @@ void main() {
       expect((await store.load()).reduceMotion, isFalse);
     });
 
+    test('параллельные записи задач не теряют друг друга', () async {
+      final path = '${dir.path}/tasks.json';
+      final svc =
+          TaskService(repository: JsonTaskRepository(path), clock: clock);
+      final a = await svc.create(title: 'A');
+      final b = await svc.create(title: 'B');
+
+      await Future.wait(<Future<Object?>>[
+        svc.updateDetails(a.id, description: 'ВАЖНЫЕ ЗАМЕТКИ'),
+        svc.complete(b.id),
+      ]);
+
+      final reloaded = await JsonTaskRepository(path).list();
+      final byId = {for (final t in reloaded) t.id: t};
+      expect(byId[a.id]!.description, 'ВАЖНЫЕ ЗАМЕТКИ');
+      expect(byId[b.id]!.status, TaskStatus.done);
+      expect(await File('$path.tmp').exists(), isFalse);
+    });
+
+    test('настройки: параллельное сохранение и неверные типы', () async {
+      final store = JsonSettingsStore('${dir.path}/settings.json');
+      await Future.wait(<Future<void>>[
+        store.save(const AppSettings(reduceMotion: true)),
+        store.save(const AppSettings(showTimestamps: false)),
+      ]);
+      expect((await store.load()).showTimestamps, isFalse);
+
+      await File('${dir.path}/settings.json')
+          .writeAsString('{"reduce_motion": "да", "show_timestamps": 1}');
+      final loaded = await store.load();
+      expect(loaded.reduceMotion, isFalse);
+      expect(loaded.showTimestamps, isTrue);
+    });
+
     test('резервная копия кладётся рядом с файлом задач', () async {
       final path = '${dir.path}/tasks.json';
       final info = JsonStorageInfo(path, clock: clock);

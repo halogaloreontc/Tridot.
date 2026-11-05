@@ -88,6 +88,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
   final List<String> _commands = <String>[];
   int? _commandCursor;
+
+  /// Черновик, который был в поле до листания истории стрелками.
+  String _draftBeforeRecall = '';
   int? _highlightedCommand;
 
   AppSection _section = AppSection.tasks;
@@ -105,6 +108,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   String? _docTaskId;
   bool _docLoading = false;
+
+  /// Сохранения документа идут строго по очереди.
+  Future<void> _docSaves = Future<void>.value();
+
   DocumentSaveState _docState = DocumentSaveState.saved;
   DateTime? _docSavedAt;
 
@@ -136,11 +143,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _docTimer?.cancel();
     _tick?.cancel();
     // Несохранённые правки документа не теряем и при закрытии экрана.
-    if (_docState == DocumentSaveState.dirty && _docTaskId != null) {
+    if (_docPending && _docTaskId != null) {
       unawaited(
         widget.tasks.updateDetails(
           _docTaskId!,
-          title: _docTitle.text,
+          title: _docTitle.text.trim().isEmpty ? null : _docTitle.text,
           description: _docBody.text,
           project: _docProject.text,
         ),
@@ -303,6 +310,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   String? _previousCommand() {
     if (_commands.isEmpty) return null;
+    if (_commandCursor == null) _draftBeforeRecall = _input.text;
     final cursor = _commandCursor == null
         ? _commands.length - 1
         : (_commandCursor! - 1).clamp(0, _commands.length - 1);
@@ -315,28 +323,46 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (cursor == null) return null;
     if (cursor + 1 >= _commands.length) {
       _commandCursor = null;
-      return '';
+      return _draftBeforeRecall;
     }
     _commandCursor = cursor + 1;
     return _commands[cursor + 1];
   }
 
-  void _jumpToCommand(int commandIndex) {
+  /// Прокручивает чат к команде. Лента строится лениво, поэтому старая
+  /// команда может ещё не существовать: прокручиваем шагами вверх, пока она
+  /// не появится, и затем выравниваем её.
+  Future<void> _jumpToCommand(int commandIndex) async {
     var seen = -1;
+    var messageIndex = -1;
     for (var i = 0; i < _messages.length; i++) {
       if (!_messages[i].fromUser) continue;
-      seen++;
-      if (seen != commandIndex) continue;
-      final context = _messageKeys[i]?.currentContext;
-      if (context != null) {
-        Scrollable.ensureVisible(
-          context,
-          alignment: .3,
-          duration: _motion(const Duration(milliseconds: 240)),
-        );
+      if (++seen == commandIndex) {
+        messageIndex = i;
+        break;
       }
-      setState(() => _highlightedCommand = commandIndex);
-      return;
+    }
+    if (messageIndex < 0) return;
+    setState(() => _highlightedCommand = commandIndex);
+    final key = _messageKeys.putIfAbsent(messageIndex, GlobalKey.new);
+    for (var step = 0; step < 200 && key.currentContext == null; step++) {
+      if (!_chatScroll.hasClients) return;
+      final position = _chatScroll.position;
+      if (position.pixels >= position.maxScrollExtent) break;
+      _chatScroll.jumpTo(
+        (position.pixels + position.viewportDimension * .8)
+            .clamp(0, position.maxScrollExtent),
+      );
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+    }
+    final context = key.currentContext;
+    if (context != null && context.mounted) {
+      await Scrollable.ensureVisible(
+        context,
+        alignment: .3,
+        duration: _motion(const Duration(milliseconds: 240)),
+      );
     }
   }
 
@@ -421,23 +447,41 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // ------------------------------------------------------------ документ
 
-  /// Документ показывает выбранную задачу. При смене задачи правки старой
-  /// сначала сохраняются, потом загружается новая.
+  /// Есть правки, которые ещё не записаны (или запись не удалась).
+  bool get _docPending =>
+      _docState == DocumentSaveState.dirty ||
+      _docState == DocumentSaveState.failed;
+
+  /// Снимки правок, отправленных на запись, по задачам. Пока запись идёт,
+  /// документ этой задачи открывается из снимка, а не из устаревших данных.
+  final Map<String, _DocSnapshot> _docInFlight = <String, _DocSnapshot>{};
+
+  _DocSnapshot? _currentSnapshot() {
+    final id = _docTaskId;
+    if (id == null) return null;
+    return _DocSnapshot(id, _docTitle.text, _docProject.text, _docBody.text);
+  }
+
+  /// Документ показывает выбранную задачу и переключается сразу: правки
+  /// прежней задачи уходят на запись из снимка, а не из полей ввода, поэтому
+  /// ничего не попадает в чужую задачу даже при медленном диске.
   Future<void> _syncDocument() async {
     final selected = _selectedTask;
     if (selected?.id == _docTaskId) return;
-    await _saveDocument();
-    if (!mounted) return;
+    _docTimer?.cancel();
+    final pending = _docPending ? _currentSnapshot() : null;
+    final snapshot = selected == null ? null : _docInFlight[selected.id];
     _docLoading = true;
     _docTaskId = selected?.id;
-    _docTitle.text = selected?.title ?? '';
-    _docProject.text = selected?.project ?? '';
-    _docBody.text = selected?.description ?? '';
+    _docTitle.text = snapshot?.title ?? selected?.title ?? '';
+    _docProject.text = snapshot?.project ?? selected?.project ?? '';
+    _docBody.text = snapshot?.body ?? selected?.description ?? '';
     _docLoading = false;
     setState(() {
       _docState = DocumentSaveState.saved;
       _docSavedAt = null;
     });
+    if (pending != null) await _enqueueSave(pending);
   }
 
   void _onDocumentEdited() {
@@ -456,35 +500,64 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _docTimer = Timer(const Duration(milliseconds: 800), _saveDocument);
   }
 
+  /// Сохраняет открытый документ, если в нём есть несохранённые правки.
   Future<void> _saveDocument() async {
     _docTimer?.cancel();
-    final id = _docTaskId;
-    if (id == null || _docState != DocumentSaveState.dirty) return;
-    final title = _docTitle.text;
-    final project = _docProject.text;
-    final body = _docBody.text;
+    if (!_docPending) return;
+    final snapshot = _currentSnapshot();
+    if (snapshot == null) return;
     if (mounted) setState(() => _docState = DocumentSaveState.saving);
+    await _enqueueSave(snapshot);
+  }
+
+  /// Записи идут строго по очереди. Результат меняет состояние документа,
+  /// только если открыт документ той же задачи.
+  Future<void> _enqueueSave(_DocSnapshot snapshot) {
+    _docInFlight[snapshot.id] = snapshot;
+    final save = _docSaves.then((_) => _write(snapshot));
+    _docSaves = save.catchError((Object _) {});
+    return save;
+  }
+
+  Future<void> _write(_DocSnapshot snapshot) async {
+    final titleMissing = snapshot.title.trim().isEmpty;
+    var failed = false;
     try {
+      // Пустое название не сохраняется, но заметки и проект — сохраняются.
       await widget.tasks.updateDetails(
-        id,
-        title: title,
-        description: body,
-        project: project,
+        snapshot.id,
+        title: titleMissing ? null : snapshot.title,
+        description: snapshot.body,
+        project: snapshot.project,
       );
-      if (!mounted) return;
-      final changedMeanwhile = _docTaskId == id &&
-          (_docTitle.text != title ||
-              _docProject.text != project ||
-              _docBody.text != body);
+    } catch (_) {
+      failed = true;
+    }
+    if (identical(_docInFlight[snapshot.id], snapshot)) {
+      _docInFlight.remove(snapshot.id);
+    }
+    if (!mounted) return;
+    if (_docTaskId == snapshot.id) {
+      final current = _currentSnapshot()!;
+      final changedMeanwhile = current != snapshot;
       setState(() {
-        _docState = changedMeanwhile
-            ? DocumentSaveState.dirty
-            : DocumentSaveState.saved;
-        _docSavedAt = _now;
+        _docState = failed
+            ? DocumentSaveState.failed
+            : changedMeanwhile
+                ? DocumentSaveState.dirty
+                : titleMissing
+                    ? DocumentSaveState.titleRequired
+                    : DocumentSaveState.saved;
+        if (!failed) _docSavedAt = _now;
       });
-      if (changedMeanwhile) {
+      if (!failed && changedMeanwhile) {
         _docTimer = Timer(const Duration(milliseconds: 800), _saveDocument);
       }
+    } else if (failed) {
+      _announce('Не удалось сохранить документ задачи — правки не записаны');
+    }
+    if (failed) return;
+    try {
       final active = await widget.tasks.listActive();
       final all = await widget.tasks.listAll();
       if (mounted) {
@@ -494,7 +567,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _docState = DocumentSaveState.failed);
+      // Список обновится при следующем обновлении экрана.
     }
   }
 
@@ -667,11 +740,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       tooltip: wide && _panelOpen
                           ? 'Скрыть список задач'
                           : 'Список задач',
-                      icon: Badge(
-                        isLabelVisible: _active.isNotEmpty,
-                        backgroundColor: AssistantColors.textStrong,
-                        textColor: AssistantColors.background,
-                        label: Text('${_active.length}'),
+                      icon: _CountBadge(
+                        count: _active.length,
                         child: const Icon(Icons.checklist),
                       ),
                     ),
@@ -1123,11 +1193,8 @@ final class _NavItem extends StatelessWidget {
                       ],
                     )
                   : Center(
-                      child: Badge(
-                        isLabelVisible: badge != null,
-                        backgroundColor: AssistantColors.textStrong,
-                        textColor: AssistantColors.background,
-                        label: Text(badge ?? ''),
+                      child: _CountBadge(
+                        count: int.tryParse(badge ?? '') ?? 0,
                         child: icon,
                       ),
                     ),
@@ -1407,4 +1474,47 @@ final class _QuickActions extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Счётчик рядом с иконкой: смещён за её край, чтобы не закрывать значок,
+/// и не растёт вместе с крупным шрифтом.
+final class _CountBadge extends StatelessWidget {
+  const _CountBadge({required this.count, required this.child});
+
+  final int count;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Badge(
+      isLabelVisible: count > 0,
+      offset: const Offset(12, -8),
+      backgroundColor: AssistantColors.textStrong,
+      textColor: AssistantColors.background,
+      label: MediaQuery.withNoTextScaling(child: Text('$count')),
+      child: child,
+    );
+  }
+}
+
+/// Содержимое документа задачи в момент отправки на запись.
+@immutable
+final class _DocSnapshot {
+  const _DocSnapshot(this.id, this.title, this.project, this.body);
+
+  final String id;
+  final String title;
+  final String project;
+  final String body;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _DocSnapshot &&
+      other.id == id &&
+      other.title == title &&
+      other.project == project &&
+      other.body == body;
+
+  @override
+  int get hashCode => Object.hash(id, title, project, body);
 }

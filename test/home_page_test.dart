@@ -24,6 +24,34 @@ final class _BrokenRepository implements TaskRepository {
   Future<void> save(Task task) async {}
 }
 
+/// Репозиторий с задержкой записи и возможностью один раз упасть.
+final class _SlowRepository implements TaskRepository {
+  final InMemoryTaskRepository _inner = InMemoryTaskRepository();
+
+  /// Задержку включают после подготовки данных: в тестовом времени
+  /// ожидание идёт только вместе с tester.pump.
+  Duration delay = Duration.zero;
+  bool failNext = false;
+  int saves = 0;
+
+  @override
+  Future<List<Task>> list() => _inner.list();
+
+  @override
+  Future<Task?> get(String id) => _inner.get(id);
+
+  @override
+  Future<void> save(Task task) async {
+    saves++;
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
+    if (failNext) {
+      failNext = false;
+      throw StateError('диск недоступен');
+    }
+    await _inner.save(task);
+  }
+}
+
 final _clock = FixedClock(DateTime(2026, 11, 4, 12));
 
 const _desktop = Size(1300, 900);
@@ -399,5 +427,188 @@ void main() {
       find.byKey(const Key('assistant-input')),
     );
     expect(field.controller!.text, 'Добавь задачу «» на завтра в 10:00');
+  });
+
+  Future<Task> byTitle(TaskService service, String title) async =>
+      (await service.listAll()).firstWhere((Task t) => t.title == title);
+
+  Future<void> openTask(WidgetTester tester, Task task) async {
+    await tester.tap(find.byKey(ValueKey<String>('task-${task.id}')));
+    await tester.pump();
+  }
+
+  testWidgets('пустое название не мешает сохранить заметки', (tester) async {
+    final service =
+        TaskService(repository: InMemoryTaskRepository(), clock: _clock);
+    final alpha = await service.create(title: 'Alpha');
+    final beta = await service.create(title: 'Beta');
+    await _pump(tester, service: service);
+    await openTask(tester, alpha);
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('document-title')), '');
+    await tester.enterText(
+      find.byKey(const Key('document-editor')),
+      'Важные заметки',
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('должно быть название'), findsOneWidget);
+
+    await openTask(tester, beta);
+    await tester.pumpAndSettle();
+    final saved = await byTitle(service, 'Alpha');
+    expect(saved.description, 'Важные заметки');
+  });
+
+  testWidgets('после ошибки записи «Сохранить» повторяет запись',
+      (tester) async {
+    final repo = _SlowRepository();
+    final service = TaskService(repository: repo, clock: _clock);
+    final alpha = await service.create(title: 'Alpha');
+    await _pump(tester, service: service);
+    await openTask(tester, alpha);
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+
+    repo.failNext = true;
+    await tester.enterText(find.byKey(const Key('document-editor')), 'текст');
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Не удалось сохранить'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('document-save')));
+    await tester.pumpAndSettle();
+    expect((await byTitle(service, 'Alpha')).description, 'текст');
+    expect(find.textContaining('Сохранено'), findsOneWidget);
+  });
+
+  testWidgets('быстрое переключение задач не путает документы', (tester) async {
+    final repo = _SlowRepository();
+    final service = TaskService(repository: repo, clock: _clock);
+    final alpha = await service.create(title: 'Alpha');
+    final beta = await service.create(title: 'Beta');
+    final gamma = await service.create(title: 'Gamma');
+    repo.delay = const Duration(milliseconds: 300);
+    await _pump(tester, service: service);
+    await openTask(tester, alpha);
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('document-editor')), 'A');
+    await openTask(tester, beta);
+    await tester.pump(const Duration(milliseconds: 50));
+    await openTask(tester, gamma);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    final title = tester.widget<TextField>(
+      find.byKey(const Key('document-title')),
+    );
+    expect(title.controller!.text, 'Gamma');
+    await tester.enterText(find.byKey(const Key('document-editor')), 'G');
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect((await byTitle(service, 'Alpha')).description, 'A');
+    expect((await byTitle(service, 'Beta')).description, '');
+    expect((await byTitle(service, 'Gamma')).description, 'G');
+  });
+
+  testWidgets('поздняя запись старой задачи не теряет правки новой',
+      (tester) async {
+    final repo = _SlowRepository();
+    final service = TaskService(repository: repo, clock: _clock);
+    final alpha = await service.create(title: 'Alpha');
+    final beta = await service.create(title: 'Beta');
+    repo.delay = const Duration(milliseconds: 500);
+    await _pump(tester, service: service);
+    await openTask(tester, alpha);
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('document-editor')), 'A-notes');
+    await tester.pump(const Duration(milliseconds: 850));
+    // Запись Alpha ещё идёт (500 мс), а пользователь уже печатает в Beta.
+    await openTask(tester, beta);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.enterText(find.byKey(const Key('document-editor')), 'B-notes');
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+
+    expect((await byTitle(service, 'Alpha')).description, 'A-notes');
+    expect((await byTitle(service, 'Beta')).description, 'B-notes');
+  });
+
+  testWidgets('переход по истории к старой команде за пределами экрана',
+      (tester) async {
+    await _pump(tester, size: const Size(1000, 600));
+    for (var i = 0; i < 15; i++) {
+      await _say(tester, 'Покажи задачи $i');
+    }
+    expect(find.text('Покажи задачи 0'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('history-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('Покажи задачи 0'), findsOneWidget);
+  });
+
+  testWidgets('стрелки не стирают черновик', (tester) async {
+    await _pump(tester);
+    await _say(tester, 'Покажи задачи');
+    await tester.enterText(
+      find.byKey(const Key('assistant-input')),
+      'черновик',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('assistant-input')),
+    );
+    expect(field.controller!.text, 'черновик');
+  });
+
+  testWidgets('переключатель режимов не сжимается на узком экране',
+      (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _pump(tester, size: const Size(320, 640));
+    final size = tester.getSize(find.byKey(const Key('mode-document')));
+    expect(size.height, greaterThanOrEqualTo(40));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('правки сохраняются при смене задачи до автосохранения',
+      (tester) async {
+    final repo = _SlowRepository();
+    final service = TaskService(repository: repo, clock: _clock);
+    final alpha = await service.create(title: 'Alpha');
+    final beta = await service.create(title: 'Beta');
+    repo.delay = const Duration(milliseconds: 300);
+    await _pump(tester, service: service);
+    await openTask(tester, alpha);
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('document-editor')), 'срочно');
+    await openTask(tester, beta);
+    final title = tester.widget<TextField>(
+      find.byKey(const Key('document-title')),
+    );
+    expect(title.controller!.text, 'Beta', reason: 'переключение сразу');
+
+    // Возврат к Alpha, пока запись ещё идёт: виден снимок, а не старые данные.
+    await openTask(tester, alpha);
+    final body = tester.widget<TextField>(
+      find.byKey(const Key('document-editor')),
+    );
+    expect(body.controller!.text, 'срочно');
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect((await byTitle(service, 'Alpha')).description, 'срочно');
+    expect((await byTitle(service, 'Beta')).description, '');
   });
 }

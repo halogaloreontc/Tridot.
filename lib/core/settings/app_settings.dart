@@ -5,10 +5,16 @@ import 'dart:io';
 final class AppSettings {
   const AppSettings({this.reduceMotion = false, this.showTimestamps = true});
 
-  factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
-        reduceMotion: json['reduce_motion'] as bool? ?? false,
-        showTimestamps: json['show_timestamps'] as bool? ?? true,
-      );
+  /// Неизвестные или неверного типа значения заменяются значениями по
+  /// умолчанию: битые настройки не должны мешать запуску.
+  factory AppSettings.fromJson(Map<String, dynamic> json) {
+    final reduceMotion = json['reduce_motion'];
+    final showTimestamps = json['show_timestamps'];
+    return AppSettings(
+      reduceMotion: reduceMotion is bool && reduceMotion,
+      showTimestamps: showTimestamps is! bool || showTimestamps,
+    );
+  }
 
   /// Не анимировать кубик и переходы, даже если система разрешает.
   final bool reduceMotion;
@@ -50,6 +56,7 @@ final class JsonSettingsStore implements SettingsStore {
   JsonSettingsStore(this.filePath);
 
   final String filePath;
+  Future<void> _writes = Future<void>.value();
 
   @override
   Future<AppSettings> load() async {
@@ -58,14 +65,20 @@ final class JsonSettingsStore implements SettingsStore {
     try {
       final decoded = jsonDecode(await file.readAsString());
       if (decoded is Map<String, dynamic>) return AppSettings.fromJson(decoded);
-    } on FormatException {
-      // Повреждённый файл: перезапишется при следующем сохранении.
+    } on Object {
+      // Повреждённый или нечитаемый файл: перезапишется при сохранении.
     }
     return const AppSettings();
   }
 
   @override
-  Future<void> save(AppSettings settings) async {
+  Future<void> save(AppSettings settings) {
+    final write = _writes.then((_) => _write(settings));
+    _writes = write.catchError((Object _) {});
+    return write;
+  }
+
+  Future<void> _write(AppSettings settings) async {
     final file = File(filePath);
     await file.parent.create(recursive: true);
     final temporary = File('$filePath.tmp');

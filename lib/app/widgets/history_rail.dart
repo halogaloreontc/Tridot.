@@ -88,9 +88,10 @@ final class _MarkState extends State<_Mark> {
           child: InkWell(
             onTap: widget.onTap,
             borderRadius: BorderRadius.circular(8),
+            // 40×40 — удобная цель для пальца; черта по центру.
             child: SizedBox(
               width: 40,
-              height: 24,
+              height: 40,
               child: Center(
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 160),
