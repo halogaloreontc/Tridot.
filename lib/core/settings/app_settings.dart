@@ -3,7 +3,12 @@ import 'dart:io';
 
 /// Пользовательские настройки интерфейса.
 final class AppSettings {
-  const AppSettings({this.reduceMotion = false, this.showTimestamps = true});
+  const AppSettings({
+    this.reduceMotion = false,
+    this.showTimestamps = true,
+    this.disabledExtensions = const <String>{},
+    this.enabledExtensions = const <String>{},
+  });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
   /// умолчанию: битые настройки не должны мешать запуску.
@@ -13,7 +18,19 @@ final class AppSettings {
     return AppSettings(
       reduceMotion: reduceMotion is bool && reduceMotion,
       showTimestamps: showTimestamps is! bool || showTimestamps,
+      disabledExtensions: _ids(json['disabled_extensions']),
+      enabledExtensions: _ids(json['enabled_extensions']),
     );
+  }
+
+  /// Список id: не список — пусто, не строки и пустые строки пропускаются.
+  static Set<String> _ids(Object? value) {
+    if (value is! List) return const <String>{};
+    return <String>{
+      for (final item in value)
+        if (item is String && item.trim().isNotEmpty && item.length <= 64)
+          item.trim(),
+    };
   }
 
   /// Не анимировать кубик и переходы, даже если система разрешает.
@@ -22,15 +39,32 @@ final class AppSettings {
   /// Показывать время под сообщениями чата.
   final bool showTimestamps;
 
-  AppSettings copyWith({bool? reduceMotion, bool? showTimestamps}) =>
+  /// Выключенные расширения из включённых по умолчанию
+  /// (docs/EXTENSIONS.md). Новое расширение, включённое по умолчанию,
+  /// сюда не попадает и после обновления появляется включённым.
+  final Set<String> disabledExtensions;
+
+  /// Явно включённые расширения из выключенных по умолчанию.
+  final Set<String> enabledExtensions;
+
+  AppSettings copyWith({
+    bool? reduceMotion,
+    bool? showTimestamps,
+    Set<String>? disabledExtensions,
+    Set<String>? enabledExtensions,
+  }) =>
       AppSettings(
         reduceMotion: reduceMotion ?? this.reduceMotion,
         showTimestamps: showTimestamps ?? this.showTimestamps,
+        disabledExtensions: disabledExtensions ?? this.disabledExtensions,
+        enabledExtensions: enabledExtensions ?? this.enabledExtensions,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'reduce_motion': reduceMotion,
         'show_timestamps': showTimestamps,
+        'disabled_extensions': disabledExtensions.toList()..sort(),
+        'enabled_extensions': enabledExtensions.toList()..sort(),
       };
 }
 

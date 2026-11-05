@@ -1,14 +1,25 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/screens/settings_screen.dart';
+import 'package:local_assistant/core/connectors/connector.dart';
+import 'package:local_assistant/core/connectors/tasks_connector.dart';
+import 'package:local_assistant/core/extensions/extension_registry.dart';
+import 'package:local_assistant/core/scenario/scenario_parser.dart';
+import 'package:local_assistant/core/services/clock.dart';
+import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
+import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
+import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
 Widget host({
   AppSettings settings = const AppSettings(),
   ValueChanged<AppSettings>? onChanged,
   VoidCallback? onClearChat,
   int messageCount = 5,
+  ExtensionRegistry? extensions,
 }) {
   return MaterialApp(
     theme: AssistantTheme.dark(),
@@ -18,10 +29,58 @@ Widget host({
         onChanged: onChanged ?? (_) {},
         onClearChat: onClearChat ?? () {},
         messageCount: messageCount,
+        extensions: extensions,
       ),
     ),
   );
 }
+
+String userPack(String id, {String title = 'Мои шутки'}) => '''
+{"format":"assistant-pack/1","id":"$id","type":"jokes","title":"$title",
+ "author":"Я","language":"ru","version":"1.2.0","description":"Свои шутки",
+ "entries":[{"id":"j1","text":"Шутка","tags":["кофе"]}]}''';
+
+Future<ExtensionRegistry> registry() async {
+  final clock = FixedClock(DateTime(2026, 11, 5, 12));
+  final packs = PackStore.memory(builtIn: <String>[userPack('jokes.basic')]);
+  await packs.load();
+  return ExtensionRegistry(
+    connectors: <Connector>[
+      TasksConnector(
+        taskService: TaskService(
+          repository: InMemoryTaskRepository(),
+          clock: clock,
+        ),
+        parser: ScenarioParser(clock: clock),
+      ),
+      const CalculatorConnector(),
+    ],
+    packs: packs,
+  );
+}
+
+/// Экран с реестром, который сам хранит изменённые настройки.
+Widget stateful(ExtensionRegistry extensions, List<AppSettings> changes) {
+  var settings = const AppSettings();
+  return StatefulBuilder(
+    builder: (context, setState) => host(
+      settings: settings,
+      extensions: extensions,
+      onChanged: (value) {
+        changes.add(value);
+        extensions.apply(
+          ExtensionChoice(
+            disabled: value.disabledExtensions,
+            enabled: value.enabledExtensions,
+          ),
+        );
+        setState(() => settings = value);
+      },
+    ),
+  );
+}
+
+Finder tile(String id) => find.byKey(ValueKey<String>('extension-$id'));
 
 const clearKey = ValueKey<String>('clear-chat');
 
@@ -116,5 +175,253 @@ void main() {
     await tester.pumpWidget(host(messageCount: 1));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  group('Расширения', () {
+    testWidgets('без реестра раздела нет', (tester) async {
+      await tester.pumpWidget(host());
+      expect(find.text('Расширения'), findsNothing);
+    });
+
+    testWidgets('группы, строки, бейджи, обязательные задачи', (tester) async {
+      final extensions = await tester.runAsync(registry);
+      await tester.pumpWidget(host(extensions: extensions));
+      for (final title in <String>['Расширения', 'Навыки', 'Подключения']) {
+        expect(find.text(title), findsOneWidget, reason: title);
+      }
+      expect(find.text('Паки'), findsOneWidget);
+      expect(find.text('Подключений пока нет'), findsOneWidget);
+      expect(find.text('Калькулятор'), findsOneWidget);
+      expect(find.text('Задачи'), findsOneWidget);
+      expect(find.text('Мои шутки'), findsOneWidget);
+      expect(find.text('v1.2.0 · Я'), findsOneWidget);
+      expect(find.text('встроено'), findsNWidgets(3));
+      expect(find.text('всегда включено'), findsOneWidget);
+      final tasks = tester.widget<SwitchListTile>(tile('tasks'));
+      expect(tasks.value, isTrue);
+      expect(tasks.onChanged, isNull);
+      final calc = tester.widget<SwitchListTile>(tile('calc'));
+      expect(calc.value, isTrue);
+      expect(calc.onChanged, isNotNull);
+      expect(
+        find.byKey(const ValueKey<String>('extension-remove-jokes.basic')),
+        findsNothing,
+        reason: 'встроенный пак не удаляется',
+      );
+    });
+
+    testWidgets('переключатель сообщает выбор в настройках', (tester) async {
+      final extensions = (await tester.runAsync(registry))!;
+      final changes = <AppSettings>[];
+      await tester.pumpWidget(stateful(extensions, changes));
+      await tester.ensureVisible(tile('calc'));
+      await tester.tap(tile('calc'));
+      await tester.pumpAndSettle();
+      expect(changes.last.disabledExtensions, <String>{'calc'});
+      expect(extensions.isEnabled('calc'), isFalse);
+      expect(tester.widget<SwitchListTile>(tile('calc')).value, isFalse);
+      await tester.ensureVisible(tile('jokes.basic'));
+      await tester.tap(tile('jokes.basic'));
+      await tester.pumpAndSettle();
+      expect(changes.last.disabledExtensions, <String>{'calc', 'jokes.basic'});
+      await tester.tap(tile('calc'));
+      await tester.pumpAndSettle();
+      expect(changes.last.disabledExtensions, <String>{'jokes.basic'});
+    });
+
+    testWidgets('добавить пак: ошибки, успех, замена, удаление',
+        (tester) async {
+      final extensions = (await tester.runAsync(registry))!;
+      await tester.pumpWidget(stateful(extensions, <AppSettings>[]));
+      Future<void> openDialog() async {
+        await tester.ensureVisible(find.byKey(const ValueKey('pack-add')));
+        await tester.tap(find.byKey(const ValueKey('pack-add')));
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> submit(String json) async {
+        await tester.enterText(find.byKey(const ValueKey('pack-json')), json);
+        await tester.runAsync(() async {
+          await tester.tap(find.byKey(const ValueKey('pack-import')));
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        });
+        await tester.pumpAndSettle();
+      }
+
+      await openDialog();
+      await submit('{"format":"assistant-pack/2"}');
+      expect(find.byKey(const ValueKey('pack-errors')), findsOneWidget);
+      expect(
+        find.textContaining('Версия формата «assistant-pack/2»'),
+        findsOneWidget,
+      );
+      await submit(userPack('jokes.basic'));
+      expect(find.textContaining('встроен в приложение'), findsOneWidget);
+
+      await submit(userPack('my.jokes', title: 'Свои'));
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Пак «Свои» добавлен.'), findsOneWidget);
+      expect(tile('my.jokes'), findsOneWidget);
+
+      // Повторный импорт того же id — с подтверждением замены.
+      await openDialog();
+      await submit(userPack('my.jokes', title: 'Свои 2'));
+      expect(find.text('Заменить пак?'), findsOneWidget);
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const ValueKey('pack-replace-confirm')));
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Свои 2'), findsOneWidget);
+
+      final remove = find.byKey(
+        const ValueKey<String>('extension-remove-my.jokes'),
+      );
+      await tester.ensureVisible(remove);
+      await tester.tap(remove);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('pack-remove-cancel')));
+      await tester.pumpAndSettle();
+      expect(tile('my.jokes'), findsOneWidget);
+      await tester.tap(remove);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('pack-remove-confirm')));
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pumpAndSettle();
+      expect(extensions.info('my.jokes'), isNull);
+      expect(tile('my.jokes'), findsNothing);
+    });
+
+    testWidgets('без переполнения на 320x640 при масштабе 2', (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final extensions = (await tester.runAsync(registry))!;
+      await tester.pumpWidget(stateful(extensions, <AppSettings>[]));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.byKey(const ValueKey('pack-add')));
+      await tester.tap(find.byKey(const ValueKey('pack-add')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('pack-json')), '{');
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const ValueKey('pack-import')));
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('pack-errors')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+    testWidgets('удаление пака с длинным названием на 320x640 при масштабе 2',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final extensions = (await tester.runAsync(registry))!;
+      final title = 'Очень длинное название пакета шуток для проверки '
+          'экрана настроек на узком телефоне с крупным шрифтом';
+      expect(title.length, lessThanOrEqualTo(100));
+      await tester.runAsync(
+        () => extensions.importPack(userPack('my.pack', title: title)),
+      );
+      await tester.pumpWidget(stateful(extensions, <AppSettings>[]));
+      await tester.pumpAndSettle();
+      final remove =
+          find.byKey(const ValueKey<String>('extension-remove-my.pack'));
+      await tester.ensureVisible(remove);
+      await tester.tap(remove);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      for (final key in <String>['pack-remove-cancel', 'pack-remove-confirm']) {
+        final button = find.byKey(ValueKey<String>(key));
+        final rect = tester.getRect(button);
+        expect(
+          const Rect.fromLTWH(0, 0, 320, 640).contains(rect.center),
+          isTrue,
+          reason: '$key: $rect',
+        );
+      }
+      await tester.tap(find.byKey(const ValueKey('pack-remove-cancel')));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(tile('my.pack'), findsOneWidget);
+    });
+
+    testWidgets('сбой записи пака — ошибка в диалоге, кнопка снова доступна',
+        (tester) async {
+      final temp = (await tester.runAsync(
+        () => Directory.systemTemp.createTemp('pack_ui'),
+      ))!;
+      addTearDown(() => temp.deleteSync(recursive: true));
+      final blocker = File('${temp.path}/file')..writeAsStringSync('');
+      final extensions = ExtensionRegistry(
+        connectors: const <Connector>[CalculatorConnector()],
+        packs: PackStore(userDirectory: '${blocker.path}/packs'),
+      );
+      await tester.pumpWidget(stateful(extensions, <AppSettings>[]));
+      await tester.ensureVisible(find.byKey(const ValueKey('pack-add')));
+      await tester.tap(find.byKey(const ValueKey('pack-add')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('pack-json')),
+        userPack('my.pack'),
+      );
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const ValueKey('pack-import')));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      for (var i = 0; i < 5; i++) {
+        await tester.pumpAndSettle();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+      }
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('pack-errors')), findsOneWidget);
+      expect(find.textContaining('Не удалось сохранить пак'), findsOneWidget);
+      final button = tester.widget<TextButton>(
+        find.byKey(const ValueKey('pack-import')),
+      );
+      expect(button.onPressed, isNotNull);
+    });
+
+    testWidgets('удалённый выключенный пак добавляется снова включённым',
+        (tester) async {
+      final extensions = (await tester.runAsync(registry))!;
+      final changes = <AppSettings>[];
+      await tester.runAsync(() => extensions.importPack(userPack('my.pack')));
+      await tester.pumpWidget(stateful(extensions, changes));
+      await tester.ensureVisible(tile('my.pack'));
+      await tester.tap(tile('my.pack'));
+      await tester.pumpAndSettle();
+      expect(changes.last.disabledExtensions, contains('my.pack'));
+
+      final remove =
+          find.byKey(const ValueKey<String>('extension-remove-my.pack'));
+      await tester.ensureVisible(remove);
+      await tester.tap(remove);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('pack-remove-confirm')));
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pumpAndSettle();
+      expect(tile('my.pack'), findsNothing);
+      expect(changes.last.disabledExtensions, isNot(contains('my.pack')));
+
+      await tester.runAsync(() => extensions.importPack(userPack('my.pack')));
+      await tester.pumpAndSettle();
+      expect(extensions.isEnabled('my.pack'), isTrue);
+      expect(tester.widget<SwitchListTile>(tile('my.pack')).value, isTrue);
+    });
   });
 }

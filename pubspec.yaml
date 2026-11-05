@@ -22,6 +22,8 @@ flutter:
   assets:
     - assets/fonts/Inter-OFL.txt
     - assets/fonts/JetBrainsMono-OFL.txt
+    # Встроенные паки (docs/EXTENSIONS.md): только данные, без кода.
+    - assets/packs/
   fonts:
     - family: Inter
       fonts:

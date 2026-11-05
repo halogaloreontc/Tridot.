@@ -11,6 +11,8 @@ import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
+import 'package:local_assistant/core/skills/calculator/calculator.dart';
+import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
 import 'connectors/example_warehouse_connector.dart';
@@ -102,6 +104,7 @@ const Set<String> _allowedKeys = <String>{
   'note',
   'source',
   'tags',
+  'answer',
 };
 
 final DateTime _defaultNow = DateTime(2026, 11, 2, 16, 30);
@@ -127,7 +130,14 @@ final Map<String, Connector Function(DateTime now)> _connectorFactories =
         secrets: InMemorySecretStore(),
         baseUri: Uri.parse('https://warehouse.example/api/'),
       ),
+  CalculatorConnector.id: (DateTime now) => const CalculatorConnector(),
 };
+
+/// Ответ калькулятора для сравнения с полем `answer`: неразрывные пробелы
+/// между разрядами («2 400») в корпусе пишутся обычными.
+String _calcAnswer(String text) => Calculator.calculate(text)
+    .answer
+    .replaceAll(Calculator.groupSeparator, ' ');
 
 /// Кого выберет маршрутизатор: id коннектора, `ambiguous`, если он
 /// переспросит (те же правила, что в AssistantController), или `null`.
@@ -226,6 +236,15 @@ void _validate(Map<String, dynamic> json, String location) {
       fail('поле $key должно быть строкой');
     }
   }
+  if (json.containsKey('answer')) {
+    // Ответ проверяется только у калькулятора и только для примеров.
+    if (json['answer'] is! String) fail('поле answer должно быть строкой');
+    if (connector != CalculatorConnector.id ||
+        json['intent'] != CalculatorConnector.commandId) {
+      fail('поле answer бывает только у connector «calc» с intent '
+          '«${CalculatorConnector.commandId}»');
+    }
+  }
   final status = json['status'];
   if (status != null && status != 'active' && status != 'known_gap') {
     fail('неизвестный status «$status»');
@@ -282,6 +301,9 @@ final class _Case {
         own.isEmpty ? 'unknown' : own.first.commandId,
         expectedIntent,
       );
+      if (json['answer'] case final String answer) {
+        compare('answer', _calcAnswer(text), answer);
+      }
       return mismatches;
     }
 

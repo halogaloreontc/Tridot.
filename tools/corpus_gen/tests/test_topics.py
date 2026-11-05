@@ -375,3 +375,14 @@ def tomllib_loads(text: str) -> dict[str, Any]:
     import tomllib
 
     return tomllib.loads(text)
+
+
+def test_builtin_calc_topics_load() -> None:
+    calc = load_catalog().connector("calc")
+    assert calc.intents == ("calc.evaluate", "unknown")
+    assert set(calc.topics) == {"evaluate", "tricky"}
+    assert calc.topics["evaluate"].intents == {"calc.evaluate"}
+    assert calc.topics["tricky"].intents is None
+    assert not calc.title_intents and not calc.due_intents
+    assert "«8-800-555-35-35»" in calc.label_rules and calc.generation_rules
+    assert "calc:evaluate" in load_catalog().refs()

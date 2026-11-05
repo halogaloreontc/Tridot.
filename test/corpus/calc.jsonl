@@ -1,0 +1,69 @@
+{"id": "calc-001", "text": "сколько будет 2+2*2", "connector": "calc", "intent": "calc.evaluate", "answer": "6", "source": "manual"}
+{"id": "calc-002", "text": "Сколько будет 15% от 2400?", "connector": "calc", "intent": "calc.evaluate", "answer": "360", "source": "manual"}
+{"id": "calc-003", "text": "15% от 2400", "connector": "calc", "intent": "calc.evaluate", "answer": "360", "note": "проценты от числа без маркера", "source": "manual"}
+{"id": "calc-004", "text": "корень из 144", "connector": "calc", "intent": "calc.evaluate", "answer": "12", "source": "manual"}
+{"id": "calc-005", "text": "квадратный корень из 2", "connector": "calc", "intent": "calc.evaluate", "answer": "≈ 1,414213562", "note": "не полный квадрат — приближённо", "source": "manual"}
+{"id": "calc-006", "text": "3,5 умножить на 12", "connector": "calc", "intent": "calc.evaluate", "answer": "42", "source": "manual"}
+{"id": "calc-007", "text": "посчитай (10 + 5) / 3", "connector": "calc", "intent": "calc.evaluate", "answer": "5", "source": "manual"}
+{"id": "calc-008", "text": "вычисли 2^10", "connector": "calc", "intent": "calc.evaluate", "answer": "1 024", "note": "разряды через пробел", "source": "manual"}
+{"id": "calc-009", "text": "реши 100 - 37", "connector": "calc", "intent": "calc.evaluate", "answer": "63", "source": "manual"}
+{"id": "calc-010", "text": "10 / 3", "connector": "calc", "intent": "calc.evaluate", "answer": "≈ 3,333333333", "note": "бесконечная дробь — 10 значащих цифр", "source": "manual"}
+{"id": "calc-011", "text": "сколько будет 1/8", "connector": "calc", "intent": "calc.evaluate", "answer": "0,125", "note": "конечная дробь — точно", "source": "manual"}
+{"id": "calc-012", "text": "2400 плюс 15%", "connector": "calc", "intent": "calc.evaluate", "answer": "2 760", "note": "прибавить 15% от 2400", "source": "manual"}
+{"id": "calc-013", "text": "2400 минус 10%", "connector": "calc", "intent": "calc.evaluate", "answer": "2 160", "source": "manual"}
+{"id": "calc-014", "text": "5 в квадрате", "connector": "calc", "intent": "calc.evaluate", "answer": "25", "source": "manual"}
+{"id": "calc-015", "text": "2 в кубе", "connector": "calc", "intent": "calc.evaluate", "answer": "8", "source": "manual"}
+{"id": "calc-016", "text": "два плюс два", "connector": "calc", "intent": "calc.evaluate", "answer": "4", "note": "числа словами", "source": "manual"}
+{"id": "calc-017", "text": "двадцать пять умножить на четыре", "connector": "calc", "intent": "calc.evaluate", "answer": "100", "source": "manual"}
+{"id": "calc-018", "text": "сто разделить на восемь", "connector": "calc", "intent": "calc.evaluate", "answer": "12,5", "source": "manual"}
+{"id": "calc-019", "text": "10 : 4", "connector": "calc", "intent": "calc.evaluate", "answer": "2,5", "note": "двоеточие с пробелами — деление", "source": "manual"}
+{"id": "calc-020", "text": "12 ÷ 4", "connector": "calc", "intent": "calc.evaluate", "answer": "3", "source": "manual"}
+{"id": "calc-021", "text": "7 × 8", "connector": "calc", "intent": "calc.evaluate", "answer": "56", "source": "manual"}
+{"id": "calc-022", "text": "2+2=", "connector": "calc", "intent": "calc.evaluate", "answer": "4", "note": "знак равенства в конце — маркер", "source": "manual"}
+{"id": "calc-023", "text": "2+2 равно?", "connector": "calc", "intent": "calc.evaluate", "answer": "4", "source": "manual"}
+{"id": "calc-024", "text": "чему равно 7*8", "connector": "calc", "intent": "calc.evaluate", "answer": "56", "source": "manual"}
+{"id": "calc-025", "text": "-5 + 3", "connector": "calc", "intent": "calc.evaluate", "answer": "−2", "note": "унарный минус", "source": "manual"}
+{"id": "calc-026", "text": "(2 + 3) * (4 - 1)", "connector": "calc", "intent": "calc.evaluate", "answer": "15", "source": "manual"}
+{"id": "calc-027", "text": "0,1 + 0,2", "connector": "calc", "intent": "calc.evaluate", "answer": "0,3", "note": "точная арифметика, без 0,30000000000000004", "source": "manual"}
+{"id": "calc-028", "text": "1 000 000 / 4", "connector": "calc", "intent": "calc.evaluate", "answer": "250 000", "note": "разряды во вводе", "source": "manual"}
+{"id": "calc-029", "text": "10 / 0", "connector": "calc", "intent": "calc.evaluate", "answer": "На ноль делить нельзя.", "source": "manual"}
+{"id": "calc-030", "text": "посчитай 2^5000", "connector": "calc", "intent": "calc.evaluate", "answer": "Получается слишком большое число — такое не посчитаю.", "source": "manual"}
+{"id": "calc-031", "text": "корень из -4", "connector": "calc", "intent": "calc.evaluate", "answer": "Квадратный корень из отрицательного числа не извлекается.", "source": "manual"}
+{"id": "calc-032", "text": "сколько будет 2 +", "connector": "calc", "intent": "calc.evaluate", "answer": "Не понял пример. Например: «сколько будет 15% от 2400».", "note": "маркер есть, пример неполный — уточнение", "source": "manual"}
+{"id": "calc-033", "text": "посчитай 5 коробок", "connector": "calc", "intent": "calc.evaluate", "answer": "Не понял пример. Например: «сколько будет 15% от 2400».", "source": "manual"}
+{"id": "calc-034", "text": "Сколько будет 4^0,5", "connector": "calc", "intent": "calc.evaluate", "answer": "≈ 2", "note": "дробная степень — приближённо", "source": "manual"}
+{"id": "calc-035", "text": "√81", "connector": "calc", "intent": "calc.evaluate", "answer": "9", "source": "manual"}
+{"id": "calc-036", "text": "12.11", "connector": "calc", "intent": "unknown", "note": "дата", "source": "manual"}
+{"id": "calc-037", "text": "18:30", "connector": "calc", "intent": "unknown", "note": "время", "source": "manual"}
+{"id": "calc-038", "text": "в 10", "connector": "calc", "intent": "unknown", "note": "время", "source": "manual"}
+{"id": "calc-039", "text": "64115", "connector": "calc", "intent": "unknown", "note": "артикул", "source": "manual"}
+{"id": "calc-040", "text": "10-15 минут", "connector": "calc", "intent": "unknown", "note": "диапазон", "source": "manual"}
+{"id": "calc-041", "text": "2-3 дня", "connector": "calc", "intent": "unknown", "note": "диапазон", "source": "manual"}
+{"id": "calc-042", "text": "+7 999 123-45-67", "connector": "calc", "intent": "unknown", "note": "телефон", "source": "manual"}
+{"id": "calc-043", "text": "8-800-555-35-35", "connector": "calc", "intent": "unknown", "note": "телефон", "source": "manual"}
+{"id": "calc-044", "text": "2.10", "connector": "calc", "intent": "unknown", "note": "версия", "source": "manual"}
+{"id": "calc-045", "text": "#2", "connector": "calc", "intent": "unknown", "note": "метка", "source": "manual"}
+{"id": "calc-046", "text": "через 2 часа", "connector": "calc", "intent": "unknown", "note": "срок", "source": "manual"}
+{"id": "calc-047", "text": "где лежит 64115", "connector": "calc", "intent": "unknown", "note": "вопрос складу", "source": "manual"}
+{"id": "calc-048", "text": "A-03-2", "connector": "calc", "intent": "unknown", "note": "ячейка склада", "source": "manual"}
+{"id": "calc-049", "text": "2026-11-05", "connector": "calc", "intent": "unknown", "note": "дата в формате ISO", "source": "manual"}
+{"id": "calc-050", "text": "реши задачу с отчётом", "connector": "calc", "intent": "unknown", "note": "«реши» без примера", "source": "manual"}
+{"id": "calc-051", "text": "сколько задач на завтра", "connector": "calc", "intent": "unknown", "note": "«сколько» без примера", "source": "manual"}
+{"id": "calc-052", "text": "посчитай что-нибудь", "connector": "calc", "intent": "unknown", "note": "дефис в слове — не минус", "source": "manual"}
+{"id": "calc-053", "text": "пять", "connector": "calc", "intent": "unknown", "note": "одно число без действия", "source": "manual"}
+{"id": "calc-054", "text": "100%", "connector": "calc", "intent": "unknown", "note": "проценты без действия", "source": "manual"}
+{"id": "calc-055", "text": "купить 2 кг муки", "intent": "createTask", "title": "Купить 2 кг муки", "note": "задача с числами — не пример", "source": "manual"}
+{"id": "calc-056", "text": "добавь задачу 2+2", "intent": "createTask", "title": "2+2", "note": "явная команда задач сильнее", "source": "manual"}
+{"id": "calc-057", "text": "Добавь задачу посчитать 15% от 2400", "intent": "createTask", "title": "Посчитать 15% от 2400", "source": "manual"}
+{"id": "calc-058", "text": "через 2 часа позвонить маме", "intent": "createTask", "title": "Позвонить маме", "source": "manual"}
+{"id": "calc-059", "text": "64115-01", "connector": "calc", "intent": "unknown", "note": "артикул через дефис", "source": "manual"}
+{"id": "calc-060", "text": "64115/2", "connector": "calc", "intent": "unknown", "note": "артикул через косую черту", "source": "manual"}
+{"id": "calc-061", "text": "555-1234", "connector": "calc", "intent": "unknown", "note": "телефон без кода", "source": "manual"}
+{"id": "calc-062", "text": "10-15", "connector": "calc", "intent": "unknown", "note": "диапазон без слов", "source": "manual"}
+{"id": "calc-063", "text": "12/11", "connector": "calc", "intent": "unknown", "note": "дата через косую черту", "source": "manual"}
+{"id": "calc-064", "text": "05/11/2026", "connector": "calc", "intent": "unknown", "note": "дата через косую черту", "source": "manual"}
+{"id": "calc-065", "text": "24/7", "connector": "calc", "intent": "unknown", "note": "круглосуточно", "source": "manual"}
+{"id": "calc-066", "text": "-15% от 200", "connector": "calc", "intent": "calc.evaluate", "answer": "−30", "note": "минус перед процентами", "source": "manual"}
+{"id": "calc-067", "text": "корень из 1/4", "connector": "calc", "intent": "calc.evaluate", "answer": "0,5", "note": "корень из дроби словами", "source": "manual"}
+{"id": "calc-068", "text": "2,5:0,5", "connector": "calc", "intent": "calc.evaluate", "answer": "5", "note": "двоеточие между десятичными — деление", "source": "manual"}
+{"id": "calc-069", "text": "10^-21", "connector": "calc", "intent": "calc.evaluate", "answer": "1 × 10^−21", "note": "длинная конечная дробь — точно", "source": "manual"}

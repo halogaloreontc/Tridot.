@@ -1,7 +1,9 @@
+import '../extensions/extension_kind.dart';
 import '../models/assistant_types.dart';
 import '../services/clock.dart';
 import 'utterance.dart';
 
+export '../extensions/extension_kind.dart';
 export '../models/assistant_types.dart' show AssistantResponse, AssistantStatus;
 export 'utterance.dart';
 
@@ -24,7 +26,15 @@ final class ConnectorInfo {
     this.examples = const <String>[],
     this.requiresNetwork = false,
     this.access = ConnectorAccess.readOnly,
-  });
+    this.kind = ExtensionKind.connector,
+    this.version = '1.0.0',
+    this.author = defaultAuthor,
+    this.defaultEnabled = true,
+    this.required = false,
+  }) : assert(kind != ExtensionKind.pack, 'Пак — данные, а не коннектор');
+
+  /// Автор встроенных расширений.
+  static const String defaultAuthor = 'Личный помощник';
 
   /// Постоянный идентификатор латиницей: `tasks`, `warehouse`. Попадает
   /// в корпус фраз (поле `connector`) и в [ConnectorMatch.connectorId].
@@ -44,6 +54,22 @@ final class ConnectorInfo {
   final bool requiresNetwork;
 
   final ConnectorAccess access;
+
+  /// Навык (своя логика без сети) или подключение к внешнему приложению.
+  /// В «Настройки → Расширения» навыки и подключения — разные группы.
+  final ExtensionKind kind;
+
+  /// Версия для пользователя: «1.0.0».
+  final String version;
+
+  final String author;
+
+  /// Включён у пользователя, который его ещё не трогал. Новое расширение
+  /// с `true` после обновления приложения появляется включённым.
+  final bool defaultEnabled;
+
+  /// Нельзя выключить: без него помощник теряет смысл (задачи).
+  final bool required;
 }
 
 /// Ответ коннектора на вопрос «это твоя фраза?».

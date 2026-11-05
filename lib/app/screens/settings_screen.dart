@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
+import '../widgets/extensions_section.dart';
 import '../widgets/task_tile.dart';
 
-/// Экран «Настройки»: поведение интерфейса, история чата, о приложении.
+/// Экран «Настройки»: поведение интерфейса, расширения, история чата,
+/// о приложении.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
     super.key,
@@ -12,6 +15,7 @@ class SettingsScreen extends StatelessWidget {
     required this.onChanged,
     required this.onClearChat,
     required this.messageCount,
+    this.extensions,
   });
 
   final AppSettings settings;
@@ -20,6 +24,9 @@ class SettingsScreen extends StatelessWidget {
 
   /// Сообщений в чате; приветствие помощника тоже считается.
   final int messageCount;
+
+  /// Навыки, подключения и паки; `null` — раздел «Расширения» не показан.
+  final ExtensionRegistry? extensions;
 
   static const applicationName = 'Личный помощник';
 
@@ -93,6 +100,12 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: (value) =>
                     onChanged(settings.copyWith(showTimestamps: value)),
               ),
+              if (extensions case final ExtensionRegistry registry)
+                ExtensionsSection(
+                  registry: registry,
+                  settings: settings,
+                  onChanged: onChanged,
+                ),
               const SectionLabel('Чат'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),

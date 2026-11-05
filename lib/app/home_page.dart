@@ -8,6 +8,7 @@ import '../core/models/task.dart';
 import '../core/scenario/assistant_controller.dart';
 import '../core/services/clock.dart';
 import '../core/services/task_service.dart';
+import '../core/extensions/extension_registry.dart';
 import '../core/settings/app_settings.dart';
 import '../core/storage/storage_info.dart';
 import 'assistant_theme.dart';
@@ -185,10 +186,24 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _loadSettings() async {
     final settings = await _settingsStore.load();
-    if (mounted) setState(() => _settings = settings);
+    if (!mounted) return;
+    _applyExtensions(settings);
+    setState(() => _settings = settings);
+  }
+
+  /// Включает и выключает расширения сразу, без перезапуска: история
+  /// чата, задачи, выбранная задача и черновик в поле ввода не меняются.
+  void _applyExtensions(AppSettings settings) {
+    widget.assistant.extensions.apply(
+      ExtensionChoice(
+        disabled: settings.disabledExtensions,
+        enabled: settings.enabledExtensions,
+      ),
+    );
   }
 
   void _changeSettings(AppSettings settings) {
+    _applyExtensions(settings);
     setState(() => _settings = settings);
     unawaited(_settingsStore.save(settings));
   }
@@ -907,6 +922,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onChanged: _changeSettings,
           onClearChat: _clearChat,
           messageCount: _messages.length,
+          extensions: widget.assistant.extensions,
         );
       case AppSection.tasks:
         return _buildTasksWorkspace(wide: wide);

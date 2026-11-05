@@ -8,11 +8,13 @@ import 'app/assistant_theme.dart';
 import 'app/home_page.dart';
 import 'core/connectors/connector.dart';
 import 'core/connectors/tasks_connector.dart';
+import 'core/extensions/extension_registry.dart';
 import 'core/scenario/assistant_controller.dart';
 import 'core/scenario/scenario_parser.dart';
 import 'core/services/clock.dart';
 import 'core/services/task_service.dart';
 import 'core/settings/app_settings.dart';
+import 'core/skills/calculator/calculator_connector.dart';
 import 'core/storage/json_task_repository.dart';
 import 'core/storage/storage_info.dart';
 
@@ -32,14 +34,24 @@ Future<void> main() async {
   final repository = JsonTaskRepository(tasksPath);
   const clock = SystemClock();
   final tasks = TaskService(repository: repository, clock: clock);
-  // Коннекторы подключаются здесь; порядок важен только при равной
-  // уверенности (тогда маршрутизатор всё равно переспросит).
-  final assistant = AssistantController(
+  // Паки — только данные (ADR-005): встроенные из assets/packs,
+  // пользовательские — в <документы>/assistant/packs.
+  final packs = PackStore(
+    loadBuiltIn: _builtInPacks,
+    userDirectory: p.join(folder, 'packs'),
+  );
+  // Навыки и подключения регистрируются здесь; порядок важен только при
+  // равной уверенности (тогда маршрутизатор всё равно переспросит). Что
+  // включено — выбор пользователя в «Настройки → Расширения».
+  final extensions = ExtensionRegistry(
     connectors: <Connector>[
       TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
+      const CalculatorConnector(),
     ],
-    clock: clock,
+    packs: packs,
   );
+  await packs.load();
+  final assistant = AssistantController(extensions: extensions, clock: clock);
   runApp(
     AssistantApp(
       assistant: assistant,
@@ -49,6 +61,20 @@ Future<void> main() async {
       settingsStore: JsonSettingsStore(p.join(folder, 'settings.json')),
     ),
   );
+}
+
+/// Тексты встроенных паков: все `assets/packs/*.json` из манифеста.
+Future<List<String>> _builtInPacks() async {
+  final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+  final paths = manifest
+      .listAssets()
+      .where(
+        (String path) =>
+            path.startsWith('assets/packs/') && path.endsWith('.json'),
+      )
+      .toList()
+    ..sort();
+  return <String>[for (final path in paths) await rootBundle.loadString(path)];
 }
 
 final class AssistantApp extends StatelessWidget {

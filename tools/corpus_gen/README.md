@@ -128,7 +128,8 @@ cd ../.. && flutter test test/scenario_corpus_test.dart
 
 Темы задач: `create`, `reschedule`, `complete`, `implicit` (команды без слова-команды: «надо купить хлеб», «я купил хлеб»), `list`, `unknown`, `tricky` (ловушки),
 `gaps` (естественные формулировки, которых парсер может ещё не знать). Темы других
-коннекторов указываются как `коннектор:тема`, например `--topic warehouse:where`; список всех
+коннекторов указываются как `коннектор:тема`, например `--topic warehouse:where` или
+`--topic calc:evaluate` (калькулятор, `topics/calc.toml`); список всех
 тем — `corpus-gen topics`. `--count` — фраз от каждого генератора; `--source` можно указать
 несколько раз.
 

@@ -1,6 +1,6 @@
 # Коннекторы
 
-Коннектор — подключаемый набор команд помощника. Встроенный коннектор `tasks` отвечает за задачи; следующие будут для внешних приложений: склад (halowarekeep), expeora, сторонние программы. Этот документ — точная инструкция, как написать коннектор, проверить его и подключить. Решение о коннекторах и правила безопасности — ADR-004 в `docs/DECISIONS.md`.
+Коннектор — подключаемый набор команд помощника. Коннекторы бывают двух видов (`ConnectorInfo.kind`, `docs/EXTENSIONS.md`): **навыки** — своя логика без сети (встроенные `tasks` — задачи, `calc` — калькулятор), и **подключения** к внешним приложениям. Следующие будут для внешних приложений: склад (halowarekeep), expeora, сторонние программы. Этот документ — точная инструкция, как написать коннектор, проверить его и подключить. Решение о коннекторах и правила безопасности — ADR-004 в `docs/DECISIONS.md`.
 
 Языковой модели в приложении нет (ADR-001): коннектор распознаёт фразы правилами, на основе общего предварительного разбора `Utterance`.
 
@@ -31,7 +31,7 @@
 | `secret_store.dart` | `SecretStore`, `InMemorySecretStore` — секреты не в открытых файлах |
 | `tasks_connector.dart` | `TasksConnector` — встроенные задачи, образец реального коннектора |
 
-Маршрутизатор — `lib/core/scenario/assistant_controller.dart` (`AssistantController`).
+Навык «Калькулятор» — `lib/core/skills/calculator/` (`CalculatorConnector`). Маршрутизатор — `lib/core/scenario/assistant_controller.dart` (`AssistantController`); он спрашивает только включённые коннекторы из `ExtensionRegistry` (`lib/core/extensions/`, `docs/EXTENSIONS.md`).
 
 ## Интерфейс
 
@@ -53,6 +53,10 @@ abstract interface class Connector {
 | `examples` | фразы, которые коннектор обязан понимать; тест проверяет каждую |
 | `requiresNetwork` | `true`, если `run` ходит в сеть |
 | `access` | `readOnly` (по умолчанию) или `readWrite` |
+| `kind` | `ExtensionKind.connector` (по умолчанию) — подключение к внешнему приложению; `ExtensionKind.skill` — навык без сети. Определяет группу в «Настройки → Расширения» («Подключения» или «Навыки»). `pack` запрещён: пак — данные, а не коннектор |
+| `version`, `author` | для пользователя в настройках; по умолчанию `1.0.0` и «Личный помощник» |
+| `defaultEnabled` | включён, пока пользователь не выключил (по умолчанию `true`); новый коннектор с `true` после обновления появляется включённым |
+| `required` | нельзя выключить (по умолчанию `false`; `true` только у `tasks`) |
 
 ### `match(Utterance utterance)`
 
@@ -389,21 +393,25 @@ expect(transport.requests.single.headers['Authorization'], 'Bearer секрет'
 
 ## Подключение в `lib/main.dart`
 
-Коннекторы передаются списком; порядок важен только при равной уверенности (и тогда всё равно будет уточнение):
+Коннекторы регистрируются в `ExtensionRegistry` списком; порядок важен только при равной уверенности (и тогда всё равно будет уточнение). Что из них включено — выбор пользователя в «Настройки → Расширения» (`docs/EXTENSIONS.md`):
 
 ```dart
-final assistant = AssistantController(
+final extensions = ExtensionRegistry(
   connectors: <Connector>[
     TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
+    const CalculatorConnector(),
     WarehouseConnector(
       transport: transport,   // реализация HttpTransport для приложения
       secrets: secretStore,   // реализация SecretStore на защищённом хранилище
       baseUri: Uri.parse('https://…/api/'),
     ),
   ],
-  clock: clock,
+  packs: packs,
 );
+final assistant = AssistantController(extensions: extensions, clock: clock);
 ```
+
+В тестах можно по-прежнему писать `AssistantController(connectors: <Connector>[…])` — тогда все коннекторы включены.
 
 ## Фразы коннектора в корпусе
 
@@ -422,6 +430,7 @@ final assistant = AssistantController(
 ## Чек-лист перед подключением
 
 - [ ] `id` уникален, `title` понятен пользователю, `examples` проверены тестом.
+- [ ] `kind` указан (`skill` — без сети, `connector` — внешнее приложение), `version` и `author` заполнены; `defaultEnabled` обдуман: по умолчанию включается минимум (ADR-005).
 - [ ] `match` без ввода-вывода; чужие фразы (задачи, даты, вопросы без кода) дают `null`.
 - [ ] Уверенность по шкале; фразы задач с теми же словами не дают спора (проверено корпусом).
 - [ ] `access: readOnly`, если коннектор ничего не меняет. Для `readWrite` — подтверждение каждого изменяющего действия через `session.requestConfirmation` (раздел «Подтверждение изменяющих действий»), с тестами на «да», «нет», постороннее сообщение и устаревший вопрос.

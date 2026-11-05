@@ -55,6 +55,9 @@ final class TasksConnector implements Connector {
           'Заверши её',
         ],
         access: ConnectorAccess.readWrite,
+        kind: ExtensionKind.skill,
+        // Без задач помощник теряет смысл: навык не выключается.
+        required: true,
       );
 
   @override

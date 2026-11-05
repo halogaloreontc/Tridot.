@@ -1,5 +1,6 @@
 import '../connectors/connector.dart';
 import '../connectors/tasks_connector.dart';
+import '../extensions/extension_registry.dart';
 import '../services/clock.dart';
 
 /// Маршрутизатор сообщений между коннекторами.
@@ -16,22 +17,26 @@ import '../services/clock.dart';
 /// коннектор не нашёл в сообщении явной команды. Любое другое сообщение
 /// снимает ожидание. Совпадение без маркера ([ConnectorMatch.implicit])
 /// уступает явному совпадению другого коннектора.
+///
+/// Спрашиваются только включённые расширения ([ExtensionRegistry]). Их
+/// можно включать и выключать на ходу: задачи, выбор и история не
+/// сбрасываются, снимается только ожидание подтверждения выключенного
+/// коннектора.
 final class AssistantController {
+  /// [connectors] — все включены; [extensions] — реестр с выбором
+  /// пользователя. Передаётся что-то одно.
   AssistantController({
-    required List<Connector> connectors,
+    List<Connector>? connectors,
+    ExtensionRegistry? extensions,
     Clock clock = const SystemClock(),
-  })  : _connectors = List<Connector>.unmodifiable(connectors),
+  })  : assert(
+          connectors == null || extensions == null,
+          'Передайте либо connectors, либо extensions',
+        ),
+        extensions = extensions ??
+            ExtensionRegistry(connectors: connectors ?? const <Connector>[]),
         session = AssistantSession(clock: clock) {
-    final ids = <String>{};
-    for (final connector in _connectors) {
-      if (!ids.add(connector.info.id)) {
-        throw ArgumentError.value(
-          connector.info.id,
-          'connectors',
-          'Коннектор с таким id уже подключён',
-        );
-      }
-    }
+    this.extensions.addListener(_onExtensionsChanged);
   }
 
   /// Пример из подсказок интерфейса. Тест проверяет, что парсер его понимает.
@@ -44,14 +49,30 @@ final class AssistantController {
   /// уточнение.
   static const double ambiguityMargin = 0.15;
 
-  final List<Connector> _connectors;
+  /// Навыки, подключения, паки и выбор пользователя.
+  final ExtensionRegistry extensions;
 
   /// Общее состояние диалога: выбранный объект, часы, последний коннектор.
   final AssistantSession session;
 
+  /// Включённые сейчас коннекторы.
+  List<Connector> get _connectors => extensions.enabledConnectors;
+
+  /// Паспорта включённых коннекторов.
   List<ConnectorInfo> get connectors => <ConnectorInfo>[
         for (final connector in _connectors) connector.info,
       ];
+
+  /// Выключенный коннектор не получит «да» на свой вопрос: ожидание
+  /// снимается сразу. Остальное (выбор, ожидание других) не трогаем.
+  void _onExtensionsChanged() {
+    final pending = session.pendingConfirmation;
+    if (pending == null) return;
+    final enabled = _connectors.any(
+      (Connector c) => c.info.id == pending.connectorId,
+    );
+    if (!enabled) session.takePendingConfirmation();
+  }
 
   /// Задача, к которой относятся «её», «перенеси», «заверши».
   String? get selectedTaskId => session.selectedItemFor(TasksConnector.id);
@@ -64,11 +85,12 @@ final class AssistantController {
   void forgetTask(String id) => session.forget(TasksConnector.id, id);
 
   Future<AssistantResponse> handle(String message) async {
+    final connectors = _connectors;
     final utterance = Utterance.analyze(message, now: session.clock.now());
     final pending = session.takePendingConfirmation();
     final owner = pending == null
         ? null
-        : _connectors
+        : connectors
             .where((Connector c) => c.info.id == pending.connectorId)
             .firstOrNull;
     if (pending != null && owner != null) {
@@ -76,7 +98,7 @@ final class AssistantController {
       if (reply != null) return _answer(owner, pending, reply);
     }
     final candidates = <(Connector, ConnectorMatch)>[];
-    for (final connector in _connectors) {
+    for (final connector in connectors) {
       final ConnectorMatch? match;
       try {
         match = connector.match(utterance);

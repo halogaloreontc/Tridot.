@@ -12,6 +12,7 @@ import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
+import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 import 'package:local_assistant/core/storage/task_repository.dart';
 
@@ -74,6 +75,7 @@ Future<_Harness> _pump(
   TaskService? service,
   EdgeInsets viewInsets = EdgeInsets.zero,
   SettingsStore? settings,
+  bool calculator = false,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -86,6 +88,7 @@ Future<_Harness> _pump(
   final assistant = AssistantController(
     connectors: <Connector>[
       TasksConnector(taskService: tasks, parser: ScenarioParser(clock: _clock)),
+      if (calculator) const CalculatorConnector(),
     ],
     clock: _clock,
   );
@@ -778,5 +781,91 @@ void main() {
         reason: 'ширина ${size.width}',
       );
     }
+  });
+
+  group('расширения включаются и выключаются без сброса', () {
+    Future<void> toggleCalculator(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('nav-settings')));
+      await tester.pumpAndSettle();
+      final tile = find.byKey(const ValueKey<String>('extension-calc'));
+      await tester.ensureVisible(tile);
+      await tester.pumpAndSettle();
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('nav-tasks')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('история, выбор, черновик и ожидание задач целы',
+        (tester) async {
+      final store = InMemorySettingsStore();
+      final h = await _pump(tester, settings: store, calculator: true);
+
+      await _say(tester, '2+2');
+      expect(find.text('2 + 2 = 4'), findsOneWidget);
+      await _say(tester, 'Добавь задачу купить хлеб');
+      final selected = h.assistant.selectedTaskId;
+      expect(selected, isNotNull);
+      // Задачи ждут «да» на свой вопрос.
+      await _say(tester, 'я купил хлеб');
+      expect(find.textContaining('Отметить «Купить хлеб»'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('assistant-input')),
+        'черновик',
+      );
+      await tester.pump();
+
+      await toggleCalculator(tester);
+
+      expect(h.assistant.extensions.isEnabled('calc'), isFalse);
+      expect((await store.load()).disabledExtensions, <String>{'calc'});
+      expect(find.text('2 + 2 = 4'), findsOneWidget, reason: 'история');
+      expect(find.text('Добавь задачу купить хлеб'), findsWidgets);
+      expect(h.assistant.selectedTaskId, selected, reason: 'выбор');
+      expect(find.byKey(const Key('selected-task-strip')), findsOneWidget);
+      final field = tester.widget<TextField>(
+        find.byKey(const Key('assistant-input')),
+      );
+      expect(field.controller!.text, 'черновик', reason: 'черновик');
+      expect(
+        h.assistant.session.pendingConfirmation?.connectorId,
+        TasksConnector.id,
+        reason: 'ожидание другого коннектора не снято',
+      );
+
+      await _say(tester, 'да');
+      expect(await _status(h.tasks, selected!), TaskStatus.done);
+
+      await _say(tester, '3+3');
+      expect(find.text('3 + 3 = 6'), findsNothing, reason: 'выключен');
+
+      await toggleCalculator(tester);
+      expect((await store.load()).disabledExtensions, isEmpty);
+      await _say(tester, '3+3');
+      expect(find.text('3 + 3 = 6'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('выбор из сохранённых настроек применяется при запуске',
+        (tester) async {
+      final store = InMemorySettingsStore();
+      await store.save(const AppSettings(disabledExtensions: <String>{'calc'}));
+      final h = await _pump(tester, settings: store, calculator: true);
+      expect(h.assistant.extensions.isEnabled('calc'), isFalse);
+      expect(h.assistant.extensions.isEnabled(TasksConnector.id), isTrue);
+      await _say(tester, '2+2');
+      expect(find.text('2 + 2 = 4'), findsNothing);
+    });
+
+    testWidgets('задачи выключить нельзя', (tester) async {
+      await _pump(tester, calculator: true);
+      await tester.tap(find.byKey(const Key('nav-settings')));
+      await tester.pumpAndSettle();
+      final tile = tester.widget<SwitchListTile>(
+        find.byKey(const ValueKey<String>('extension-tasks')),
+      );
+      expect(tile.value, isTrue);
+      expect(tile.onChanged, isNull);
+    });
   });
 }
