@@ -1,5 +1,6 @@
 import '../connectors/due_parser.dart';
 import '../connectors/utterance.dart';
+import '../connectors/verb_forms.dart';
 import '../models/task.dart';
 import '../services/clock.dart';
 
@@ -34,9 +35,23 @@ final class ParsedCommand {
     this.dueIssue = DueIssue.none,
     this.titleIssue = TitleIssue.none,
     this.projects = const <String>[],
+    this.implicit = false,
+    this.pastTense = false,
   });
 
   final CommandIntent intent;
+
+  /// Команда без маркера: намерение понято по форме глагола. Создание —
+  /// по инфинитиву в начале фразы («купить хлеб», «через 3 дня сдать
+  /// отчёт»), завершение — по глаголу прошедшего времени («я купил хлеб»).
+  /// Коннектор отвечает на такие команды с меньшей уверенностью, чтобы явная
+  /// команда другого коннектора побеждала.
+  final bool implicit;
+
+  /// Завершение сообщением о сделанном: «я купил хлеб», «выполнил отчёт».
+  /// Задача по [targetQuery] не завершается сразу: сначала вопрос
+  /// «Отметить … выполненной?».
+  final bool pastTense;
 
   /// Метки проектов из команды: «#работа» вне кавычек, без «#».
   final List<String> projects;
@@ -86,6 +101,11 @@ final class ScenarioParser {
     }
 
     final marker = _detectIntent(utterance);
+    if (!marker.found) {
+      return _implicitCreate(utterance) ??
+          _implicitComplete(utterance) ??
+          const ParsedCommand(intent: CommandIntent.unknown);
+    }
     final intent = marker.intent;
     final titleIssue = utterance.unbalancedQuotes
         ? TitleIssue.unbalancedQuotes
@@ -128,13 +148,18 @@ final class ScenarioParser {
           titleIssue: titleIssue,
         );
       case CommandIntent.completeTask:
+        final targetQuery = hasQuotes
+            ? null
+            : _targetQuery(utterance, marker.index, _completeFiller);
         return ParsedCommand(
           intent: intent,
           title: quoted,
-          targetQuery: hasQuotes
-              ? null
-              : _targetQuery(utterance, marker.index, _completeFiller),
+          targetQuery: targetQuery,
           titleIssue: titleIssue,
+          // «Выполнил отчёт» — сообщение о сделанном: задача по словам
+          // отмечается только после подтверждения.
+          pastTense: targetQuery != null &&
+              isPastVerb(utterance.tokens[marker.index].text),
         );
       case CommandIntent.listTasks:
       case CommandIntent.unknown:
@@ -333,6 +358,302 @@ final class ScenarioParser {
     }
   }
 
+  // ------------------------------------------------- команды без маркера
+
+  /// Вступление перед действием без команды: «надо купить хлеб», «мне нужно
+  /// позвонить», «не забыть оплатить». Здесь «не» — часть «не забыть»,
+  /// а не отрицание.
+  static const Set<String> _implicitLeadIns = <String>{
+    ..._politeWords,
+    'надо',
+    'нужно',
+    'необходимо',
+    'хочу',
+    'хотел',
+    'хотела',
+    'бы',
+    'мне',
+    'нам',
+    'будет',
+    'еще',
+    'также',
+    'а',
+    'и',
+    'ну',
+    'так',
+    'вот',
+    'ладно',
+    'потом',
+    'тоже',
+    'кстати',
+  };
+
+  /// Вторые слова после «не» во вступлении: «не забыть», «не забудь».
+  static const Set<String> _dontForget = <String>{
+    'забыть',
+    'забудь',
+    'забудьте',
+  };
+
+  /// Инфинитивы, которые не становятся задачей без маркера.
+  ///
+  /// Состояние и модальность: «быть или не быть», «жить стало веселее»,
+  /// «знать бы заранее» — рассуждение, а не дело. Команды самому
+  /// помощнику: «показать список», «удалить задачу хлеб», «отметить хлеб» —
+  /// это просьба, которую он не понял, а не новая задача «Показать список».
+  /// Такую задачу можно добавить явно: «Добавь задачу отметить юбилей».
+  static const Set<String> _notImplicitVerbs = <String>{
+    'быть',
+    'бывать',
+    'жить',
+    'стать',
+    'хотеть',
+    'хотеться',
+    'мочь',
+    'знать',
+    'видеть',
+    'спать',
+    'казаться',
+    'стоить',
+    'показать',
+    'показывать',
+    'вывести',
+    'выводить',
+    'открыть',
+    'удалить',
+    'удалять',
+    'стереть',
+    'очистить',
+    'отменить',
+    'отменять',
+    'найти',
+    'искать',
+    'отметить',
+    'отмечать',
+    'завершить',
+    'закрыть',
+  };
+
+  /// Слова после глагола, с которыми фраза — не поручение: «купить хлеб
+  /// не надо», «купить ли хлеб», «посмотреть кино было бы неплохо»,
+  /// «знать надо».
+  static const Set<String> _notImplicitAfterVerb = <String>{
+    'не',
+    'ни',
+    'ли',
+    'бы',
+    'б',
+    'было',
+    'стало',
+    'надо',
+    'нужно',
+    'хочется',
+    'можно',
+    'нельзя',
+  };
+
+  /// Слова о самом помощнике: «показать задачи», «вывести список» —
+  /// команды, которые он не понял, а не задача.
+  static bool _isAssistantNoun(String word) =>
+      word.startsWith('задач') ||
+      word.startsWith('списк') ||
+      word == 'список' ||
+      word.startsWith('напоминани');
+
+  /// Глаголы поиска, после которых «где» или «сколько» — вопрос
+  /// к помощнику: «узнать, где лежит 64115», «посмотреть, сколько
+  /// венских стульев». Такие вопросы забирают другие коннекторы.
+  static const Set<String> _lookupVerbs = <String>{
+    'узнать',
+    'посмотреть',
+    'проверить',
+    'глянуть',
+    'подсказать',
+    'сказать',
+    'уточнить',
+  };
+
+  static const Set<String> _lookupQuestions = <String>{'где', 'сколько'};
+
+  /// Создание без маркера: после вступления и срока фраза начинается
+  /// с инфинитива. «Купить хлеб?» — вопрос, не задача.
+  ParsedCommand? _implicitCreate(Utterance utterance) {
+    if (utterance.isQuestion ||
+        utterance.quotedTitles.isNotEmpty ||
+        utterance.unbalancedQuotes) {
+      return null;
+    }
+    final due = utterance.due;
+    final tokens = utterance.tokens;
+    final remove = <CharSpan>[...due.spans];
+    var i = 0;
+    while (i < tokens.length) {
+      final token = tokens[i];
+      if (Utterance.isCovered(token, due.spans)) {
+        i++;
+        continue;
+      }
+      if (_implicitLeadIns.contains(token.text)) {
+        remove.add(token.span);
+        i++;
+        continue;
+      }
+      if (token.text == 'не' &&
+          i + 1 < tokens.length &&
+          _dontForget.contains(tokens[i + 1].text)) {
+        remove
+          ..add(token.span)
+          ..add(tokens[i + 1].span);
+        i += 2;
+        continue;
+      }
+      break;
+    }
+    if (i >= tokens.length) return null;
+    final verb = tokens[i].text;
+    if (!DueParser.isInfinitive(verb) || _notImplicitVerbs.contains(verb)) {
+      return null;
+    }
+    final after = <UtteranceToken>[
+      for (final token in tokens.skip(i + 1))
+        if (!Utterance.isCovered(token, due.spans) &&
+            !_politeWords.contains(token.text))
+          token,
+    ];
+    if (after.any(
+      (UtteranceToken t) =>
+          _notImplicitAfterVerb.contains(t.text) || _isAssistantNoun(t.text),
+    )) {
+      return null;
+    }
+    if (_lookupVerbs.contains(verb) &&
+        after.isNotEmpty &&
+        _lookupQuestions.contains(after.first.text)) {
+      return null;
+    }
+    // Одно слово «купить» — не задача; «постричься» и «позвонить завтра» —
+    // задача: возвратный глагол сам себе дело, срок делает его поручением.
+    final reflexive = verb.endsWith('ся') || verb.endsWith('сь');
+    if (after.isEmpty && !reflexive && due.spans.isEmpty) return null;
+    _trimEdgeWords(utterance, remove, _politeWords);
+    final text = utterance.remainder(remove);
+    if (text.isEmpty) return null;
+    return ParsedCommand(
+      intent: CommandIntent.createTask,
+      title: Utterance.capitalize(text),
+      dueAt: due.dueAt,
+      duePrecision: due.precision,
+      dueIssue: due.issue,
+      projects: <String>[for (final tag in utterance.hashtags) tag.name],
+      implicit: true,
+    );
+  }
+
+  /// Слова, которые не описывают сделанное: «я уже купил хлеб».
+  static const Set<String> _pastFiller = <String>{
+    ..._politeWords,
+    'я',
+    'мы',
+    'уже',
+    'все',
+    'вот',
+    'ну',
+    'а',
+    'и',
+    'так',
+    'наконец',
+    'сегодня',
+    'вчера',
+    'позавчера',
+    'утром',
+    'днем',
+    'вечером',
+    'ночью',
+    'недавно',
+  };
+
+  /// Кто-то другой, а не «я»: «мать звонила», «она купила хлеб» — рассказ,
+  /// а не сообщение о сделанном.
+  static const Set<String> _thirdPersons = <String>{
+    'он',
+    'она',
+    'оно',
+    'они',
+    'кто',
+    'мама',
+    'папа',
+    'мать',
+    'отец',
+    'сын',
+    'дочь',
+    'дочка',
+    'брат',
+    'сестра',
+    'муж',
+    'жена',
+    'зять',
+    'бабушка',
+    'дедушка',
+    'ребенок',
+    'дети',
+    'сосед',
+    'соседка',
+    'коллега',
+    'начальник',
+    'кошка',
+    'собака',
+    'лошадь',
+  };
+
+  /// Завершение без маркера: «я купил хлеб», «отчёт сдал». Глагол
+  /// прошедшего времени стоит первым или последним среди значимых слов.
+  ParsedCommand? _implicitComplete(Utterance utterance) {
+    if (utterance.isQuestion ||
+        utterance.quotedTitles.isNotEmpty ||
+        utterance.unbalancedQuotes) {
+      return null;
+    }
+    final remove = <CharSpan>[
+      ...utterance.due.spans,
+      for (final token in utterance.tokens)
+        if (_pastFiller.contains(token.text)) token.span,
+    ];
+    final rest = utterance.tokensOutside(remove);
+    if (rest.isEmpty) return null;
+    // «Не купил хлеб» — не сделано.
+    if (rest.any((UtteranceToken t) => t.text == 'не' || t.text == 'нет')) {
+      return null;
+    }
+    if (!isPastVerb(rest.first.text) && !isPastVerb(rest.last.text)) {
+      return null;
+    }
+    if (rest.any((UtteranceToken t) => _thirdPersons.contains(t.text))) {
+      return null;
+    }
+    // «Хлеб купили» без «мы» — безлично или о других.
+    final saysWe = utterance.tokens.any((UtteranceToken t) => t.text == 'мы');
+    if (!saysWe &&
+        rest.any((UtteranceToken t) => VerbForms.isPluralPastVerb(t.text))) {
+      return null;
+    }
+    // «Я купил», «звонил» без предмета: по одному глаголу задачу не угадать.
+    if (rest.every((UtteranceToken t) => VerbForms.stem(t.text) != null)) {
+      return null;
+    }
+    final text = utterance.remainder(remove);
+    if (text.isEmpty) return null;
+    return ParsedCommand(
+      intent: CommandIntent.completeTask,
+      targetQuery: Utterance.capitalize(text),
+      implicit: true,
+      pastTense: true,
+    );
+  }
+
+  /// Похоже на глагол прошедшего времени: «купил», «сдала», «позвонили».
+  /// Правила — [VerbForms.isPastVerb].
+  static bool isPastVerb(String word) => VerbForms.isPastVerb(word);
+
   // ------------------------------------------------------- целевая задача
 
   /// Слова, которые не описывают саму задачу в «Заверши её», «Отметь
@@ -451,7 +772,7 @@ final class ScenarioParser {
       }
       if (_isList(word, words)) return _Marker(CommandIntent.listTasks, i, 1);
     }
-    return const _Marker.unknown();
+    return const _Marker.none();
   }
 
   static const Set<String> _createVerbs = <String>{
@@ -544,12 +865,21 @@ final class ScenarioParser {
 }
 
 final class _Marker {
-  const _Marker(this.intent, this.index, this.length);
+  const _Marker(this.intent, this.index, this.length) : found = true;
 
+  /// Маркер есть, но команды нет: «Не выполнено», «Что выполнить?».
   const _Marker.unknown()
       : intent = CommandIntent.unknown,
         index = -1,
-        length = 0;
+        length = 0,
+        found = true;
+
+  /// Маркера нет ни одного: возможно, команда без маркера.
+  const _Marker.none()
+      : intent = CommandIntent.unknown,
+        index = -1,
+        length = 0,
+        found = false;
 
   final CommandIntent intent;
 
@@ -558,4 +888,7 @@ final class _Marker {
 
   /// Сколько слов занимает маркер.
   final int length;
+
+  /// В сообщении есть маркер какой-либо команды.
+  final bool found;
 }

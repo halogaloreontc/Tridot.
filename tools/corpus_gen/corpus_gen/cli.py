@@ -49,6 +49,13 @@ def main(argv: list[str] | None = None) -> int:
     imp.add_argument("--source", required=True, help="откуда фразы, например kimi-web")
     imp.add_argument("--topic", default="manual", help="метка темы, можно «коннектор:тема»")
 
+    rel = commands.add_parser("relabel", help="сбросить разметку, чтобы разметить фразы заново")
+    rel.add_argument(
+        "--include-reviewed",
+        action="store_true",
+        help="сбросить и ваши решения из review (принятые и отклонённые)",
+    )
+
     commands.add_parser("stats", help="статистика по источникам и расходам")
 
     args = parser.parse_args(argv)
@@ -72,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         "review": _review,
         "promote": _promote,
         "import-manual": _import_manual,
+        "relabel": _relabel,
         "stats": _stats,
     }
     return handlers[args.command](config, store, args)
@@ -262,6 +270,12 @@ def _import_manual(config: Config, store: CandidateStore, args: argparse.Namespa
         print(f"Ошибка: {error}", file=sys.stderr)
         return 2
     print(f"Добавлено фраз: {report.added}, дублей пропущено: {report.duplicates}")
+    return 0
+
+
+def _relabel(config: Config, store: CandidateStore, args: argparse.Namespace) -> int:
+    count = pipeline.relabel(store, include_reviewed=args.include_reviewed)
+    print(f"Разметка сброшена у фраз: {count}. Запустите `corpus-gen label`.")
     return 0
 
 

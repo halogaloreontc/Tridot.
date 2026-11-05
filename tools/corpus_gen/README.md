@@ -126,7 +126,7 @@ ollama list
 cd ../.. && flutter test test/scenario_corpus_test.dart
 ```
 
-Темы задач: `create`, `reschedule`, `complete`, `list`, `unknown`, `tricky` (ловушки),
+Темы задач: `create`, `reschedule`, `complete`, `implicit` (команды без слова-команды: «надо купить хлеб», «я купил хлеб»), `list`, `unknown`, `tricky` (ловушки),
 `gaps` (естественные формулировки, которых парсер может ещё не знать). Темы других
 коннекторов указываются как `коннектор:тема`, например `--topic warehouse:where`; список всех
 тем — `corpus-gen topics`. `--count` — фраз от каждого генератора; `--source` можно указать
@@ -141,6 +141,18 @@ cd ../.. && flutter test test/scenario_corpus_test.dart
 
 Фразы для другого коннектора — с его id в `--topic`, например `--topic warehouse:manual`
 (после `:` — любая метка темы, коннектор должен быть описан в `topics/`).
+
+Правила разметки поменялись (например, названия без кавычек) — разметьте старые фразы
+заново. Фразы остаются, сбрасывается только разметка; перенесённые в корпус не трогаются,
+ваши решения из `review` — только с `--include-reviewed`:
+
+```bash
+.venv/bin/corpus-gen relabel
+```
+
+```bash
+.venv/bin/corpus-gen label
+```
 
 Расход по источникам — по ценам из `config.toml`:
 

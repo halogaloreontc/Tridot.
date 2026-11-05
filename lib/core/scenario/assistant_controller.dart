@@ -8,6 +8,14 @@ import '../services/clock.dart';
 /// коннектор `match`, выбирает самое уверенное совпадение и запускает его
 /// `run`. Если два разных коннектора одинаково уверены, просит уточнить,
 /// а не выбирает наугад. Интерфейс работает только с этим классом.
+///
+/// Если коннектор ждёт подтверждения ([AssistantSession.pendingConfirmation])
+/// и сообщение — «да» или «нет» ([ConfirmationReply.of]), ответ уходит
+/// этому коннектору до обычного разбора. Ответ с пояснением («да, купил
+/// хлеб», [ConfirmationReply.leading]) уходит ему же, если ни один
+/// коннектор не нашёл в сообщении явной команды. Любое другое сообщение
+/// снимает ожидание. Совпадение без маркера ([ConnectorMatch.implicit])
+/// уступает явному совпадению другого коннектора.
 final class AssistantController {
   AssistantController({
     required List<Connector> connectors,
@@ -57,6 +65,16 @@ final class AssistantController {
 
   Future<AssistantResponse> handle(String message) async {
     final utterance = Utterance.analyze(message, now: session.clock.now());
+    final pending = session.takePendingConfirmation();
+    final owner = pending == null
+        ? null
+        : _connectors
+            .where((Connector c) => c.info.id == pending.connectorId)
+            .firstOrNull;
+    if (pending != null && owner != null) {
+      final reply = ConfirmationReply.of(utterance);
+      if (reply != null) return _answer(owner, pending, reply);
+    }
     final candidates = <(Connector, ConnectorMatch)>[];
     for (final connector in _connectors) {
       final ConnectorMatch? match;
@@ -69,9 +87,25 @@ final class AssistantController {
       if (match == null || match.confidence <= 0) continue;
       candidates.add((connector, match));
     }
+    if (pending != null && owner != null) {
+      // «Да, купил хлеб», «нет, не купил»: ответ с пояснением. Если в
+      // пояснении явная команда («нет, добавь задачу молоко»), это уже
+      // новое сообщение, а не ответ.
+      final reply = ConfirmationReply.leading(utterance);
+      if (reply != null &&
+          candidates.every(((Connector, ConnectorMatch) c) => c.$2.implicit)) {
+        return _answer(owner, pending, reply);
+      }
+    }
     if (candidates.isEmpty) {
       session.lastConnectorId = null;
       return _unknown();
+    }
+    // Совпадение без маркера уступает явному совпадению другого коннектора.
+    if (candidates.any(((Connector, ConnectorMatch) c) => !c.$2.implicit)) {
+      candidates.removeWhere(
+        ((Connector, ConnectorMatch) c) => c.$2.implicit,
+      );
     }
 
     // Устойчивая сортировка: при равной уверенности побеждает коннектор,
@@ -99,23 +133,40 @@ final class AssistantController {
       break;
     }
 
+    return _run(bestConnector, best);
+  }
+
+  Future<AssistantResponse> _answer(
+    Connector owner,
+    PendingConfirmation pending,
+    ConfirmationReply reply,
+  ) =>
+      _run(
+        owner,
+        ConnectorMatch(
+          connectorId: owner.info.id,
+          commandId: pending.commandId,
+          confidence: 1,
+          payload: ConfirmationAnswer(pending, reply),
+        ),
+      );
+
+  Future<AssistantResponse> _run(
+    Connector connector,
+    ConnectorMatch match,
+  ) async {
     try {
-      return await bestConnector.run(best, session);
+      return await connector.run(match, session);
     } catch (error) {
       return AssistantResponse(
         message: 'Не удалось выполнить действие: $error',
-        intent: best.commandId,
+        intent: match.commandId,
         status: AssistantStatus.failed,
       );
     } finally {
-      session.lastConnectorId = bestConnector.info.id;
+      session.lastConnectorId = connector.info.id;
     }
   }
 
-  AssistantResponse _unknown() => const AssistantResponse(
-        message: 'Пока понимаю создание, список, перенос и завершение задач. '
-            'Например: $exampleCommand',
-        intent: 'unknown',
-        status: AssistantStatus.noAction,
-      );
+  AssistantResponse _unknown() => TasksConnector.unknownResponse;
 }

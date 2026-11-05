@@ -49,7 +49,16 @@ def _topics_dir(project: Path, with_warehouse: bool = True) -> Path:
 def test_builtin_tasks_topics_load() -> None:
     catalog = load_catalog()
     tasks = catalog.connector("tasks")
-    assert set(tasks.topics) == {"create", "reschedule", "complete", "list", "unknown", "tricky", "gaps"}
+    assert set(tasks.topics) == {
+        "create",
+        "reschedule",
+        "complete",
+        "implicit",
+        "list",
+        "unknown",
+        "tricky",
+        "gaps",
+    }
     assert tasks.intents == ("createTask", "listTasks", "completeTask", "rescheduleTask", "unknown")
     assert tasks.topics["create"].intents == {"createTask"}
     assert tasks.topics["tricky"].intents is None
@@ -345,6 +354,21 @@ def test_label_system_knows_weekdays_and_relative_dues() -> None:
     assert "в следующую пятницу" in text and "пн вт ср чт пт сб вс" in text
     assert "через полчаса" in text and "через пару дней" in text
     assert "«пятничный отчёт»" in text and "conflictingDays" in text
+
+
+def test_label_system_knows_implicit_commands() -> None:
+    text = " ".join(prompts.LABEL_SYSTEM.split())
+    assert "«через 3 дня сдать отчёт»" in text and "«не забыть» — не отрицание" in text
+    assert "«я купил хлеб» — «Купил хлеб»" in text
+    assert "«Созвон с командой»" in text
+    assert "«кстати» — не глаголы" in text
+    assert "«мама купила хлеб»" in text and "«я купил», «вчера звонил») — unknown" in text
+
+
+def test_implicit_topic_covers_create_and_complete() -> None:
+    tasks = load_catalog().connector("tasks")
+    assert tasks.topics["implicit"].intents == {"createTask", "completeTask", "unknown"}
+    assert "«я купил хлеб»" in tasks.topics["implicit"].description
 
 
 def tomllib_loads(text: str) -> dict[str, Any]:

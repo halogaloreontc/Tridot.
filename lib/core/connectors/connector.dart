@@ -53,6 +53,7 @@ final class ConnectorMatch {
     required this.commandId,
     required this.confidence,
     this.payload,
+    this.implicit = false,
   }) : assert(confidence >= 0 && confidence <= 1);
 
   /// [ConnectorInfo.id] коннектора, который вернул совпадение.
@@ -69,6 +70,13 @@ final class ConnectorMatch {
   /// Всё, что коннектор разобрал в `match` и что понадобится в `run`:
   /// разобранная команда, код товара и т. п. Маршрутизатор его не читает.
   final Object? payload;
+
+  /// Совпадение без маркера команды: намерение угадано по форме фразы
+  /// («купить хлеб» — инфинитив, «я купил хлеб» — прошедшее время).
+  /// Такое совпадение уступает любому явному совпадению другого коннектора,
+  /// даже менее уверенному: «узнать, где лежит 64115» — вопрос складу,
+  /// а не задача «Узнать, где лежит 64115».
+  final bool implicit;
 }
 
 /// Выбранный в интерфейсе или в диалоге объект: задача, товар, документ.
@@ -79,6 +87,165 @@ final class SelectedItem {
   final String connectorId;
 
   final String itemId;
+}
+
+/// Ответ пользователя на вопрос подтверждения.
+enum ConfirmationReply {
+  yes,
+  no;
+
+  static const Set<String> _yesWords = <String>{
+    'да',
+    'ага',
+    'угу',
+    'конечно',
+    'отмечай',
+    'отметь',
+    'подтверждаю',
+    'давай',
+    'ок',
+    'окей',
+    'верно',
+    'точно',
+    'пожалуйста',
+    'спасибо',
+  };
+
+  static const Set<String> _noWords = <String>{
+    'нет',
+    'неа',
+    'не',
+    'надо',
+    'нужно',
+    'отмена',
+    'отмени',
+    'отменить',
+    'отмечай',
+    'отмечать',
+    'спасибо',
+  };
+
+  /// Слова, без которых ответ «нет» — не ответ: «надо» — не «не надо».
+  static const Set<String> _negations = <String>{
+    'нет',
+    'неа',
+    'не',
+    'отмена',
+    'отмени',
+    'отменить',
+  };
+
+  /// Вежливость: одна она ответом не бывает.
+  static const Set<String> _courtesy = <String>{'пожалуйста', 'спасибо'};
+
+  /// Первое слово, которое само по себе — ответ: «да, купил хлеб»,
+  /// «нет, не купил».
+  static const Set<String> _leadingYes = <String>{
+    'да',
+    'ага',
+    'угу',
+    'конечно',
+    'ок',
+    'окей',
+  };
+
+  static const Set<String> _leadingNo = <String>{'нет', 'неа'};
+
+  static const Set<String> _yesSymbols = <String>{'+', '👍', '👌', '✅', '✔'};
+  static const Set<String> _noSymbols = <String>{
+    '-',
+    '—',
+    '–',
+    '👎',
+    '❌',
+    '✖',
+  };
+
+  /// Сообщение без пробелов, вариантов эмодзи и оттенков кожи: «👍🏻» → «👍».
+  static String _symbols(String text) => text.replaceAll(_ignoredSymbols, '');
+
+  static final RegExp _ignoredSymbols =
+      RegExp('[\\s\u{FE0F}\u{1F3FB}-\u{1F3FF}]', unicode: true);
+
+  /// «Да», «ага», «конечно, отмечай», «да, спасибо», «+», «👍» — [yes];
+  /// «нет», «неа», «не надо», «отмена», «-», «👎» — [no]; всё остальное,
+  /// в том числе вопрос, — `null`. Ответ — всё сообщение целиком:
+  /// «нет, добавь задачу» — уже новая команда, а не ответ. Ответ с
+  /// пояснением («да, купил хлеб») — [leading].
+  static ConfirmationReply? of(Utterance utterance) {
+    final symbols = _symbols(utterance.original);
+    if (_yesSymbols.contains(symbols)) return yes;
+    if (_noSymbols.contains(symbols)) return no;
+    if (utterance.isQuestion || utterance.quotedTitles.isNotEmpty) return null;
+    final words = utterance.words;
+    if (words.isEmpty) return null;
+    if (words.any(_negations.contains) && words.every(_noWords.contains)) {
+      return no;
+    }
+    if (words.every(_yesWords.contains) && !words.every(_courtesy.contains)) {
+      return yes;
+    }
+    return null;
+  }
+
+  /// Ответ по первому слову, когда дальше идёт пояснение: «да, купил
+  /// хлеб» — [yes], «нет, не купил» — [no]. Пояснение может оказаться
+  /// новой командой («нет, добавь задачу молоко»), поэтому маршрутизатор
+  /// принимает такой ответ, только если ни один коннектор не нашёл в
+  /// сообщении явной команды.
+  static ConfirmationReply? leading(Utterance utterance) {
+    if (utterance.isQuestion || utterance.quotedTitles.isNotEmpty) return null;
+    final words = utterance.words;
+    if (words.isEmpty) return null;
+    if (_leadingYes.contains(words.first)) return yes;
+    if (_leadingNo.contains(words.first)) return no;
+    if (words.length >= 2 &&
+        words[0] == 'не' &&
+        (words[1] == 'надо' || words[1] == 'нужно' || words[1] == 'отмечай')) {
+      return no;
+    }
+    return null;
+  }
+}
+
+/// Изменяющее действие, которое ждёт подтверждения в следующем сообщении.
+///
+/// Коннектор кладёт его в [AssistantSession.requestConfirmation] вместе
+/// с вопросом «…? Ответьте «да» или «нет».». Если следующее сообщение —
+/// «да» или «нет» ([ConfirmationReply.of]), маршрутизатор до обычного
+/// разбора вызывает `run` этого коннектора с [ConfirmationAnswer]
+/// в [ConnectorMatch.payload]. Любое другое сообщение снимает ожидание
+/// и разбирается как обычно. Ожидание живёт ровно одно сообщение.
+final class PendingConfirmation {
+  const PendingConfirmation({
+    required this.connectorId,
+    required this.commandId,
+    this.itemId,
+    this.payload,
+  });
+
+  /// Коннектор, который задал вопрос и выполнит действие.
+  final String connectorId;
+
+  /// Действие: `task.complete`, `warehouse.writeOff`. Становится
+  /// [ConnectorMatch.commandId] ответа.
+  final String commandId;
+
+  /// Объект действия, если он один: id задачи, артикул.
+  final String? itemId;
+
+  /// Всё остальное, что нужно для выполнения. Маршрутизатор его не читает.
+  final Object? payload;
+}
+
+/// Ответ пользователя на [PendingConfirmation]: так его получает `run`.
+final class ConfirmationAnswer {
+  const ConfirmationAnswer(this.pending, this.reply);
+
+  final PendingConfirmation pending;
+  final ConfirmationReply reply;
+
+  bool get confirmed => reply == ConfirmationReply.yes;
 }
 
 /// Состояние диалога, общее для всех коннекторов.
@@ -101,6 +268,26 @@ final class AssistantSession {
   String? lastConnectorId;
 
   SelectedItem? get selection => _selection;
+
+  PendingConfirmation? _pendingConfirmation;
+
+  /// Действие, которое ждёт «да» или «нет» в следующем сообщении.
+  PendingConfirmation? get pendingConfirmation => _pendingConfirmation;
+
+  /// Запоминает действие до следующего сообщения. Вызывается из `run`
+  /// вместе с ответом-вопросом `needsClarification`. Новое ожидание
+  /// заменяет прежнее.
+  void requestConfirmation(PendingConfirmation pending) {
+    _pendingConfirmation = pending;
+  }
+
+  /// Забирает ожидание: после этого его больше нет. Вызывает маршрутизатор
+  /// в начале каждого сообщения.
+  PendingConfirmation? takePendingConfirmation() {
+    final pending = _pendingConfirmation;
+    _pendingConfirmation = null;
+    return pending;
+  }
 
   /// Выбранный объект коннектора [connectorId] или `null`.
   String? selectedItemFor(String connectorId) {

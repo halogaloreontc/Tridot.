@@ -1,3 +1,4 @@
+import '../connectors/verb_forms.dart';
 import '../models/task.dart';
 import '../storage/task_repository.dart';
 import 'clock.dart';
@@ -82,23 +83,60 @@ final class TaskService {
   /// «на», «задачу») не учитываются. Оценка — доля совпавших слов запроса.
   /// В результат попадают задачи с оценкой не ниже 0.5 и хотя бы одним
   /// совпавшим словом от трёх букв.
-  Future<List<TaskSearchHit>> searchActive(String query) async {
+  ///
+  /// С [verbForms] запрос — сообщение о сделанном («купил хлеб», «отчёт
+  /// сдал»): глаголы сравниваются по основе без окончаний «-л», «-ла»,
+  /// «-ли», «-ло», «-ть», «-ти» — первые `min(4, длина)` букв, так что
+  /// «купил» совпадает с «купить», а «сдал» — со «сдать». Если в запросе
+  /// есть не только глаголы, должно совпасть хотя бы одно из остальных
+  /// слов: «купил хлеб» не находит «Купить молоко». Если глаголы есть и
+  /// в запросе, и в названии, должен совпасть и глагол: «купил хлеб» не
+  /// находит «Испечь хлеб». Глаголом считается только то, что
+  /// [VerbForms.stem] признаёт глаголом: «кровать», «новость», «часть» —
+  /// предметы.
+  Future<List<TaskSearchHit>> searchActive(
+    String query, {
+    bool verbForms = false,
+  }) async {
     final wanted = _searchWords(query);
     if (wanted.isEmpty) return const <TaskSearchHit>[];
+    final objects = verbForms
+        ? wanted.where((String w) => VerbForms.stem(w) == null).toSet()
+        : null;
+    final queryHasVerb = verbForms && objects!.length < wanted.length;
     final hits = <TaskSearchHit>[];
     for (final task in await listActive()) {
       final words = _searchWords(task.title);
       var matched = 0;
       var hasLong = false;
+      var objectMatched = false;
+      var verbMatched = false;
       for (final word in wanted) {
-        final match = words.where((String other) => _sameStem(word, other));
+        final match = words.where(
+          (String other) =>
+              _sameStem(word, other) ||
+              (verbForms && _sameVerbStem(word, other)),
+        );
         if (match.isNotEmpty) {
           matched++;
           if (match.any((String other) => other.length >= 3) &&
               word.length >= 3) {
             hasLong = true;
           }
+          if (objects != null) {
+            if (objects.contains(word)) {
+              objectMatched = true;
+            } else {
+              verbMatched = true;
+            }
+          }
         }
+      }
+      if (objects != null && objects.isNotEmpty && !objectMatched) continue;
+      if (queryHasVerb &&
+          !verbMatched &&
+          words.any((String w) => VerbForms.stem(w) != null)) {
+        continue;
       }
       final score = matched / wanted.length;
       if (score >= 0.5 && hasLong) hits.add(TaskSearchHit(task, score));
@@ -159,6 +197,15 @@ final class TaskService {
     var length = a.length < b.length ? a.length : b.length;
     if (length > 5) length = 5;
     return a.substring(0, length) == b.substring(0, length);
+  }
+
+  static bool _sameVerbStem(String a, String b) {
+    final left = VerbForms.stem(a);
+    final right = VerbForms.stem(b);
+    if (left == null || right == null) return false;
+    var length = left.length < right.length ? left.length : right.length;
+    if (length > 4) length = 4;
+    return left.substring(0, length) == right.substring(0, length);
   }
 
   static String _titleKey(String title) => title

@@ -379,4 +379,311 @@ void main() {
       expect(response.task?.title, 'Купить хлеб');
     });
   });
+
+  group('команды без маркера', () {
+    test('инфинитив в начале создаёт задачу', () async {
+      final response = await assistant.handle('надо купить хлеб');
+
+      expect(response.status, AssistantStatus.completed);
+      expect(response.message, 'Создал задачу «Купить хлеб».');
+      expect(response.task?.title, 'Купить хлеб');
+    });
+
+    test('инфинитив после срока создаёт задачу со сроком', () async {
+      final response = await assistant.handle('через 3 дня сдать отчёт');
+
+      expect(response.task?.title, 'Сдать отчёт');
+      expect(response.task?.dueAt, DateTime(2026, 11, 5));
+    });
+
+    test('вопрос и существительное в начале — не задача', () async {
+      for (final phrase in <String>['купить хлеб?', 'тетрадь купить']) {
+        final response = await assistant.handle(phrase);
+        expect(response.intent, 'unknown', reason: phrase);
+      }
+      expect(await repository.list(), isEmpty);
+    });
+
+    test('уверенность ниже явной команды', () {
+      final connector = TasksConnector(
+        taskService: service,
+        parser: ScenarioParser(clock: FixedClock(DateTime(2026, 11, 2, 16))),
+      );
+      double confidence(String text) => connector
+          .match(Utterance.analyze(text, now: DateTime(2026, 11, 2, 16)))!
+          .confidence;
+
+      expect(confidence('купить хлеб'), 0.6);
+      expect(confidence('завтра купить хлеб'), 0.75);
+      expect(confidence('добавь купить хлеб'), 0.9);
+      expect(confidence('я купил хлеб'), 0.6);
+    });
+  });
+
+  group('завершение по сообщению о сделанном', () {
+    late Task bread;
+    late Task report;
+
+    setUp(() async {
+      bread = (await assistant.handle('Добавь задачу купить хлеб')).task!;
+      report = (await assistant.handle('Добавь задачу сдать отчёт')).task!;
+    });
+
+    Future<bool> isActive(Task task) async =>
+        (await repository.get(task.id))!.isActive;
+
+    test('спрашивает и ничего не меняет', () async {
+      final response = await assistant.handle('я купил хлеб');
+
+      expect(response.status, AssistantStatus.needsClarification);
+      expect(response.intent, 'task.complete');
+      expect(response.message, 'Отметить «Купить хлеб» выполненной?');
+      expect(await isActive(bread), isTrue);
+      expect(assistant.session.pendingConfirmation?.itemId, bread.id);
+    });
+
+    for (final yes in <String>[
+      'да',
+      'Да!',
+      'ага',
+      'угу',
+      'конечно',
+      'отмечай',
+      'да, отмечай',
+      '+',
+    ]) {
+      test('«$yes» завершает задачу', () async {
+        await assistant.handle('я купил хлеб');
+
+        final response = await assistant.handle(yes);
+
+        expect(response.status, AssistantStatus.completed);
+        expect(response.message, 'Задача «Купить хлеб» завершена.');
+        expect(response.task?.id, bread.id);
+        expect(await isActive(bread), isFalse);
+        expect(await isActive(report), isTrue);
+        expect(assistant.session.pendingConfirmation, isNull);
+      });
+    }
+
+    const refusals = <String>['нет', 'не надо', 'отмена', '-', 'Нет, спасибо'];
+    for (final no in refusals) {
+      test('«$no» оставляет задачу', () async {
+        await assistant.handle('я купил хлеб');
+
+        final response = await assistant.handle(no);
+
+        expect(response.message, 'Хорошо, не отмечаю.');
+        expect(response.status, AssistantStatus.noAction);
+        expect(await isActive(bread), isTrue);
+      });
+    }
+
+    test('другое сообщение снимает вопрос и разбирается как обычно', () async {
+      await assistant.handle('я купил хлеб');
+
+      final created = await assistant.handle('Добавь задачу позвонить маме');
+      final stale = await assistant.handle('да');
+
+      expect(created.status, AssistantStatus.completed);
+      expect(created.task?.title, 'Позвонить маме');
+      expect(stale.intent, 'unknown');
+      expect(await isActive(bread), isTrue);
+    });
+
+    test('вопрос живёт одно сообщение', () async {
+      await assistant.handle('я купил хлеб');
+      await assistant.handle('покажи задачи');
+
+      final response = await assistant.handle('да');
+
+      expect(response.intent, 'unknown');
+      expect(await isActive(bread), isTrue);
+    });
+
+    test('«да» без вопроса — не команда', () async {
+      final response = await assistant.handle('да');
+
+      expect(response.intent, 'unknown');
+      expect(await isActive(bread), isTrue);
+      expect(await isActive(report), isTrue);
+    });
+
+    test('вопрос и отказ не меняют выбранную задачу', () async {
+      expect(assistant.selectedTaskId, report.id);
+
+      await assistant.handle('я купил хлеб');
+      expect(assistant.selectedTaskId, report.id);
+      await assistant.handle('нет');
+      expect(assistant.selectedTaskId, report.id);
+      await assistant.handle('я купил хлеб');
+      await assistant.handle('да');
+      expect(assistant.selectedTaskId, report.id);
+    });
+
+    test('глагол сравнивается по основе', () async {
+      final response = await assistant.handle('отчёт сдал');
+
+      expect(response.message, 'Отметить «Сдать отчёт» выполненной?');
+      expect((await assistant.handle('угу')).task?.id, report.id);
+    });
+
+    test('общий глагол без общего предмета не совпадает', () async {
+      final response = await assistant.handle('купила молоко');
+
+      expect(response.intent, 'unknown');
+      expect(response.status, AssistantStatus.noAction);
+      expect(assistant.session.pendingConfirmation, isNull);
+    });
+
+    test('без подходящей задачи — обычный ответ «не понял»', () async {
+      final response = await assistant.handle('я позвонил маме');
+
+      expect(response.intent, 'unknown');
+      expect(response.message, TasksConnector.unknownResponse.message);
+      expect(assistant.session.pendingConfirmation, isNull);
+    });
+
+    test('несколько подходящих задач — список без ожидания', () async {
+      final bread2 =
+          (await assistant.handle('Добавь задачу купить хлеб бабушке')).task!;
+
+      final response = await assistant.handle('я купил хлеб');
+
+      expect(response.status, AssistantStatus.needsClarification);
+      expect(response.message, contains('«Купить хлеб»'));
+      expect(response.message, contains('«Купить хлеб бабушке»'));
+      expect(response.message, isNot(contains('Сдать отчёт')));
+      expect(assistant.session.pendingConfirmation, isNull);
+
+      final answer = await assistant.handle('да');
+      expect(answer.intent, 'unknown');
+      expect(await isActive(bread), isTrue);
+      expect(await isActive(bread2), isTrue);
+    });
+
+    test('явный глагол в прошедшем времени тоже спрашивает', () async {
+      final slides =
+          (await assistant.handle('Добавь задачу сделать презентацию')).task!;
+
+      final response = await assistant.handle('сделал презентацию');
+
+      expect(response.message, 'Отметить «Сделать презентацию» выполненной?');
+      expect((await assistant.handle('да')).task?.id, slides.id);
+    });
+
+    test('задачу завершили до ответа — ничего не делает', () async {
+      await assistant.handle('я купил хлеб');
+      await service.complete(bread.id);
+
+      final response = await assistant.handle('да');
+
+      expect(response.status, AssistantStatus.noAction);
+      expect(response.message, 'Эта задача уже не активна.');
+    });
+
+    for (final yes in <String>['да, купил хлеб', 'да спасибо', '👍', 'Ок']) {
+      test('«$yes» — согласие с пояснением или знаком', () async {
+        await assistant.handle('я купил хлеб');
+
+        final response = await assistant.handle(yes);
+
+        expect(response.status, AssistantStatus.completed);
+        expect(response.task?.id, bread.id);
+        expect(await isActive(bread), isFalse);
+      });
+    }
+
+    for (final no in <String>['нет, не купил', 'неа', '👎']) {
+      test('«$no» — отказ с пояснением или знаком', () async {
+        await assistant.handle('я купил хлеб');
+
+        final response = await assistant.handle(no);
+
+        expect(response.message, 'Хорошо, не отмечаю.');
+        expect(await isActive(bread), isTrue);
+      });
+    }
+
+    test('«нет, добавь …» — новая команда, а не отказ', () async {
+      await assistant.handle('я купил хлеб');
+
+      final response = await assistant.handle('нет, добавь задачу молоко');
+
+      expect(response.status, AssistantStatus.completed);
+      expect(response.task?.title, 'Молоко');
+      expect(await isActive(bread), isTrue);
+      expect(assistant.session.pendingConfirmation, isNull);
+    });
+
+    test('«кстати» после вопроса не создаёт задачу', () async {
+      await assistant.handle('отчёт сдал');
+
+      final response = await assistant.handle('кстати');
+
+      expect(response.intent, 'unknown');
+      expect(await repository.list(), hasLength(2));
+      expect(assistant.session.pendingConfirmation, isNull);
+    });
+
+    test('существительное на «-ть» в запросе — предмет, а не глагол', () async {
+      await assistant.handle('Добавь задачу посмотреть фильм');
+      await assistant.handle('Добавь задачу оплатить интернет');
+
+      for (final phrase in <String>[
+        'купил кровать',
+        'посмотрел новость',
+        'оплатил часть',
+      ]) {
+        final response = await assistant.handle(phrase);
+        expect(response.intent, 'unknown', reason: phrase);
+        expect(assistant.session.pendingConfirmation, isNull, reason: phrase);
+      }
+    });
+
+    test('другой глагол с тем же предметом не совпадает', () async {
+      final response = await assistant.handle('съел хлеб');
+
+      expect(response.intent, 'unknown');
+      expect(assistant.session.pendingConfirmation, isNull);
+    });
+
+    test('глагол без предмета и рассказ о других — не вопрос', () async {
+      for (final phrase in <String>[
+        'я купил',
+        'сдал',
+        'вчера сдал',
+        'хлеб купили',
+        'мама купила хлеб',
+      ]) {
+        final response = await assistant.handle(phrase);
+        expect(response.intent, 'unknown', reason: phrase);
+        expect(assistant.session.pendingConfirmation, isNull, reason: phrase);
+      }
+      expect(await isActive(bread), isTrue);
+    });
+
+    test('ответ названием на «Какую задачу…?» не создаёт дубль', () async {
+      final bread2 =
+          (await assistant.handle('Добавь задачу купить хлеб бабушке')).task!;
+      final question = await assistant.handle('я купил хлеб');
+      expect(question.message, contains('Напишите «Заверши»'));
+
+      final answer = await assistant.handle('купить хлеб');
+
+      expect(answer.status, AssistantStatus.noAction);
+      expect(
+        answer.message,
+        'Задача «Купить хлеб» уже есть. Чтобы отметить её выполненной, '
+        'напишите «Заверши её».',
+      );
+      expect(await repository.list(), hasLength(3));
+      expect(assistant.selectedTaskId, bread.id);
+
+      final done = await assistant.handle('Заверши её');
+      expect(done.task?.id, bread.id);
+      expect(await isActive(bread), isFalse);
+      expect(await isActive(bread2), isTrue);
+    });
+  });
 }

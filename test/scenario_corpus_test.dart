@@ -131,8 +131,11 @@ final Map<String, Connector Function(DateTime now)> _connectorFactories =
 
 /// Кого выберет маршрутизатор: id коннектора, `ambiguous`, если он
 /// переспросит (те же правила, что в AssistantController), или `null`.
-String? _routed(List<ConnectorMatch> sorted) {
-  if (sorted.isEmpty) return null;
+String? _routed(List<ConnectorMatch> all) {
+  if (all.isEmpty) return null;
+  final sorted = all.any((ConnectorMatch m) => !m.implicit)
+      ? all.where((ConnectorMatch m) => !m.implicit).toList()
+      : all;
   final best = sorted.first;
   for (final other in sorted.skip(1)) {
     if (other.connectorId == best.connectorId) continue;

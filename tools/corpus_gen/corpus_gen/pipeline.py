@@ -566,3 +566,29 @@ def _run_parallel(sources: list[Source], run: Callable[[Source], None]) -> None:
         return
     with ThreadPoolExecutor(max_workers=len(sources)) as pool:
         list(pool.map(run, sources))
+
+
+# Статусы, которые сбрасывает relabel. Решения человека (accepted, rejected)
+# и перенесённые в корпус фразы трогаются только по явному флагу или никогда.
+RELABEL_STATUSES = frozenset({"new", "error", "disputed", "agreed"})
+RELABEL_REVIEWED = frozenset({"accepted", "rejected"})
+
+
+def relabel(store: CandidateStore, include_reviewed: bool = False) -> int:
+    """Сбрасывает разметку, чтобы фразы разметились заново по текущим правилам.
+
+    Текст, источник и тема остаются; перенесённые в корпус (promoted) не
+    трогаются никогда.
+    """
+    statuses = RELABEL_STATUSES | (RELABEL_REVIEWED if include_reviewed else frozenset())
+    count = 0
+    for row in store.rows:
+        if row.get("status") not in statuses:
+            continue
+        row["status"] = "new"
+        row["labels"] = {}
+        for key in ("final", "final_by", "errors"):
+            row.pop(key, None)
+        count += 1
+    store.save()
+    return count

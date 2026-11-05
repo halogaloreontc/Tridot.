@@ -8,8 +8,10 @@ import 'connector.dart';
 ///
 /// Распознавание — [ScenarioParser], изменения — только через [TaskService].
 /// Работает локально, без сети. Изменения задач — собственные данные
-/// приложения, поэтому подтверждение ADR-004 к ним не применяется: каждое
-/// действие видно в ответе и обратимо в интерфейсе.
+/// приложения, поэтому подтверждение ADR-004 к явным командам не
+/// применяется: каждое действие видно в ответе и обратимо в интерфейсе.
+/// Подтверждение нужно только завершению по сообщению о сделанном
+/// («я купил хлеб»): задача угадана по словам, а не названа командой.
 final class TasksConnector implements Connector {
   TasksConnector({
     required TaskService taskService,
@@ -26,6 +28,16 @@ final class TasksConnector implements Connector {
   /// Пример из подсказок интерфейса. Тест проверяет, что парсер его понимает.
   static const String exampleCommand =
       'Добавь задачу позвонить клиенту завтра в 11:00';
+
+  /// Ответ на фразу, которую никто не понял. Его же даёт коннектор, когда
+  /// сообщение о сделанном («я купил хлеб») не подходит ни к одной задаче:
+  /// тогда фраза, скорее всего, была не о задачах.
+  static const AssistantResponse unknownResponse = AssistantResponse(
+    message: 'Пока понимаю создание, список, перенос и завершение задач. '
+        'Например: $exampleCommand',
+    intent: 'unknown',
+    status: AssistantStatus.noAction,
+  );
 
   final TaskService _tasks;
   final ScenarioParser _parser;
@@ -49,9 +61,19 @@ final class TasksConnector implements Connector {
   ConnectorMatch? match(Utterance utterance) {
     final command = _parser.parseUtterance(utterance);
     final (commandId, confidence) = switch (command.intent) {
+      // Без маркера — ниже явных команд любого коннектора: «через 3 дня
+      // сдать отчёт» с явным сроком увереннее, чем «купить хлеб».
+      CommandIntent.createTask when command.implicit => (
+          'task.create',
+          utterance.due.spans.isEmpty ? 0.6 : 0.75,
+        ),
       CommandIntent.createTask => ('task.create', 0.9),
       CommandIntent.listTasks => ('task.list', 0.9),
       CommandIntent.rescheduleTask => ('task.reschedule', 0.85),
+      CommandIntent.completeTask when command.implicit => (
+          'task.complete',
+          0.6,
+        ),
       CommandIntent.completeTask => ('task.complete', 0.8),
       CommandIntent.unknown => ('', 0.0),
     };
@@ -61,6 +83,7 @@ final class TasksConnector implements Connector {
       commandId: commandId,
       confidence: confidence,
       payload: command,
+      implicit: command.implicit,
     );
   }
 
@@ -69,7 +92,9 @@ final class TasksConnector implements Connector {
     ConnectorMatch match,
     AssistantSession session,
   ) async {
-    final command = match.payload! as ParsedCommand;
+    final payload = match.payload;
+    if (payload is ConfirmationAnswer) return _answer(payload, session);
+    final command = payload! as ParsedCommand;
     switch (command.intent) {
       case CommandIntent.createTask:
         return _create(command, session);
@@ -102,6 +127,23 @@ final class TasksConnector implements Connector {
     }
     final dueQuestion = _dueClarification(command.dueIssue);
     if (dueQuestion != null) return _ask('task.create', dueQuestion);
+    if (command.implicit) {
+      // «Купить хлеб» без маркера при уже активной «Купить хлеб» — чаще
+      // всего ответ на «Какую задачу отметить…?» или забытая задача,
+      // а не просьба завести вторую такую же.
+      final existing = await _tasks.findActiveByTitle(title);
+      if (existing.isNotEmpty) {
+        final task = existing.first;
+        session.select(id, task.id);
+        return AssistantResponse(
+          message: 'Задача «${task.title}» уже есть. Чтобы отметить её '
+              'выполненной, напишите «Заверши её».',
+          intent: 'task.create',
+          status: AssistantStatus.noAction,
+          task: task,
+        );
+      }
+    }
     final task = await _tasks.create(
       title: title,
       dueAt: command.dueAt,
@@ -146,6 +188,10 @@ final class TasksConnector implements Connector {
     ParsedCommand command,
     AssistantSession session,
   ) async {
+    final query = command.targetQuery;
+    if (command.pastTense && query != null) {
+      return _askToComplete(command, query, session);
+    }
     final target = await _resolveTarget(
       command,
       session,
@@ -157,6 +203,90 @@ final class TasksConnector implements Connector {
     final task = await _tasks.complete(target.id!);
     // Завершённая задача больше не «её»: следующий перенос или завершение
     // требует нового выбора, а не тихо открывает её снова.
+    session.forget(id, task.id);
+    return AssistantResponse(
+      message: 'Задача «${task.title}» завершена.',
+      intent: 'task.complete',
+      status: AssistantStatus.completed,
+      task: task,
+    );
+  }
+
+  /// «Я купил хлеб»: найти задачу и спросить, отметить ли её. Сразу
+  /// ничего не меняется — задача угадана по словам.
+  Future<AssistantResponse> _askToComplete(
+    ParsedCommand command,
+    String query,
+    AssistantSession session,
+  ) async {
+    var tasks = await _tasks.findActiveByTitle(query);
+    if (tasks.isEmpty) {
+      final hits = await _tasks.searchActive(query, verbForms: true);
+      if (hits.isNotEmpty) {
+        final best = hits.first.score;
+        tasks = <Task>[
+          for (final hit in hits)
+            if (best - hit.score <= 0.1 + 1e-9) hit.task,
+        ];
+      }
+    }
+    if (tasks.isEmpty) {
+      // Без маркера фраза могла быть вовсе не о задачах: «я купил хлеб»
+      // без такой задачи — просто рассказ.
+      if (command.implicit) return unknownResponse;
+      return _ask('task.complete', 'Не нашёл активную задачу «$query».');
+    }
+    if (tasks.length > 1) {
+      final titles =
+          tasks.take(3).map((Task t) => '«${t.title}»').toList(growable: false);
+      final list = titles.length == 1
+          ? titles.single
+          : '${titles.sublist(0, titles.length - 1).join(', ')} '
+              'или ${titles.last}';
+      return _ask(
+        'task.complete',
+        'Какую задачу отметить выполненной: $list? Напишите «Заверши» '
+            'и её название или выберите задачу в списке.',
+      );
+    }
+    final task = tasks.single;
+    session.requestConfirmation(
+      PendingConfirmation(
+        connectorId: id,
+        commandId: 'task.complete',
+        itemId: task.id,
+      ),
+    );
+    return _ask('task.complete', 'Отметить «${task.title}» выполненной?');
+  }
+
+  /// Ответ на «Отметить «…» выполненной?».
+  Future<AssistantResponse> _answer(
+    ConfirmationAnswer answer,
+    AssistantSession session,
+  ) async {
+    final pending = answer.pending;
+    final taskId = pending.itemId;
+    if (pending.commandId != 'task.complete' || taskId == null) {
+      throw StateError('Неизвестное подтверждение ${pending.commandId}');
+    }
+    if (!answer.confirmed) {
+      return const AssistantResponse(
+        message: 'Хорошо, не отмечаю.',
+        intent: 'task.complete',
+        status: AssistantStatus.noAction,
+      );
+    }
+    final active = await _tasks.listActive();
+    if (!active.any((Task t) => t.id == taskId)) {
+      // Задачу успели завершить или удалить в интерфейсе.
+      return const AssistantResponse(
+        message: 'Эта задача уже не активна.',
+        intent: 'task.complete',
+        status: AssistantStatus.noAction,
+      );
+    }
+    final task = await _tasks.complete(taskId);
     session.forget(id, task.id);
     return AssistantResponse(
       message: 'Задача «${task.title}» завершена.',

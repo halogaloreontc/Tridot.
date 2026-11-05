@@ -249,3 +249,27 @@ def test_title_quotes(title: Any, expected: Any) -> None:
     from corpus_gen.pipeline import _strip_title_quotes
 
     assert _strip_title_quotes(title) == expected
+
+
+def test_relabel_resets_labels_but_keeps_phrases_and_promoted(tmp_path: Path) -> None:
+    store = CandidateStore(tmp_path)
+    base = {"text": "t", "source": "s", "family": "f", "topic": "create", "labels": {"x": {"intent": "createTask"}}}
+    store.rows = [
+        {**base, "cid": "1", "text": "a", "status": "disputed", "errors": ["e"]},
+        {**base, "cid": "2", "text": "b", "status": "agreed", "final": {"intent": "createTask"}, "final_by": ["x", "y"]},
+        {**base, "cid": "3", "text": "c", "status": "accepted", "final": {"intent": "createTask"}},
+        {**base, "cid": "4", "text": "d", "status": "rejected"},
+        {**base, "cid": "5", "text": "e", "status": "promoted", "final": {"intent": "createTask"}},
+    ]
+    assert pipeline.relabel(store) == 2
+    by_text = {row["text"]: row for row in store.rows}
+    for text in ("a", "b"):
+        assert by_text[text]["status"] == "new"
+        assert by_text[text]["labels"] == {}
+        assert not {"final", "final_by", "errors"} & set(by_text[text])
+    assert by_text["c"]["status"] == "accepted"
+    assert by_text["d"]["status"] == "rejected"
+    assert pipeline.relabel(store, include_reviewed=True) == 4  # две новые и два решения
+    assert by_text["c"]["status"] == by_text["d"]["status"] == "new"
+    assert by_text["e"]["status"] == "promoted"
+    assert len(CandidateStore(tmp_path).rows) == 5

@@ -1,4 +1,5 @@
 import '../models/task.dart';
+import 'verb_forms.dart';
 
 /// Почему срок не удалось однозначно разобрать. Коннектор превращает это
 /// в уточнение, а не сохраняет догадку.
@@ -145,19 +146,6 @@ final class DueParser {
     'плиз',
     'пж',
     'пжлст',
-  };
-
-  /// Существительные на «-ть», которые не глаголы: «в 2 сеть» — не время.
-  static const Set<String> _nounsEndingInT = <String>{
-    'сеть',
-    'мать',
-    'путь',
-    'суть',
-    'нить',
-    'треть',
-    'ртуть',
-    'плеть',
-    'медь',
   };
 
   /// Единицы после числа с точкой: «1.5 кг», «3.5 метра» — количество,
@@ -380,7 +368,34 @@ final class DueParser {
 
     // Одиночный час: «в 10», «к 9 утра», «в 7 вечера». Только после «в/к»
     // и только если дальше нет обычного слова — «в 2 магазина» не время.
+    // Исключение — час сразу после дня: «завтра в 10 созвон», «в следующий
+    // понедельник в 9 планёрка». Здесь число уже не может быть количеством.
     final masked = _word.allMatches(dateText).toList(growable: false);
+    final dayEnds = <int>{
+      for (final found in <_Found>[
+        ..._relativeMentions(normalized, words, now),
+        ..._calendarMentions(
+          normalized,
+          words,
+          now,
+          const <(int, int)>{},
+          _merge(spans),
+          sourceEnds,
+        ),
+      ])
+        if (found.date != null) found.end,
+      for (final word in words)
+        if (_dayWords.containsKey(word.group(0))) word.end,
+    };
+    bool afterDay(RegExpMatch preposition) {
+      for (final end in dayEnds) {
+        if (end > preposition.start) continue;
+        final gap = normalized.substring(end, preposition.start).trim();
+        if (gap.isEmpty || gap == ',') return true;
+      }
+      return false;
+    }
+
     for (var i = 0; i < masked.length; i++) {
       final token = masked[i];
       final value = token.group(0)!;
@@ -403,7 +418,7 @@ final class DueParser {
               _politeWords.contains(nextWord) ||
               // «в 10 позвонить»: час перед действием.
               (_onlySpaces(dateText, token.end, next.start) &&
-                  _isInfinitive(nextWord!)) ||
+                  isInfinitive(nextWord!)) ||
               // «в 10 или в 11», «в 9 и в 18» — перечисление времён,
               // а не «10 штук».
               nextWord == 'или' ||
@@ -412,6 +427,8 @@ final class DueParser {
                   _hourPrepositions.contains(afterNext.group(0))) ||
               // «в 10 в пятницу», «в 9 через 2 дня»: дальше снова срок.
               _startsDayPhrase(masked, i + 1) ||
+              // «завтра в 10 созвон»: час сразу после дня.
+              afterDay(masked[i - 1]) ||
               (!_onlySpaces(dateText, token.end, next.start) &&
                   _onlyPunctuation(dateText, token.end, next.start));
       if (!freeAfter) continue;
@@ -1246,18 +1263,11 @@ final class DueParser {
     return result;
   }
 
-  /// Похоже на инфинитив: «позвонить», «купить», «зайти». Нужен, чтобы
-  /// «в 10 позвонить» стало временем, а «в 2 магазина» — нет.
-  static bool _isInfinitive(String word) {
-    if (word.length < 4 || _nounsEndingInT.contains(word)) return false;
-    // «-сть» почти всегда существительное: «часть», «новость».
-    if (word.endsWith('сть')) return false;
-    return word.endsWith('ть') ||
-        word.endsWith('ться') ||
-        word.endsWith('тись') ||
-        word.endsWith('йти') ||
-        word.endsWith('дти');
-  }
+  /// Похоже на инфинитив: «позвонить», «купить», «зайти», «отнести»,
+  /// «испечь». Нужен, чтобы «в 10 позвонить» стало временем, а «в 2
+  /// магазина» — нет, и чтобы «купить хлеб» без команды стало задачей.
+  /// Правила — [VerbForms.isInfinitive].
+  static bool isInfinitive(String word) => VerbForms.isInfinitive(word);
 
   /// После числа с точкой стоит единица измерения: «1.5 кг», «2.5%».
   static bool _isQuantity(String text, List<RegExpMatch> words, int end) {
