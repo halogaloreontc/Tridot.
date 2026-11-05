@@ -731,7 +731,24 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (section != AppSection.tasks) unawaited(_refresh());
   }
 
+  /// Выход из чата по задаче в общий чат: выбор снимается, режим —
+  /// «Диалог», курсор в поле ввода — можно сразу создавать новую задачу.
+  void _exitTask() {
+    unawaited(_saveDocument());
+    setState(() {
+      widget.assistant.clearSelection();
+      _mode = AssistantViewMode.dialogue;
+    });
+    unawaited(_syncDocument());
+    _inputFocus.requestFocus();
+  }
+
   Widget _buildWorkspace({required bool narrow, required bool wide}) {
+    final selected = _selectedTask;
+    final taskInFocus =
+        _section == AppSection.tasks && selected != null && selected.isActive
+            ? selected
+            : null;
     // Material, а не ColoredBox: на нём рисуются подсветка и всплески
     // нажатий у ListTile и кнопок во всех разделах.
     return Material(
@@ -744,42 +761,55 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               padding: EdgeInsets.symmetric(horizontal: narrow ? 4 : 16),
               child: Row(
                 children: <Widget>[
-                  if (narrow)
+                  // В чате по задаче слева — «назад» в общий чат (там
+                  // создаются новые задачи); на телефоне он заменяет меню.
+                  if (taskInFocus != null)
+                    IconButton(
+                      key: const Key('task-back'),
+                      tooltip: 'Назад к общему чату',
+                      onPressed: _exitTask,
+                      style: narrow
+                          ? null
+                          : IconButton.styleFrom(
+                              fixedSize: const Size(36, 36),
+                              minimumSize: const Size(36, 36),
+                              padding: EdgeInsets.zero,
+                              side: const BorderSide(
+                                color: AssistantColors.border,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                      icon: const Icon(Icons.chevron_left, size: 22),
+                    )
+                  else if (narrow)
                     IconButton(
                       key: const Key('menu-button'),
                       tooltip: 'Меню',
                       onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                       icon: const Icon(Icons.menu),
-                    )
-                  else
-                    const SizedBox(width: 8),
-                  // Заголовок с подписью занимает всё свободное место, поэтому
-                  // поиск и кнопка панели прижаты к правому краю.
-                  Expanded(
-                    child: Row(
-                      children: <Widget>[
-                        Flexible(
-                          child: Text(
-                            _section.title,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: AssistantColors.textStrong,
-                            ),
-                          ),
-                        ),
-                        if (_section == AppSection.tasks &&
-                            _active.isNotEmpty &&
-                            !narrow) ...<Widget>[
-                          const SizedBox(width: 8),
-                          Text(
-                            '${_active.length} активных',
-                            style: technicalTextStyle,
-                          ),
-                        ],
-                      ],
                     ),
+                  SizedBox(width: narrow ? 4 : 12),
+                  // Заголовок занимает всё свободное место, поэтому поиск и
+                  // кнопка панели прижаты к правому краю.
+                  Expanded(
+                    child: taskInFocus == null
+                        ? _SectionTitle(
+                            title: _section.title,
+                            subtitle: _section == AppSection.tasks &&
+                                    _active.isNotEmpty &&
+                                    !narrow
+                                ? '${_active.length} активных'
+                                : null,
+                          )
+                        : _TaskCrumb(
+                            task: taskInFocus,
+                            now: _now,
+                            narrow: narrow,
+                            onOpenDocument: () =>
+                                _setMode(AssistantViewMode.document),
+                          ),
                   ),
                   if (_section == AppSection.tasks && !narrow) ...<Widget>[
                     _SearchField(
@@ -1037,16 +1067,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              if (selected != null && selected.isActive)
-                _SelectedTaskStrip(
-                  task: selected,
-                  now: _now,
-                  onOpenDocument: () => _setMode(AssistantViewMode.document),
-                  onClear: () {
-                    setState(widget.assistant.clearSelection);
-                    unawaited(_syncDocument());
-                  },
-                ),
               if (!compact)
                 _QuickActions(
                   hasSelection: selected != null && selected.isActive,
@@ -1477,76 +1497,150 @@ final class _MessageRow extends StatelessWidget {
   }
 }
 
-final class _SelectedTaskStrip extends StatelessWidget {
-  const _SelectedTaskStrip({
+final class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.title, this.subtitle});
+
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        Flexible(
+          child: Text(
+            title,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AssistantColors.textStrong,
+            ),
+          ),
+        ),
+        if (subtitle != null) ...<Widget>[
+          const SizedBox(width: 8),
+          Text(subtitle!, style: technicalTextStyle),
+        ],
+      ],
+    );
+  }
+}
+
+/// Задача, с которой работает помощник («её»), — в верхней панели справа
+/// от заголовка: «Задачи › Подготовить презентацию · завтра в 10:00».
+final class _TaskCrumb extends StatelessWidget {
+  const _TaskCrumb({
     required this.task,
     required this.now,
+    required this.narrow,
     required this.onOpenDocument,
-    required this.onClear,
   });
 
   final Task task;
   final DateTime now;
+  final bool narrow;
   final VoidCallback onOpenDocument;
-  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
     final due = task.dueAt;
-    return Container(
-      key: const Key('selected-task-strip'),
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.only(left: 12, right: 4),
-      constraints: const BoxConstraints(minHeight: 44),
-      decoration: BoxDecoration(
-        color: AssistantColors.panel,
-        border: Border.all(color: AssistantColors.borderSoft),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: <Widget>[
-          const Icon(
-            Icons.push_pin_outlined,
-            size: 16,
-            color: AssistantColors.textStrong,
+    const titleStyle = TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.w600,
+      color: AssistantColors.textStrong,
+    );
+    if (narrow) {
+      // Две строки помещаются в панель высотой 56, только пока шрифт не
+      // крупный; иначе остаётся название задачи, подпись — в подсказке.
+      if (MediaQuery.textScalerOf(context).scale(1) > 1.3) {
+        return Tooltip(
+          message: 'Задачи › «её»',
+          child: Text(
+            task.title,
+            key: const Key('selected-task-strip'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: titleStyle,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: <InlineSpan>[
-                  const TextSpan(text: '«её» — ', style: technicalTextStyle),
-                  TextSpan(
-                    text: task.title,
+        );
+      }
+      return Column(
+        key: const Key('selected-task-strip'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const Text('Задачи › «её»', style: technicalTextStyle),
+          Text(
+            task.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: titleStyle,
+          ),
+        ],
+      );
+    }
+    return Row(
+      children: <Widget>[
+        const Text('Задачи', style: titleStyle),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 6),
+          child: Icon(
+            Icons.chevron_right,
+            size: 16,
+            color: AssistantColors.muted,
+          ),
+        ),
+        Flexible(
+          child: Container(
+            key: const Key('selected-task-strip'),
+            height: 36,
+            padding: const EdgeInsets.only(left: 10, right: 2),
+            decoration: BoxDecoration(
+              color: AssistantColors.panel,
+              border: Border.all(color: AssistantColors.borderSoft),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Icon(
+                  Icons.push_pin_outlined,
+                  size: 14,
+                  color: AssistantColors.textStrong,
+                ),
+                const SizedBox(width: 8),
+                const Text('«её»', style: technicalTextStyle),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    task.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: AssistantColors.textStrong,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  if (due != null)
-                    TextSpan(
-                      text: '  ${formatDue(due, task.duePrecision, now)}',
-                      style: technicalTextStyle,
-                    ),
+                ),
+                if (due != null) ...<Widget>[
+                  const SizedBox(width: 8),
+                  Text(
+                    formatDue(due, task.duePrecision, now),
+                    style: technicalTextStyle,
+                  ),
                 ],
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+                IconButton(
+                  tooltip: 'Открыть документ задачи',
+                  onPressed: onOpenDocument,
+                  iconSize: 16,
+                  icon: const Icon(Icons.description_outlined),
+                ),
+              ],
             ),
           ),
-          IconButton(
-            tooltip: 'Открыть документ задачи',
-            onPressed: onOpenDocument,
-            icon: const Icon(Icons.description_outlined, size: 18),
-          ),
-          IconButton(
-            key: const Key('selected-task-clear'),
-            tooltip: 'Снять выбор',
-            onPressed: onClear,
-            icon: const Icon(Icons.close, size: 18),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

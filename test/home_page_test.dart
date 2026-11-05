@@ -716,4 +716,38 @@ void main() {
         .where((s) => s.width > 2 && s.height > 2 && s.width < 10);
     expect(visible.length, 9, reason: 'девять клеток знака');
   });
+
+  testWidgets('кнопка «назад» выводит из чата по задаче в общий чат',
+      (tester) async {
+    final h = await _pump(tester);
+    await _say(tester, 'Добавь задачу «Отчёт» на завтра');
+    expect(find.byKey(const Key('selected-task-strip')), findsOneWidget);
+    expect(find.byKey(const Key('task-back')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('task-back')));
+    await tester.pumpAndSettle();
+    expect(h.assistant.selectedTaskId, isNull);
+    expect(find.byKey(const Key('selected-task-strip')), findsNothing);
+    expect(find.byKey(const Key('task-back')), findsNothing);
+    expect(find.byKey(const Key('history-rail')), findsOneWidget);
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('assistant-input')),
+    );
+    expect(field.focusNode!.hasFocus, isTrue);
+  });
+
+  testWidgets('на телефоне «назад» заменяет меню, пока открыта задача',
+      (tester) async {
+    await _pump(tester, size: _phone);
+    expect(find.byKey(const Key('menu-button')), findsOneWidget);
+    await _say(tester, 'Добавь задачу «Отчёт» на завтра');
+    expect(find.byKey(const Key('menu-button')), findsNothing);
+    expect(find.text('Задачи › «её»'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('task-back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('menu-button')), findsOneWidget);
+  });
 }
