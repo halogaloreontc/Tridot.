@@ -612,10 +612,31 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   child: SafeArea(child: _buildTasksPanel()),
                 ),
           body: SafeArea(
-            child: Row(
+            child: Stack(
               children: <Widget>[
-                if (!narrow) _buildSidebar(expanded: sidebarExpanded),
-                Expanded(child: _buildWorkspace(narrow: narrow, wide: wide)),
+                Row(
+                  children: <Widget>[
+                    if (!narrow) _buildSidebar(expanded: sidebarExpanded),
+                    Expanded(
+                      child: _buildWorkspace(narrow: narrow, wide: wide),
+                    ),
+                  ],
+                ),
+                // Хроника команд: у правого края чата и ровно по центру
+                // высоты всего экрана — зеркальная пара кубику у ответа.
+                if (_section == AppSection.tasks &&
+                    _mode == AssistantViewMode.dialogue)
+                  Positioned(
+                    top: 0,
+                    bottom: 0,
+                    right: wide && _panelOpen ? 321 : 0,
+                    child: HistoryRail(
+                      entries: _historyEntries,
+                      activeIndex: _highlightedCommand,
+                      onSelect: _jumpToCommand,
+                      compact: narrow,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -991,18 +1012,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       );
     }
-    final entries = <HistoryEntry>[
-      for (var i = 0; i < _messages.length; i++)
-        if (_messages[i].fromUser)
-          HistoryEntry(
-            command: _messages[i].text,
-            timestamp: _timeLabel(_messages[i].timestamp),
-            result: i + 1 < _messages.length && !_messages[i + 1].fromUser
-                ? _messages[i + 1].text
-                : null,
-          ),
-    ];
-    final compactRail = MediaQuery.sizeOf(context).width < narrowBreakpoint;
     return Row(
       children: <Widget>[
         Expanded(
@@ -1019,17 +1028,27 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
           ),
         ),
-        // Закреплена у правого края и выровнена по центру средней части:
-        // зеркальная пара кубику у последнего ответа.
-        HistoryRail(
-          entries: entries,
-          activeIndex: _highlightedCommand,
-          onSelect: _jumpToCommand,
-          compact: compactRail,
-        ),
+        // Место под хронику: сама она лежит слоем поверх экрана (см. build),
+        // чтобы стоять по центру высоты всего экрана, а не области чата.
+        SizedBox(width: _railWidth),
       ],
     );
   }
+
+  double get _railWidth =>
+      MediaQuery.sizeOf(context).width < narrowBreakpoint ? 24 : 32;
+
+  List<HistoryEntry> get _historyEntries => <HistoryEntry>[
+        for (var i = 0; i < _messages.length; i++)
+          if (_messages[i].fromUser)
+            HistoryEntry(
+              command: _messages[i].text,
+              timestamp: _timeLabel(_messages[i].timestamp),
+              result: i + 1 < _messages.length && !_messages[i + 1].fromUser
+                  ? _messages[i + 1].text
+                  : null,
+            ),
+      ];
 
   Widget _cubeWidget() => StatusCube(
         state: _cube,

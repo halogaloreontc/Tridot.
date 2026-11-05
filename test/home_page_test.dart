@@ -750,4 +750,30 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('menu-button')), findsOneWidget);
   });
+
+  testWidgets('хроника стоит по центру высоты всего экрана', (tester) async {
+    for (final size in <Size>[_desktop, _laptop, _phone]) {
+      await tester.pumpWidget(const SizedBox());
+      await _pump(tester, size: size);
+      await _say(tester, 'Покажи задачи');
+      await _say(tester, 'Привет');
+      await _say(tester, 'Покажи задачи');
+
+      final marks = find.byWidgetPredicate(
+        (Widget w) =>
+            w.key is ValueKey<String> &&
+            RegExp(r'^history-\d+$').hasMatch(
+              (w.key! as ValueKey<String>).value,
+            ),
+      );
+      final first = tester.getRect(marks.first);
+      final last = tester.getRect(marks.last);
+      final centre = (first.top + last.bottom) / 2;
+      expect(
+        (centre - size.height / 2).abs(),
+        lessThan(2),
+        reason: 'ширина ${size.width}',
+      );
+    }
+  });
 }
