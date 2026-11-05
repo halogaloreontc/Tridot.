@@ -30,7 +30,7 @@ final class ParsedCommand {
     this.title,
     this.targetQuery,
     this.dueAt,
-    this.duePrecision = DuePrecision.dateTime,
+    this.duePrecision,
     this.dueIssue = DueIssue.none,
     this.titleIssue = TitleIssue.none,
     this.projects = const <String>[],
@@ -54,7 +54,9 @@ final class ParsedCommand {
   /// контроллер берёт выбранную задачу. Для создания и списка всегда `null`.
   final String? targetQuery;
   final DateTime? dueAt;
-  final DuePrecision duePrecision;
+
+  /// Точность [dueAt]: `null` тогда и только тогда, когда срока нет.
+  final DuePrecision? duePrecision;
   final DueIssue dueIssue;
   final TitleIssue titleIssue;
 }
@@ -144,8 +146,11 @@ final class ScenarioParser {
   (DateTime, DuePrecision)? parseDue(String text) {
     final result = parseDueDetailed(text);
     final due = result.dueAt;
-    if (due == null || result.issue != DueIssue.none) return null;
-    return (due, result.precision);
+    final precision = result.precision;
+    if (due == null || precision == null || result.issue != DueIssue.none) {
+      return null;
+    }
+    return (due, precision);
   }
 
   /// Разбирает срок в тексте без названия в кавычках.

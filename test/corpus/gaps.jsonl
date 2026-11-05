@@ -1,5 +1,3 @@
-{"id":"gap-001","status":"known_gap","text":"Добавь задачу «Спорт» в понедельник","intent":"createTask","title":"Спорт","due":"2026-11-09","precision":"date","note":"дни недели ещё не поддерживаются"}
-{"id":"gap-003","status":"known_gap","text":"Добавь задачу «Чай» через час","intent":"createTask","title":"Чай","due":"2026-11-02T17:30","precision":"dateTime","note":"относительное время"}
 {"id":"gap-004","status":"known_gap","text":"Добавь задачу «Отчёт» на 15 ноября","intent":"createTask","title":"Отчёт","due":"2026-11-15","precision":"date","note":"месяц словом"}
-{"id":"gap-005","status":"known_gap","text":"напомни в пятницу купить хлеб","intent":"createTask","title":"Купить хлеб","due":"2026-11-06","precision":"date","note":"дни недели ещё не поддерживаются; «в пятницу» пока остаётся в названии"}
-{"id":"gap-006","status":"known_gap","text":"Добавь задачу купить хлеб через 3 дня","intent":"createTask","title":"Купить хлеб","due":"2026-11-05","precision":"date","note":"«через N дней» ещё не поддерживается"}
+{"id":"gap-007","status":"known_gap","text":"напомни во вторник утром позвонить","intent":"createTask","title":"Позвонить","due":"2026-11-03T09:00","precision":"dateTime","note":"части суток без часа («утром») ещё не поддерживаются; «утром» остаётся в названии"}
+{"id":"gap-008","status":"known_gap","text":"добавь позвонить на этой неделе","intent":"createTask","title":"Позвонить","due":null,"note":"«на этой неделе» без дня не даёт срока и пока остаётся в названии"}

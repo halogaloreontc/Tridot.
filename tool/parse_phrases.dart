@@ -31,8 +31,10 @@ Future<void> main() async {
         'intent': parsed.intent.name,
         'title': parsed.title,
         'targetQuery': parsed.targetQuery,
-        'due': due == null ? null : _formatDue(due, parsed.duePrecision),
-        'precision': due == null ? null : parsed.duePrecision.name,
+        'due': due == null
+            ? null
+            : _formatDue(due, parsed.duePrecision ?? DuePrecision.dateTime),
+        'precision': parsed.duePrecision?.name,
         'issue': parsed.dueIssue.name,
         'titleIssue': parsed.titleIssue.name,
         'projects': parsed.projects,

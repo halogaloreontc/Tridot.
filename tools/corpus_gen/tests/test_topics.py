@@ -340,6 +340,13 @@ def test_label_system_knows_new_due_rules() -> None:
     assert "1.5 кг" in prompts.LABEL_SYSTEM
 
 
+def test_label_system_knows_weekdays_and_relative_dues() -> None:
+    text = " ".join(prompts.LABEL_SYSTEM.split())
+    assert "в следующую пятницу" in text and "пн вт ср чт пт сб вс" in text
+    assert "через полчаса" in text and "через пару дней" in text
+    assert "«пятничный отчёт»" in text and "conflictingDays" in text
+
+
 def tomllib_loads(text: str) -> dict[str, Any]:
     import tomllib
 

@@ -105,7 +105,8 @@ final class TasksConnector implements Connector {
     final task = await _tasks.create(
       title: title,
       dueAt: command.dueAt,
-      duePrecision: command.duePrecision,
+      // Без срока точность не важна: задача хранит значение по умолчанию.
+      duePrecision: command.duePrecision ?? DuePrecision.dateTime,
       tags: command.projects,
     );
     session.select(id, task.id);
@@ -186,8 +187,11 @@ final class TasksConnector implements Connector {
         'На когда перенести задачу? Например: «на завтра в 15:00».',
       );
     }
-    final task =
-        await _tasks.reschedule(target.id!, dueAt, command.duePrecision);
+    final task = await _tasks.reschedule(
+      target.id!,
+      dueAt,
+      command.duePrecision ?? DuePrecision.dateTime,
+    );
     session.select(id, task.id);
     return AssistantResponse(
       message:

@@ -308,6 +308,13 @@ final class _Case {
       final due = json['due'] as String?;
       compare('due', parsed.dueAt, due == null ? null : DateTime.parse(due));
     }
+    // Точность есть ровно тогда, когда есть срок: без срока она не
+    // должна притворяться «dateTime».
+    if ((parsed.dueAt == null) != (parsed.duePrecision == null)) {
+      mismatches.add(
+        'precision: при сроке ${parsed.dueAt} получено ${parsed.duePrecision}',
+      );
+    }
     if (json.containsKey('precision')) {
       compare(
         'precision',
