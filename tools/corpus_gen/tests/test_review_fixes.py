@@ -205,3 +205,47 @@ def test_unrelated_error_keeps_json_mode() -> None:
         provider.complete("s", "u", {})
     assert provider._json_mode is True
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("raw", "title"),
+    [
+        # Закрывающая “ заменена на ": строка JSON обрывается.
+        ('{"intent": "createTask", "title": "„Зайти в банк"", "due": null}', "Зайти в банк"),
+        ('{"intent": "createTask", "title": "Сдать отчет"", "due": null}', "Сдать отчет"),
+        ('{"title": "Прочитать "Мастер и Маргарита"", "x": 1}', 'Прочитать "Мастер и Маргарита"'),
+        ('{"title": "a\\\\"b", "x": "c"}', 'a\\"b'),
+    ],
+)
+def test_stray_quotes_are_repaired(raw: str, title: str) -> None:
+    from corpus_gen.pipeline import _strip_title_quotes
+    from corpus_gen.providers import _load_json
+
+    assert _strip_title_quotes(_load_json(raw, "ollama")["title"]) == title
+
+
+def test_valid_json_is_untouched_and_garbage_still_fails() -> None:
+    from corpus_gen.providers import _escape_stray_quotes, _load_json
+
+    valid = '{"a": "x, y", "b": ["q", "r"], "c": {"d": "e: f"}}'
+    assert _escape_stray_quotes(valid) == valid
+    with pytest.raises(ProviderError, match="рядом"):
+        _load_json('{"a": }', "ollama")
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("«Купить хлеб»", "Купить хлеб"),
+        ("„Зайти в банк“", "Зайти в банк"),
+        ("Купить хлеб", "Купить хлеб"),
+        ('Купить "Наполеон"', 'Купить "Наполеон"'),
+        ("«»", None),
+        ("  ", None),
+        (None, None),
+    ],
+)
+def test_title_quotes(title: Any, expected: Any) -> None:
+    from corpus_gen.pipeline import _strip_title_quotes
+
+    assert _strip_title_quotes(title) == expected

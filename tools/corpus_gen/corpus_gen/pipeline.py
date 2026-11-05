@@ -223,7 +223,7 @@ def label(
                 )
             except Exception as error:  # noqa: BLE001
                 with lock:
-                    row.setdefault("errors", []).append(f"{source.name}: {error}")
+                    row.setdefault("errors", []).append(_error_text(source, error))
                     usage.append(_usage_row(source, "label", error))
                 return
         with lock:
@@ -231,7 +231,7 @@ def label(
             try:
                 row["labels"][source.name] = normalize_label(completion.data)
             except ProviderError as error:
-                row.setdefault("errors", []).append(f"{source.name}: {error}")
+                row.setdefault("errors", []).append(_error_text(source, error))
 
     workers = max(1, sum(s.max_concurrency for s in labelers))
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -246,6 +246,29 @@ def label(
     return counts
 
 
+_OPENING_QUOTES = "«“„\""
+_CLOSING_QUOTES = "»”“\""
+
+
+def _error_text(source: Source, error: Exception) -> str:
+    """Ошибки провайдера уже начинаются с имени источника — не дублируем его."""
+    text = str(error)
+    return text if text.startswith(f"{source.name}:") else f"{source.name}: {text}"
+
+
+def _strip_title_quotes(title: Any) -> str | None:
+    """Название — текст внутри кавычек; модели иногда захватывают и сами кавычки."""
+    if not isinstance(title, str):
+        return None
+    title = title.strip()
+    if len(title) >= 2 and title[0] in _OPENING_QUOTES and title[-1] in _CLOSING_QUOTES:
+        title = title[1:-1].strip()
+    elif title.endswith('"') and title.count('"') % 2 == 1:
+        # Непарная " в конце — остаток сломанной закрывающей кавычки.
+        title = title[:-1].strip()
+    return title or None
+
+
 def normalize_label(data: dict[str, Any]) -> dict[str, Any]:
     """Проверяет разметку модели и приводит её к формату корпуса."""
     intent = data.get("intent")
@@ -258,8 +281,7 @@ def normalize_label(data: dict[str, Any]) -> dict[str, Any]:
     if title_issue not in prompts.TITLE_ISSUES:
         raise ProviderError(f"недопустимый titleIssue: {title_issue!r}")
 
-    title = data.get("title")
-    title = title.strip() if isinstance(title, str) and title.strip() else None
+    title = _strip_title_quotes(data.get("title"))
     if intent in {"listTasks", "unknown"} or title_issue != "none":
         title = None
 

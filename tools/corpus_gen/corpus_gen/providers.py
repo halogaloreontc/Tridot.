@@ -180,10 +180,15 @@ def _load_json(text: str, name: str, tokens: tuple[int, int] = (0, 0)) -> dict[s
         start, end = cleaned.find("{"), cleaned.rfind("}")
         if start == -1 or end <= start:
             raise ProviderError(f"{name}: ответ не JSON: {text[:200]!r}", *tokens) from None
+        candidate = cleaned[start : end + 1]
         try:
-            value = json.loads(cleaned[start : end + 1])
+            value = json.loads(candidate)
         except json.JSONDecodeError as error:
-            raise ProviderError(f"{name}: ответ не JSON: {error}", *tokens) from None
+            try:
+                value = json.loads(_escape_stray_quotes(candidate))
+            except json.JSONDecodeError:
+                near = candidate[max(0, error.pos - 40) : error.pos + 40]
+                raise ProviderError(f"{name}: ответ не JSON: {error}; рядом: {near!r}", *tokens) from None
     if not isinstance(value, dict):
         raise ProviderError(f"{name}: ожидался JSON-объект", *tokens)
     return value
@@ -195,3 +200,34 @@ def make_provider(source: Source) -> Provider:
     if source.kind == "openai_compat":
         return OpenAICompatProvider(source)
     raise ValueError(f"неизвестный kind: {source.kind}")
+
+
+def _escape_stray_quotes(text: str) -> str:
+    """Экранирует ASCII-кавычки внутри строк, которые модель забыла экранировать.
+
+    Локальные модели, переписывая название вроде „Зайти в банк“, иногда ставят
+    вместо закрывающей “ обычную ", и строка JSON обрывается. Кавычка внутри
+    строки считается закрывающей, только если за ней (после пробелов) идёт
+    , : } ] или конец текста; иначе она — часть значения.
+    """
+    out: list[str] = []
+    in_string = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if in_string and char == "\\":
+            out.append(text[index : index + 2])
+            index += 2
+            continue
+        if char == '"':
+            if not in_string:
+                in_string = True
+            else:
+                rest = text[index + 1 :].lstrip()
+                if not rest or rest[0] in ",:}]":
+                    in_string = False
+                else:
+                    out.append("\\")
+        out.append(char)
+        index += 1
+    return "".join(out)
