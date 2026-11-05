@@ -1,0 +1,52 @@
+{"id":"unq-001","text":"Добавь задачу позвонить клиенту завтра в 10","intent":"createTask","title":"Позвонить клиенту","due":"2026-11-03T10:00","precision":"dateTime","note":"час без минут после «в»"}
+{"id":"unq-003","text":"запиши сдать отчёт #работа","intent":"createTask","title":"Сдать отчёт","due":null,"projects":["работа"]}
+{"id":"unq-004","text":"Добавь «Купить хлеб» завтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date","note":"кавычки без слова «задачу»"}
+{"id":"unq-005","text":"напомни мне завтра в 9:30 оплатить интернет","intent":"createTask","title":"Оплатить интернет","due":"2026-11-03T09:30","precision":"dateTime"}
+{"id":"unq-006","text":"добавь задачу","intent":"createTask","title":null,"due":null,"note":"контроллер спросит название"}
+{"id":"unq-007","text":"Добавь задачу купить завтрак","intent":"createTask","title":"Купить завтрак","due":null,"note":"«завтрак» — целое слово, не «завтра»"}
+{"id":"unq-008","text":"добавь обновить до версии 2.10","intent":"createTask","title":"Обновить до версии 2.10","due":null,"note":"номер версии не дата, «до» остаётся"}
+{"id":"unq-009","text":"Пожалуйста, добавь задачу купить молоко","intent":"createTask","title":"Купить молоко","due":null}
+{"id":"unq-010","text":"Добавь, пожалуйста, задачу полить цветы на завтра","intent":"createTask","title":"Полить цветы","due":"2026-11-03","precision":"date"}
+{"id":"unq-011","text":"добавь в список купить батарейки","intent":"createTask","title":"Купить батарейки","due":null}
+{"id":"unq-012","text":"Создай напоминание позвонить маме в 19:00","intent":"createTask","title":"Позвонить маме","due":"2026-11-02T19:00","precision":"dateTime"}
+{"id":"unq-013","text":"напомни что надо купить хлеб","intent":"createTask","title":"Надо купить хлеб","due":null,"note":"«что» после «напомни» убирается"}
+{"id":"unq-014","text":"Добавь на завтра задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date","note":"срок между глаголом и «задачу»"}
+{"id":"unq-015","text":"Новая задача сдать ключи послезавтра в 9:30","intent":"createTask","title":"Сдать ключи","due":"2026-11-04T09:30","precision":"dateTime"}
+{"id":"unq-016","text":"Добавь задачу встреча с клиентом 15.11 в 12:00","intent":"createTask","title":"Встреча с клиентом","due":"2026-11-15T12:00","precision":"dateTime","note":"«с» не при сроке остаётся"}
+{"id":"unq-017","text":"Добавь задачу купить хлеб, завтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date","note":"осиротевшая запятая"}
+{"id":"unq-018","text":"Добавь задачу купить хлеб завтра в 9 утра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03T09:00","precision":"dateTime"}
+{"id":"unq-019","text":"Добавь задачу пробежка в 7 вечера","intent":"createTask","title":"Пробежка","due":"2026-11-02T19:00","precision":"dateTime"}
+{"id":"unq-020","text":"Добавь задачу купить 2 хлеба в 2 магазинах","intent":"createTask","title":"Купить 2 хлеба в 2 магазинах","due":null,"note":"«в 2 магазинах» — не время"}
+{"id":"unq-021","text":"Добавь задачу купить подарок к 18:00","intent":"createTask","title":"Купить подарок","due":"2026-11-02T18:00","precision":"dateTime"}
+{"id":"unq-022","text":"Добавь задачу купить подарок до 20.11","intent":"createTask","title":"Купить подарок","due":"2026-11-20","precision":"date"}
+{"id":"unq-023","text":"Добавь задачу Позвонить в iCloud","intent":"createTask","title":"Позвонить в iCloud","due":null,"note":"регистр пользователя сохраняется"}
+{"id":"unq-024","text":"добавь задачу проверить заказ 64115","intent":"createTask","title":"Проверить заказ 64115","due":null,"note":"пятизначный код не время и не дата"}
+{"id":"unq-025","text":"Добавь задачу купить краску #дача #ремонт завтра","intent":"createTask","title":"Купить краску","due":"2026-11-03","precision":"date","projects":["дача","ремонт"]}
+{"id":"unq-026","text":"Запиши задачу сдать ключи плиз","intent":"createTask","title":"Сдать ключи","due":null}
+{"id":"unq-027","text":"Добавь задачу купить хлеб и молоко к концу 15.11","intent":"createTask","title":"Купить хлеб и молоко","due":"2026-11-15","precision":"date","note":"«к концу» входит в срок"}
+{"id":"unq-028","text":"Добавь задачу в 10","intent":"createTask","title":null,"due":"2026-11-03T10:00","precision":"dateTime","note":"кроме срока ничего нет"}
+{"id":"unq-029","text":"Добавь задачу ремонт на 31.02","intent":"createTask","title":"Ремонт","issue":"invalidDate"}
+{"id":"unq-030","text":"добавь задачу сдать отчёт сегодня в 9:00","intent":"createTask","title":"Сдать отчёт","issue":"inPast"}
+{"id":"unq-031","text":"Добавь задачу «Купить хлеб» купить молоко завтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date","note":"кавычки важнее остатка фразы"}
+{"id":"unq-032","text":"Добавь задачу «Отчёт «Q3» сдать завтра","intent":"createTask","title":null,"titleIssue":"unbalancedQuotes","note":"при незакрытой кавычке остаток не угадывается"}
+{"id":"unq-033","text":"Создай задачу «»","intent":"createTask","title":null}
+{"id":"unq-034","text":"Добавь задачу купить хлеб.","intent":"createTask","title":"Купить хлеб","note":"точка в конце"}
+{"id":"unq-035","text":"Добавь задачу встреча #42 завтра","intent":"createTask","title":"Встреча","projects":["42"],"due":"2026-11-03","precision":"date"}
+{"id":"unq-036","text":"добавь задачу сходить в зал к 9 утра","intent":"createTask","title":"Сходить в зал","due":"2026-11-03T09:00","precision":"dateTime"}
+{"id":"unq-037","text":"Добавь задачу купить хлеб в 10 или в 11","intent":"createTask","issue":"conflictingTimes"}
+{"id":"tgt-001","text":"Заверши не забыть купить хлеб","intent":"completeTask","targetQuery":"Не забыть купить хлеб","note":"отрицание внутри названия не отменяет завершение"}
+{"id":"tgt-002","text":"не выполнил отчёт","intent":"unknown","note":"«не» первым словом"}
+{"id":"tgt-003","text":"Я не сделал?","intent":"unknown"}
+{"id":"tgt-004","text":"Перенеси отчёт на завтра","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-11-03","precision":"date"}
+{"id":"tgt-005","text":"Перенеси встречу с 15:00 на 17:00","intent":"rescheduleTask","targetQuery":"Встречу","due":"2026-11-02T17:00","precision":"dateTime","note":"исходный срок «с 15:00» тоже вырезается"}
+{"id":"tgt-006","text":"Перенеси задачу купить хлеб на послезавтра в 10:00","intent":"rescheduleTask","targetQuery":"Купить хлеб","due":"2026-11-04T10:00","precision":"dateTime"}
+{"id":"tgt-007","text":"Заверши отчёт","intent":"completeTask","targetQuery":"Отчёт"}
+{"id":"tgt-008","text":"Отметь задачу купить хлеб как выполненную","intent":"completeTask","targetQuery":"Купить хлеб"}
+{"id":"tgt-009","text":"Выполнил отчёт","intent":"completeTask","targetQuery":"Отчёт"}
+{"id":"tgt-010","text":"Заверши её","intent":"completeTask","title":null,"targetQuery":null,"note":"местоимение — выбранная задача"}
+{"id":"tgt-011","text":"Перенеси её на завтра в 12:00","intent":"rescheduleTask","targetQuery":null,"due":"2026-11-03T12:00","precision":"dateTime"}
+{"id":"tgt-012","text":"Сдвинь звонок маме на 20.11","intent":"rescheduleTask","targetQuery":"Звонок маме","due":"2026-11-20","precision":"date"}
+{"id":"tgt-013","text":"Готово","intent":"completeTask","targetQuery":null}
+{"id":"tgt-014","text":"Перенеси задачу «Отчёт» на завтра","intent":"rescheduleTask","title":"Отчёт","targetQuery":null,"due":"2026-11-03","precision":"date","note":"в кавычках — точное название, не запрос"}
+{"id":"tgt-015","text":"Задача выполнена","intent":"completeTask","targetQuery":null}
+{"id":"tgt-016","text":"Отложи покупку краски пожалуйста на 20.11","intent":"rescheduleTask","targetQuery":"Покупку краски","due":"2026-11-20","precision":"date"}

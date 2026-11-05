@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
 import 'package:local_assistant/app/widgets/status_cube.dart';
+import 'package:local_assistant/core/connectors/connector.dart';
+import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/models/task.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
@@ -82,8 +84,9 @@ Future<_Harness> _pump(
         clock: _clock,
       );
   final assistant = AssistantController(
-    taskService: tasks,
-    parser: ScenarioParser(clock: _clock),
+    connectors: <Connector>[
+      TasksConnector(taskService: tasks, parser: ScenarioParser(clock: _clock)),
+    ],
     clock: _clock,
   );
   await tester.pumpWidget(

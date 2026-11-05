@@ -1,5 +1,9 @@
+import '../connectors/due_parser.dart';
+import '../connectors/utterance.dart';
 import '../models/task.dart';
 import '../services/clock.dart';
+
+export '../connectors/due_parser.dart' show CharSpan, DueIssue, DueParseResult;
 
 enum CommandIntent {
   createTask,
@@ -7,27 +11,6 @@ enum CommandIntent {
   completeTask,
   rescheduleTask,
   unknown,
-}
-
-/// Почему срок не удалось однозначно разобрать. Контроллер превращает это
-/// в уточнение, а не сохраняет догадку.
-enum DueIssue {
-  none,
-
-  /// Явно указанный день («сегодня», дата) или время на этот день уже прошли.
-  inPast,
-
-  /// Дата вида 31.02 не существует.
-  invalidDate,
-
-  /// Время вида 24:00, 25:10 или «в 7.5» не распознано.
-  invalidTime,
-
-  /// В команде несколько разных дней: «сегодня или завтра», «10.11 или 12.11».
-  conflictingDays,
-
-  /// В команде несколько разных времён: «в 10:00 или в 11:00».
-  conflictingTimes,
 }
 
 /// Проблемы с названием в кавычках.
@@ -45,6 +28,7 @@ final class ParsedCommand {
   const ParsedCommand({
     required this.intent,
     this.title,
+    this.targetQuery,
     this.dueAt,
     this.duePrecision = DuePrecision.dateTime,
     this.dueIssue = DueIssue.none,
@@ -57,111 +41,97 @@ final class ParsedCommand {
   /// Метки проектов из команды: «#работа» вне кавычек, без «#».
   final List<String> projects;
 
-  /// Для создания — название новой задачи; для переноса и завершения —
-  /// название задачи, к которой относится команда.
+  /// Для создания — название новой задачи: из кавычек, а без них — остаток
+  /// фразы после команды, срока, меток и вежливых слов.
+  ///
+  /// Для переноса и завершения — только точное название в кавычках.
+  /// Название без кавычек для них — это [targetQuery].
   final String? title;
+
+  /// Для переноса и завершения без кавычек: слова, по которым ищется задача
+  /// («Перенеси отчёт на завтра» → «Отчёт»). `null`, если кроме команды,
+  /// срока и слов вроде «её», «задачу» ничего не осталось — тогда
+  /// контроллер берёт выбранную задачу. Для создания и списка всегда `null`.
+  final String? targetQuery;
   final DateTime? dueAt;
   final DuePrecision duePrecision;
   final DueIssue dueIssue;
   final TitleIssue titleIssue;
 }
 
-final class DueParseResult {
-  const DueParseResult({
-    this.dueAt,
-    this.precision = DuePrecision.dateTime,
-    this.issue = DueIssue.none,
-  });
-
-  final DateTime? dueAt;
-  final DuePrecision precision;
-  final DueIssue issue;
-}
-
-/// Узкий набор правил первого среза.
+/// Правила распознавания задачных команд.
 ///
-/// Название задачи по-прежнему требуется в кавычках. Текст в кавычках
-/// вырезается до распознавания намерения и срока, поэтому слова и даты внутри
-/// названия («Завершить отчёт», «Планёрка завтра») не меняют смысл команды.
-/// При любой неоднозначности парсер сообщает о проблеме, а не угадывает.
+/// Точное название можно дать в кавычках — это самый надёжный способ, и он
+/// имеет приоритет. Без кавычек название — это остаток исходной фразы после
+/// удаления маркера команды («добавь задачу», «напомни мне»), фрагментов
+/// срока вместе с предлогами («на завтра в 10»), меток «#проект» и вежливых
+/// слов. Удаляются только целые слова: «завтрак» — не «завтра».
+/// При неоднозначности срока парсер сообщает о проблеме, а не угадывает.
 final class ScenarioParser {
   ScenarioParser({required Clock clock}) : _clock = clock;
 
   final Clock _clock;
 
-  /// Открывающая кавычка → допустимые закрывающие.
-  static const Map<String, Set<String>> _quotePairs = <String, Set<String>>{
-    '«': <String>{'»'},
-    '»': <String>{'«'},
-    '“': <String>{'”', '“'},
-    '„': <String>{'“', '”'},
-    '"': <String>{'"'},
-  };
+  ParsedCommand parse(String message) =>
+      parseUtterance(Utterance.analyze(message, now: _clock.now()));
 
-  static final RegExp _word = RegExp('[a-zа-я0-9]+');
-
-  /// ЧЧ:ММ с необязательными секундами. Диапазон проверяется отдельно,
-  /// чтобы «25:10» стало уточнением, а не молча пропало.
-  static final RegExp _colonTime =
-      RegExp(r'(?<![\d.:])(\d{1,2}):(\d{2})(?::(\d{2}))?(?![\d:])');
-
-  /// Число с точкой: дата ДД.ММ[.ГГ|.ГГГГ] или время ЧЧ.ММ — решается
-  /// по контексту. Точка в конце предложения не считается частью числа.
-  static final RegExp _dotted = RegExp(
-    r'(?<![\d.:])(\d{1,2})\.(\d{1,2})(?:\.(\d{4}|\d{2}))?(?!\d|\.\d)',
-  );
-
-  /// Предлоги, после которых указывается исходный срок при переносе:
-  /// «с 15:00 на 17:00».
-  static const Set<String> _sourcePrepositions = <String>{'с', 'со', 'от'};
-
-  static final RegExp _hashtag =
-      RegExp(r'(?<![\p{L}\p{N}])#([\p{L}\p{N}_-]+)', unicode: true);
-
-  ParsedCommand parse(String message) {
-    final quotes = _extractQuoted(message);
-    final projects = <String>[
-      for (final match in _hashtag.allMatches(quotes.rest))
-        match.group(1)!.toLowerCase(),
-    ];
-    // Метки вырезаются до разбора, чтобы «#завтра» не стало сроком.
-    final rest = _normalize(quotes.rest.replaceAll(_hashtag, ' '));
-    final words = _word
-        .allMatches(rest)
-        .map((Match m) => m.group(0)!)
-        .toList(growable: false);
-    if (words.isEmpty && quotes.titles.isEmpty) {
+  /// Разбор уже проанализированного сообщения: так коннектор не строит
+  /// [Utterance] второй раз.
+  ParsedCommand parseUtterance(Utterance utterance) {
+    final words = utterance.words;
+    if (words.isEmpty && utterance.quotedTitles.isEmpty) {
       return const ParsedCommand(intent: CommandIntent.unknown);
     }
 
-    final intent = _detectIntent(words, rest);
-    final titleIssue = quotes.unbalanced
+    final marker = _detectIntent(utterance);
+    final intent = marker.intent;
+    final titleIssue = utterance.unbalancedQuotes
         ? TitleIssue.unbalancedQuotes
-        : quotes.titles.length > 1
+        : utterance.quotedTitles.length > 1
             ? TitleIssue.multipleTitles
             : TitleIssue.none;
-    final title = titleIssue == TitleIssue.none && quotes.titles.isNotEmpty
-        ? quotes.titles.single
-        : null;
+    final quoted =
+        titleIssue == TitleIssue.none && utterance.quotedTitles.isNotEmpty
+            ? utterance.quotedTitles.single.text
+            : null;
+    final hasQuotes =
+        utterance.quotedTitles.isNotEmpty || utterance.unbalancedQuotes;
+    final due = utterance.due;
 
     switch (intent) {
       case CommandIntent.createTask:
-      case CommandIntent.rescheduleTask:
-        final due = parseDueDetailed(rest);
         return ParsedCommand(
           intent: intent,
-          title: title,
+          title: hasQuotes
+              ? quoted
+              : _createTitle(utterance, marker.index, marker.length),
           dueAt: due.dueAt,
           duePrecision: due.precision,
           dueIssue: due.issue,
           titleIssue: titleIssue,
-          projects:
-              intent == CommandIntent.createTask ? projects : const <String>[],
+          projects: <String>[
+            for (final tag in utterance.hashtags) tag.name,
+          ],
+        );
+      case CommandIntent.rescheduleTask:
+        return ParsedCommand(
+          intent: intent,
+          title: quoted,
+          targetQuery: hasQuotes
+              ? null
+              : _targetQuery(utterance, marker.index, _rescheduleFiller),
+          dueAt: due.dueAt,
+          duePrecision: due.precision,
+          dueIssue: due.issue,
+          titleIssue: titleIssue,
         );
       case CommandIntent.completeTask:
         return ParsedCommand(
           intent: intent,
-          title: title,
+          title: quoted,
+          targetQuery: hasQuotes
+              ? null
+              : _targetQuery(utterance, marker.index, _completeFiller),
           titleIssue: titleIssue,
         );
       case CommandIntent.listTasks:
@@ -172,185 +142,311 @@ final class ScenarioParser {
 
   /// Совместимая обёртка: только успешно разобранный срок.
   (DateTime, DuePrecision)? parseDue(String text) {
-    final result = parseDueDetailed(_normalize(text));
+    final result = parseDueDetailed(text);
     final due = result.dueAt;
     if (due == null || result.issue != DueIssue.none) return null;
     return (due, result.precision);
   }
 
-  /// Разбирает срок в уже нормализованном тексте без названия.
-  DueParseResult parseDueDetailed(String normalized) {
-    final now = _clock.now();
-    final today = DateTime(now.year, now.month, now.day);
+  /// Разбирает срок в тексте без названия в кавычках.
+  DueParseResult parseDueDetailed(String text) =>
+      const DueParser().parse(text, _clock.now());
 
-    final times = <_Mention<(int, int)>>[];
-    final dates = <_Mention<DateTime>>[];
-    var dateText = normalized;
+  // ------------------------------------------------------------- название
 
-    for (final match in _colonTime.allMatches(normalized)) {
-      final hour = int.parse(match.group(1)!);
-      final minute = int.parse(match.group(2)!);
-      final second = match.group(3);
-      if (hour > 23 ||
-          minute > 59 ||
-          (second != null && int.parse(second) > 59)) {
-        return const DueParseResult(issue: DueIssue.invalidTime);
-      }
-      times.add(
-        _Mention((hour, minute), _isSource(normalized, match.start)),
-      );
-      dateText = dateText.replaceRange(
-        match.start,
-        match.end,
-        ' ' * (match.end - match.start),
-      );
+  /// Слова, которые могут стоять между глаголом и названием: «добавь мне
+  /// задачу», «запиши, пожалуйста, в список».
+  static const Set<String> _politeWords = <String>{
+    'пожалуйста',
+    'пожалуйсто',
+    'плиз',
+    'пж',
+    'пжлст',
+  };
+
+  static const Set<String> _addressees = <String>{'мне', 'нам'};
+
+  static const Set<String> _objectNouns = <String>{
+    'задачу',
+    'задача',
+    'задачи',
+    'напоминание',
+    'дело',
+  };
+
+  /// «Создай новую задачу», «добавь новое напоминание».
+  static const Set<String> _newAdjectives = <String>{
+    'новую',
+    'новое',
+    'новый',
+    'новая',
+  };
+
+  /// Что может стоять после «в список»: «в список дел».
+  static const Set<String> _listNouns = <String>{'дел', 'задач'};
+
+  /// Разговорное вступление перед командой: «Слушай, добавь…», «Можешь
+  /// добавить…», «Нет, перенеси…». Убирается только перед маркером.
+  static const Set<String> _leadIns = <String>{
+    ..._politeWords,
+    'слушай',
+    'слушайте',
+    'можешь',
+    'можете',
+    'мог',
+    'могла',
+    'могли',
+    'бы',
+    'ты',
+    'вы',
+    'а',
+    'и',
+    'ну',
+    'так',
+    'давай',
+    'давайте',
+    'эй',
+    'ок',
+    'окей',
+    'ладно',
+    'хорошо',
+    'тогда',
+    'еще',
+    'также',
+    'нет',
+    'не',
+  };
+
+  static const Set<String> _remindVerbs = <String>{'напомни', 'напомните'};
+
+  static const Set<String> _remindConjunctions = <String>{'что', 'чтобы'};
+
+  /// Название новой задачи без кавычек или `null`, если ничего не осталось.
+  String? _createTitle(Utterance utterance, int markerIndex, int length) {
+    final tokens = utterance.tokens;
+    final dueSpans = utterance.due.spans;
+    final remove = <CharSpan>[
+      ...dueSpans,
+      ..._leadInSpans(utterance, markerIndex),
+    ];
+    for (var i = markerIndex; i < markerIndex + length; i++) {
+      remove.add(tokens[i].span);
     }
 
-    for (final match in _dotted.allMatches(dateText)) {
-      final previous = _previousWord(dateText, match.start);
-      if (previous != null &&
-          (previous.startsWith('верси') || previous == 'v')) {
+    // Продолжение маркера: «мне», «пожалуйста», «задачу», «в список»,
+    // а после «напомни» — «что»/«чтобы». Срок между ними пропускается:
+    // «Добавь на завтра задачу купить хлеб».
+    final remind = _remindVerbs.contains(tokens[markerIndex].text);
+    var nounTaken = length > 1; // «новая задача» уже содержит существительное
+    var conjunctionTaken = false;
+    var i = markerIndex + length;
+    while (i < tokens.length) {
+      final token = tokens[i];
+      final word = token.text;
+      if (Utterance.isCovered(token, dueSpans)) {
+        i++;
         continue;
       }
-      final first = int.parse(match.group(1)!);
-      final secondText = match.group(2)!;
-      final second = int.parse(secondText);
-      final yearText = match.group(3);
-      final source = _sourcePrepositions.contains(previous);
-      final looksLikeTime =
-          yearText == null && secondText.length == 2 && first <= 23;
-
-      if (yearText == null && previous == 'в') {
-        // После «в» число с точкой — это время: «в 19.30».
-        if (!looksLikeTime || second > 59) {
-          return const DueParseResult(issue: DueIssue.invalidTime);
+      if (_politeWords.contains(word) || _addressees.contains(word)) {
+        remove.add(token.span);
+        i++;
+        continue;
+      }
+      if (!nounTaken && _objectNouns.contains(word)) {
+        remove.add(token.span);
+        nounTaken = true;
+        i++;
+        continue;
+      }
+      if (!nounTaken &&
+          _newAdjectives.contains(word) &&
+          i + 1 < tokens.length &&
+          _objectNouns.contains(tokens[i + 1].text)) {
+        remove
+          ..add(token.span)
+          ..add(tokens[i + 1].span);
+        nounTaken = true;
+        i += 2;
+        continue;
+      }
+      if (!nounTaken &&
+          word == 'в' &&
+          i + 1 < tokens.length &&
+          tokens[i + 1].text == 'список') {
+        remove
+          ..add(token.span)
+          ..add(tokens[i + 1].span);
+        nounTaken = true;
+        i += 2;
+        if (i < tokens.length && _listNouns.contains(tokens[i].text)) {
+          remove.add(tokens[i].span);
+          i++;
         }
-        times.add(_Mention((first, second), source));
         continue;
       }
-
-      final date = _resolveDate(first, second, yearText, today);
-      if (date != null) {
-        if (yearText != null && date.isBefore(today)) {
-          return const DueParseResult(issue: DueIssue.inPast);
-        }
-        dates.add(_Mention(date, source));
+      if (remind && !conjunctionTaken && _remindConjunctions.contains(word)) {
+        remove.add(token.span);
+        conjunctionTaken = true;
+        i++;
         continue;
       }
-      if (looksLikeTime && second <= 59) {
-        // «на 18.30»: такой даты нет, но это корректное время.
-        times.add(_Mention((first, second), source));
-        continue;
-      }
-      return const DueParseResult(issue: DueIssue.invalidDate);
+      break;
     }
 
-    for (final word in _word.allMatches(normalized)) {
-      final offset = switch (word.group(0)) {
-        'сегодня' => 0,
-        'завтра' => 1,
-        'послезавтра' => 2,
-        _ => null,
-      };
-      if (offset == null) continue;
-      dates.add(
-        _Mention(
-          DateTime(today.year, today.month, today.day + offset),
-          _isSource(normalized, word.start),
-        ),
-      );
-    }
-
-    final days = _pickDistinct(dates);
-    if (days.length > 1) {
-      return const DueParseResult(issue: DueIssue.conflictingDays);
-    }
-    final clock = _pickDistinct(times);
-    if (clock.length > 1) {
-      return const DueParseResult(issue: DueIssue.conflictingTimes);
-    }
-
-    final explicitDay = days.isEmpty ? null : days.single;
-    final time = clock.isEmpty ? null : clock.single;
-    if (explicitDay == null && time == null) return const DueParseResult();
-
-    if (time == null) {
-      if (explicitDay!.isBefore(today)) {
-        return const DueParseResult(issue: DueIssue.inPast);
-      }
-      return DueParseResult(dueAt: explicitDay, precision: DuePrecision.date);
-    }
-
-    final day = explicitDay ?? today;
-    var result = DateTime(day.year, day.month, day.day, time.$1, time.$2);
-    if (!result.isAfter(now)) {
-      if (explicitDay != null) {
-        return const DueParseResult(issue: DueIssue.inPast);
-      }
-      // Только время, и оно уже прошло: ближайшее будущее — завтра.
-      result = DateTime(day.year, day.month, day.day + 1, time.$1, time.$2);
-    }
-    return DueParseResult(dueAt: result, precision: DuePrecision.dateTime);
+    _trimEdgeWords(utterance, remove, _politeWords);
+    final text = utterance.remainder(remove);
+    return text.isEmpty ? null : Utterance.capitalize(text);
   }
 
-  /// Различные значения без исходного срока «с …». Если указан только
-  /// исходный срок, используются его значения.
-  Set<T> _pickDistinct<T>(List<_Mention<T>> mentions) {
-    final targets = mentions
-        .where((_Mention<T> m) => !m.isSource)
-        .map((_Mention<T> m) => m.value)
-        .toSet();
-    if (targets.isNotEmpty) return targets;
-    return mentions.map((_Mention<T> m) => m.value).toSet();
-  }
-
-  DateTime? _resolveDate(int day, int month, String? yearText, DateTime today) {
-    if (yearText != null) {
-      final year = yearText.length == 2
-          ? 2000 + int.parse(yearText)
-          : int.parse(yearText);
-      return _isValidDate(year, month, day) ? DateTime(year, month, day) : null;
+  /// Вступление перед маркером: слова из [_leadIns] и срок с самого начала
+  /// фразы до первого другого слова.
+  List<CharSpan> _leadInSpans(Utterance utterance, int markerIndex) {
+    final result = <CharSpan>[];
+    for (var i = 0; i < markerIndex; i++) {
+      final token = utterance.tokens[i];
+      if (Utterance.isCovered(token, utterance.due.spans)) continue;
+      if (!_leadIns.contains(token.text)) break;
+      result.add(token.span);
     }
-    // Без года — ближайшее будущее или сегодняшнее вхождение даты.
-    // Для 29.02 это может быть через несколько лет.
-    for (var year = today.year; year <= today.year + 4; year++) {
-      if (!_isValidDate(year, month, day)) continue;
-      final candidate = DateTime(year, month, day);
-      if (!candidate.isBefore(today)) return candidate;
+    return result;
+  }
+
+  /// Убирает слова из [words] с краёв ещё не удалённого текста.
+  void _trimEdgeWords(
+    Utterance utterance,
+    List<CharSpan> remove,
+    Set<String> words,
+  ) {
+    var rest = utterance.tokensOutside(remove);
+    while (rest.isNotEmpty && words.contains(rest.first.text)) {
+      remove.add(rest.first.span);
+      rest = rest.sublist(1);
     }
-    return null;
+    while (rest.isNotEmpty && words.contains(rest.last.text)) {
+      remove.add(rest.last.span);
+      rest = rest.sublist(0, rest.length - 1);
+    }
   }
 
-  bool _isSource(String text, int position) =>
-      _sourcePrepositions.contains(_previousWord(text, position));
+  // ------------------------------------------------------- целевая задача
 
-  String? _previousWord(String text, int position) {
-    final before = _word.allMatches(text.substring(0, position));
-    return before.isEmpty ? null : before.last.group(0);
+  /// Слова, которые не описывают саму задачу в «Заверши её», «Отметь
+  /// задачу как выполненную».
+  static const Set<String> _targetFiller = <String>{
+    ..._politeWords,
+    ..._addressees,
+    'задачу',
+    'задача',
+    'задачи',
+    // Слова, которые указывают на выбранную задачу, а не называют её:
+    // «Перенеси выбранную задачу», «Заверши текущую», «эту же».
+    'её',
+    'ее',
+    'его',
+    'нее',
+    'него',
+    'эту',
+    'это',
+    'этот',
+    'эта',
+    'этой',
+    'ту',
+    'тот',
+    'же',
+    'самую',
+    'выбранную',
+    'выбранная',
+    'выбранной',
+    'текущую',
+    'текущая',
+    'текущей',
+    'последнюю',
+    'последняя',
+    'последней',
+    'я',
+    'мы',
+    'уже',
+  };
+
+  static const Set<String> _completeFiller = <String>{
+    ..._targetFiller,
+    ..._completeWords,
+    ..._completeInfinitives,
+    'как',
+    'отметь',
+    'отметьте',
+    'отметить',
+    'пометь',
+    'пометить',
+    'выполненная',
+    'готова',
+  };
+
+  static const Set<String> _rescheduleFiller = <String>{
+    ..._targetFiller,
+  };
+
+  String? _targetQuery(
+    Utterance utterance,
+    int markerIndex,
+    Set<String> filler,
+  ) {
+    final remove = <CharSpan>[
+      ...utterance.due.spans,
+      ..._leadInSpans(utterance, markerIndex),
+      utterance.tokens[markerIndex].span,
+      for (final token in utterance.tokens)
+        if (filler.contains(token.text)) token.span,
+    ];
+    final text = utterance.remainder(remove);
+    return text.isEmpty ? null : Utterance.capitalize(text);
   }
 
-  CommandIntent _detectIntent(List<String> words, String text) {
+  // ------------------------------------------------------------ намерение
+
+  _Marker _detectIntent(Utterance utterance) {
+    final words = utterance.words;
+    // «Нет, добавь…» — поправка собеседнику, а не отрицание команды:
+    // отрицанием считается только «не»/«нет» прямо перед словом.
+    bool joined(int i) {
+      final tokens = utterance.tokens;
+      return utterance.analysisText
+          .substring(tokens[i - 1].span.end, tokens[i].span.start)
+          .trim()
+          .isEmpty;
+    }
+
+    final startsWithNegation =
+        words.first == 'не' && (words.length == 1 || joined(1));
     // Намерение определяет самый ранний маркер: «Добавь задачу выполнить
     // отчёт» — создание, а не завершение.
     for (var i = 0; i < words.length; i++) {
       final word = words[i];
-      final negated = i > 0 && (words[i - 1] == 'не' || words[i - 1] == 'нет');
-      if (_isCreate(word, i, words)) {
-        return negated ? CommandIntent.unknown : CommandIntent.createTask;
+      final negated =
+          i > 0 && (words[i - 1] == 'не' || words[i - 1] == 'нет') && joined(i);
+      final create = _createLength(word, i, words);
+      if (create > 0) {
+        return negated
+            ? const _Marker.unknown()
+            : _Marker(CommandIntent.createTask, i, create);
       }
       if (_isReschedule(word)) {
-        return negated ? CommandIntent.unknown : CommandIntent.rescheduleTask;
+        return negated
+            ? const _Marker.unknown()
+            : _Marker(CommandIntent.rescheduleTask, i, 1);
       }
       if (_isComplete(word, i)) {
-        // «Не выполнено», «Что выполнить?» — не команда завершить задачу.
-        if (negated || words.contains('не') || text.contains('?')) {
-          return CommandIntent.unknown;
+        // «Не выполнено», «Не выполнил отчёт», «Что выполнить?» — не команда.
+        // Отрицание дальше по фразе относится к названию: «Заверши не
+        // забыть купить хлеб».
+        if (negated || startsWithNegation || utterance.isQuestion) {
+          return const _Marker.unknown();
         }
-        return CommandIntent.completeTask;
+        return _Marker(CommandIntent.completeTask, i, 1);
       }
-      if (_isList(word, words)) return CommandIntent.listTasks;
+      if (_isList(word, words)) return _Marker(CommandIntent.listTasks, i, 1);
     }
-    return CommandIntent.unknown;
+    return const _Marker.unknown();
   }
 
   static const Set<String> _createVerbs = <String>{
@@ -367,11 +463,13 @@ final class ScenarioParser {
     'напомните',
   };
 
-  bool _isCreate(String word, int index, List<String> words) {
-    if (_createVerbs.contains(word)) return true;
-    return word == 'новая' &&
+  /// Сколько слов занимает маркер создания в позиции [index]; 0 — не он.
+  int _createLength(String word, int index, List<String> words) {
+    if (_createVerbs.contains(word)) return 1;
+    final isNewTask = word == 'новая' &&
         index + 1 < words.length &&
         words[index + 1] == 'задача';
+    return isNewTask ? 2 : 0;
   }
 
   bool _isReschedule(String word) =>
@@ -398,12 +496,19 @@ final class ScenarioParser {
     'выполнено',
     'выполнена',
     'выполненной',
+    'выполненную',
+    'выполненным',
+    'сделанным',
+    'завершенным',
+    'завершенной',
     'сделал',
     'сделала',
     'сделали',
     'сделано',
     'сделана',
     'сделанной',
+    'сделанную',
+    'завершенную',
     'готово',
   };
 
@@ -431,85 +536,21 @@ final class ScenarioParser {
     return _listVerbs.contains(word) &&
         words.any((String w) => w.startsWith('задач') || w == 'дела');
   }
-
-  /// Вырезает все названия в парных кавычках. Незакрытая кавычка не
-  /// продолжает поиск внутри фрагмента, чтобы не взять кусок названия.
-  _Quotes _extractQuoted(String message) {
-    final titles = <String>[];
-    final rest = StringBuffer();
-    var index = 0;
-    while (index < message.length) {
-      final open = message[index];
-      final closers = _quotePairs[open];
-      if (closers == null) {
-        rest.write(open);
-        index++;
-        continue;
-      }
-      final end = _findClose(message, index, open, closers);
-      if (end == null) {
-        rest.write(' ');
-        rest.write(message.substring(index + 1));
-        return _Quotes(titles: titles, rest: rest.toString(), unbalanced: true);
-      }
-      final title = message.substring(index + 1, end).trim();
-      if (title.isNotEmpty) titles.add(title);
-      rest.write(' ');
-      index = end + 1;
-    }
-    return _Quotes(titles: titles, rest: rest.toString(), unbalanced: false);
-  }
-
-  int? _findClose(
-    String message,
-    int start,
-    String open,
-    Set<String> closers,
-  ) {
-    // Вложенность поддерживается для разных открывающей и закрывающей:
-    // «Отчёт по «Ромашке»».
-    final nests = !closers.contains(open);
-    var depth = 1;
-    for (var i = start + 1; i < message.length; i++) {
-      final char = message[i];
-      if (nests && char == open) {
-        depth++;
-      } else if (closers.contains(char)) {
-        depth--;
-        if (depth == 0) return i;
-      }
-    }
-    return null;
-  }
-
-  String _normalize(String text) => text
-      .trim()
-      .toLowerCase()
-      .replaceAll('ё', 'е')
-      .replaceAll(RegExp(r'\s+'), ' ');
-
-  bool _isValidDate(int year, int month, int day) {
-    if (month < 1 || month > 12 || day < 1) return false;
-    final candidate = DateTime(year, month, day);
-    return candidate.month == month && candidate.day == day;
-  }
 }
 
-final class _Quotes {
-  const _Quotes({
-    required this.titles,
-    required this.rest,
-    required this.unbalanced,
-  });
+final class _Marker {
+  const _Marker(this.intent, this.index, this.length);
 
-  final List<String> titles;
-  final String rest;
-  final bool unbalanced;
-}
+  const _Marker.unknown()
+      : intent = CommandIntent.unknown,
+        index = -1,
+        length = 0;
 
-final class _Mention<T> {
-  const _Mention(this.value, this.isSource);
+  final CommandIntent intent;
 
-  final T value;
-  final bool isSource;
+  /// Номер первого слова маркера в [Utterance.tokens].
+  final int index;
+
+  /// Сколько слов занимает маркер.
+  final int length;
 }

@@ -1,272 +1,121 @@
-import '../formatting/due_format.dart';
-import '../models/assistant_types.dart';
-import '../models/task.dart';
+import '../connectors/connector.dart';
+import '../connectors/tasks_connector.dart';
 import '../services/clock.dart';
-import '../services/task_service.dart';
-import 'scenario_parser.dart';
 
+/// Маршрутизатор сообщений между коннекторами.
+///
+/// На каждое сообщение один раз строит [Utterance], спрашивает каждый
+/// коннектор `match`, выбирает самое уверенное совпадение и запускает его
+/// `run`. Если два разных коннектора одинаково уверены, просит уточнить,
+/// а не выбирает наугад. Интерфейс работает только с этим классом.
 final class AssistantController {
   AssistantController({
-    required TaskService taskService,
-    required ScenarioParser parser,
+    required List<Connector> connectors,
     Clock clock = const SystemClock(),
-  })  : _tasks = taskService,
-        _parser = parser,
-        _clock = clock;
+  })  : _connectors = List<Connector>.unmodifiable(connectors),
+        session = AssistantSession(clock: clock) {
+    final ids = <String>{};
+    for (final connector in _connectors) {
+      if (!ids.add(connector.info.id)) {
+        throw ArgumentError.value(
+          connector.info.id,
+          'connectors',
+          'Коннектор с таким id уже подключён',
+        );
+      }
+    }
+  }
 
   /// Пример из подсказок интерфейса. Тест проверяет, что парсер его понимает.
-  static const String exampleCommand =
-      'Добавь задачу «Позвонить клиенту» на завтра в 11:00';
+  static const String exampleCommand = TasksConnector.exampleCommand;
 
-  final TaskService _tasks;
-  final ScenarioParser _parser;
-  final Clock _clock;
-  ConversationContext _context = const ConversationContext();
+  /// Совпадения ниже этой уверенности не участвуют в споре коннекторов.
+  static const double ambiguityFloor = 0.5;
+
+  /// Если два коннектора ближе друг к другу, чем на эту величину, —
+  /// уточнение.
+  static const double ambiguityMargin = 0.15;
+
+  final List<Connector> _connectors;
+
+  /// Общее состояние диалога: выбранный объект, часы, последний коннектор.
+  final AssistantSession session;
+
+  List<ConnectorInfo> get connectors => <ConnectorInfo>[
+        for (final connector in _connectors) connector.info,
+      ];
 
   /// Задача, к которой относятся «её», «перенеси», «заверши».
-  String? get selectedTaskId => _context.lastTaskId;
+  String? get selectedTaskId => session.selectedItemFor(TasksConnector.id);
 
-  void selectTask(String id) {
-    _context = _context.withLastTask(id);
-  }
+  void selectTask(String id) => session.select(TasksConnector.id, id);
 
-  void clearSelection() {
-    _context = _context.withoutTask();
-  }
+  void clearSelection() => session.clearSelection();
 
   /// Задачу завершили или удалили не через диалог.
-  void forgetTask(String id) {
-    if (_context.lastTaskId == id) clearSelection();
-  }
+  void forgetTask(String id) => session.forget(TasksConnector.id, id);
 
   Future<AssistantResponse> handle(String message) async {
-    final command = _parser.parse(message);
-    try {
-      switch (command.intent) {
-        case CommandIntent.createTask:
-          return await _create(command);
-        case CommandIntent.listTasks:
-          return await _list();
-        case CommandIntent.completeTask:
-          return await _complete(command);
-        case CommandIntent.rescheduleTask:
-          return await _reschedule(command);
-        case CommandIntent.unknown:
-          return const AssistantResponse(
-            message:
-                'Пока понимаю создание, список, перенос и завершение задач. '
-                'Для создания укажите название в кавычках, например: '
-                '$exampleCommand',
-            intent: 'unknown',
-            status: AssistantStatus.noAction,
-          );
+    final utterance = Utterance.analyze(message, now: session.clock.now());
+    final candidates = <(Connector, ConnectorMatch)>[];
+    for (final connector in _connectors) {
+      final ConnectorMatch? match;
+      try {
+        match = connector.match(utterance);
+      } catch (error) {
+        // Ошибка в одном коннекторе не должна ломать остальные.
+        continue;
       }
+      if (match == null || match.confidence <= 0) continue;
+      candidates.add((connector, match));
+    }
+    if (candidates.isEmpty) {
+      session.lastConnectorId = null;
+      return _unknown();
+    }
+
+    // Устойчивая сортировка: при равной уверенности побеждает коннектор,
+    // подключённый раньше (но тогда сработает уточнение ниже).
+    final ranked = candidates.indexed.toList()
+      ..sort((a, b) {
+        final byConfidence = b.$2.$2.confidence.compareTo(a.$2.$2.confidence);
+        return byConfidence != 0 ? byConfidence : a.$1.compareTo(b.$1);
+      });
+    final (bestConnector, best) = ranked.first.$2;
+    for (final (_, (other, otherMatch)) in ranked.skip(1)) {
+      if (other.info.id == bestConnector.info.id) continue;
+      if (best.confidence >= ambiguityFloor &&
+          otherMatch.confidence >= ambiguityFloor &&
+          best.confidence - otherMatch.confidence <= ambiguityMargin) {
+        session.lastConnectorId = null;
+        return AssistantResponse(
+          message: 'Не понял, к чему относится команда: '
+              '«${bestConnector.info.title}» или «${other.info.title}»? '
+              'Уточните, пожалуйста.',
+          intent: 'router.ambiguous',
+          status: AssistantStatus.needsClarification,
+        );
+      }
+      break;
+    }
+
+    try {
+      return await bestConnector.run(best, session);
     } catch (error) {
       return AssistantResponse(
         message: 'Не удалось выполнить действие: $error',
-        intent: command.intent.name,
+        intent: best.commandId,
         status: AssistantStatus.failed,
       );
+    } finally {
+      session.lastConnectorId = bestConnector.info.id;
     }
   }
 
-  Future<AssistantResponse> _create(ParsedCommand command) async {
-    final titleQuestion = _titleClarification(command.titleIssue);
-    if (titleQuestion != null) {
-      return AssistantResponse(
-        message: titleQuestion,
-        intent: 'task.create',
-        status: AssistantStatus.needsClarification,
+  AssistantResponse _unknown() => const AssistantResponse(
+        message: 'Пока понимаю создание, список, перенос и завершение задач. '
+            'Например: $exampleCommand',
+        intent: 'unknown',
+        status: AssistantStatus.noAction,
       );
-    }
-    final title = command.title;
-    if (title == null || title.isEmpty) {
-      return const AssistantResponse(
-        message:
-            'Как называется задача? В прототипе укажите название в кавычках.',
-        intent: 'task.create',
-        status: AssistantStatus.needsClarification,
-      );
-    }
-    final dueQuestion = _dueClarification(command.dueIssue);
-    if (dueQuestion != null) {
-      return AssistantResponse(
-        message: dueQuestion,
-        intent: 'task.create',
-        status: AssistantStatus.needsClarification,
-      );
-    }
-    final task = await _tasks.create(
-      title: title,
-      dueAt: command.dueAt,
-      duePrecision: command.duePrecision,
-      tags: command.projects,
-    );
-    _context = _context.withLastTask(task.id);
-    return AssistantResponse(
-      message: 'Создал задачу «${task.title}»${_dueDescription(task)}'
-          '${task.project == null ? '' : ' в проекте #${task.project}'}.',
-      intent: 'task.create',
-      status: AssistantStatus.completed,
-      task: task,
-    );
-  }
-
-  Future<AssistantResponse> _list() async {
-    final tasks = await _tasks.listActive();
-    if (tasks.isEmpty) {
-      return const AssistantResponse(
-        message: 'Активных задач пока нет.',
-        intent: 'task.list',
-        status: AssistantStatus.completed,
-      );
-    }
-    final next = tasks.first;
-    final nextDue = switch (next.dueAt) {
-      null => '',
-      final due => ', ${formatDue(due, next.duePrecision, _clock.now())}',
-    };
-    return AssistantResponse(
-      message: 'Активных задач: ${tasks.length}. '
-          'Ближайшая — «${next.title}»$nextDue.',
-      intent: 'task.list',
-      status: AssistantStatus.completed,
-    );
-  }
-
-  Future<AssistantResponse> _complete(ParsedCommand command) async {
-    final target = await _resolveTarget(
-      command,
-      intent: 'task.complete',
-      noContextQuestion:
-          'Какую задачу завершить? Сначала создайте или выберите задачу.',
-    );
-    if (target.clarification != null) return target.clarification!;
-    final id = target.id!;
-    final task = await _tasks.complete(id);
-    // Завершённая задача больше не «её»: следующий перенос или завершение
-    // требует нового выбора, а не тихо открывает её снова.
-    forgetTask(task.id);
-    return AssistantResponse(
-      message: 'Задача «${task.title}» завершена.',
-      intent: 'task.complete',
-      status: AssistantStatus.completed,
-      task: task,
-    );
-  }
-
-  Future<AssistantResponse> _reschedule(ParsedCommand command) async {
-    final target = await _resolveTarget(
-      command,
-      intent: 'task.reschedule',
-      noContextQuestion:
-          'Какую задачу перенести? Пока в контексте нет выбранной задачи.',
-    );
-    if (target.clarification != null) return target.clarification!;
-    final id = target.id!;
-    final dueAt = command.dueAt;
-    final dueQuestion = _dueClarification(command.dueIssue);
-    if (dueQuestion != null) {
-      return AssistantResponse(
-        message: dueQuestion,
-        intent: 'task.reschedule',
-        status: AssistantStatus.needsClarification,
-      );
-    }
-    if (dueAt == null) {
-      return const AssistantResponse(
-        message: 'На когда перенести задачу? Например: «на завтра в 15:00».',
-        intent: 'task.reschedule',
-        status: AssistantStatus.needsClarification,
-      );
-    }
-    final task = await _tasks.reschedule(id, dueAt, command.duePrecision);
-    _context = _context.withLastTask(task.id);
-    return AssistantResponse(
-      message: 'Перенёс задачу «${task.title}»${_dueDescription(task)}.',
-      intent: 'task.reschedule',
-      status: AssistantStatus.completed,
-      task: task,
-    );
-  }
-
-  String? _dueClarification(DueIssue issue) {
-    switch (issue) {
-      case DueIssue.none:
-        return null;
-      case DueIssue.inPast:
-        return 'Это время уже прошло. Укажите другое время или день, '
-            'например: «на завтра в 10:00».';
-      case DueIssue.invalidDate:
-        return 'Такой даты нет. Укажите дату в формате ДД.ММ, например 15.11.';
-      case DueIssue.invalidTime:
-        return 'Не понял время. Укажите его в формате ЧЧ:ММ, например 18:30.';
-      case DueIssue.conflictingDays:
-        return 'В команде несколько разных дней. На какой день поставить задачу?';
-      case DueIssue.conflictingTimes:
-        return 'В команде несколько разных времён. На какое время поставить задачу?';
-    }
-  }
-
-  String? _titleClarification(TitleIssue issue) {
-    switch (issue) {
-      case TitleIssue.none:
-        return null;
-      case TitleIssue.unbalancedQuotes:
-        return 'Кавычка не закрыта. Повторите команду, указав название '
-            'в парных кавычках, например «Отчёт».';
-      case TitleIssue.multipleTitles:
-        return 'В команде несколько названий. Давайте по одной задаче за раз.';
-    }
-  }
-
-  /// Задача, к которой относится перенос или завершение: названная в кавычках
-  /// или выбранная в контексте. Без однозначного ответа — уточнение.
-  Future<_Target> _resolveTarget(
-    ParsedCommand command, {
-    required String intent,
-    required String noContextQuestion,
-  }) async {
-    AssistantResponse ask(String message) => AssistantResponse(
-          message: message,
-          intent: intent,
-          status: AssistantStatus.needsClarification,
-        );
-
-    final titleQuestion = _titleClarification(command.titleIssue);
-    if (titleQuestion != null) return _Target.ask(ask(titleQuestion));
-
-    final title = command.title;
-    if (title != null) {
-      final matches = await _tasks.findActiveByTitle(title);
-      if (matches.isEmpty) {
-        return _Target.ask(ask('Не нашёл активную задачу «$title».'));
-      }
-      if (matches.length > 1) {
-        return _Target.ask(
-          ask('Нашёл несколько задач «$title». Выберите нужную в списке.'),
-        );
-      }
-      return _Target.id(matches.single.id);
-    }
-
-    final id = _context.lastTaskId;
-    if (id == null) return _Target.ask(ask(noContextQuestion));
-    return _Target.id(id);
-  }
-
-  String _dueDescription(Task task) {
-    final due = task.dueAt;
-    if (due == null) return '';
-    return ' на ${formatDue(due, task.duePrecision, _clock.now())}';
-  }
-}
-
-final class _Target {
-  const _Target.id(String this.id) : clarification = null;
-
-  const _Target.ask(AssistantResponse this.clarification) : id = null;
-
-  final String? id;
-  final AssistantResponse? clarification;
 }

@@ -24,11 +24,23 @@ void main() {
     expect(command.duePrecision, DuePrecision.date);
   });
 
-  test('не угадывает название без явных границ', () {
+  test('берёт название без кавычек из остатка фразы', () {
     final command = parser.parse('Добавь задачу позвонить клиенту завтра');
 
     expect(command.intent, CommandIntent.createTask);
-    expect(command.title, isNull);
+    expect(command.title, 'Позвонить клиенту');
+    expect(command.dueAt, DateTime(2026, 11, 3));
+  });
+
+  test('сообщает фрагменты срока со смещениями в исходном тексте', () {
+    const text = 'Добавь  ЗАДАЧУ купить ёлку НА ЗАВТРА в 10:00';
+    final due = parser.parseDueDetailed(text);
+
+    expect(due.dueAt, DateTime(2026, 11, 3, 10));
+    expect(
+      due.spans.map((CharSpan s) => text.substring(s.start, s.end)),
+      <String>['НА ЗАВТРА', 'в 10:00'],
+    );
   });
 
   test('выбирает следующий день для уже прошедшего времени', () {

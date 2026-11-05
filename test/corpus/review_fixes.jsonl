@@ -1,0 +1,30 @@
+{"id":"rev-001","text":"добавь собрание в 2 часа дня","intent":"createTask","title":"Собрание","due":"2026-11-03T14:00","precision":"dateTime","note":"«часа» и «дня» вместе; 14:00 сегодня прошло"}
+{"id":"rev-002","text":"добавь звонок в 7 часов вечера","intent":"createTask","title":"Звонок","due":"2026-11-02T19:00","precision":"dateTime"}
+{"id":"rev-003","text":"добавь звонок завтра в 3 часа ночи","intent":"createTask","title":"Звонок","due":"2026-11-03T03:00","precision":"dateTime"}
+{"id":"rev-004","text":"добавь звонок в 10 часов утра","intent":"createTask","title":"Звонок","due":"2026-11-03T10:00","precision":"dateTime"}
+{"id":"rev-005","text":"добавь задачу купить хлеб завтра в 10 пожалуйста","intent":"createTask","title":"Купить хлеб","due":"2026-11-03T10:00","precision":"dateTime","note":"вежливое слово после часа"}
+{"id":"rev-006","text":"добавь задачу завтра в 10 пожалуйста","intent":"createTask","title":null,"due":"2026-11-03T10:00","precision":"dateTime","note":"«в 10» не становится названием"}
+{"id":"rev-007","text":"добавь в 10 позвонить","intent":"createTask","title":"Позвонить","due":"2026-11-03T10:00","precision":"dateTime","note":"час перед действием"}
+{"id":"rev-008","text":"напомни мне в 9 и в 18 пить таблетки","intent":"createTask","title":"Пить таблетки","due":null,"issue":"conflictingTimes","note":"два времени — уточнение, а не задача без срока"}
+{"id":"rev-009","text":"добавь в 2 магазина","intent":"createTask","title":"В 2 магазина","due":null,"note":"после числа существительное — не время"}
+{"id":"rev-010","text":"создай новую задачу купить хлеб завтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date"}
+{"id":"rev-011","text":"добавь новое напоминание оплатить интернет","intent":"createTask","title":"Оплатить интернет","due":null}
+{"id":"rev-012","text":"слушай, добавь задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"вступление перед командой"}
+{"id":"rev-013","text":"можешь добавить задачу купить хлеб?","intent":"createTask","title":"Купить хлеб","due":null}
+{"id":"rev-014","text":"добавь купить 1.5 кг сахара","intent":"createTask","title":"Купить 1.5 кг сахара","due":null,"note":"количество, а не 1 мая"}
+{"id":"rev-015","text":"добавь купить 3.5 метра кабеля","intent":"createTask","title":"Купить 3.5 метра кабеля","due":null}
+{"id":"rev-016","text":"добавь обновить flutter до 3.24","intent":"createTask","title":"Обновить flutter до 3.24","due":null,"note":"версия после латинского слова"}
+{"id":"rev-017","text":"добавь созвон zoom в 19.30","intent":"createTask","title":"Созвон zoom","due":"2026-11-02T19:30","precision":"dateTime","note":"после «в» — время, даже рядом с латиницей"}
+{"id":"rev-018","text":"запиши в список дел купить хлеб","intent":"createTask","title":"Купить хлеб","due":null}
+{"id":"rev-019","text":"нет, добавь задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«нет,» — поправка, а не отрицание"}
+{"id":"rev-020","text":"Нет, перенеси на завтра","intent":"rescheduleTask","targetQuery":null,"due":"2026-11-03","precision":"date"}
+{"id":"rev-021","text":"не, добавь задачу купить хлеб на завтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date"}
+{"id":"rev-022","text":"не добавляй задачу купить хлеб","intent":"unknown","note":"«не» без запятой по-прежнему не команда"}
+{"id":"rev-023","text":"добавь позвонить в 03","intent":"createTask","title":"Позвонить в 03","due":null,"note":"номер службы, а не 03:00"}
+{"id":"rev-024","text":"добавь задачу приехать к 5","intent":"createTask","title":"Приехать","due":null,"issue":"ambiguousHour","note":"5 утра или 17:00 — уточнение"}
+{"id":"rev-025","text":"Перенеси выбранную задачу на завтра","intent":"rescheduleTask","targetQuery":null,"due":"2026-11-03","precision":"date","note":"«выбранную» — выбранная задача"}
+{"id":"rev-026","text":"Заверши текущую задачу","intent":"completeTask","targetQuery":null}
+{"id":"rev-027","text":"перенеси последнюю задачу на завтра","intent":"rescheduleTask","targetQuery":null,"due":"2026-11-03","precision":"date"}
+{"id":"rev-028","text":"отметь звонок маме выполненным","intent":"completeTask","targetQuery":"Звонок маме"}
+{"id":"rev-029","text":"Добавь задачу купить хлеб к 17","intent":"createTask","title":"Купить хлеб","due":"2026-11-02T17:00","precision":"dateTime","note":"час больше 12 — без уточнения"}
+{"id":"rev-030","text":"добавь звонок в 5 утра","intent":"createTask","title":"Звонок","due":"2026-11-03T05:00","precision":"dateTime","note":"с уточнением час 1–6 понятен"}

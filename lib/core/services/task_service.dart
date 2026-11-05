@@ -2,6 +2,14 @@ import '../models/task.dart';
 import '../storage/task_repository.dart';
 import 'clock.dart';
 
+/// Задача, найденная нечётким поиском, и доля совпавших слов запроса.
+final class TaskSearchHit {
+  const TaskSearchHit(this.task, this.score);
+
+  final Task task;
+  final double score;
+}
+
 final class TaskService {
   TaskService({required TaskRepository repository, required Clock clock})
       : _repository = repository,
@@ -63,6 +71,94 @@ final class TaskService {
     return (await listActive())
         .where((Task task) => _titleKey(task.title) == wanted)
         .toList(growable: false);
+  }
+
+  /// Нечёткий поиск активных задач по словам запроса, лучшие сверху.
+  ///
+  /// Слова сравниваются по основе: первые `min(5, длина)` букв, причём для
+  /// пары слов берётся меньшая длина — «хлеб» совпадает с «хлеба», «отчёт»
+  /// с «отчёта». Слова короче трёх букв и числа совпадают только целиком:
+  /// «ип» не совпадает с «ипотеку», «2» — с «2027». Служебные слова («в»,
+  /// «на», «задачу») не учитываются. Оценка — доля совпавших слов запроса.
+  /// В результат попадают задачи с оценкой не ниже 0.5 и хотя бы одним
+  /// совпавшим словом от трёх букв.
+  Future<List<TaskSearchHit>> searchActive(String query) async {
+    final wanted = _searchWords(query);
+    if (wanted.isEmpty) return const <TaskSearchHit>[];
+    final hits = <TaskSearchHit>[];
+    for (final task in await listActive()) {
+      final words = _searchWords(task.title);
+      var matched = 0;
+      var hasLong = false;
+      for (final word in wanted) {
+        final match = words.where((String other) => _sameStem(word, other));
+        if (match.isNotEmpty) {
+          matched++;
+          if (match.any((String other) => other.length >= 3) &&
+              word.length >= 3) {
+            hasLong = true;
+          }
+        }
+      }
+      final score = matched / wanted.length;
+      if (score >= 0.5 && hasLong) hits.add(TaskSearchHit(task, score));
+    }
+    // Сортировка устойчива: при равной оценке сохраняется порядок listActive.
+    final indexed = hits.indexed.toList()
+      ..sort(((int, TaskSearchHit) a, (int, TaskSearchHit) b) {
+        final byScore = b.$2.score.compareTo(a.$2.score);
+        return byScore != 0 ? byScore : a.$1.compareTo(b.$1);
+      });
+    return indexed
+        .map(((int, TaskSearchHit) e) => e.$2)
+        .toList(growable: false);
+  }
+
+  static const Set<String> _searchStopWords = <String>{
+    'в',
+    'во',
+    'на',
+    'к',
+    'ко',
+    'и',
+    'а',
+    'с',
+    'со',
+    'по',
+    'до',
+    'о',
+    'об',
+    'от',
+    'у',
+    'за',
+    'из',
+    'для',
+    'про',
+    'задачу',
+    'задача',
+    'задачи',
+  };
+
+  static final RegExp _searchWord = RegExp(r'[\p{L}\p{N}]+', unicode: true);
+
+  static List<String> _searchWords(String text) => _searchWord
+      .allMatches(text.toLowerCase().replaceAll('ё', 'е'))
+      .map((Match m) => m.group(0)!)
+      .where((String w) => !_searchStopWords.contains(w))
+      .toList(growable: false);
+
+  static final RegExp _digitsOnly = RegExp(r'^\d+$');
+
+  static bool _sameStem(String a, String b) {
+    if (a.length < 3 ||
+        b.length < 3 ||
+        _digitsOnly.hasMatch(a) ||
+        _digitsOnly.hasMatch(b)) {
+      return a == b;
+    }
+    var length = a.length < b.length ? a.length : b.length;
+    if (length > 5) length = 5;
+    return a.substring(0, length) == b.substring(0, length);
   }
 
   static String _titleKey(String title) => title

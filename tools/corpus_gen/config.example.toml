@@ -17,6 +17,7 @@ corpus_dir = "test/corpus"      # относительно project_root
 work_dir = "work"               # кандидаты и расход, относительно этого файла
 default_now = "2026-11-02T16:30"
 dart = "dart"                   # или полный путь к dart из Flutter SDK
+# topics_dir = "topics"         # файлы тем коннекторов, относительно этого файла (по умолчанию topics/ рядом с инструментом)
 
 # --- Локально, бесплатно. Установите Ollama и скачайте модель: ollama pull <имя>
 [[source]]

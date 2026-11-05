@@ -12,7 +12,7 @@
 {"id":"create-012","text":"Добавь задачу «Годовщина» на 01.03.2027","intent":"createTask","title":"Годовщина","due":"2027-03-01","precision":"date"}
 {"id":"create-013","text":"Добавь задачу «Ужин» сегодня в 19.30","intent":"createTask","title":"Ужин","due":"2026-11-02T19:30","precision":"dateTime","note":"время через точку только после «в»"}
 {"id":"create-014","text":"ДОБАВЬ ЗАДАЧУ «Проверить почту» ЗАВТРА В 08:05","intent":"createTask","title":"Проверить почту","due":"2026-11-03T08:05","precision":"dateTime"}
-{"id":"create-015","text":"Добавь задачу позвонить клиенту завтра","intent":"createTask","title":null,"due":"2026-11-03","precision":"date","note":"без кавычек название намеренно не угадывается"}
+{"id":"create-015","text":"Добавь задачу позвонить клиенту завтра","intent":"createTask","title":"Позвонить клиенту","due":"2026-11-03","precision":"date","note":"без кавычек название — остаток фразы без команды и срока"}
 {"id":"create-016","text":"Создай задачу «»","intent":"createTask","title":null}
 {"id":"create-017","text":"  добавь   задачу   «Полить цветы»   завтра  ","intent":"createTask","title":"Полить цветы","due":"2026-11-03","precision":"date"}
 {"id":"create-018","text":"Добавь задачу «Сверить счета» #работа завтра","intent":"createTask","title":"Сверить счета","due":"2026-11-03","precision":"date","projects":["работа"]}

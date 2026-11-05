@@ -7,6 +7,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .topics import DEFAULT_TOPICS_DIR
+
 ROLES = {"generate", "label"}
 KINDS = {"anthropic", "openai_compat"}
 
@@ -59,6 +61,8 @@ class Config:
     default_now: str
     dart: str
     sources: tuple[Source, ...] = field(default_factory=tuple)
+    # Каталог файлов тем topics/*.toml (по одному на коннектор).
+    topics_dir: Path = DEFAULT_TOPICS_DIR
 
     def source(self, name: str) -> Source:
         for source in self.sources:
@@ -90,6 +94,7 @@ def load_config(path: Path) -> Config:
         default_now=settings.get("default_now", "2026-11-02T16:30"),
         dart=settings.get("dart", "dart"),
         sources=sources,
+        topics_dir=(base / settings["topics_dir"]).resolve() if "topics_dir" in settings else DEFAULT_TOPICS_DIR,
     )
 
 

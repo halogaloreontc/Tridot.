@@ -12,6 +12,7 @@ from typing import Any, Callable
 from . import pipeline, prompts
 from .config import Config, Source, load_config
 from .store import CandidateStore
+from .topics import DEFAULT_CONNECTOR, ConnectorTopics, row_connector
 
 DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config.toml"
 
@@ -22,9 +23,14 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
 
     commands.add_parser("sources", help="какие источники доступны и почему нет")
+    commands.add_parser("topics", help="коннекторы и темы из topics/*.toml")
 
     gen = commands.add_parser("generate", help="сгенерировать фразы-кандидаты")
-    gen.add_argument("--topic", required=True, choices=sorted(prompts.TOPICS))
+    gen.add_argument(
+        "--topic",
+        required=True,
+        help="тема: «create» (коннектор tasks) или «коннектор:тема»; список — corpus-gen topics",
+    )
     gen.add_argument("--count", type=int, default=20, help="фраз от каждого источника")
     gen.add_argument("--source", action="append", help="только эти источники (можно несколько)")
 
@@ -41,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
     imp = commands.add_parser("import-manual", help="добавить фразы из текстового файла")
     imp.add_argument("file", type=Path, help="по одной фразе на строку")
     imp.add_argument("--source", required=True, help="откуда фразы, например kimi-web")
-    imp.add_argument("--topic", default="manual")
+    imp.add_argument("--topic", default="manual", help="метка темы, можно «коннектор:тема»")
 
     commands.add_parser("stats", help="статистика по источникам и расходам")
 
@@ -52,10 +58,15 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    config = load_config(args.config)
+    try:
+        config = load_config(args.config)
+    except ValueError as error:
+        print(f"Ошибка в {args.config}: {error}", file=sys.stderr)
+        return 2
     store = CandidateStore(config.work_dir)
     handlers: dict[str, Callable[[Config, CandidateStore, argparse.Namespace], int]] = {
         "sources": _sources,
+        "topics": _topics,
         "generate": _generate,
         "label": _label,
         "review": _review,
@@ -91,7 +102,27 @@ def _sources(config: Config, store: CandidateStore, args: argparse.Namespace) ->
     return 0
 
 
+def _topics(config: Config, store: CandidateStore, args: argparse.Namespace) -> int:
+    try:
+        catalog = pipeline.catalog_for(config)
+    except ValueError as error:
+        print(f"Ошибка тем: {error}", file=sys.stderr)
+        return 2
+    for connector in catalog.connectors.values():
+        print(f"{connector.id} — {connector.title} ({connector.path})")
+        print(f"  намерения: {', '.join(connector.intents)}")
+        prefix = "" if connector.id == DEFAULT_CONNECTOR else f"{connector.id}:"
+        for topic in connector.topics.values():
+            print(f"  {prefix + topic.name:<24} {topic.description[:90]}")
+    return 0
+
+
 def _generate(config: Config, store: CandidateStore, args: argparse.Namespace) -> int:
+    try:
+        pipeline.catalog_for(config).resolve(args.topic)
+    except ValueError as error:
+        print(f"Ошибка: {error}", file=sys.stderr)
+        return 2
     sources = _pick(config, "generate", args.source)
     if not sources:
         print("Нет доступных генераторов. Проверьте `corpus-gen sources`.", file=sys.stderr)
@@ -124,11 +155,15 @@ def _review(config: Config, store: CandidateStore, args: argparse.Namespace) -> 
     if not queue:
         print("Спорных фраз нет.")
         return 0
+    catalog = pipeline.catalog_for(config)
     print(f"Фраз на проверку: {len(queue)}. Команды: номер разметки, e — ввести JSON, "
           "r — отклонить, s — пропустить, q — выйти.")
     for index, row in enumerate(queue, start=1):
         print(f"\n[{index}/{len(queue)}] {row['text']}")
-        print(f"    сейчас: {row['now']}  источник: {row['source']}  тема: {row['topic']}")
+        print(
+            f"    сейчас: {row['now']}  источник: {row['source']}  "
+            f"коннектор: {row_connector(row)}  тема: {row['topic']}"
+        )
         names = sorted(row["labels"])
         for number, name in enumerate(names, start=1):
             label = row["labels"][name]
@@ -152,7 +187,12 @@ def _review(config: Config, store: CandidateStore, args: argparse.Namespace) -> 
                 break
             if answer == "e":
                 try:
-                    final = _ask_json()
+                    connector = catalog.connector(row_connector(row))
+                except ValueError as error:
+                    print(f"Ошибка: {error}")
+                    continue
+                try:
+                    final = _ask_json(connector)
                 except (EOFError, KeyboardInterrupt):
                     print()
                     store.save()
@@ -174,14 +214,14 @@ def _review(config: Config, store: CandidateStore, args: argparse.Namespace) -> 
     return 0
 
 
-def _ask_json() -> dict[str, Any] | None:
+def _ask_json(connector: ConnectorTopics) -> dict[str, Any] | None:
     print('Введите JSON одной строкой, например {"intent":"createTask","title":"Отчёт","due":null}')
     text = input("json> ")  # EOFError/KeyboardInterrupt обрабатывает вызывающий
     try:
         data = json.loads(text)
         if not isinstance(data, dict):
             raise ValueError("нужен JSON-объект")
-        label = pipeline.normalize_label({"confident": True, **data})
+        label = pipeline.normalize_label({"confident": True, **data}, connector)
     except (ValueError, pipeline.ProviderError) as error:
         print(f"Ошибка: {error}")
         return None
@@ -198,6 +238,11 @@ def _promote(config: Config, store: CandidateStore, args: argparse.Namespace) ->
     print(f"{prefix}: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
     if counts.get("known_gap") and not args.dry_run:
         print("Фразы со status=known_gap парсер пока понимает неверно — это список работ.")
+    if counts.get("unverified") and not args.dry_run:
+        print(
+            "Фразы других коннекторов (unverified) записаны как active: проверьте их командой "
+            "flutter test test/scenario_corpus_test.dart."
+        )
     return 0
 
 
@@ -211,7 +256,11 @@ def _import_manual(config: Config, store: CandidateStore, args: argparse.Namespa
     except UnicodeDecodeError:
         print(f"{args.file}: файл должен быть в UTF-8", file=sys.stderr)
         return 2
-    report = pipeline.import_manual(config, store, lines, args.source, args.topic)
+    try:
+        report = pipeline.import_manual(config, store, lines, args.source, args.topic)
+    except ValueError as error:
+        print(f"Ошибка: {error}", file=sys.stderr)
+        return 2
     print(f"Добавлено фраз: {report.added}, дублей пропущено: {report.duplicates}")
     return 0
 

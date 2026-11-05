@@ -6,6 +6,8 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app/assistant_theme.dart';
 import 'app/home_page.dart';
+import 'core/connectors/connector.dart';
+import 'core/connectors/tasks_connector.dart';
 import 'core/scenario/assistant_controller.dart';
 import 'core/scenario/scenario_parser.dart';
 import 'core/services/clock.dart';
@@ -30,9 +32,12 @@ Future<void> main() async {
   final repository = JsonTaskRepository(tasksPath);
   const clock = SystemClock();
   final tasks = TaskService(repository: repository, clock: clock);
+  // Коннекторы подключаются здесь; порядок важен только при равной
+  // уверенности (тогда маршрутизатор всё равно переспросит).
   final assistant = AssistantController(
-    taskService: tasks,
-    parser: ScenarioParser(clock: clock),
+    connectors: <Connector>[
+      TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
+    ],
     clock: clock,
   );
   runApp(

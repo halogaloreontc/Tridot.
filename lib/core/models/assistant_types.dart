@@ -15,14 +15,3 @@ final class AssistantResponse {
   final AssistantStatus status;
   final Task? task;
 }
-
-final class ConversationContext {
-  const ConversationContext({this.lastTaskId});
-
-  final String? lastTaskId;
-
-  ConversationContext withLastTask(String id) =>
-      ConversationContext(lastTaskId: id);
-
-  ConversationContext withoutTask() => const ConversationContext();
-}
