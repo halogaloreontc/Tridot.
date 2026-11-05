@@ -114,6 +114,10 @@ class OpenAICompatProvider:
         # Ollama не требует ключа, но клиент ожидает непустую строку.
         self._client = openai.OpenAI(base_url=source.base_url, api_key=source.api_key() or "local")
         self._limiter = RateLimiter(source.requests_per_minute)
+        # Некоторые серверы (Ollama с частью моделей) отвечают 501/400 на
+        # response_format. Тогда режим выключается до конца запуска, а JSON
+        # разбирается из обычного ответа.
+        self._json_mode = source.json_mode
 
     def complete(self, system: str, user: str, schema: dict[str, Any]) -> Completion:
         self._limiter.wait()
@@ -130,9 +134,7 @@ class OpenAICompatProvider:
                 {"role": "user", "content": prompt},
             ],
         }
-        if self.source.json_mode:
-            request["response_format"] = {"type": "json_object"}
-        response = self._client.chat.completions.create(**request)
+        response = self._create(request)
         usage = response.usage
         tokens = (
             getattr(usage, "prompt_tokens", 0) or 0,
@@ -143,10 +145,29 @@ class OpenAICompatProvider:
         choice = response.choices[0]
         if choice.finish_reason == "length":
             raise ProviderError(f"{self.source.name}: ответ обрезан по длине", *tokens)
-        text = choice.message.content or ""
+        text = _THINK.sub("", choice.message.content or "")
         return Completion(_load_json(text, self.source.name, tokens), *tokens)
 
+    def _create(self, request: dict[str, Any]) -> Any:
+        if not self._json_mode:
+            return self._client.chat.completions.create(**request)
+        try:
+            return self._client.chat.completions.create(**request, response_format={"type": "json_object"})
+        except Exception as error:
+            # openai.APIStatusError и его наследники несут код ответа сервера.
+            if getattr(error, "status_code", None) not in _JSON_MODE_REJECTED:
+                raise
+            # Режим выключается, только если без него сервер ответил: иначе
+            # 400 был о другом (например, неверная модель) и ошибка уходит дальше.
+            response = self._client.chat.completions.create(**request)
+            self._json_mode = False
+            return response
 
+
+# 400/422 — сервер не принял параметр, 501 — не умеет structured output.
+_JSON_MODE_REJECTED = frozenset({400, 422, 501})
+# Рассуждения моделей вроде Qwen 3.x, если сервер не вынес их в отдельное поле.
+_THINK = re.compile(r"<think>.*?</think>", re.DOTALL)
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
 

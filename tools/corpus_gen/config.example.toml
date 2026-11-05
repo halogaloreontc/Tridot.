@@ -25,6 +25,9 @@ kind = "openai_compat"
 family = "local"
 base_url = "http://localhost:11434/v1"
 model = "<модель из `ollama list`>"
+# Если сервер не умеет строгий JSON (ошибка 501), генератор сам повторит
+# запрос без него. Чтобы не тратить лишний запрос, можно выключить сразу:
+# json_mode = false
 roles = ["generate", "label"]
 max_concurrency = 1
 requests_per_minute = 60

@@ -160,3 +160,48 @@ def test_review_saves_on_eof(project: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert cli.main(["--config", str(config_path), "review"]) == 0
     statuses = [r["status"] for r in CandidateStore(config.work_dir).rows]
     assert statuses == ["accepted", "disputed"]
+
+
+def _compat(responses: list[Any]) -> tuple[Any, list[dict[str, Any]]]:
+    from corpus_gen.providers import OpenAICompatProvider
+
+    class FakeStatusError(Exception):
+        def __init__(self, status_code: int) -> None:
+            super().__init__(f"Error code: {status_code}")
+            self.status_code = status_code
+
+    calls: list[dict[str, Any]] = []
+
+    def create(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        item = responses.pop(0)
+        if isinstance(item, int):
+            raise FakeStatusError(item)
+        message = SimpleNamespace(content=item)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=message, finish_reason="stop")],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=2),
+        )
+
+    provider = object.__new__(OpenAICompatProvider)
+    provider.source = Source(name="ollama", kind="openai_compat", family="local", model="m", roles=frozenset({"generate"}))
+    provider._limiter = RateLimiter(10_000)
+    provider._json_mode = True
+    provider._client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    return provider, calls
+
+
+def test_json_mode_rejected_falls_back_once_and_strips_thinking() -> None:
+    provider, calls = _compat([501, '<think>думаю {про} фразы</think>\n{"phrases": ["а"]}', '{"phrases": ["б"]}'])
+    assert provider.complete("s", "u", {}).data == {"phrases": ["а"]}
+    assert provider.complete("s", "u", {}).data == {"phrases": ["б"]}
+    assert "response_format" in calls[0]
+    assert all("response_format" not in call for call in calls[1:])
+
+
+def test_unrelated_error_keeps_json_mode() -> None:
+    provider, calls = _compat([400, 404])
+    with pytest.raises(Exception, match="404"):
+        provider.complete("s", "u", {})
+    assert provider._json_mode is True
+    assert len(calls) == 2
