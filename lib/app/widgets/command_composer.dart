@@ -14,6 +14,18 @@ final class CommandTemplate {
   final IconData icon;
 }
 
+/// Источники документов для «+». Подключение дисков — следующий этап;
+/// пункты видны заранее, а нажатие честно сообщает, что это в разработке.
+enum DocumentSource {
+  googleDrive('Google Диск', Icons.add_to_drive),
+  yandexDisk('Яндекс Диск', Icons.cloud_outlined);
+
+  const DocumentSource(this.label, this.icon);
+
+  final String label;
+  final IconData icon;
+}
+
 const List<CommandTemplate> defaultTemplates = <CommandTemplate>[
   CommandTemplate('Новая задача', 'Добавь задачу «|»', icon: Icons.add),
   CommandTemplate(
@@ -46,6 +58,8 @@ final class CommandComposer extends StatefulWidget {
     required this.onModeChanged,
     required this.onSend,
     required this.onTemplate,
+    required this.onDocumentSource,
+    required this.onVoice,
     required this.previousCommand,
     required this.nextCommand,
   });
@@ -57,6 +71,12 @@ final class CommandComposer extends StatefulWidget {
   final ValueChanged<AssistantViewMode> onModeChanged;
   final VoidCallback onSend;
   final ValueChanged<CommandTemplate> onTemplate;
+
+  /// Выбран источник документа в меню «+».
+  final ValueChanged<DocumentSource> onDocumentSource;
+
+  /// Микрофон при пустом поле: голосовое общение с помощником.
+  final VoidCallback onVoice;
 
   /// Прошлая и следующая команда из истории для ↑/↓; null — нет.
   final String? Function() previousCommand;
@@ -132,8 +152,9 @@ final class _CommandComposerState extends State<CommandComposer> {
     return ListenableBuilder(
       listenable: widget.controller,
       builder: (BuildContext context, _) {
-        final canSend =
-            widget.controller.text.trim().isNotEmpty && !widget.sending;
+        final hasText = widget.controller.text.trim().isNotEmpty;
+        // Пустое поле — микрофон для голоса, с текстом — кнопка отправки.
+        final voice = !hasText && !widget.sending;
         return Container(
           key: const Key('assistant-composer'),
           padding: const EdgeInsets.all(6),
@@ -165,15 +186,47 @@ final class _CommandComposerState extends State<CommandComposer> {
               ),
               Row(
                 children: <Widget>[
-                  PopupMenuButton<CommandTemplate>(
+                  PopupMenuButton<Object>(
                     key: const Key('templates-button'),
-                    tooltip: 'Шаблоны команд',
-                    onSelected: widget.onTemplate,
+                    tooltip: 'Документы и шаблоны команд',
+                    onSelected: (Object value) {
+                      if (value is CommandTemplate) widget.onTemplate(value);
+                      if (value is DocumentSource) {
+                        widget.onDocumentSource(value);
+                      }
+                    },
                     color: AssistantColors.raised,
                     itemBuilder: (BuildContext context) =>
-                        <PopupMenuEntry<CommandTemplate>>[
+                        <PopupMenuEntry<Object>>[
+                      const PopupMenuItem<Object>(
+                        enabled: false,
+                        height: 28,
+                        child:
+                            Text('Документ с диска', style: technicalTextStyle),
+                      ),
+                      for (final source in DocumentSource.values)
+                        PopupMenuItem<Object>(
+                          key: Key('source-${source.name}'),
+                          value: source,
+                          child: Row(
+                            children: <Widget>[
+                              Icon(source.icon, size: 18),
+                              const SizedBox(width: 10),
+                              Flexible(child: Text(source.label)),
+                              const SizedBox(width: 8),
+                              const Text('скоро', style: technicalTextStyle),
+                            ],
+                          ),
+                        ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem<Object>(
+                        enabled: false,
+                        height: 28,
+                        child:
+                            Text('Шаблоны команд', style: technicalTextStyle),
+                      ),
                       for (final template in defaultTemplates)
-                        PopupMenuItem<CommandTemplate>(
+                        PopupMenuItem<Object>(
                           value: template,
                           child: Row(
                             children: <Widget>[
@@ -201,8 +254,12 @@ final class _CommandComposerState extends State<CommandComposer> {
                   const SizedBox(width: 8),
                   IconButton(
                     key: const Key('assistant-send'),
-                    onPressed: canSend ? widget.onSend : null,
-                    tooltip: 'Отправить',
+                    onPressed: widget.sending
+                        ? null
+                        : voice
+                            ? widget.onVoice
+                            : widget.onSend,
+                    tooltip: voice ? 'Голосовой режим' : 'Отправить',
                     style: IconButton.styleFrom(
                       fixedSize: const Size(40, 40),
                       backgroundColor: const Color(0xFFC4C9C5),
@@ -216,7 +273,10 @@ final class _CommandComposerState extends State<CommandComposer> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.arrow_upward, size: 20),
+                        : Icon(
+                            voice ? Icons.mic_none : Icons.arrow_upward,
+                            size: 20,
+                          ),
                   ),
                 ],
               ),

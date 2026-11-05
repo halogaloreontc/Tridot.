@@ -348,4 +348,56 @@ void main() {
     }
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('микрофон при пустом поле превращается в отправку при вводе',
+      (tester) async {
+    await _pump(tester);
+    expect(find.byIcon(Icons.mic_none), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_upward), findsNothing);
+
+    await tester.tap(find.byKey(const Key('assistant-send')));
+    await tester.pump();
+    expect(find.textContaining('Голосовой режим в разработке'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('assistant-input')),
+      'Покажи задачи',
+    );
+    await tester.pump();
+    expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
+    expect(find.byIcon(Icons.mic_none), findsNothing);
+
+    await tester.tap(find.byKey(const Key('assistant-send')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.text('Активных задач пока нет.'), findsOneWidget);
+  });
+
+  testWidgets('«+» показывает диски и шаблоны команд', (tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('templates-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Google Диск'), findsOneWidget);
+    expect(find.text('Яндекс Диск'), findsOneWidget);
+    expect(find.text('Задача на завтра в 10:00'), findsOneWidget);
+
+    await tester.tap(find.text('Яндекс Диск'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('«Яндекс Диск» — следующий этап'),
+      findsOneWidget,
+    );
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('templates-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Задача на завтра в 10:00'));
+    await tester.pumpAndSettle();
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('assistant-input')),
+    );
+    expect(field.controller!.text, 'Добавь задачу «» на завтра в 10:00');
+  });
 }

@@ -403,6 +403,14 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _refresh();
   }
 
+  void _announce(String text) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(text), duration: const Duration(seconds: 3)),
+      );
+  }
+
   void _openTasksPanel(bool wide) {
     if (wide) {
       setState(() => _panelOpen = !_panelOpen);
@@ -920,6 +928,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 onModeChanged: _setMode,
                 onSend: _send,
                 onTemplate: _insertTemplate,
+                onDocumentSource: (DocumentSource source) => _announce(
+                  'Подключение «${source.label}» — следующий этап: '
+                  'документы будут создаваться и правиться через помощника.',
+                ),
+                onVoice: () => _announce(
+                  'Голосовой режим в разработке. Пока напишите команду текстом.',
+                ),
                 previousCommand: _previousCommand,
                 nextCommand: _nextCommand,
               ),

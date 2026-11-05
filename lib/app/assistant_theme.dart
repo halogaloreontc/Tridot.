@@ -29,6 +29,8 @@ final class AssistantTheme {
       ),
       iconTheme: const IconThemeData(color: Color(0xFF858C87), size: 18),
       snackBarTheme: const SnackBarThemeData(
+        // Плавающее уведомление не прячет под собой поле ввода целиком.
+        behavior: SnackBarBehavior.floating,
         backgroundColor: Color(0xFF242824),
         contentTextStyle: TextStyle(color: Color(0xFFC9CECA)),
       ),
