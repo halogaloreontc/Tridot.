@@ -161,8 +161,11 @@ final class EmptyState extends StatelessWidget {
             Text(title, textAlign: TextAlign.center),
             if (hint != null) ...<Widget>[
               const SizedBox(height: 6),
-              Text(hint!,
-                  textAlign: TextAlign.center, style: technicalTextStyle),
+              Text(
+                hint!,
+                style: technicalTextStyle,
+                textAlign: TextAlign.center,
+              ),
             ],
           ],
         ),
