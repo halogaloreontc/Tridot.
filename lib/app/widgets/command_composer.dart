@@ -1,35 +1,145 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../assistant_theme.dart';
 
 enum AssistantViewMode { dialogue, document }
 
-final class CommandComposer extends StatelessWidget {
+/// Шаблон команды из меню «+». `|` в [template] — место курсора.
+final class CommandTemplate {
+  const CommandTemplate(this.label, this.template, {this.icon = Icons.bolt});
+
+  final String label;
+  final String template;
+  final IconData icon;
+}
+
+const List<CommandTemplate> defaultTemplates = <CommandTemplate>[
+  CommandTemplate('Новая задача', 'Добавь задачу «|»', icon: Icons.add),
+  CommandTemplate(
+    'Задача на завтра в 10:00',
+    'Добавь задачу «|» на завтра в 10:00',
+    icon: Icons.event_outlined,
+  ),
+  CommandTemplate(
+    'Задача в проект',
+    'Добавь задачу «|» #проект',
+    icon: Icons.tag,
+  ),
+  CommandTemplate(
+    'Перенести выбранную',
+    'Перенеси её на завтра в |',
+    icon: Icons.update,
+  ),
+  CommandTemplate('Показать задачи', 'Покажи задачи', icon: Icons.checklist),
+];
+
+/// Поле команды. Не блокируется во время отправки, чтобы не терять фокус:
+/// повторную отправку отсекает хозяин.
+final class CommandComposer extends StatefulWidget {
   const CommandComposer({
     super.key,
     required this.controller,
+    required this.focusNode,
     required this.sending,
     required this.mode,
     required this.onModeChanged,
     required this.onSend,
+    required this.onTemplate,
+    required this.previousCommand,
+    required this.nextCommand,
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final bool sending;
   final AssistantViewMode mode;
   final ValueChanged<AssistantViewMode> onModeChanged;
   final VoidCallback onSend;
+  final ValueChanged<CommandTemplate> onTemplate;
+
+  /// Прошлая и следующая команда из истории для ↑/↓; null — нет.
+  final String? Function() previousCommand;
+  final String? Function() nextCommand;
+
+  @override
+  State<CommandComposer> createState() => _CommandComposerState();
+}
+
+final class _CommandComposerState extends State<CommandComposer> {
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode.onKeyEvent = _onKey;
+  }
+
+  @override
+  void didUpdateWidget(covariant CommandComposer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      widget.focusNode.onKeyEvent = _onKey;
+    }
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (shift) {
+        _insert('\n');
+      } else if (!widget.sending) {
+        widget.onSend();
+      }
+      return KeyEventResult.handled;
+    }
+    final text = widget.controller.text;
+    final singleLine = !text.contains('\n');
+    if (key == LogicalKeyboardKey.arrowUp && singleLine) {
+      return _recall(widget.previousCommand());
+    }
+    if (key == LogicalKeyboardKey.arrowDown && singleLine) {
+      return _recall(widget.nextCommand());
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _recall(String? command) {
+    if (command == null) return KeyEventResult.ignored;
+    widget.controller.value = TextEditingValue(
+      text: command,
+      selection: TextSelection.collapsed(offset: command.length),
+    );
+    return KeyEventResult.handled;
+  }
+
+  void _insert(String text) {
+    final value = widget.controller.value;
+    final selection = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    final updated =
+        value.text.replaceRange(selection.start, selection.end, text);
+    widget.controller.value = TextEditingValue(
+      text: updated,
+      selection: TextSelection.collapsed(offset: selection.start + text.length),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) {
-        final hasText = controller.text.trim().isNotEmpty;
+      listenable: widget.controller,
+      builder: (BuildContext context, _) {
+        final canSend =
+            widget.controller.text.trim().isNotEmpty && !widget.sending;
         return Container(
           key: const Key('assistant-composer'),
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: const Color(0xFF272B28),
-            border: Border.all(color: const Color(0xFF3A403A)),
+            border: Border.all(color: AssistantColors.border),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
@@ -37,13 +147,14 @@ final class CommandComposer extends StatelessWidget {
             children: <Widget>[
               TextField(
                 key: const Key('assistant-input'),
-                controller: controller,
-                enabled: !sending,
+                controller: widget.controller,
+                focusNode: widget.focusNode,
                 minLines: 1,
                 maxLines: 6,
                 textInputAction: TextInputAction.send,
+                textCapitalization: TextCapitalization.sentences,
                 onSubmitted: (_) {
-                  if (!sending) onSend();
+                  if (!widget.sending) widget.onSend();
                 },
                 decoration: const InputDecoration(
                   hintText: 'Напишите команду…',
@@ -54,23 +165,58 @@ final class CommandComposer extends StatelessWidget {
               ),
               Row(
                 children: <Widget>[
-                  _RoundButton(
-                    key: const Key('attachment-button'),
-                    tooltip: 'Вложения пока не реализованы',
-                    onPressed: null,
-                    child: const Icon(Icons.add),
+                  PopupMenuButton<CommandTemplate>(
+                    key: const Key('templates-button'),
+                    tooltip: 'Шаблоны команд',
+                    onSelected: widget.onTemplate,
+                    color: AssistantColors.raised,
+                    itemBuilder: (BuildContext context) =>
+                        <PopupMenuEntry<CommandTemplate>>[
+                      for (final template in defaultTemplates)
+                        PopupMenuItem<CommandTemplate>(
+                          value: template,
+                          child: Row(
+                            children: <Widget>[
+                              Icon(template.icon, size: 18),
+                              const SizedBox(width: 10),
+                              Flexible(child: Text(template.label)),
+                            ],
+                          ),
+                        ),
+                    ],
+                    child: const _RoundIcon(icon: Icons.add),
                   ),
-                  const Spacer(),
-                  _ModeSwitch(mode: mode, onChanged: onModeChanged),
-                  const Spacer(),
-                  _RoundButton(
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _ModeSwitch(
+                          mode: widget.mode,
+                          onChanged: widget.onModeChanged,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
                     key: const Key('assistant-send'),
-                    tooltip: hasText
-                        ? 'Отправить'
-                        : 'Голосовой ввод пока не реализован',
-                    onPressed: hasText && !sending ? onSend : null,
-                    light: true,
-                    child: Icon(hasText ? Icons.arrow_upward : Icons.mic_none),
+                    onPressed: canSend ? widget.onSend : null,
+                    tooltip: 'Отправить',
+                    style: IconButton.styleFrom(
+                      fixedSize: const Size(40, 40),
+                      backgroundColor: const Color(0xFFC4C9C5),
+                      foregroundColor: const Color(0xFF171917),
+                      disabledBackgroundColor: AssistantColors.raised,
+                      disabledForegroundColor: AssistantColors.muted,
+                    ),
+                    icon: widget.sending
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.arrow_upward, size: 20),
                   ),
                 ],
               ),
@@ -78,6 +224,25 @@ final class CommandComposer extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+final class _RoundIcon extends StatelessWidget {
+  const _RoundIcon({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: const BoxDecoration(
+        color: Colors.black,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, size: 20, color: AssistantColors.textStrong),
     );
   }
 }
@@ -108,58 +273,31 @@ final class _ModeSwitch extends StatelessWidget {
 
   Widget _button(String label, AssistantViewMode value, String key) {
     final active = mode == value;
-    return InkWell(
-      key: Key(key),
-      onTap: () => onChanged(value),
-      borderRadius: BorderRadius.circular(999),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: active ? const Color(0xFFE5E7E6) : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: active ? const Color(0xFF171917) : const Color(0xFF858C87),
-            fontSize: 12,
+    return Semantics(
+      button: true,
+      selected: active,
+      child: InkWell(
+        key: Key(key),
+        onTap: () => onChanged(value),
+        borderRadius: BorderRadius.circular(999),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          constraints: const BoxConstraints(minHeight: 36),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: active ? AssistantColors.textStrong : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: active ? const Color(0xFF171917) : AssistantColors.muted,
+              fontSize: 12,
+            ),
           ),
         ),
       ),
-    );
-  }
-}
-
-final class _RoundButton extends StatelessWidget {
-  const _RoundButton({
-    super.key,
-    required this.tooltip,
-    required this.onPressed,
-    required this.child,
-    this.light = false,
-  });
-
-  final String tooltip;
-  final VoidCallback? onPressed;
-  final Widget child;
-  final bool light;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: onPressed,
-      tooltip: tooltip,
-      style: IconButton.styleFrom(
-        fixedSize: const Size(32, 32),
-        minimumSize: const Size(32, 32),
-        maximumSize: const Size(32, 32),
-        padding: EdgeInsets.zero,
-        backgroundColor: light ? const Color(0xFFC4C9C5) : Colors.black,
-        foregroundColor: light ? const Color(0xFF171917) : Colors.white,
-        disabledBackgroundColor: light ? const Color(0xFFC4C9C5) : Colors.black,
-      ),
-      icon: child,
     );
   }
 }

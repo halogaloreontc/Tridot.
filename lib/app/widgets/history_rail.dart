@@ -2,141 +2,109 @@ import 'package:flutter/material.dart';
 
 import '../assistant_theme.dart';
 
+/// Одна команда пользователя в истории разговора.
 final class HistoryEntry {
-  const HistoryEntry({required this.messages, required this.timestamp});
+  const HistoryEntry({required this.command, required this.timestamp});
 
-  final List<String> messages;
+  final String command;
   final String timestamp;
 }
 
-final class HistoryRail extends StatefulWidget {
-  const HistoryRail({super.key, required this.entries});
+/// Узкая полоса справа от чата: по черте на каждую команду пользователя.
+/// Наведение или долгое нажатие показывает команду, нажатие прокручивает
+/// чат к ней. Длинная история прокручивается внутри полосы.
+final class HistoryRail extends StatelessWidget {
+  const HistoryRail({
+    super.key,
+    required this.entries,
+    required this.onSelect,
+    this.activeIndex,
+  });
 
   final List<HistoryEntry> entries;
-
-  @override
-  State<HistoryRail> createState() => _HistoryRailState();
-}
-
-final class _HistoryRailState extends State<HistoryRail> {
-  int? _preview;
+  final ValueChanged<int> onSelect;
+  final int? activeIndex;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       key: const Key('history-rail'),
-      width: 36,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: <Widget>[
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: List<Widget>.generate(widget.entries.length, (index) {
-                final active = _preview == index;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: MouseRegion(
-                    onEnter: (_) => setState(() => _preview = index),
-                    onExit: (_) => setState(() => _preview = null),
-                    child: InkWell(
-                      key: Key('history-$index'),
-                      onTap: () => setState(
-                        () => _preview = _preview == index ? null : index,
+      width: 40,
+      child: entries.isEmpty
+          ? const SizedBox.shrink()
+          : Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    for (var index = 0; index < entries.length; index++)
+                      _Mark(
+                        key: Key('history-$index'),
+                        entry: entries[index],
+                        active: index == activeIndex,
+                        onTap: () => onSelect(index),
                       ),
-                      borderRadius: BorderRadius.circular(8),
-                      child: SizedBox(
-                        width: 32,
-                        height: 18,
-                        child: Center(
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            width: active ? 19.2 : 11.2,
-                            height: 2.56,
-                            transform: Matrix4.translationValues(
-                              active ? -1.6 : 0,
-                              0,
-                              0,
-                            ),
-                            decoration: BoxDecoration(
-                              color: active
-                                  ? const Color(0xFFC4C9C5)
-                                  : const Color(0xFF4A504B),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
+                  ],
+                ),
+              ),
             ),
-          ),
-          if (_preview != null)
-            Positioned(
-              right: 44,
-              top: 24,
-              child: _Preview(entry: widget.entries[_preview!]),
-            ),
-        ],
-      ),
     );
   }
 }
 
-final class _Preview extends StatelessWidget {
-  const _Preview({required this.entry});
+final class _Mark extends StatefulWidget {
+  const _Mark({
+    super.key,
+    required this.entry,
+    required this.active,
+    required this.onTap,
+  });
 
   final HistoryEntry entry;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  State<_Mark> createState() => _MarkState();
+}
+
+final class _MarkState extends State<_Mark> {
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFF1B1E1B),
-      shape: RoundedRectangleBorder(
-        side: const BorderSide(color: Color(0xFF414741)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Container(
-        width: 300,
-        constraints: const BoxConstraints(maxHeight: 300),
-        padding: const EdgeInsets.all(14),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                'Сообщения версии',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 10),
-              for (var index = 0; index < entry.messages.length; index++)
-                Align(
-                  alignment: index.isOdd
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding:
-                        index.isOdd ? const EdgeInsets.all(9) : EdgeInsets.zero,
-                    decoration: BoxDecoration(
-                      color: index.isOdd
-                          ? const Color(0xFF292D29)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      entry.messages[index],
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFFC9CECA),
-                          ),
-                    ),
+    final highlighted = widget.active || _hover;
+    return Tooltip(
+      message: '${widget.entry.command}\n${widget.entry.timestamp}',
+      preferBelow: false,
+      waitDuration: const Duration(milliseconds: 250),
+      child: Semantics(
+        button: true,
+        label: 'Перейти к команде: ${widget.entry.command}',
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _hover = true),
+          onExit: (_) => setState(() => _hover = false),
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: 40,
+              height: 24,
+              child: Center(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  width: highlighted ? 20 : 12,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: highlighted
+                        ? AssistantColors.textStrong
+                        : AssistantColors.muted,
+                    borderRadius: BorderRadius.circular(999),
                   ),
                 ),
-              Text(entry.timestamp, style: technicalTextStyle),
-            ],
+              ),
+            ),
           ),
         ),
       ),
