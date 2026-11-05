@@ -27,6 +27,7 @@
 | `precision` | нет | `date` или `dateTime` |
 | `issue` | нет | `inPast`, `invalidDate`, `invalidTime`, `conflictingDays`, `conflictingTimes`; отсутствие означает `none` и проверяется всегда |
 | `titleIssue` | нет | `unbalancedQuotes`, `multipleTitles`; отсутствие означает `none` и проверяется всегда |
+| `projects` | нет | метки проектов из команды (`#работа` вне кавычек) в нижнем регистре, без `#` |
 | `status` | нет | `active` (по умолчанию) или `known_gap` |
 | `note` | нет | пояснение для человека |
 | `source` | нет | откуда фраза: `manual`, имя модели-генератора и т. п. |

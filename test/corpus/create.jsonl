@@ -15,3 +15,6 @@
 {"id":"create-015","text":"Добавь задачу позвонить клиенту завтра","intent":"createTask","title":null,"due":"2026-11-03","precision":"date","note":"без кавычек название намеренно не угадывается"}
 {"id":"create-016","text":"Создай задачу «»","intent":"createTask","title":null}
 {"id":"create-017","text":"  добавь   задачу   «Полить цветы»   завтра  ","intent":"createTask","title":"Полить цветы","due":"2026-11-03","precision":"date"}
+{"id":"create-018","text":"Добавь задачу «Сверить счета» #работа завтра","intent":"createTask","title":"Сверить счета","due":"2026-11-03","precision":"date","projects":["работа"]}
+{"id":"create-019","text":"Добавь задачу «Купить краску» #Дача #ремонт","intent":"createTask","title":"Купить краску","due":null,"projects":["дача","ремонт"]}
+{"id":"create-020","text":"Добавь задачу «Встреча #42» #завтра","intent":"createTask","title":"Встреча #42","due":null,"projects":["завтра"],"note":"метки внутри кавычек и метка-слово не становятся сроком"}

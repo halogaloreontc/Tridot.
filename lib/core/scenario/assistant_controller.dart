@@ -100,10 +100,12 @@ final class AssistantController {
       title: title,
       dueAt: command.dueAt,
       duePrecision: command.duePrecision,
+      tags: command.projects,
     );
     _context = _context.withLastTask(task.id);
     return AssistantResponse(
-      message: 'Создал задачу «${task.title}»${_dueDescription(task)}.',
+      message: 'Создал задачу «${task.title}»${_dueDescription(task)}'
+          '${task.project == null ? '' : ' в проекте #${task.project}'}.',
       intent: 'task.create',
       status: AssistantStatus.completed,
       task: task,

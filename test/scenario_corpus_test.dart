@@ -81,6 +81,7 @@ const Set<String> _allowedKeys = <String>{
   'precision',
   'issue',
   'titleIssue',
+  'projects',
   'status',
   'note',
   'source',
@@ -111,6 +112,11 @@ void _validate(Map<String, dynamic> json, String location) {
   checkEnum('precision', DuePrecision.values);
   checkEnum('issue', DueIssue.values);
   checkEnum('titleIssue', TitleIssue.values);
+  final projects = json['projects'];
+  if (projects != null &&
+      (projects is! List || projects.any((Object? p) => p is! String))) {
+    fail('поле projects должно быть списком строк');
+  }
   for (final key in <String>['title', 'due', 'now', 'note', 'source']) {
     final value = json[key];
     if (value != null && value is! String) {
@@ -177,6 +183,14 @@ final class _Case {
       parsed.dueIssue,
       issue == null ? DueIssue.none : DueIssue.values.byName(issue),
     );
+    if (json.containsKey('projects')) {
+      final expected = (json['projects'] as List<dynamic>).cast<String>();
+      if (parsed.projects.join(',') != expected.join(',')) {
+        mismatches.add(
+          'projects: ожидалось $expected, получено ${parsed.projects}',
+        );
+      }
+    }
     final titleIssue = json['titleIssue'] as String?;
     compare(
       'titleIssue',

@@ -33,6 +33,9 @@ class Task {
   final DateTime? completedAt;
   final DateTime? deletedAt;
 
+  /// Проект задачи — первая метка; пусто, если проекта нет.
+  String? get project => tags.isEmpty ? null : tags.first;
+
   bool get isActive =>
       deletedAt == null &&
       status != TaskStatus.done &&
@@ -48,6 +51,7 @@ class Task {
     DateTime? updatedAt,
     DateTime? completedAt,
     DateTime? deletedAt,
+    List<String>? tags,
     bool clearCompletedAt = false,
   }) {
     return Task(
@@ -58,7 +62,7 @@ class Task {
       priority: priority ?? this.priority,
       dueAt: dueAt ?? this.dueAt,
       duePrecision: duePrecision ?? this.duePrecision,
-      tags: tags,
+      tags: tags ?? this.tags,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,

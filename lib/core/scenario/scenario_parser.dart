@@ -49,9 +49,13 @@ final class ParsedCommand {
     this.duePrecision = DuePrecision.dateTime,
     this.dueIssue = DueIssue.none,
     this.titleIssue = TitleIssue.none,
+    this.projects = const <String>[],
   });
 
   final CommandIntent intent;
+
+  /// Метки проектов из команды: «#работа» вне кавычек, без «#».
+  final List<String> projects;
 
   /// Для создания — название новой задачи; для переноса и завершения —
   /// название задачи, к которой относится команда.
@@ -111,9 +115,17 @@ final class ScenarioParser {
   /// «с 15:00 на 17:00».
   static const Set<String> _sourcePrepositions = <String>{'с', 'со', 'от'};
 
+  static final RegExp _hashtag =
+      RegExp(r'(?<![\p{L}\p{N}])#([\p{L}\p{N}_-]+)', unicode: true);
+
   ParsedCommand parse(String message) {
     final quotes = _extractQuoted(message);
-    final rest = _normalize(quotes.rest);
+    final projects = <String>[
+      for (final match in _hashtag.allMatches(quotes.rest))
+        match.group(1)!.toLowerCase(),
+    ];
+    // Метки вырезаются до разбора, чтобы «#завтра» не стало сроком.
+    final rest = _normalize(quotes.rest.replaceAll(_hashtag, ' '));
     final words = _word
         .allMatches(rest)
         .map((Match m) => m.group(0)!)
@@ -143,6 +155,8 @@ final class ScenarioParser {
           duePrecision: due.precision,
           dueIssue: due.issue,
           titleIssue: titleIssue,
+          projects:
+              intent == CommandIntent.createTask ? projects : const <String>[],
         );
       case CommandIntent.completeTask:
         return ParsedCommand(
