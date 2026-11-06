@@ -1,4 +1,5 @@
 import '../connectors/due_parser.dart';
+import '../connectors/social_prefix.dart';
 import '../connectors/utterance.dart';
 import '../connectors/verb_forms.dart';
 import '../models/task.dart';
@@ -328,11 +329,16 @@ final class ScenarioParser {
     return text.isEmpty ? null : Utterance.capitalize(text);
   }
 
-  /// Вступление перед маркером: слова из [_leadIns] и срок с самого начала
-  /// фразы до первого другого слова.
+  /// Вступление перед маркером: приветствие ([SocialPrefix]), слова
+  /// из [_leadIns] и срок с самого начала фразы до первого другого слова.
   List<CharSpan> _leadInSpans(Utterance utterance, int markerIndex) {
     final result = <CharSpan>[];
-    for (var i = 0; i < markerIndex; i++) {
+    var start = SocialPrefix.length(utterance);
+    if (start > markerIndex) start = 0;
+    for (var i = 0; i < start; i++) {
+      result.add(utterance.tokens[i].span);
+    }
+    for (var i = start; i < markerIndex; i++) {
       final token = utterance.tokens[i];
       if (Utterance.isCovered(token, utterance.due.spans)) continue;
       if (!_leadIns.contains(token.text)) break;
@@ -486,7 +492,11 @@ final class ScenarioParser {
     final due = utterance.due;
     final tokens = utterance.tokens;
     final remove = <CharSpan>[...due.spans];
-    var i = 0;
+    // «Привет, купить хлеб», «пока не забыл, купить хлеб».
+    var i = SocialPrefix.length(utterance);
+    for (var k = 0; k < i; k++) {
+      remove.add(tokens[k].span);
+    }
     while (i < tokens.length) {
       final token = tokens[i];
       if (Utterance.isCovered(token, due.spans)) {

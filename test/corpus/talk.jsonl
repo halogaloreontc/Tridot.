@@ -1,0 +1,101 @@
+{"id": "talk-001", "text": "привет", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-002", "text": "Привет!", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-003", "text": "здравствуйте", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-004", "text": "Добрый день", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-005", "text": "добрый вечер", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-006", "text": "доброе утро", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-007", "text": "хай", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-008", "text": "йо", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-009", "text": "👋", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-010", "text": "Нода, привет", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-011", "text": "привет, Rio", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-012", "text": "пока", "connector": "talk", "intent": "talk.bye", "source": "manual"}
+{"id": "talk-013", "text": "До завтра!", "connector": "talk", "intent": "talk.bye", "source": "manual"}
+{"id": "talk-014", "text": "до свидания", "connector": "talk", "intent": "talk.bye", "source": "manual"}
+{"id": "talk-015", "text": "спокойной ночи", "connector": "talk", "intent": "talk.bye", "source": "manual"}
+{"id": "talk-016", "text": "всего доброго", "connector": "talk", "intent": "talk.bye", "source": "manual"}
+{"id": "talk-017", "text": "спасибо", "connector": "talk", "intent": "talk.thanks", "source": "manual"}
+{"id": "talk-018", "text": "спс", "connector": "talk", "intent": "talk.thanks", "source": "manual"}
+{"id": "talk-019", "text": "благодарю", "connector": "talk", "intent": "talk.thanks", "source": "manual"}
+{"id": "talk-020", "text": "Спасибо большое!", "connector": "talk", "intent": "talk.thanks", "source": "manual"}
+{"id": "talk-021", "text": "ну спасибо", "connector": "talk", "intent": "talk.thanks", "source": "manual"}
+{"id": "talk-022", "text": "как дела?", "connector": "talk", "intent": "talk.howAreYou", "source": "manual"}
+{"id": "talk-023", "text": "Как дела", "connector": "talk", "intent": "talk.howAreYou", "source": "manual"}
+{"id": "talk-024", "text": "как ты", "connector": "talk", "intent": "talk.howAreYou", "source": "manual"}
+{"id": "talk-025", "text": "как жизнь?", "connector": "talk", "intent": "talk.howAreYou", "source": "manual"}
+{"id": "talk-026", "text": "привет, как дела?", "connector": "talk", "intent": "talk.howAreYou", "source": "manual"}
+{"id": "talk-027", "text": "всё в порядке?", "connector": "talk", "intent": "talk.howAreYou", "source": "manual"}
+{"id": "talk-028", "text": "кто ты", "connector": "talk", "intent": "talk.whoAreYou", "source": "manual"}
+{"id": "talk-029", "text": "как тебя зовут?", "connector": "talk", "intent": "talk.whoAreYou", "source": "manual"}
+{"id": "talk-030", "text": "ты кто такой", "connector": "talk", "intent": "talk.whoAreYou", "source": "manual"}
+{"id": "talk-031", "text": "ты кто такая?", "connector": "talk", "intent": "talk.whoAreYou", "source": "manual"}
+{"id": "talk-032", "text": "Noda, представься", "connector": "talk", "intent": "talk.whoAreYou", "source": "manual"}
+{"id": "talk-033", "text": "что ты умеешь", "connector": "talk", "intent": "talk.capabilities", "source": "manual"}
+{"id": "talk-034", "text": "что умеешь?", "connector": "talk", "intent": "talk.capabilities", "source": "manual"}
+{"id": "talk-035", "text": "помощь", "connector": "talk", "intent": "talk.capabilities", "source": "manual"}
+{"id": "talk-036", "text": "help", "connector": "talk", "intent": "talk.capabilities", "source": "manual"}
+{"id": "talk-037", "text": "что ты можешь", "connector": "talk", "intent": "talk.capabilities", "source": "manual"}
+{"id": "talk-038", "text": "расскажи шутку", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-039", "text": "пошути", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-040", "text": "анекдот", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-041", "text": "каламбур", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-042", "text": "ещё шутку", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-043", "text": "расскажи-ка анекдот, пожалуйста", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-044", "text": "ок", "connector": "talk", "intent": "talk.reaction", "source": "manual"}
+{"id": "talk-045", "text": "понял", "connector": "talk", "intent": "talk.reaction", "source": "manual"}
+{"id": "talk-046", "text": "круто", "connector": "talk", "intent": "talk.reaction", "source": "manual"}
+{"id": "talk-047", "text": "👍", "connector": "talk", "intent": "talk.reaction", "source": "manual"}
+{"id": "talk-048", "text": "ясно", "connector": "talk", "intent": "talk.reaction", "source": "manual"}
+{"id": "talk-049", "text": "отлично", "connector": "talk", "intent": "talk.reaction", "source": "manual"}
+{"id": "talk-050", "text": "ты тупой", "connector": "talk", "intent": "talk.rude", "source": "manual"}
+{"id": "talk-051", "text": "дурак", "connector": "talk", "intent": "talk.rude", "source": "manual"}
+{"id": "talk-052", "text": "отстань", "connector": "talk", "intent": "talk.rude", "source": "manual"}
+{"id": "talk-053", "text": "говори короче", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-054", "text": "говори кратко", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-055", "text": "говори подробнее", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-056", "text": "говори нормально", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-057", "text": "давай дружелюбнее", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-058", "text": "давай повеселее", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-059", "text": "говори официально", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-060", "text": "говори по-деловому", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-061", "text": "давай на ты", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-062", "text": "на вы", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-063", "text": "без смайликов", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-064", "text": "можно со смайликами", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-065", "text": "шути меньше", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-066", "text": "шути больше", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-067", "text": "не шути", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-068", "text": "Noda будь основной", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-069", "text": "пусть отвечает Рио", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-070", "text": "пока не забыл, купить хлеб", "connector": "talk", "intent": "unknown", "note": "прощание только целиком", "source": "manual"}
+{"id": "talk-071", "text": "привет, добавь задачу купить хлеб", "connector": "talk", "intent": "unknown", "note": "явная задача важнее приветствия", "source": "manual"}
+{"id": "talk-072", "text": "спасибо, перенеси отчёт на завтра", "connector": "talk", "intent": "unknown", "note": "команда после благодарности", "source": "manual"}
+{"id": "talk-073", "text": "до завтра сдать отчёт", "connector": "talk", "intent": "unknown", "note": "срок, а не прощание", "source": "manual"}
+{"id": "talk-074", "text": "добавь задачу рассказать шутку", "connector": "talk", "intent": "unknown", "note": "задача про шутку", "source": "manual"}
+{"id": "talk-075", "text": "ок 15:00", "connector": "talk", "intent": "unknown", "note": "число — не отклик", "source": "manual"}
+{"id": "talk-076", "text": "как дела у проекта Ремонт", "connector": "talk", "intent": "unknown", "note": "не короткая реплика", "source": "manual"}
+{"id": "talk-077", "text": "кто ты такой, чтобы мне указывать, что делать в эту пятницу вечером", "connector": "talk", "intent": "unknown", "note": "длинная фраза", "source": "manual"}
+{"id": "talk-078", "text": "сколько будет 2+2", "connector": "talk", "intent": "unknown", "note": "пример калькулятора", "source": "manual"}
+{"id": "talk-079", "text": "расскажи про задачи", "connector": "talk", "intent": "unknown", "note": "не шутка", "source": "manual"}
+{"id": "talk-080", "text": "купить дуракам подарок", "connector": "talk", "intent": "unknown", "note": "грубое слово внутри задачи", "source": "manual"}
+{"id": "talk-081", "text": "говори", "connector": "talk", "intent": "unknown", "note": "без того, как говорить", "source": "manual"}
+{"id": "talk-082", "text": "привет, добавь задачу купить хлеб", "connector": "tasks", "intent": "createTask", "title": "Купить хлеб", "note": "приветствие снимается с названия", "source": "manual"}
+{"id": "talk-083", "text": "пока не забыл, купить хлеб", "connector": "tasks", "intent": "createTask", "title": "Купить хлеб", "note": "«пока не забыл» — вступление, а не прощание", "source": "manual"}
+{"id": "talk-084", "text": "спасибо, добавь задачу молоко", "connector": "tasks", "intent": "createTask", "title": "Молоко", "source": "manual"}
+{"id": "talk-085", "text": "Добрый вечер, купить молоко завтра", "connector": "tasks", "intent": "createTask", "title": "Купить молоко", "source": "manual"}
+{"id": "talk-086", "text": "привет, покажи задачи", "connector": "tasks", "intent": "listTasks", "source": "manual"}
+{"id": "talk-087", "text": "привет, сколько будет 2+2*2", "connector": "calc", "intent": "calc.evaluate", "answer": "6", "note": "бывший known_gap: калькулятор снимает приветствие перед примером", "source": "manual"}
+{"id": "talk-088", "text": "ну привет, добавь задачу хлеб", "connector": "tasks", "intent": "createTask", "title": "Хлеб", "note": "вступление «ну привет» не попадает в название", "source": "manual"}
+{"id": "talk-089", "text": "привет, Нода, добавь задачу хлеб", "connector": "tasks", "intent": "createTask", "title": "Хлеб", "note": "имя помощника после приветствия", "source": "manual"}
+{"id": "talk-090", "text": "привет как дела добавь задачу хлеб", "connector": "tasks", "intent": "createTask", "title": "Хлеб", "source": "manual"}
+{"id": "talk-091", "text": "отлично, добавь задачу молоко", "connector": "tasks", "intent": "createTask", "title": "Молоко", "note": "отклик со знаком — вступление", "source": "manual"}
+{"id": "talk-092", "text": "привет, пока не забыл купить хлеб", "connector": "tasks", "intent": "createTask", "title": "Купить хлеб", "source": "manual"}
+{"id": "talk-093", "text": "всем привет, купить хлеб", "connector": "tasks", "intent": "createTask", "title": "Купить хлеб", "source": "manual"}
+{"id": "talk-094", "text": "спасибо, сколько будет 3*3", "connector": "calc", "intent": "calc.evaluate", "answer": "9", "source": "manual"}
+{"id": "talk-095", "text": "привет! 2+2", "connector": "calc", "intent": "calc.evaluate", "answer": "4", "source": "manual"}
+{"id": "talk-096", "text": "привет, говори короче", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-097", "text": "спасибо и пока", "connector": "talk", "intent": "talk.bye", "source": "manual"}
+{"id": "talk-098", "text": "привет ты тупой", "connector": "talk", "intent": "talk.rude", "source": "manual"}
+{"id": "talk-099", "text": "можно без эмодзи", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-100", "text": "а ты кто", "connector": "talk", "intent": "talk.whoAreYou", "source": "manual"}
+{"id": "talk-101", "text": "спасибо, Нода", "connector": "talk", "intent": "talk.thanks", "source": "manual"}

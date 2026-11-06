@@ -56,6 +56,20 @@ final class ExampleWarehouseConnector implements Connector {
         ],
         requiresNetwork: true,
         access: ConnectorAccess.readOnly,
+        // Тексты ответов — записи каталога (docs/REPLIES.md): нейтральный
+        // текст с разметкой рода {м:…|ж:…} и обращения {вы:…|ты:…}.
+        // Факты (код, ячейка, остаток) приходят подстановками.
+        replies: <String, String>{
+          'warehouse.ask.code': 'Какой артикул найти: {codes}?',
+          'warehouse.notConnected':
+              'Склад не подключён: токен склада не задан.',
+          'warehouse.notFound': 'Артикул {code} на складе не найден.',
+          'warehouse.badToken':
+              'Склад не принял токен. {вы:Подключите|ты:Подключи} склад заново.',
+          'warehouse.httpError': 'Склад ответил ошибкой {status}.',
+          'warehouse.located':
+              'Артикул {code} лежит в ячейке {cell}, остаток {quantity} шт.',
+        },
       );
 
   @override
@@ -86,8 +100,9 @@ final class ExampleWarehouseConnector implements Connector {
   ) async {
     final request = match.payload! as LocateRequest;
     if (request.codes.length > 1) {
-      return AssistantResponse(
-        message: 'Какой артикул найти: ${request.codes.join(' или ')}?',
+      return session.reply(
+        'warehouse.ask.code',
+        values: <String, String>{'codes': request.codes.join(' или ')},
         intent: match.commandId,
         status: AssistantStatus.needsClarification,
       );
@@ -95,8 +110,8 @@ final class ExampleWarehouseConnector implements Connector {
     final code = request.codes.single;
     final token = await _secrets.read(tokenKey);
     if (token == null) {
-      return AssistantResponse(
-        message: 'Склад не подключён: токен склада не задан.',
+      return session.reply(
+        'warehouse.notConnected',
         intent: match.commandId,
         status: AssistantStatus.noAction,
       );
@@ -112,22 +127,24 @@ final class ExampleWarehouseConnector implements Connector {
       ),
     );
     if (response.statusCode == 404) {
-      return AssistantResponse(
-        message: 'Артикул $code на складе не найден.',
+      return session.reply(
+        'warehouse.notFound',
+        values: <String, String>{'code': code},
         intent: match.commandId,
         status: AssistantStatus.completed,
       );
     }
     if (response.statusCode == 401 || response.statusCode == 403) {
-      return AssistantResponse(
-        message: 'Склад не принял токен. Подключите склад заново.',
+      return session.reply(
+        'warehouse.badToken',
         intent: match.commandId,
         status: AssistantStatus.failed,
       );
     }
     if (!response.isSuccess) {
-      return AssistantResponse(
-        message: 'Склад ответил ошибкой ${response.statusCode}.',
+      return session.reply(
+        'warehouse.httpError',
+        values: <String, String>{'status': '${response.statusCode}'},
         intent: match.commandId,
         status: AssistantStatus.failed,
       );
@@ -136,8 +153,13 @@ final class ExampleWarehouseConnector implements Connector {
     final json = jsonDecode(response.body) as Map<String, Object?>;
     final cell = json['cell'] as String;
     final quantity = json['quantity'] as int;
-    return AssistantResponse(
-      message: 'Артикул $code лежит в ячейке $cell, остаток $quantity шт.',
+    return session.reply(
+      'warehouse.located',
+      values: <String, String>{
+        'code': code,
+        'cell': cell,
+        'quantity': '$quantity',
+      },
       intent: match.commandId,
       status: AssistantStatus.completed,
     );

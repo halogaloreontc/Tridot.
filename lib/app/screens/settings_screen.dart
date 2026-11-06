@@ -4,10 +4,11 @@ import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
 import '../widgets/extensions_section.dart';
+import '../widgets/personas_section.dart';
 import '../widgets/task_tile.dart';
 
-/// Экран «Настройки»: поведение интерфейса, расширения, история чата,
-/// о приложении.
+/// Экран «Настройки»: поведение интерфейса, помощники, расширения,
+/// история чата, о приложении.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
     super.key,
@@ -99,6 +100,11 @@ class SettingsScreen extends StatelessWidget {
                 value: settings.showTimestamps,
                 onChanged: (value) =>
                     onChanged(settings.copyWith(showTimestamps: value)),
+              ),
+              PersonasSection(
+                settings: settings,
+                onChanged: onChanged,
+                registry: extensions,
               ),
               if (extensions case final ExtensionRegistry registry)
                 ExtensionsSection(

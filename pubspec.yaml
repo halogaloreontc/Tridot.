@@ -24,6 +24,9 @@ flutter:
     - assets/fonts/JetBrainsMono-OFL.txt
     # Встроенные паки (docs/EXTENSIONS.md): только данные, без кода.
     - assets/packs/
+    # Каталоги ответов по стилям (docs/REPLIES.md). Ядро читает их копию
+    # lib/core/replies/builtin_replies.g.dart (tool/gen_replies.dart).
+    - assets/replies/
   fonts:
     - family: Inter
       fonts:

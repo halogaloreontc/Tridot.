@@ -15,6 +15,7 @@ import 'core/services/clock.dart';
 import 'core/services/task_service.dart';
 import 'core/settings/app_settings.dart';
 import 'core/skills/calculator/calculator_connector.dart';
+import 'core/skills/talk/talk_connector.dart';
 import 'core/storage/json_task_repository.dart';
 import 'core/storage/storage_info.dart';
 
@@ -47,6 +48,7 @@ Future<void> main() async {
     connectors: <Connector>[
       TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
       const CalculatorConnector(),
+      TalkConnector(taskService: tasks),
     ],
     packs: packs,
   );

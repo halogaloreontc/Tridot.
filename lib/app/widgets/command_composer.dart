@@ -62,6 +62,7 @@ final class CommandComposer extends StatefulWidget {
     required this.onVoice,
     required this.previousCommand,
     required this.nextCommand,
+    this.header,
   });
 
   final TextEditingController controller;
@@ -81,6 +82,9 @@ final class CommandComposer extends StatefulWidget {
   /// Прошлая и следующая команда из истории для ↑/↓; null — нет.
   final String? Function() previousCommand;
   final String? Function() nextCommand;
+
+  /// Строка над полем: выбор адресата в дуэте помощников.
+  final Widget? header;
 
   @override
   State<CommandComposer> createState() => _CommandComposerState();
@@ -166,6 +170,8 @@ final class _CommandComposerState extends State<CommandComposer> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
+              if (widget.header case final Widget header)
+                Align(alignment: Alignment.centerLeft, child: header),
               TextField(
                 key: const Key('assistant-input'),
                 controller: widget.controller,

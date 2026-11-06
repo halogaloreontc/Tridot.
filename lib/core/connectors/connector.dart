@@ -1,5 +1,8 @@
-import '../extensions/extension_kind.dart';
+import '../extensions/extension_registry.dart';
 import '../models/assistant_types.dart';
+import '../models/task.dart';
+import '../personas/persona.dart';
+import '../replies/reply_library.dart';
 import '../services/clock.dart';
 import 'utterance.dart';
 
@@ -31,6 +34,8 @@ final class ConnectorInfo {
     this.author = defaultAuthor,
     this.defaultEnabled = true,
     this.required = false,
+    this.replies = const <String, String>{},
+    this.protectedReplies = const <String>{},
   }) : assert(kind != ExtensionKind.pack, 'Пак — данные, а не коннектор');
 
   /// Автор встроенных расширений.
@@ -70,6 +75,17 @@ final class ConnectorInfo {
 
   /// Нельзя выключить: без него помощник теряет смысл (задачи).
   final bool required;
+
+  /// Свои записи каталога ответов: id → нейтральный текст с разметкой
+  /// (docs/REPLIES.md). Маршрутизатор добавляет их в каталог; остальные
+  /// стили берут нейтральный текст, паки ответов могут дать свои
+  /// варианты. Id не должен совпадать со встроенной записью.
+  final Map<String, String> replies;
+
+  /// Какие из [replies] — предупреждения и вопросы-подтверждения («Товар
+  /// не найден», «Списать 3 шт.?»): паки ответов их не переопределяют, и
+  /// звучит нейтральный текст коннектора (docs/REPLIES.md).
+  final Set<String> protectedReplies;
 }
 
 /// Ответ коннектора на вопрос «это твоя фраза?».
@@ -80,6 +96,8 @@ final class ConnectorMatch {
     required this.confidence,
     this.payload,
     this.implicit = false,
+    this.fallback = false,
+    this.acknowledgement = false,
   }) : assert(confidence >= 0 && confidence <= 1);
 
   /// [ConnectorInfo.id] коннектора, который вернул совпадение.
@@ -103,6 +121,62 @@ final class ConnectorMatch {
   /// даже менее уверенному: «узнать, где лежит 64115» — вопрос складу,
   /// а не задача «Узнать, где лежит 64115».
   final bool implicit;
+
+  /// Совпадение «на крайний случай»: забирает фразу, только если больше
+  /// никто не откликнулся, даже без маркера. Так беседа отвечает на
+  /// «привет», но никогда не перехватывает команды задач, калькулятора
+  /// и подключений.
+  final bool fallback;
+
+  /// Короткий отклик, похожий на согласие, но не ответ «да» или «нет»:
+  /// «хорошо», «ладно», «понял», «спасибо». Пока коннектор ждёт
+  /// подтверждения, маршрутизатор такое совпадение не берёт: вопрос не
+  /// пропадает молча, а помощник переспрашивает «да» или «нет» и ничего не
+  /// делает ([AssistantController]).
+  final bool acknowledgement;
+}
+
+/// Состояние коннектора для «Как дела?».
+enum HealthStatus {
+  /// Всё работает.
+  ok,
+
+  /// Работает с перебоями: медленно, часть данных недоступна.
+  degraded,
+
+  /// Не работает: нет связи, вход не принят.
+  down,
+}
+
+/// Отчёт о здоровье коннектора: состояние, пояснение по-русски и с какого
+/// момента так.
+final class HealthReport {
+  const HealthReport(this.status, {this.detail = '', this.since});
+
+  const HealthReport.ok() : this(HealthStatus.ok);
+
+  final HealthStatus status;
+
+  /// Что не так, для пользователя: «нет связи с сервером склада». У
+  /// [HealthStatus.ok] может быть пустым.
+  final String detail;
+
+  /// С какого момента такое состояние (последний успех, начало сбоя);
+  /// `null` — неизвестно.
+  final DateTime? since;
+
+  bool get isOk => status == HealthStatus.ok;
+}
+
+/// Необязательная проверка здоровья коннектора (docs/CONNECTORS.md,
+/// «Проверка здоровья»). Её спрашивает «Как дела?» у каждого включённого
+/// коннектора. Проверка не должна ничего менять и должна быть быстрой:
+/// маршрутизатор ждёт её не дольше [timeout].
+abstract interface class ConnectorHealth {
+  /// Сколько ждать ответа проверки: дольше — «не ответил вовремя».
+  static const Duration timeout = Duration(seconds: 3);
+
+  Future<HealthReport> health();
 }
 
 /// Выбранный в интерфейсе или в диалоге объект: задача, товар, документ.
@@ -279,10 +353,64 @@ final class ConfirmationAnswer {
 /// Живёт столько же, сколько контроллер. Коннектор читает и меняет выбор
 /// только своих объектов: «её» в «Заверши её» — задача, а не товар склада.
 final class AssistantSession {
-  AssistantSession({this.clock = const SystemClock()});
+  AssistantSession({
+    this.clock = const SystemClock(),
+    ReplyLibrary? replies,
+  }) : replies = replies ?? ReplyLibrary.builtIn;
 
   /// Источник времени. Коннекторы не вызывают `DateTime.now()` напрямую.
   final Clock clock;
+
+  /// Расширения: включённые навыки, подключения и паки. Маршрутизатор
+  /// ставит его при создании; беседа берёт отсюда, что умеет помощник,
+  /// здоровье коннекторов и шутки.
+  ExtensionRegistry? extensions;
+
+  /// Кто отвечает на текущее сообщение. Маршрутизатор ставит его вместе
+  /// с [voice].
+  Persona speaker = Personas.rio;
+
+  /// Настройки помощников на начало текущего сообщения.
+  PersonaSettings personas = const PersonaSettings();
+
+  /// Каталоги ответов: маршрутизатор обновляет их при смене расширений.
+  ReplyLibrary replies;
+
+  /// Голос текущей реплики: маршрутизатор ставит его в начале каждого
+  /// сообщения, и до конца ответа он не меняется, даже если настройки
+  /// поменяли посреди ответа.
+  ReplyVoice voice = const ReplyVoice();
+
+  /// Номер реплики в разговоре: от него зависит, какой вариант фразы
+  /// прозвучит. Растёт с каждой репликой, поэтому соседние ответы
+  /// звучат по-разному.
+  int turn = 0;
+
+  /// Текст записи [id] каталога ответов голосом [voice].
+  String say(
+    String id, [
+    Map<String, String> values = const <String, String>{},
+  ]) =>
+      replies.render(Reply(id, values), voice, turn: turn++);
+
+  /// Ответ из каталога: текст по записи [id] с фактами [values].
+  AssistantResponse reply(
+    String id, {
+    Map<String, String> values = const <String, String>{},
+    required String intent,
+    required AssistantStatus status,
+    Task? task,
+    PersonaSettingsChange? settingsChange,
+  }) =>
+      AssistantResponse(
+        message: say(id, values),
+        intent: intent,
+        status: status,
+        task: task,
+        replyId: id,
+        values: values,
+        settingsChange: settingsChange,
+      );
 
   SelectedItem? _selection;
 

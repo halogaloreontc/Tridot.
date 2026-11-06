@@ -1,5 +1,6 @@
 import '../formatting/due_format.dart';
 import '../models/task.dart';
+import '../replies/reply_library.dart';
 import '../scenario/scenario_parser.dart';
 import '../services/task_service.dart';
 import 'connector.dart';
@@ -12,7 +13,7 @@ import 'connector.dart';
 /// применяется: каждое действие видно в ответе и обратимо в интерфейсе.
 /// Подтверждение нужно только завершению по сообщению о сделанном
 /// («я купил хлеб»): задача угадана по словам, а не названа командой.
-final class TasksConnector implements Connector {
+final class TasksConnector implements Connector, ConnectorHealth {
   TasksConnector({
     required TaskService taskService,
     required ScenarioParser parser,
@@ -32,12 +33,29 @@ final class TasksConnector implements Connector {
   /// Ответ на фразу, которую никто не понял. Его же даёт коннектор, когда
   /// сообщение о сделанном («я купил хлеб») не подходит ни к одной задаче:
   /// тогда фраза, скорее всего, была не о задачах.
-  static const AssistantResponse unknownResponse = AssistantResponse(
-    message: 'Пока понимаю создание, список, перенос и завершение задач. '
-        'Например: $exampleCommand',
+  ///
+  /// Здесь — нейтральный текст; в разговоре он звучит голосом помощника
+  /// ([unknown]).
+  static final AssistantResponse unknownResponse = AssistantResponse(
+    message: ReplyLibrary.builtIn.render(
+      const Reply(unknownReply, <String, String>{'example': exampleCommand}),
+      const ReplyVoice(),
+    ),
     intent: 'unknown',
     status: AssistantStatus.noAction,
+    replyId: unknownReply,
+    values: const <String, String>{'example': exampleCommand},
   );
+
+  static const String unknownReply = 'common.unknown';
+
+  /// «Не понял» голосом текущего помощника.
+  static AssistantResponse unknown(AssistantSession session) => session.reply(
+        unknownReply,
+        values: const <String, String>{'example': exampleCommand},
+        intent: 'unknown',
+        status: AssistantStatus.noAction,
+      );
 
   final TaskService _tasks;
   final ScenarioParser _parser;
@@ -59,6 +77,20 @@ final class TasksConnector implements Connector {
         // Без задач помощник теряет смысл: навык не выключается.
         required: true,
       );
+
+  /// Задачи в порядке, если их можно прочитать.
+  @override
+  Future<HealthReport> health() async {
+    try {
+      await _tasks.listActive();
+      return const HealthReport.ok();
+    } on Object catch (error) {
+      return HealthReport(
+        HealthStatus.down,
+        detail: 'не удалось прочитать задачи: $error',
+      );
+    }
+  }
 
   @override
   ConnectorMatch? match(Utterance utterance) {
@@ -118,18 +150,16 @@ final class TasksConnector implements Connector {
   ) async {
     final titleQuestion = _titleClarification(command.titleIssue);
     if (titleQuestion != null) {
-      return _ask('task.create', titleQuestion);
+      return _ask(session, 'task.create', titleQuestion);
     }
     final title = command.title;
     if (title == null || title.isEmpty) {
-      return _ask(
-        'task.create',
-        'Как называется задача? Напишите, например: «Добавь задачу купить '
-            'хлеб». Точное название можно взять в кавычки.',
-      );
+      return _ask(session, 'task.create', 'task.ask.title');
     }
     final dueQuestion = _dueClarification(command.dueIssue);
-    if (dueQuestion != null) return _ask('task.create', dueQuestion);
+    if (dueQuestion != null) {
+      return _ask(session, 'task.create', dueQuestion);
+    }
     if (command.implicit) {
       // «Купить хлеб» без маркера при уже активной «Купить хлеб» — чаще
       // всего ответ на «Какую задачу отметить…?» или забытая задача,
@@ -138,9 +168,9 @@ final class TasksConnector implements Connector {
       if (existing.isNotEmpty) {
         final task = existing.first;
         session.select(id, task.id);
-        return AssistantResponse(
-          message: 'Задача «${task.title}» уже есть. Чтобы отметить её '
-              'выполненной, напишите «Заверши её».',
+        return session.reply(
+          'task.exists',
+          values: <String, String>{'title': task.title},
           intent: 'task.create',
           status: AssistantStatus.noAction,
           task: task,
@@ -155,9 +185,20 @@ final class TasksConnector implements Connector {
       tags: command.projects,
     );
     session.select(id, task.id);
-    return AssistantResponse(
-      message: 'Создал задачу «${task.title}»${_dueDescription(task, session)}'
-          '${task.project == null ? '' : ' в проекте #${task.project}'}.',
+    final due = _due(task, session);
+    final project = task.project;
+    return session.reply(
+      switch ((due, project)) {
+        (null, null) => 'task.created',
+        (_?, null) => 'task.created.withDue',
+        (null, _?) => 'task.created.withProject',
+        (_?, _?) => 'task.created.withDueAndProject',
+      },
+      values: <String, String>{
+        'title': task.title,
+        if (due != null) 'due': due,
+        if (project != null) 'project': project,
+      },
       intent: 'task.create',
       status: AssistantStatus.completed,
       task: task,
@@ -167,21 +208,21 @@ final class TasksConnector implements Connector {
   Future<AssistantResponse> _list(AssistantSession session) async {
     final tasks = await _tasks.listActive();
     if (tasks.isEmpty) {
-      return const AssistantResponse(
-        message: 'Активных задач пока нет.',
+      return session.reply(
+        'task.list.empty',
         intent: 'task.list',
         status: AssistantStatus.completed,
       );
     }
     final next = tasks.first;
-    final nextDue = switch (next.dueAt) {
-      null => '',
-      final due =>
-        ', ${formatDue(due, next.duePrecision, session.clock.now())}',
-    };
-    return AssistantResponse(
-      message: 'Активных задач: ${tasks.length}. '
-          'Ближайшая — «${next.title}»$nextDue.',
+    final nextDue = _due(next, session);
+    return session.reply(
+      nextDue == null ? 'task.list' : 'task.list.withDue',
+      values: <String, String>{
+        'count': '${tasks.length}',
+        'title': next.title,
+        if (nextDue != null) 'due': nextDue,
+      },
       intent: 'task.list',
       status: AssistantStatus.completed,
     );
@@ -199,20 +240,14 @@ final class TasksConnector implements Connector {
       command,
       session,
       intent: 'task.complete',
-      noContextQuestion:
-          'Какую задачу завершить? Сначала создайте или выберите задачу.',
+      noContextQuestion: 'task.ask.completeWhich',
     );
     if (target.clarification != null) return target.clarification!;
     final task = await _tasks.complete(target.id!);
     // Завершённая задача больше не «её»: следующий перенос или завершение
     // требует нового выбора, а не тихо открывает её снова.
     session.forget(id, task.id);
-    return AssistantResponse(
-      message: 'Задача «${task.title}» завершена.',
-      intent: 'task.complete',
-      status: AssistantStatus.completed,
-      task: task,
-    );
+    return _completed(task, session);
   }
 
   /// «Я купил хлеб»: найти задачу и спросить, отметить ли её. Сразу
@@ -236,8 +271,13 @@ final class TasksConnector implements Connector {
     if (tasks.isEmpty) {
       // Без маркера фраза могла быть вовсе не о задачах: «я купил хлеб»
       // без такой задачи — просто рассказ.
-      if (command.implicit) return unknownResponse;
-      return _ask('task.complete', 'Не нашёл активную задачу «$query».');
+      if (command.implicit) return unknown(session);
+      return _ask(
+        session,
+        'task.complete',
+        'task.notFound',
+        <String, String>{'query': query},
+      );
     }
     if (tasks.length > 1) {
       final titles =
@@ -247,9 +287,10 @@ final class TasksConnector implements Connector {
           : '${titles.sublist(0, titles.length - 1).join(', ')} '
               'или ${titles.last}';
       return _ask(
+        session,
         'task.complete',
-        'Какую задачу отметить выполненной: $list? Напишите «Заверши» '
-            'и её название или выберите задачу в списке.',
+        'task.ask.completeChoice',
+        <String, String>{'candidates': list},
       );
     }
     final task = tasks.single;
@@ -260,7 +301,12 @@ final class TasksConnector implements Connector {
         itemId: task.id,
       ),
     );
-    return _ask('task.complete', 'Отметить «${task.title}» выполненной?');
+    return _ask(
+      session,
+      'task.complete',
+      'task.ask.confirmComplete',
+      <String, String>{'title': task.title},
+    );
   }
 
   /// Ответ на «Отметить «…» выполненной?».
@@ -274,8 +320,8 @@ final class TasksConnector implements Connector {
       throw StateError('Неизвестное подтверждение ${pending.commandId}');
     }
     if (!answer.confirmed) {
-      return const AssistantResponse(
-        message: 'Хорошо, не отмечаю.',
+      return session.reply(
+        'task.confirm.declined',
         intent: 'task.complete',
         status: AssistantStatus.noAction,
       );
@@ -283,20 +329,15 @@ final class TasksConnector implements Connector {
     final active = await _tasks.listActive();
     if (!active.any((Task t) => t.id == taskId)) {
       // Задачу успели завершить или удалить в интерфейсе.
-      return const AssistantResponse(
-        message: 'Эта задача уже не активна.',
+      return session.reply(
+        'task.confirm.inactive',
         intent: 'task.complete',
         status: AssistantStatus.noAction,
       );
     }
     final task = await _tasks.complete(taskId);
     session.forget(id, task.id);
-    return AssistantResponse(
-      message: 'Задача «${task.title}» завершена.',
-      intent: 'task.complete',
-      status: AssistantStatus.completed,
-      task: task,
-    );
+    return _completed(task, session);
   }
 
   Future<AssistantResponse> _reschedule(
@@ -307,18 +348,16 @@ final class TasksConnector implements Connector {
       command,
       session,
       intent: 'task.reschedule',
-      noContextQuestion:
-          'Какую задачу перенести? Пока в контексте нет выбранной задачи.',
+      noContextQuestion: 'task.ask.rescheduleWhich',
     );
     if (target.clarification != null) return target.clarification!;
     final dueQuestion = _dueClarification(command.dueIssue);
-    if (dueQuestion != null) return _ask('task.reschedule', dueQuestion);
+    if (dueQuestion != null) {
+      return _ask(session, 'task.reschedule', dueQuestion);
+    }
     final dueAt = command.dueAt;
     if (dueAt == null) {
-      return _ask(
-        'task.reschedule',
-        'На когда перенести задачу? Например: «на завтра в 15:00».',
-      );
+      return _ask(session, 'task.reschedule', 'task.ask.rescheduleWhen');
     }
     final task = await _tasks.reschedule(
       target.id!,
@@ -326,53 +365,59 @@ final class TasksConnector implements Connector {
       command.duePrecision ?? DuePrecision.dateTime,
     );
     session.select(id, task.id);
-    return AssistantResponse(
-      message:
-          'Перенёс задачу «${task.title}»${_dueDescription(task, session)}.',
+    return session.reply(
+      'task.rescheduled',
+      values: <String, String>{
+        'title': task.title,
+        // Перенос всегда со сроком: без него — вопрос выше.
+        'due': _due(task, session)!,
+      },
       intent: 'task.reschedule',
       status: AssistantStatus.completed,
       task: task,
     );
   }
 
-  AssistantResponse _ask(String intent, String message) => AssistantResponse(
-        message: message,
+  AssistantResponse _completed(Task task, AssistantSession session) =>
+      session.reply(
+        'task.completed',
+        values: <String, String>{'title': task.title},
+        intent: 'task.complete',
+        status: AssistantStatus.completed,
+        task: task,
+      );
+
+  /// Уточнение из каталога ответов: [replyId] с фактами [values].
+  AssistantResponse _ask(
+    AssistantSession session,
+    String intent,
+    String replyId, [
+    Map<String, String> values = const <String, String>{},
+  ]) =>
+      session.reply(
+        replyId,
+        values: values,
         intent: intent,
         status: AssistantStatus.needsClarification,
       );
 
-  String? _dueClarification(DueIssue issue) {
-    switch (issue) {
-      case DueIssue.none:
-        return null;
-      case DueIssue.inPast:
-        return 'Это время уже прошло. Укажите другое время или день, '
-            'например: «на завтра в 10:00».';
-      case DueIssue.invalidDate:
-        return 'Такой даты нет. Укажите дату в формате ДД.ММ, например 15.11.';
-      case DueIssue.invalidTime:
-        return 'Не понял время. Укажите его в формате ЧЧ:ММ, например 18:30.';
-      case DueIssue.conflictingDays:
-        return 'В команде несколько разных дней. На какой день поставить задачу?';
-      case DueIssue.conflictingTimes:
-        return 'В команде несколько разных времён. На какое время поставить задачу?';
-      case DueIssue.ambiguousHour:
-        return 'Утра или вечера? Укажите время точнее, например «в 17:00» '
-            'или «в 5 утра».';
-    }
-  }
+  /// Запись каталога с вопросом о сроке или `null`, если со сроком всё
+  /// в порядке.
+  String? _dueClarification(DueIssue issue) => switch (issue) {
+        DueIssue.none => null,
+        DueIssue.inPast => 'task.due.inPast',
+        DueIssue.invalidDate => 'task.due.invalidDate',
+        DueIssue.invalidTime => 'task.due.invalidTime',
+        DueIssue.conflictingDays => 'task.due.conflictingDays',
+        DueIssue.conflictingTimes => 'task.due.conflictingTimes',
+        DueIssue.ambiguousHour => 'task.due.ambiguousHour',
+      };
 
-  String? _titleClarification(TitleIssue issue) {
-    switch (issue) {
-      case TitleIssue.none:
-        return null;
-      case TitleIssue.unbalancedQuotes:
-        return 'Кавычка не закрыта. Повторите команду, указав название '
-            'в парных кавычках, например «Отчёт», или без кавычек.';
-      case TitleIssue.multipleTitles:
-        return 'В команде несколько названий. Давайте по одной задаче за раз.';
-    }
-  }
+  String? _titleClarification(TitleIssue issue) => switch (issue) {
+        TitleIssue.none => null,
+        TitleIssue.unbalancedQuotes => 'task.title.unbalancedQuotes',
+        TitleIssue.multipleTitles => 'task.title.multiple',
+      };
 
   /// Задача, к которой относится перенос или завершение.
   ///
@@ -388,8 +433,14 @@ final class TasksConnector implements Connector {
     required String intent,
     required String noContextQuestion,
   }) async {
+    AssistantResponse ask(
+      String replyId, [
+      Map<String, String> values = const <String, String>{},
+    ]) =>
+        _ask(session, intent, replyId, values);
+
     final titleQuestion = _titleClarification(command.titleIssue);
-    if (titleQuestion != null) return _Target.ask(_ask(intent, titleQuestion));
+    if (titleQuestion != null) return _Target.ask(ask(titleQuestion));
 
     final name = command.title ?? command.targetQuery;
     if (name != null) {
@@ -397,18 +448,19 @@ final class TasksConnector implements Connector {
       if (exact.length == 1) return _Target.id(exact.single.id);
       if (exact.length > 1) {
         return _Target.ask(
-          _ask(
-            intent,
-            'Нашёл несколько задач «$name». Выберите нужную в списке.',
-          ),
+          ask('task.ask.duplicates', <String, String>{'name': name}),
         );
       }
       if (command.title != null) {
-        return _Target.ask(_ask(intent, 'Не нашёл активную задачу «$name».'));
+        return _Target.ask(
+          ask('task.notFound', <String, String>{'query': name}),
+        );
       }
       final hits = await _tasks.searchActive(name);
       if (hits.isEmpty) {
-        return _Target.ask(_ask(intent, 'Не нашёл активную задачу «$name».'));
+        return _Target.ask(
+          ask('task.notFound', <String, String>{'query': name}),
+        );
       }
       final best = hits.first.score;
       final close = hits
@@ -420,11 +472,7 @@ final class TasksConnector implements Connector {
         // Совпала только половина слов: «Заверши позвонить маме» при задаче
         // «Позвонить клиенту». Менять задачу по такой догадке нельзя.
         return _Target.ask(
-          _ask(
-            intent,
-            'Вы про задачу «${hit.task.title}»? Напишите её название точнее '
-            'или выберите задачу в списке.',
-          ),
+          ask('task.ask.didYouMean', <String, String>{'title': hit.task.title}),
         );
       }
       final titles = close
@@ -432,23 +480,23 @@ final class TasksConnector implements Connector {
           .map((TaskSearchHit h) => '«${h.task.title}»')
           .join(', ');
       return _Target.ask(
-        _ask(
-          intent,
-          'Под «$name» подходят несколько задач: $titles. '
-          'Уточните название или выберите задачу в списке.',
+        ask(
+          'task.ask.severalMatch',
+          <String, String>{'name': name, 'candidates': titles},
         ),
       );
     }
 
     final selected = session.selectedItemFor(id);
-    if (selected == null) return _Target.ask(_ask(intent, noContextQuestion));
+    if (selected == null) return _Target.ask(ask(noContextQuestion));
     return _Target.id(selected);
   }
 
-  String _dueDescription(Task task, AssistantSession session) {
+  /// Срок задачи словами («завтра в 10:00») или `null` без срока.
+  String? _due(Task task, AssistantSession session) {
     final due = task.dueAt;
-    if (due == null) return '';
-    return ' на ${formatDue(due, task.duePrecision, session.clock.now())}';
+    if (due == null) return null;
+    return formatDue(due, task.duePrecision, session.clock.now());
   }
 }
 

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../../replies/reply_library.dart';
 import 'rational.dart';
 
 export 'rational.dart' show Rational;
@@ -174,8 +175,15 @@ final class CalcResult {
       : Calculator.failureMessage(failure!);
 
   /// Сообщение пользователю: «2 + 2 × 2 = 6», «10 / 3 ≈ 3,333333333».
-  String get message =>
-      ok ? '$expression ${approximate ? '≈' : '='} $value' : answer;
+  String get message => ok
+      ? ReplyLibrary.builtIn.render(
+          Reply(
+            approximate ? 'calc.result.approx' : 'calc.result',
+            <String, String>{'expr': expression, 'result': value!},
+          ),
+          const ReplyVoice(),
+        )
+      : answer;
 }
 
 /// Значение при счёте: точное или приближённое.
@@ -226,24 +234,34 @@ abstract final class Calculator {
   /// Неразрывный пробел между разрядами: «2 400».
   static const String groupSeparator = ' ';
 
-  static const String malformedMessage =
-      'Не понял пример. Например: «сколько будет 15% от 2400».';
+  /// Нейтральные тексты ошибок — из каталога ответов (docs/REPLIES.md);
+  /// в разговоре навык отвечает голосом помощника.
+  static final String malformedMessage = failureMessage(CalcFailure.malformed);
 
-  static String failureMessage(CalcFailure failure) => switch (failure) {
-        CalcFailure.malformed => malformedMessage,
-        CalcFailure.divisionByZero => 'На ноль делить нельзя.',
-        CalcFailure.tooBig =>
-          'Получается слишком большое число — такое не посчитаю.',
-        CalcFailure.negativeRoot =>
-          'Квадратный корень из отрицательного числа не извлекается.',
-        CalcFailure.undefined =>
-          'Так не посчитать: отрицательное число в дробной степени '
-              'не определено.',
-        CalcFailure.tooLong =>
-          'Слишком длинный пример: не больше $maxLength символов.',
-        CalcFailure.tooDeep =>
-          'Слишком много вложенных скобок: не больше $maxDepth.',
+  /// Запись каталога ответов для ошибки.
+  static String failureReply(CalcFailure failure) => switch (failure) {
+        CalcFailure.malformed => 'calc.malformed',
+        CalcFailure.divisionByZero => 'calc.divisionByZero',
+        CalcFailure.tooBig => 'calc.tooBig',
+        CalcFailure.negativeRoot => 'calc.negativeRoot',
+        CalcFailure.undefined => 'calc.undefined',
+        CalcFailure.tooLong => 'calc.tooLong',
+        CalcFailure.tooDeep => 'calc.tooDeep',
       };
+
+  /// Факты для записи ошибки: пределы длины и вложенности.
+  static Map<String, String> failureValues(CalcFailure failure) =>
+      switch (failure) {
+        CalcFailure.tooLong => <String, String>{'max': '$maxLength'},
+        CalcFailure.tooDeep => <String, String>{'max': '$maxDepth'},
+        _ => const <String, String>{},
+      };
+
+  static String failureMessage(CalcFailure failure) =>
+      ReplyLibrary.builtIn.render(
+        Reply(failureReply(failure), failureValues(failure)),
+        const ReplyVoice(),
+      );
 
   /// Разбирает сообщение. `null` — сообщение не похоже на пример: в нём
   /// нет ни маркера, ни выражения целиком (дата, время, телефон, задача).

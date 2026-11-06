@@ -1,6 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../personas/persona.dart';
+
+export '../personas/persona.dart';
+
 /// Пользовательские настройки интерфейса.
 final class AppSettings {
   const AppSettings({
@@ -8,6 +12,8 @@ final class AppSettings {
     this.showTimestamps = true,
     this.disabledExtensions = const <String>{},
     this.enabledExtensions = const <String>{},
+    this.personas = const PersonaSettings(),
+    this.noticeDay,
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -20,8 +26,22 @@ final class AppSettings {
       showTimestamps: showTimestamps is! bool || showTimestamps,
       disabledExtensions: _ids(json['disabled_extensions']),
       enabledExtensions: _ids(json['enabled_extensions']),
+      personas: PersonaSettings.fromJson(json),
+      noticeDay: _day(json['notice_day']),
     );
   }
+
+  /// День вида `2026-11-06` или `null`.
+  static String? _day(Object? value) =>
+      value is String && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)
+          ? value
+          : null;
+
+  /// [day] в виде `2026-11-06`.
+  static String dayKey(DateTime day) =>
+      '${day.year.toString().padLeft(4, '0')}-'
+      '${day.month.toString().padLeft(2, '0')}-'
+      '${day.day.toString().padLeft(2, '0')}';
 
   /// Список id: не список — пусто, не строки и пустые строки пропускаются.
   static Set<String> _ids(Object? value) {
@@ -47,17 +67,29 @@ final class AppSettings {
   /// Явно включённые расширения из выключенных по умолчанию.
   final Set<String> enabledExtensions;
 
+  /// Помощники: дуэт или соло, кто основной, стили, «вы»/«ты», эмодзи.
+  final PersonaSettings personas;
+
+  /// Служебное: день, когда второй помощник уже написал о просроченных
+  /// задачах (`2026-11-06`). Не чаще раза в день, и смена настроек
+  /// помощников не повторяет сообщение.
+  final String? noticeDay;
+
   AppSettings copyWith({
     bool? reduceMotion,
     bool? showTimestamps,
     Set<String>? disabledExtensions,
     Set<String>? enabledExtensions,
+    PersonaSettings? personas,
+    String? noticeDay,
   }) =>
       AppSettings(
         reduceMotion: reduceMotion ?? this.reduceMotion,
         showTimestamps: showTimestamps ?? this.showTimestamps,
         disabledExtensions: disabledExtensions ?? this.disabledExtensions,
         enabledExtensions: enabledExtensions ?? this.enabledExtensions,
+        personas: personas ?? this.personas,
+        noticeDay: noticeDay ?? this.noticeDay,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -65,6 +97,8 @@ final class AppSettings {
         'show_timestamps': showTimestamps,
         'disabled_extensions': disabledExtensions.toList()..sort(),
         'enabled_extensions': enabledExtensions.toList()..sort(),
+        ...personas.toJson(),
+        if (noticeDay != null) 'notice_day': noticeDay,
       };
 }
 

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../replies/reply_library.dart';
 import 'pack.dart';
 
 /// Установленный пак и откуда он.
@@ -90,6 +91,10 @@ final class PackStore {
   /// Id навыков и подключений: пак с таким id спутал бы настройки.
   set reservedIds(Set<String> ids) => _reservedIds = Set<String>.of(ids);
 
+  /// Записи каталога ответов, против которых проверяются паки ответов:
+  /// встроенные и записи подключённых коннекторов.
+  ReplySchema? replySchema;
+
   /// Все паки: сначала встроенные, затем пользовательские, по названию.
   List<InstalledPack> get packs {
     final list = _packs.values.toList()
@@ -117,7 +122,7 @@ final class PackStore {
       loadErrors.add('Встроенные паки не загрузились: $error');
     }
     for (final source in builtIn) {
-      final result = PackFormat.parse(source);
+      final result = PackFormat.parse(source, replySchema: replySchema);
       final pack = result.pack;
       if (pack == null) {
         loadErrors.add('Встроенный пак отклонён: ${result.errors.join(' ')}');
@@ -144,7 +149,10 @@ final class PackStore {
     for (final file in files) {
       final name = p.basename(file.path);
       try {
-        final result = PackFormat.parse(await file.readAsString());
+        final result = PackFormat.parse(
+          await file.readAsString(),
+          replySchema: replySchema,
+        );
         final pack = result.pack;
         final existing = pack == null ? null : _packs[pack.id];
         if (pack == null) {
@@ -186,7 +194,7 @@ final class PackStore {
     String source, {
     bool replace = false,
   }) {
-    final result = PackFormat.parse(source);
+    final result = PackFormat.parse(source, replySchema: replySchema);
     final pack = result.pack;
     if (pack == null) {
       return Future<PackImportResult>.value(

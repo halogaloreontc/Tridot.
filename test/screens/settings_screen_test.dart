@@ -7,6 +7,7 @@ import 'package:local_assistant/app/screens/settings_screen.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/extensions/extension_registry.dart';
+import 'package:local_assistant/core/replies/reply_library.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
@@ -128,6 +129,9 @@ void main() {
       (tester) async {
     var cleared = 0;
     await tester.pumpWidget(host(onClearChat: () => cleared++));
+    // Раздел «Помощники» выше: кнопка может оказаться ниже экрана.
+    await tester.ensureVisible(find.byKey(clearKey));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(clearKey));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
@@ -146,6 +150,8 @@ void main() {
 
   testWidgets('licenses button opens the license page', (tester) async {
     await tester.pumpWidget(host());
+    await tester.ensureVisible(find.byKey(const ValueKey<String>('licenses')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey<String>('licenses')));
     await tester.pumpAndSettle();
     expect(find.byType(LicensePage), findsOneWidget);
@@ -422,6 +428,146 @@ void main() {
       await tester.pumpAndSettle();
       expect(extensions.isEnabled('my.pack'), isTrue);
       expect(tester.widget<SwitchListTile>(tile('my.pack')).value, isTrue);
+    });
+  });
+
+  group('Помощники', () {
+    Widget personasHost(
+      List<AppSettings> changes, {
+      ExtensionRegistry? extensions,
+    }) {
+      var settings = const AppSettings();
+      return StatefulBuilder(
+        builder: (context, setState) => host(
+          settings: settings,
+          extensions: extensions,
+          onChanged: (value) {
+            changes.add(value);
+            extensions?.apply(
+              ExtensionChoice(
+                disabled: value.disabledExtensions,
+                enabled: value.enabledExtensions,
+              ),
+            );
+            setState(() => settings = value);
+          },
+        ),
+      );
+    }
+
+    Future<void> tap(WidgetTester tester, String key) async {
+      final target = find.byKey(ValueKey<String>(key));
+      await tester.ensureVisible(target);
+      await tester.pumpAndSettle();
+      await tester.tap(target);
+      await tester.pumpAndSettle();
+    }
+
+    String preview(WidgetTester tester, String persona) => tester
+        .widget<Text>(find.byKey(ValueKey<String>('style-preview-$persona')))
+        .data!;
+
+    testWidgets('по умолчанию: дуэт, основной Rio, примеры стилей',
+        (tester) async {
+      await tester.pumpWidget(host());
+      expect(find.text('Помощники'), findsOneWidget);
+      ChoiceChip chip(String key) => tester.widget<ChoiceChip>(
+            find.descendant(
+              of: find.byKey(ValueKey<String>(key)),
+              matching: find.byType(ChoiceChip),
+            ),
+          );
+      expect(chip('assistant-mode-duo').selected, isTrue);
+      expect(chip('main-persona-rio').selected, isTrue);
+      expect(chip('style-rio-neutral').selected, isTrue);
+      expect(chip('style-noda-friendly').selected, isTrue);
+      expect(chip('address-vy').selected, isTrue);
+      expect(
+        preview(tester, 'rio'),
+        'Создал задачу «Купить хлеб» на завтра в 10:00.',
+      );
+      expect(preview(tester, 'noda'), contains('«Купить хлеб»'));
+      expect(preview(tester, 'noda'), contains('завтра в 10:00'));
+    });
+
+    testWidgets('переключатели сообщают настройки, пример меняется сразу',
+        (tester) async {
+      final changes = <AppSettings>[];
+      await tester.pumpWidget(personasHost(changes));
+      await tap(tester, 'style-rio-business');
+      expect(changes.last.personas.styleOf(Personas.rio), 'business');
+      expect(
+        preview(tester, 'rio'),
+        'Задача «Купить хлеб» создана, срок — завтра в 10:00.',
+      );
+      await tap(tester, 'style-noda-neutral');
+      await tap(tester, 'address-ty');
+      expect(changes.last.personas.address, ReplyAddress.informal);
+      expect(
+        preview(tester, 'noda'),
+        'Создала задачу «Купить хлеб» на завтра в 10:00.',
+      );
+      await tap(tester, 'style-noda-friendly');
+      await tap(tester, 'setting-emoji');
+      expect(changes.last.personas.emoji, isFalse);
+      expect(
+        ReplyTemplate.pictographs.hasMatch(preview(tester, 'noda')),
+        isFalse,
+      );
+      await tap(tester, 'main-persona-noda');
+      expect(changes.last.personas.mainPersona, 'noda');
+      await tap(tester, 'assistant-mode-solo');
+      expect(changes.last.personas.mode, AssistantMode.solo);
+      expect(
+        find.byKey(const ValueKey<String>('solo-persona-rio')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('main-persona-rio')),
+        findsNothing,
+      );
+      await tap(tester, 'solo-persona-noda');
+      expect(changes.last.personas.soloPersona, 'noda');
+      await tap(tester, 'jokes-normal');
+      expect(changes.last.personas.jokes, JokeFrequency.normal);
+      await tap(tester, 'jokes-off');
+      expect(changes.last.personas.jokes, JokeFrequency.off);
+      // Остальное не тронуто.
+      expect(changes.last.showTimestamps, isTrue);
+      expect(changes.last.disabledExtensions, isEmpty);
+    });
+
+    testWidgets('стиль из пака ответов — ещё одна кнопка', (tester) async {
+      final extensions = await tester.runAsync(() async {
+        final packs = PackStore.memory(
+          builtIn: <String>[
+            '{"format":"assistant-pack/1","id":"replies.sea","type":"replies",'
+                '"title":"Морской","author":"Я","language":"ru",'
+                '"version":"1.0.0","entries":{"task.created.withDue":'
+                '"Полный вперёд: «{title}», {due}!"}}',
+          ],
+        );
+        await packs.load();
+        return ExtensionRegistry(connectors: <Connector>[], packs: packs);
+      });
+      final changes = <AppSettings>[];
+      await tester.pumpWidget(personasHost(changes, extensions: extensions));
+      await tap(tester, 'style-rio-replies.sea');
+      expect(
+        preview(tester, 'rio'),
+        'Полный вперёд: «Купить хлеб», завтра в 10:00!',
+      );
+      // Пак выключили — стиль сохранён, но говорит нейтрально.
+      await tap(tester, 'extension-replies.sea');
+      expect(changes.last.personas.styleOf(Personas.rio), 'replies.sea');
+      expect(
+        find.byKey(const ValueKey<String>('style-missing-rio')),
+        findsOneWidget,
+      );
+      expect(
+        preview(tester, 'rio'),
+        'Создал задачу «Купить хлеб» на завтра в 10:00.',
+      );
     });
   });
 }

@@ -1,4 +1,5 @@
 import '../connectors/connector.dart';
+import '../replies/reply_library.dart';
 import 'extension_info.dart';
 import 'pack.dart';
 import 'pack_store.dart';
@@ -23,6 +24,8 @@ final class ExtensionRegistry {
         packs = packs ?? PackStore.memory(),
         _choice = choice {
     final ids = <String>{};
+    final replies = <String, String>{};
+    final protectedReplies = <String>{};
     for (final connector in _connectors) {
       if (!ids.add(connector.info.id)) {
         throw ArgumentError.value(
@@ -31,9 +34,30 @@ final class ExtensionRegistry {
           'Коннектор с таким id уже подключён',
         );
       }
+      for (final MapEntry(:key, :value) in connector.info.replies.entries) {
+        if (replies.containsKey(key)) {
+          throw ArgumentError.value(
+            key,
+            'connectors',
+            'Запись каталога ответов уже есть у другого коннектора',
+          );
+        }
+        replies[key] = value;
+      }
+      protectedReplies.addAll(connector.info.protectedReplies);
     }
     this.packs.reservedIds = ids;
+    this.replies = ReplyLibrary.builtIn.withEntries(
+      replies,
+      protectedIds: protectedReplies,
+    );
+    // Паки ответов проверяются и против записей коннекторов.
+    this.packs.replySchema = this.replies.schema;
   }
+
+  /// Встроенные каталоги ответов вместе с записями коннекторов — без
+  /// стилей из паков.
+  late final ReplyLibrary replies;
 
   final List<Connector> _connectors;
 
@@ -82,6 +106,28 @@ final class ExtensionRegistry {
           ))
             installed.pack.id,
       };
+
+  /// Стили из включённых паков ответов (`type: replies`).
+  List<ReplyCatalog> get replyStyles => <ReplyCatalog>[
+        for (final installed in packs.packs)
+          if (installed.pack.type == PackFormat.repliesType &&
+              _choice.isEnabled(
+                ExtensionInfo.fromPack(
+                  installed.pack,
+                  builtIn: installed.builtIn,
+                ),
+              ))
+            _replyCatalogs[installed.pack] ??=
+                installed.pack.replyCatalog(builtIn: installed.builtIn),
+      ];
+
+  /// Разобранные стили паков: пак не меняется, поэтому шаблоны
+  /// разбираются один раз, а не при каждой перерисовке настроек.
+  static final Expando<ReplyCatalog> _replyCatalogs = Expando<ReplyCatalog>();
+
+  /// Каталоги ответов со стилями включённых паков: из них говорит
+  /// помощник и выбираются стили в настройках.
+  ReplyLibrary get replyLibrary => replies.withStyles(replyStyles);
 
   /// Записи включённых паков: для будущих навыков (беседа, шутки).
   List<PackEntry> packEntries({

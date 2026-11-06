@@ -1,4 +1,5 @@
 import '../../connectors/connector.dart';
+import '../../connectors/social_prefix.dart';
 import 'calculator.dart';
 
 /// Навык «Калькулятор»: считает примеры из сообщения.
@@ -6,7 +7,7 @@ import 'calculator.dart';
 /// Свой разбор выражений и словесных форм ([Calculator]), точная
 /// рациональная арифметика, никакого выполнения кода. Без сети и без
 /// изменения данных.
-final class CalculatorConnector implements Connector {
+final class CalculatorConnector implements Connector, ConnectorHealth {
   const CalculatorConnector();
 
   static const String id = 'calc';
@@ -39,9 +40,27 @@ final class CalculatorConnector implements Connector {
         kind: ExtensionKind.skill,
       );
 
+  /// Считает без сети и хранилищ: всегда в порядке.
+  @override
+  Future<HealthReport> health() async => const HealthReport.ok();
+
+  /// Пример в сообщении: целиком или после вступления — «привет, сколько
+  /// будет 2+2», «спасибо, 3*3» ([SocialPrefix]). `null` — примера нет.
+  static CalcRecognition? recognize(Utterance utterance) {
+    final whole = Calculator.recognize(utterance.original);
+    if (whole?.expression != null) return whole;
+    final rest = SocialPrefix.rest(utterance);
+    final withoutPrefix = rest == null ? null : Calculator.recognize(rest);
+    if (withoutPrefix != null &&
+        (whole == null || withoutPrefix.expression != null)) {
+      return withoutPrefix;
+    }
+    return whole;
+  }
+
   @override
   ConnectorMatch? match(Utterance utterance) {
-    final recognition = Calculator.recognize(utterance.original);
+    final recognition = recognize(utterance);
     if (recognition == null) return null;
     final parsed = recognition.expression != null;
     return ConnectorMatch(
@@ -64,8 +83,14 @@ final class CalculatorConnector implements Connector {
   ) async {
     final recognition = match.payload! as CalcRecognition;
     final result = Calculator.evaluateRecognition(recognition);
-    return AssistantResponse(
-      message: result.message,
+    final failure = result.failure;
+    return session.reply(
+      failure == null
+          ? (result.approximate ? 'calc.result.approx' : 'calc.result')
+          : Calculator.failureReply(failure),
+      values: failure == null
+          ? <String, String>{'expr': result.expression, 'result': result.value!}
+          : Calculator.failureValues(failure),
       intent: commandId,
       status: switch (result.failure) {
         null => AssistantStatus.completed,

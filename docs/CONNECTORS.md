@@ -1,6 +1,6 @@
 # Коннекторы
 
-Коннектор — подключаемый набор команд помощника. Коннекторы бывают двух видов (`ConnectorInfo.kind`, `docs/EXTENSIONS.md`): **навыки** — своя логика без сети (встроенные `tasks` — задачи, `calc` — калькулятор), и **подключения** к внешним приложениям. Следующие будут для внешних приложений: склад (halowarekeep), expeora, сторонние программы. Этот документ — точная инструкция, как написать коннектор, проверить его и подключить. Решение о коннекторах и правила безопасности — ADR-004 в `docs/DECISIONS.md`.
+Коннектор — подключаемый набор команд помощника. Коннекторы бывают двух видов (`ConnectorInfo.kind`, `docs/EXTENSIONS.md`): **навыки** — своя логика без сети (встроенные `tasks` — задачи, `calc` — калькулятор, `talk` — беседа), и **подключения** к внешним приложениям. Следующие будут для внешних приложений: склад (halowarekeep), expeora, сторонние программы. Этот документ — точная инструкция, как написать коннектор, проверить его и подключить. Решение о коннекторах и правила безопасности — ADR-004 в `docs/DECISIONS.md`.
 
 Языковой модели в приложении нет (ADR-001): коннектор распознаёт фразы правилами, на основе общего предварительного разбора `Utterance`.
 
@@ -13,6 +13,7 @@
   с ConfirmationAnswer (см. «Подтверждение изменяющих действий»), конец
 → каждый коннектор: match(utterance) → ConnectorMatch? (без ввода-вывода)
 → «да, …»/«нет, …» с пояснением и без явных совпадений: тоже ответ владельцу
+→ совпадения на крайний случай (fallback, беседа) отбрасываются, если есть любые другие
 → совпадения без маркера (implicit) отбрасываются, если есть явные
 → выбор самого уверенного совпадения (или уточнение, если спорно)
 → run(match, session) победителя (здесь можно ходить в сеть)
@@ -23,7 +24,7 @@
 
 | Файл | Что в нём |
 | --- | --- |
-| `connector.dart` | `Connector`, `ConnectorInfo`, `ConnectorAccess`, `ConnectorMatch`, `AssistantSession`, `PendingConfirmation`, `ConfirmationAnswer`, `ConfirmationReply`; реэкспортирует `Utterance`, `AssistantResponse`, `AssistantStatus` |
+| `connector.dart` | `Connector`, `ConnectorInfo`, `ConnectorAccess`, `ConnectorMatch`, `AssistantSession`, `PendingConfirmation`, `ConfirmationAnswer`, `ConfirmationReply`, `ConnectorHealth`, `HealthReport`, `HealthStatus`; реэкспортирует `Utterance`, `AssistantResponse`, `AssistantStatus` |
 | `utterance.dart` | `Utterance` — общий разбор сообщения: слова, кавычки, метки, срок, коды |
 | `due_parser.dart` | `DueParser`, `DueParseResult`, `DueIssue`, `CharSpan` — сроки с фрагментами текста |
 | `verb_forms.dart` | `VerbForms` — инфинитив и прошедшее время по окончаниям, основа глагола; общие правила для сроков, команд без маркера и поиска задач |
@@ -31,7 +32,7 @@
 | `secret_store.dart` | `SecretStore`, `InMemorySecretStore` — секреты не в открытых файлах |
 | `tasks_connector.dart` | `TasksConnector` — встроенные задачи, образец реального коннектора |
 
-Навык «Калькулятор» — `lib/core/skills/calculator/` (`CalculatorConnector`). Маршрутизатор — `lib/core/scenario/assistant_controller.dart` (`AssistantController`); он спрашивает только включённые коннекторы из `ExtensionRegistry` (`lib/core/extensions/`, `docs/EXTENSIONS.md`).
+Навык «Калькулятор» — `lib/core/skills/calculator/` (`CalculatorConnector`), навык «Беседа» — `lib/core/skills/talk/` (`TalkConnector`). Маршрутизатор — `lib/core/scenario/assistant_controller.dart` (`AssistantController`); он спрашивает только включённые коннекторы из `ExtensionRegistry` (`lib/core/extensions/`, `docs/EXTENSIONS.md`).
 
 ## Интерфейс
 
@@ -57,6 +58,8 @@ abstract interface class Connector {
 | `version`, `author` | для пользователя в настройках; по умолчанию `1.0.0` и «Личный помощник» |
 | `defaultEnabled` | включён, пока пользователь не выключил (по умолчанию `true`); новый коннектор с `true` после обновления появляется включённым |
 | `required` | нельзя выключить (по умолчанию `false`; `true` только у `tasks`) |
+| `replies` | свои записи каталога ответов: id → нейтральный текст с разметкой (`docs/REPLIES.md`). Id не совпадает со встроенной записью и записями других коннекторов |
+| `protectedReplies` | какие из `replies` — предупреждения и вопросы-подтверждения («Склад не принял токен», «Списать 3 шт.?»): паки ответов их не переопределяют |
 
 ### `match(Utterance utterance)`
 
@@ -69,12 +72,22 @@ abstract interface class Connector {
 
 - Здесь допустимы ввод-вывод и сеть (если `requiresNetwork: true`).
 - Исключение превращается маршрутизатором в ответ `failed` с текстом «Не удалось выполнить действие: …» и `intent = match.commandId`. Ожидаемые ситуации (нет токена, 404, 401) лучше разбирать самому и отвечать понятным текстом.
-- Ответ — `AssistantResponse(message, intent, status)`:
+- Ответ — `AssistantResponse(message, intent, status)`. Текст для пользователя берите из каталога ответов: `session.reply('warehouse.located', values: {…}, intent: …, status: …)` — факты передаются значениями, слова и стиль помощника (Rio или Noda, «вы»/«ты», эмодзи) добавляет каталог (`docs/REPLIES.md`). Свои записи объявляются в `ConnectorInfo.replies`. Статусы:
   - `completed` — ответ получен или действие выполнено (в том числе «товар не найден»);
   - `needsClarification` — нужен ответ пользователя, ничего не сделано;
   - `noAction` — действие невозможно, ничего не сделано (коннектор не настроен);
   - `failed` — ошибка.
 - `intent` — `commandId` команды: `warehouse.locate`.
+
+### Тексты ответов: каталог
+
+Коннектор не пишет текст ответа сам — он передаёт факты, а слова берутся из каталога ответов (`docs/REPLIES.md`):
+
+1. Объявите записи в `ConnectorInfo.replies`: id латиницей через точку (`warehouse.located`), нейтральный текст с подстановками `{code}` и разметкой рода `{м:нашёл|ж:нашла}` и обращения `{вы:Подключите|ты:Подключи}`. Эмодзи — только в `{э:…}` (нейтральный текст обходится без них).
+2. В `run` отвечайте `session.reply(id, values: {...}, intent:, status:)`; часть ответа — `session.say(id, values)`. Значения — готовые строки: числа, даты (`formatDue`), названия в «».
+3. Уточнение — вопрос со «?»: каталог проверяет, что во всех стилях и паках ответов он остаётся вопросом, а каждый факт не теряется ни в одном роде и обращении. Ошибка разметки — исключение при создании `ExtensionRegistry`, её ловит первый же тест.
+4. Не склеивайте ответ из кусков с условиями в коде, если можно завести отдельную запись: `warehouse.notFound` и `warehouse.located` лучше, чем один текст с «не».
+5. Остальные стили говорят записи коннектора нейтральным текстом; свои варианты можно дать паком ответов (`type: replies`) — кроме записей из `protectedReplies`: предупреждения и вопросы-подтверждения пак не переписывает («Готово!» вместо «Склад не принял токен» не пройдёт проверку).
 
 ### `AssistantSession`
 
@@ -83,6 +96,9 @@ abstract interface class Connector {
 | Член | Значение |
 | --- | --- |
 | `clock` | источник времени; не вызывайте `DateTime.now()` |
+| `speaker`, `personas`, `voice` | кто отвечает на текущее сообщение (Rio или Noda), настройки помощников и голос на начало сообщения; ставит маршрутизатор |
+| `extensions` | реестр расширений: включённые коннекторы и паки (так беседа узнаёт, что умеет помощник и какие шутки включены) |
+| `reply(id, values:, intent:, status:, task:)`, `say(id, values)` | ответ (или текст) из каталога ответов голосом текущего помощника; голос (`voice`) ставит маршрутизатор в начале сообщения |
 | `select(connectorId, itemId)` | запомнить выбранный объект («её», «его») |
 | `selectedItemFor(connectorId)` | выбранный объект **этого** коннектора или `null` |
 | `forget(connectorId, itemId)` | снять выбор, если выбран этот объект |
@@ -132,6 +148,8 @@ abstract interface class Connector {
 
 Встроенный `tasks`: создание и список — 0.9, перенос — 0.85, завершение — 0.8. Команды без маркера ниже: создание по инфинитиву («купить хлеб») — 0.6, со сроком («через 3 дня сдать отчёт») — 0.75; сообщение о сделанном без маркера («я купил хлеб») — 0.6. Такие совпадения помечены `ConnectorMatch(implicit: true)`: маршрутизатор отбрасывает их, если хоть один коннектор вернул явное совпадение, даже менее уверенное. Поэтому «узнать, где лежит 64115» (задачи угадали инфинитив, склад нашёл свой вопрос с 0.6) уходит складу без уточнения. Ставьте `implicit: true`, если намерение угадано только по форме фразы, без слова-команды.
 
+`ConnectorMatch(fallback: true)` — совпадение на крайний случай: маршрутизатор отбрасывает его, если откликнулся **любой** другой коннектор, даже без маркера. Так устроена беседа (`talk`, уверенность 0.6): «привет» — ей, «привет, добавь задачу купить хлеб» и «пока не забыл, купить хлеб» — задачам. Ставьте `fallback: true` коннектору, который отвечает на короткие реплики целиком и не должен спорить с командами.
+
 ## Правила уточнений
 
 1. **Маршрутизатор** спрашивает «Не понял, к чему относится команда: «Задачи» или «Склад»?», если у двух **разных** коннекторов уверенность не ниже 0.5 (`AssistantController.ambiguityFloor`) и разница не больше 0.15 (`ambiguityMargin`). Ничего не выполняется. Поэтому не завышайте уверенность: 0.9 на любую фразу с числом создаст спор с задачами.
@@ -150,10 +168,52 @@ abstract interface class Connector {
    - ответ с пояснением — «да» или «нет» первым словом и дальше что угодно («да, купил хлеб», «нет, не купил», `ConfirmationReply.leading`) — тоже ответ, но только если ни один коннектор не нашёл в сообщении явной команды. «Нет, добавь задачу молоко» — новая команда: задачи вернули явное совпадение;
    - если ответ распознан, маршрутизатор **до обычного разбора** вызывает `run` коннектора-владельца с `ConnectorMatch(commandId: pending.commandId, confidence: 1, payload: ConfirmationAnswer(pending, reply))`. `match` других коннекторов не спрашивается: «да» не уйдёт чужому коннектору.
 3. **Выполнение.** `run` различает ответ по типу `payload`: `ConfirmationAnswer` → при `confirmed` выполнить действие (проверив, что объект ещё существует), иначе ответить «Хорошо, не …» и ничего не делать.
-4. **Срок жизни — одно сообщение.** Любое другое сообщение («нет, добавь задачу …», вопрос «да?», новая команда, «кстати») снимает ожидание и разбирается как обычно; «да» после него — уже обычная фраза. Новый вопрос заменяет прежний.
+4. **Срок жизни — одно сообщение.** Любое другое сообщение («нет, добавь задачу …», вопрос «да?», новая команда, «кстати») снимает ожидание и разбирается как обычно; «да» после него — уже обычная фраза. Новый вопрос заменяет прежний. Исключение — отклик, похожий на согласие («хорошо», «ладно», «спасибо», совпадение с `acknowledgement: true`): маршрутизатор отвечает «Пока ничего не сделал. Ответьте, пожалуйста: «да» или «нет»?» (`common.confirm.unclear`) и оставляет ожидание ещё на одно сообщение. Коннектор, который отвечает на такие короткие реплики, ставит своему совпадению `acknowledgement: true`.
 5. Вопрос и отказ не меняют выбранный объект (`select`).
 
 Встроенные задачи — собственные данные приложения: явные команды («Заверши отчёт») выполняются сразу. Тем же механизмом задачи подтверждают завершение по сообщению о сделанном: «я купил хлеб» → «Отметить «Купить хлеб» выполненной?» → «да». Код — `TasksConnector._askToComplete` и `_answer`, тесты — `test/assistant_controller_test.dart` (группа «завершение по сообщению о сделанном») и `test/connectors/router_test.dart`.
+
+## Проверка здоровья
+
+«Как дела?» (навык «Беседа») отвечает из настоящего состояния: задачи и здоровье каждого **включённого** коннектора. Проверку даёт необязательный интерфейс `ConnectorHealth`:
+
+```dart
+final class WarehouseConnector implements Connector, ConnectorHealth {
+  @override
+  Future<HealthReport> health() async {
+    final token = await _secrets.read(tokenKey);
+    if (token == null) {
+      return const HealthReport(HealthStatus.down, detail: 'склад не подключён');
+    }
+    if (_lastFailure case final DateTime since) {
+      return HealthReport(HealthStatus.degraded, detail: 'сервер отвечает с ошибками', since: since);
+    }
+    return const HealthReport.ok();
+  }
+}
+```
+
+| Поле `HealthReport` | Значение |
+| --- | --- |
+| `status` | `ok` — всё работает; `degraded` — с перебоями (медленно, часть данных недоступна); `down` — не работает (нет связи, вход не принят) |
+| `detail` | что не так, по-русски, для пользователя: «нет связи с сервером склада». Без секретов и технических кодов |
+| `since` | с какого момента такое состояние: начало сбоя или время последнего успеха; `null` — неизвестно |
+
+- Проверка ничего не меняет и быстрая: лучше вернуть запомненное состояние последних запросов (связь, вход, время последнего успеха), чем делать новый тяжёлый запрос. Беседа ждёт не дольше `ConnectorHealth.timeout` (3 с): не ответил — «не ответил на проверку вовремя» (`degraded`), исключение — «проверка не удалась: …» (`down`).
+- Коннектор без `ConnectorHealth` проверить нельзя: «Как дела?» не говорит о нём «все подключения работают», а называет его — «Навыки и подключения с проверкой работают. Проверить не могу: «Пример склада».» (`talk.status.okUnchecked`). Встроенные `tasks` (читаются ли задачи), `calc` и `talk` всегда отвечают `ok`, если ничего не сломано.
+- Всё хорошо — «У меня всё в порядке: все навыки и подключения работают.» и число активных и просроченных задач. Есть проблема — «Не всё в порядке: «Склад» не работает: нет связи с сервером (с 9:05). Передать жалобу администратору?». Ответ «да» сейчас честно говорит, что передать жалобу пока нельзя: это появится вместе с поддержкой на сервере коннектора; «нет» — «Хорошо, не передаю.». Никаких сетевых запросов.
+
+### Жалобы: что должен уметь сервер
+
+Жалоба на сбой отправляется **серверу приложения коннектора** (у halowarekeep — новое действие «принять жалобу»), а не хранится в помощнике: закрытое приложение не должно терять жалобу, а отсчёт времени должен идти, даже когда телефон выключен. Требования к серверу:
+
+1. **Принять жалобу** — `POST` с телом: коннектор, состояние и пояснение из `HealthReport`, `since`, время жалобы, версия помощника, текст пользователя (если есть). Без секретов и личных данных сверх того, что пользователь сам написал. Ответ — id жалобы; повторная отправка той же жалобы (тот же ключ идемпотентности) не создаёт вторую.
+2. **Доставить редакторам** приложения сразу после приёма (уведомление, очередь, почта — как принято у приложения).
+3. **Эскалировать администратору**, если за 3–5 часов никто из редакторов не ответил. Срок — настройка коннектора на сервере. Отсчёт и эскалация — только на сервере.
+4. **Статус жалобы** по id (`принята`, `в работе`, `передана администратору`, `закрыта`) — чтобы помощник мог ответить на «что с моей жалобой?».
+5. Права — текущего пользователя, как у остальных действий коннектора; жалоба — изменяющее действие, поэтому помощник отправит её только после «да» (ADR-004).
+
+Пока сервер этого не умеет, коннектор не отправляет ничего, а беседа отвечает на «да» записью `talk.complaint.later`.
 
 ## Сеть и секреты
 
@@ -178,7 +238,7 @@ abstract interface class Connector {
 1. Придумайте `id`, `title`, 3–5 примеров фраз и `commandId` для каждой команды (`warehouse.locate`).
 2. Создайте файл `lib/core/connectors/<id>_connector.dart` с классом, реализующим `Connector`.
 3. Напишите `match`: признаки фразы из `Utterance` (`codes`, `hasAnyWord`, `due`, `quotedTitles`), уверенность по шкале, `payload`.
-4. Напишите `run`: секреты из `SecretStore`, запрос через `HttpTransport`, разбор ответа, понятный текст для каждого исхода.
+4. Напишите `run`: секреты из `SecretStore`, запрос через `HttpTransport`, разбор ответа, понятный текст для каждого исхода — записью каталога (`ConnectorInfo.replies` и `session.reply`).
 5. Тесты с подделками (`test/connectors/`): каждый пример из `info.examples` распознаётся; чужие фразы (задачи, фразы с датами) — `null`; все исходы `run`; без секрета нет запросов.
 6. Фразы — в корпус (`test/corpus/connectors.jsonl`, см. ниже), фабрику коннектора — в `_connectorFactories` в `test/scenario_corpus_test.dart`.
 7. Подключите в `lib/main.dart`.
@@ -247,6 +307,20 @@ final class ExampleWarehouseConnector implements Connector {
         ],
         requiresNetwork: true,
         access: ConnectorAccess.readOnly,
+        // Тексты ответов — записи каталога (docs/REPLIES.md): нейтральный
+        // текст с разметкой рода {м:…|ж:…} и обращения {вы:…|ты:…}.
+        // Факты (код, ячейка, остаток) приходят подстановками.
+        replies: <String, String>{
+          'warehouse.ask.code': 'Какой артикул найти: {codes}?',
+          'warehouse.notConnected':
+              'Склад не подключён: токен склада не задан.',
+          'warehouse.notFound': 'Артикул {code} на складе не найден.',
+          'warehouse.badToken':
+              'Склад не принял токен. {вы:Подключите|ты:Подключи} склад заново.',
+          'warehouse.httpError': 'Склад ответил ошибкой {status}.',
+          'warehouse.located':
+              'Артикул {code} лежит в ячейке {cell}, остаток {quantity} шт.',
+        },
       );
 
   @override
@@ -277,8 +351,9 @@ final class ExampleWarehouseConnector implements Connector {
   ) async {
     final request = match.payload! as LocateRequest;
     if (request.codes.length > 1) {
-      return AssistantResponse(
-        message: 'Какой артикул найти: ${request.codes.join(' или ')}?',
+      return session.reply(
+        'warehouse.ask.code',
+        values: <String, String>{'codes': request.codes.join(' или ')},
         intent: match.commandId,
         status: AssistantStatus.needsClarification,
       );
@@ -286,8 +361,8 @@ final class ExampleWarehouseConnector implements Connector {
     final code = request.codes.single;
     final token = await _secrets.read(tokenKey);
     if (token == null) {
-      return AssistantResponse(
-        message: 'Склад не подключён: токен склада не задан.',
+      return session.reply(
+        'warehouse.notConnected',
         intent: match.commandId,
         status: AssistantStatus.noAction,
       );
@@ -303,22 +378,24 @@ final class ExampleWarehouseConnector implements Connector {
       ),
     );
     if (response.statusCode == 404) {
-      return AssistantResponse(
-        message: 'Артикул $code на складе не найден.',
+      return session.reply(
+        'warehouse.notFound',
+        values: <String, String>{'code': code},
         intent: match.commandId,
         status: AssistantStatus.completed,
       );
     }
     if (response.statusCode == 401 || response.statusCode == 403) {
-      return AssistantResponse(
-        message: 'Склад не принял токен. Подключите склад заново.',
+      return session.reply(
+        'warehouse.badToken',
         intent: match.commandId,
         status: AssistantStatus.failed,
       );
     }
     if (!response.isSuccess) {
-      return AssistantResponse(
-        message: 'Склад ответил ошибкой ${response.statusCode}.',
+      return session.reply(
+        'warehouse.httpError',
+        values: <String, String>{'status': '${response.statusCode}'},
         intent: match.commandId,
         status: AssistantStatus.failed,
       );
@@ -327,8 +404,13 @@ final class ExampleWarehouseConnector implements Connector {
     final json = jsonDecode(response.body) as Map<String, Object?>;
     final cell = json['cell'] as String;
     final quantity = json['quantity'] as int;
-    return AssistantResponse(
-      message: 'Артикул $code лежит в ячейке $cell, остаток $quantity шт.',
+    return session.reply(
+      'warehouse.located',
+      values: <String, String>{
+        'code': code,
+        'cell': cell,
+        'quantity': '$quantity',
+      },
       intent: match.commandId,
       status: AssistantStatus.completed,
     );
@@ -341,6 +423,7 @@ final class ExampleWarehouseConnector implements Connector {
 - `match` смотрит только на `utterance.codes` и слова целиком. Код «64115» уже отделён от дат: «Где лежит 15.11» не совпадёт, потому что кодов нет.
 - Уверенность 0.9 только если фраза целиком о складе (начинается с «где» или с кода). В «Добавь задачу проверить, где лежит 64115» складу достаётся 0.6, задачам 0.9 — разница больше 0.15, побеждают задачи без уточнения.
 - `run` сначала проверяет многозначность и токен — до сети.
+- Тексты — записи каталога в `info.replies`; `run` передаёт только факты (`code`, `cell`, `quantity`). Rio скажет «не нашёл», Noda — «не нашла», в дружеском или деловом стиле — своими словами, но с теми же фактами.
 - Неожиданный ответ (не JSON) бросает исключение, и маршрутизатор отвечает `failed`; помощник не падает.
 
 ### Тест с подделками
@@ -430,6 +513,8 @@ final assistant = AssistantController(extensions: extensions, clock: clock);
 ## Чек-лист перед подключением
 
 - [ ] `id` уникален, `title` понятен пользователю, `examples` проверены тестом.
+- [ ] Если у коннектора есть связь, вход или внешнее состояние — `ConnectorHealth` с понятным `detail` и `since` (раздел «Проверка здоровья»).
+- [ ] Тексты ответов — записи `ConnectorInfo.replies` (нейтральный текст с разметкой рода и обращения), `run` отвечает через `session.reply`.
 - [ ] `kind` указан (`skill` — без сети, `connector` — внешнее приложение), `version` и `author` заполнены; `defaultEnabled` обдуман: по умолчанию включается минимум (ADR-005).
 - [ ] `match` без ввода-вывода; чужие фразы (задачи, даты, вопросы без кода) дают `null`.
 - [ ] Уверенность по шкале; фразы задач с теми же словами не дают спора (проверено корпусом).

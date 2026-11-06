@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../replies/reply_library.dart';
+
 /// Для кого запись пака: для любого помощника, только Rio или только Noda.
 enum PackPersona {
   any,
@@ -60,6 +62,7 @@ final class Pack {
     required this.entries,
     this.language = 'ru',
     this.description = '',
+    this.replies = const <String, List<String>>{},
   });
 
   final String id;
@@ -71,7 +74,27 @@ final class Pack {
   final String language;
   final String version;
   final String description;
+
+  /// Записи паков шуток, каламбуров и фраз. У пака ответов пусто.
   final List<PackEntry> entries;
+
+  /// Пак ответов (`type: replies`): варианты фраз по id записи каталога.
+  final Map<String, List<String>> replies;
+
+  /// Стиль общения из пака ответов: id стиля — id пака.
+  ReplyCatalog replyCatalog({bool builtIn = false}) => ReplyCatalog(
+        style: id,
+        title: title,
+        description: description,
+        builtIn: builtIn,
+        entries: <String, List<ReplyTemplate>>{
+          // Пак уже проверен при разборе: шаблоны разбираются без ошибок.
+          for (final MapEntry(:key, :value) in replies.entries)
+            key: <ReplyTemplate>[
+              for (final text in value) ReplyTemplate.parse(text),
+            ],
+        },
+      );
 
   Map<String, Object?> toJson() => <String, Object?>{
         'format': PackFormat.format,
@@ -82,9 +105,14 @@ final class Pack {
         'language': language,
         'version': version,
         if (description.isNotEmpty) 'description': description,
-        'entries': <Map<String, Object?>>[
-          for (final entry in entries) entry.toJson(),
-        ],
+        'entries': type == PackFormat.repliesType
+            ? <String, Object?>{
+                for (final MapEntry(:key, :value) in replies.entries)
+                  key: value.length == 1 ? value.single : value,
+              }
+            : <Map<String, Object?>>[
+                for (final entry in entries) entry.toJson(),
+              ],
       };
 
   /// Компактный JSON: так пак на диске не больше вставленного текста и
@@ -111,7 +139,16 @@ abstract final class PackFormat {
 
   /// Известные виды паков. Новый вид добавляется сюда вместе с навыком,
   /// который им пользуется.
-  static const Set<String> types = <String>{'jokes', 'puns', 'phrases'};
+  static const Set<String> types = <String>{
+    'jokes',
+    'puns',
+    'phrases',
+    repliesType,
+  };
+
+  /// Пак ответов: свой стиль общения (docs/REPLIES.md). `entries` —
+  /// объект {id записи каталога: вариант или список из 1–3 вариантов}.
+  static const String repliesType = 'replies';
 
   /// Пока только русский.
   static const Set<String> languages = <String>{'ru'};
@@ -161,7 +198,11 @@ abstract final class PackFormat {
 
   /// Разбирает и проверяет пак. Ничего не выполняет: текст записей
   /// остаётся текстом.
-  static PackParseResult parse(String input) {
+  ///
+  /// Пак ответов проверяется против [replySchema] (по умолчанию —
+  /// встроенный каталог): только известные записи и подстановки, разметка
+  /// рода, обращения и эмодзи без ошибок.
+  static PackParseResult parse(String input, {ReplySchema? replySchema}) {
     final errors = <String>[];
     // Метка порядка байтов из редакторов Windows — не часть JSON.
     final source = input.startsWith('\uFEFF') ? input.substring(1) : input;
@@ -268,9 +309,19 @@ abstract final class PackFormat {
     }
 
     final entries = <PackEntry>[];
+    var replies = const <String, List<String>>{};
     final rawEntries = json['entries'];
+    if (type == repliesType && id != null && ReplyStyles.builtIn.contains(id)) {
+      errors.add('Id «$id» занят встроенным стилем: выберите другой.');
+    }
     if (rawEntries == null) {
       errors.add('Нет поля «entries» (записи).');
+    } else if (type == repliesType) {
+      replies = _replies(
+        rawEntries,
+        replySchema ?? ReplyLibrary.builtIn.schema,
+        errors,
+      );
     } else if (rawEntries is! List<Object?>) {
       errors.add('Поле «entries» должно быть списком.');
     } else if (rawEntries.isEmpty) {
@@ -298,9 +349,45 @@ abstract final class PackFormat {
         version: version!,
         description: description,
         entries: List<PackEntry>.unmodifiable(entries),
+        replies: replies,
       ),
       const <String>[],
     );
+  }
+
+  /// Записи пака ответов: объект {id: варианты}. Проверяются все.
+  static Map<String, List<String>> _replies(
+    Object rawEntries,
+    ReplySchema schema,
+    List<String> errors,
+  ) {
+    if (rawEntries is! Map<String, Object?>) {
+      errors.add(
+        'У пака ответов «entries» — объект {id записи: варианты}.',
+      );
+      return const <String, List<String>>{};
+    }
+    if (rawEntries.isEmpty) {
+      errors.add('В паке нет ни одной записи.');
+      return const <String, List<String>>{};
+    }
+    if (rawEntries.length > maxEntries) {
+      errors.add('Записей больше $maxEntries.');
+      return const <String, List<String>>{};
+    }
+    final parsed = ReplyFormat.parseEntries(
+      rawEntries,
+      errors,
+      schema: schema,
+      pack: true,
+    );
+    if (parsed == null) return const <String, List<String>>{};
+    return Map<String, List<String>>.unmodifiable(<String, List<String>>{
+      for (final MapEntry(:key, :value) in parsed.entries)
+        key: List<String>.unmodifiable(
+          value.map((ReplyTemplate t) => t.source),
+        ),
+    });
   }
 
   static List<String> _trim(List<String> errors) {

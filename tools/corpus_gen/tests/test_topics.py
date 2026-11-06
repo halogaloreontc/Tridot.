@@ -386,3 +386,28 @@ def test_builtin_calc_topics_load() -> None:
     assert not calc.title_intents and not calc.due_intents
     assert "«8-800-555-35-35»" in calc.label_rules and calc.generation_rules
     assert "calc:evaluate" in load_catalog().refs()
+
+
+def test_builtin_talk_topics_load() -> None:
+    catalog = load_catalog()
+    talk = catalog.connector("talk")
+    assert talk.intents[-1] == "unknown"
+    assert set(talk.intents) == {
+        "talk.greet",
+        "talk.bye",
+        "talk.thanks",
+        "talk.howAreYou",
+        "talk.whoAreYou",
+        "talk.capabilities",
+        "talk.joke",
+        "talk.reaction",
+        "talk.rude",
+        "talk.setting",
+        "unknown",
+    }
+    assert set(talk.topics) == {"social", "jokes", "style", "tricky"}
+    assert talk.topics["jokes"].intents == {"talk.joke"}
+    assert talk.topics["tricky"].intents is None
+    assert not talk.title_intents and not talk.due_intents
+    assert "пока не забыл" in talk.label_rules and talk.generation_rules
+    assert "talk:style" in catalog.refs()

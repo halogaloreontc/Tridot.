@@ -20,6 +20,7 @@ import 'screens/storage_screen.dart';
 import 'widgets/command_composer.dart';
 import 'widgets/document_view.dart';
 import 'widgets/history_rail.dart';
+import 'widgets/personas_section.dart';
 import 'widgets/status_cube.dart';
 import 'widgets/task_tile.dart';
 
@@ -86,6 +87,27 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late final SettingsStore _settingsStore =
       widget.settingsStore ?? InMemorySettingsStore();
   late List<_ChatMessage> _messages = <_ChatMessage>[_welcome()];
+
+  /// В чате только приветствие, показанное до загрузки настроек: его
+  /// можно произнести голосом основного помощника из настроек.
+  bool _pristineWelcome = true;
+
+  /// Настройки загружены: до этого помощник не пишет первым.
+  bool _settingsLoaded = false;
+
+  /// Загрузка настроек: сообщение, отправленное раньше, ждёт её, чтобы
+  /// ответить голосом из настроек, а не голосом по умолчанию.
+  late final Future<void> _settingsReady;
+
+  /// День, за который уже проверены просроченные задачи.
+  String? _noticeChecked;
+
+  /// Кому писать в дуэте, выбор в поле ввода: `null` — основному. Живёт,
+  /// пока открыт этот чат, и не сохраняется.
+  String? _addressee;
+
+  /// «Команда обрабатывается…» от помощника, который сейчас отвечает.
+  _ChatMessage? _working;
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
   final List<String> _commands = <String>[];
   int? _commandCursor;
@@ -137,7 +159,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ]) {
       controller.addListener(_onDocumentEdited);
     }
-    _loadSettings();
+    _settingsReady = _loadSettings();
     _refresh();
   }
 
@@ -175,12 +197,28 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (state == AppLifecycleState.paused) _saveDocument();
   }
 
-  _ChatMessage _welcome() => _ChatMessage(
-        text: 'Я готов к работе. Создайте задачу, например: '
-            '${AssistantController.exampleCommand}',
+  /// Приветствие основного помощника.
+  _ChatMessage _welcome() =>
+      _answer(widget.assistant.welcome(), withStatus: false);
+
+  /// Ответ помощника в историю: готовый текст и автор. Смена стиля или
+  /// помощника потом его не переписывает.
+  /// [withStatus] — показывать ли «Уточните»/«Ошибка» по статусу ответа
+  /// (у приветствия и «обрабатывается…» статуса нет).
+  _ChatMessage _answer(
+    AssistantResponse response, {
+    bool withStatus = true,
+  }) =>
+      _ChatMessage(
+        text: response.message,
         fromUser: false,
         timestamp: _now,
+        status: withStatus ? response.status : null,
+        taskId: response.task?.id,
+        personaId: response.personaId,
       );
+
+  bool get _duo => _settings.personas.mode == AssistantMode.duo;
 
   // ------------------------------------------------------------- данные
 
@@ -188,7 +226,14 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final settings = await _settingsStore.load();
     if (!mounted) return;
     _applyExtensions(settings);
-    setState(() => _settings = settings);
+    widget.assistant.personas = settings.personas;
+    setState(() {
+      _settings = settings;
+      _settingsLoaded = true;
+      // Приветствие до загрузки настроек звучало голосом по умолчанию.
+      if (_pristineWelcome) _messages = <_ChatMessage>[_welcome()];
+    });
+    _maybeNotice();
   }
 
   /// Включает и выключает расширения сразу, без перезапуска: история
@@ -202,10 +247,39 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  /// Новые настройки применяются сразу и ничего не сбрасывают: история
+  /// (с авторами и текстами), задачи, выбор, черновик, адресат и ожидание
+  /// подтверждения остаются. Ответ, который уже готовится, договаривается
+  /// прежним голосом.
   void _changeSettings(AppSettings settings) {
     _applyExtensions(settings);
+    widget.assistant.personas = settings.personas;
     setState(() => _settings = settings);
     unawaited(_settingsStore.save(settings));
+  }
+
+  /// Второй помощник (в соло — единственный) пишет первым о просроченных
+  /// задачах: при открытии и при смене дня, не чаще раза в день. День
+  /// запоминается в настройках, поэтому ни перезапуск, ни смена настроек
+  /// помощников сообщение не повторяют.
+  void _maybeNotice() {
+    if (!mounted || !_settingsLoaded || !_loaded || _loadError != null) return;
+    // Пока готовится ответ, напоминание не вклиниваем между командой и
+    // ответом: после ответа _send вызовет _refresh → _maybeNotice.
+    if (_sending) return;
+    final now = _now;
+    final today = AppSettings.dayKey(now);
+    if (_noticeChecked == today) return;
+    _noticeChecked = today;
+    if (_settings.noticeDay == today) return;
+    final overdue = _active.where((Task t) => isOverdue(t, now)).toList();
+    final notice = widget.assistant.overdueNotice(overdue);
+    if (notice == null) return;
+    setState(() {
+      _pristineWelcome = false;
+      _messages.add(_answer(notice));
+    });
+    _changeSettings(_settings.copyWith(noticeDay: today));
   }
 
   Future<void> _refresh() async {
@@ -230,6 +304,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     await _syncDocument();
     _scheduleTick();
+    _maybeNotice();
   }
 
   /// Перерисовка к полуночи и к сроку ближайшей задачи со временем, чтобы
@@ -251,7 +326,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _tick = Timer(next.difference(now) + const Duration(seconds: 1), () {
       if (!mounted) return;
       setState(() {});
-      _scheduleTick();
+      // Новый день: свежий список задач, и второй помощник может написать
+      // о просроченных (_refresh → _maybeNotice).
+      unawaited(_refresh());
     });
   }
 
@@ -270,10 +347,30 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _input.text).trim();
     if (text.isEmpty || _sending) return;
+    if (!_settingsLoaded) {
+      // Настройки ещё читаются: ждём их, иначе ответит помощник по
+      // умолчанию, а не выбранный. Повторная отправка в это время — нет.
+      _sending = true;
+      try {
+        await _settingsReady;
+      } on Object {
+        // Не прочитались — отвечаем с настройками по умолчанию.
+      }
+      _sending = false;
+      if (!mounted) return;
+    }
     _cubeTimer?.cancel();
+    // Адресат и голос фиксируются сейчас: смена настроек во время ответа
+    // применится со следующего сообщения.
+    final addressee = _duo ? _addressee : null;
     setState(() {
       _sending = true;
+      _pristineWelcome = false;
       _cube = CubeState.working;
+      _working = _answer(
+        widget.assistant.working(text, addressee: addressee),
+        withStatus: false,
+      );
       _messages.add(_ChatMessage(text: text, fromUser: true, timestamp: _now));
       _commands.add(text);
       _commandCursor = null;
@@ -281,20 +378,21 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
     _scrollToLatest();
     await _saveDocument();
-    final response = await widget.assistant.handle(text);
+    final response = await widget.assistant.handle(text, addressee: addressee);
     if (!mounted) return;
+    // «Говори короче», «давай на ты»: тот же путь, что у экрана настроек,
+    // — к настройкам на сейчас, с сохранением в settings.json.
+    final change = response.settingsChange;
+    if (change != null) {
+      _changeSettings(
+        _settings.copyWith(personas: change.apply(_settings.personas)),
+      );
+    }
     setState(() {
       _sending = false;
+      _working = null;
       _cube = cubeStateFor(response.status);
-      _messages.add(
-        _ChatMessage(
-          text: response.message,
-          fromUser: false,
-          timestamp: _now,
-          status: response.status,
-          taskId: response.task?.id,
-        ),
-      );
+      _messages.add(_answer(response));
     });
     _cubeTimer = Timer(const Duration(milliseconds: 1600), () {
       if (mounted && !_sending) setState(() => _cube = CubeState.idle);
@@ -389,6 +487,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _clearChat() {
     setState(() {
       _messages = <_ChatMessage>[_welcome()];
+      _pristineWelcome = false;
+      _addressee = null;
       _messageKeys.clear();
       _commands.clear();
       _commandCursor = null;
@@ -685,12 +785,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 const _BrandMark(),
                 if (expanded) ...<Widget>[
                   const SizedBox(width: 12),
-                  const Text(
-                    'Помощник',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AssistantColors.textStrong,
+                  // При крупном шрифте в выдвижной панели название
+                  // сокращается, а не вылезает за край.
+                  const Flexible(
+                    child: Text(
+                      'Помощник',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AssistantColors.textStrong,
+                      ),
                     ),
                   ),
                 ],
@@ -970,6 +1075,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   answer: _latestAnswer(),
                 ),
         ),
+        if (_duo) _buildAddresseeSwitch(),
         _buildBottomArea(height),
       ],
     );
@@ -1012,14 +1118,12 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       );
     }
-    if (_sending) {
+    final working = _working;
+    if (_sending && working != null) {
       rows.add(
         _MessageRow(
-          message: _ChatMessage(
-            text: 'Команда обрабатывается локально…',
-            fromUser: false,
-            timestamp: _now,
-          ),
+          key: const Key('working-message'),
+          message: working,
           now: _now,
           showTime: false,
           cube: _cubeWidget(),
@@ -1128,6 +1232,33 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 nextCommand: _nextCommand,
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// «Кому: Rio | Noda» над нижней частью, вне её прокрутки: при узком
+  /// экране и крупном тексте поле ввода прокручивается, а переключатель
+  /// остаётся на виду и нажимается. Выбор основного — `null`: тогда
+  /// после смены основного в настройках отвечает новый основной.
+  Widget _buildAddresseeSwitch() {
+    final main = _settings.personas.main;
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _AddresseeSwitch(
+              main: main,
+              selected: Personas.byId(_addressee) ?? main,
+              onChanged: (Persona persona) => setState(
+                () => _addressee = persona.id == main.id ? null : persona.id,
+              ),
+            ),
           ),
         ),
       ),
@@ -1266,6 +1397,7 @@ final class _ChatMessage {
     required this.timestamp,
     this.status,
     this.taskId,
+    this.personaId,
   });
 
   final String text;
@@ -1273,6 +1405,10 @@ final class _ChatMessage {
   final DateTime timestamp;
   final AssistantStatus? status;
   final String? taskId;
+
+  /// Кто из помощников написал: `rio`, `noda`. Хранится вместе с готовым
+  /// текстом, поэтому смена помощника не переписывает историю.
+  final String? personaId;
 }
 
 final class _NavItem extends StatelessWidget {
@@ -1426,11 +1562,33 @@ final class _MessageRow extends StatelessWidget {
         ? AssistantColors.danger
         : AssistantColors.warning;
     final current = task;
+    final author = fromUser ? null : Personas.byId(message.personaId);
     final content = Column(
       crossAxisAlignment:
           fromUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
+        if (author != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              key: ValueKey<String>('message-author-${author.id}'),
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                PersonaMark(persona: author, size: 16),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    author.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: technicalTextStyle.copyWith(
+                      color: Color(author.accentColor),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (label != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 2),
@@ -1932,6 +2090,79 @@ final class _PanelToggle extends StatelessWidget {
       icon: _CountBadge(
         count: wide ? 0 : count,
         child: const Icon(Icons.view_sidebar_outlined, size: 18),
+      ),
+    );
+  }
+}
+
+/// Кому писать в дуэте: две кнопки с именами помощников над полем ввода.
+/// Выбор живёт только в этом чате; обращение по имени («Noda, …») важнее.
+final class _AddresseeSwitch extends StatelessWidget {
+  const _AddresseeSwitch({
+    required this.main,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final Persona main;
+  final Persona selected;
+  final ValueChanged<Persona> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final order = <Persona>[main, Personas.other(main)];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Wrap(
+        key: const Key('addressee-switch'),
+        spacing: 6,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: <Widget>[
+          const Text('Кому:', style: technicalTextStyle),
+          for (final persona in order)
+            Semantics(
+              button: true,
+              selected: persona.id == selected.id,
+              label: 'Писать ${persona.name}',
+              excludeSemantics: true,
+              child: InkWell(
+                key: Key('addressee-${persona.id}'),
+                onTap: () => onChanged(persona),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: persona.id == selected.id
+                        ? AssistantColors.bubble
+                        : Colors.transparent,
+                    border: Border.all(
+                      color: persona.id == selected.id
+                          ? Color(persona.accentColor)
+                          : AssistantColors.borderSoft,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      PersonaMark(persona: persona, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        persona.name,
+                        style: technicalTextStyle.copyWith(
+                          color: persona.id == selected.id
+                              ? AssistantColors.textStrong
+                              : AssistantColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

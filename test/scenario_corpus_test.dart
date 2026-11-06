@@ -13,6 +13,7 @@ import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/skills/calculator/calculator.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
+import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
 import 'connectors/example_warehouse_connector.dart';
@@ -131,21 +132,32 @@ final Map<String, Connector Function(DateTime now)> _connectorFactories =
         baseUri: Uri.parse('https://warehouse.example/api/'),
       ),
   CalculatorConnector.id: (DateTime now) => const CalculatorConnector(),
+  // Беседа уступает любой команде (fallback): её фразы проверяют, что
+  // «привет, добавь задачу …» остаётся задачей.
+  TalkConnector.id: (DateTime now) => TalkConnector(),
 };
 
-/// Ответ калькулятора для сравнения с полем `answer`: неразрывные пробелы
-/// между разрядами («2 400») в корпусе пишутся обычными.
-String _calcAnswer(String text) => Calculator.calculate(text)
-    .answer
-    .replaceAll(Calculator.groupSeparator, ' ');
+/// Ответ калькулятора для сравнения с полем `answer`: пример — как его
+/// видит коннектор (со снятым вступлением «привет, …»). Неразрывные
+/// пробелы между разрядами («2 400») в корпусе пишутся обычными.
+String _calcAnswer(Utterance utterance) {
+  final recognition = CalculatorConnector.recognize(utterance);
+  final result = recognition == null
+      ? Calculator.calculate(utterance.original)
+      : Calculator.evaluateRecognition(recognition);
+  return result.answer.replaceAll(Calculator.groupSeparator, ' ');
+}
 
 /// Кого выберет маршрутизатор: id коннектора, `ambiguous`, если он
 /// переспросит (те же правила, что в AssistantController), или `null`.
 String? _routed(List<ConnectorMatch> all) {
   if (all.isEmpty) return null;
-  final sorted = all.any((ConnectorMatch m) => !m.implicit)
-      ? all.where((ConnectorMatch m) => !m.implicit).toList()
+  final firm = all.any((ConnectorMatch m) => !m.fallback)
+      ? all.where((ConnectorMatch m) => !m.fallback).toList()
       : all;
+  final sorted = firm.any((ConnectorMatch m) => !m.implicit)
+      ? firm.where((ConnectorMatch m) => !m.implicit).toList()
+      : firm;
   final best = sorted.first;
   for (final other in sorted.skip(1)) {
     if (other.connectorId == best.connectorId) continue;
@@ -302,7 +314,7 @@ final class _Case {
         expectedIntent,
       );
       if (json['answer'] case final String answer) {
-        compare('answer', _calcAnswer(text), answer);
+        compare('answer', _calcAnswer(utterance), answer);
       }
       return mismatches;
     }
