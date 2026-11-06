@@ -11,10 +11,16 @@ from typing import Any, Callable
 
 from . import pipeline, prompts
 from .config import Config, Source, load_config
-from .store import CandidateStore
+from .store import CandidateStore, LockedError, WorkLock
 from .topics import DEFAULT_CONNECTOR, ConnectorTopics, row_connector
 
 DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config.toml"
+
+# Команды, которые пишут в work/: им нужна блокировка work/.lock.
+WRITING_COMMANDS = frozenset({"generate", "label", "review", "promote", "import-manual", "relabel"})
+
+# Код выхода при прерывании, как у оболочки после Ctrl+C.
+INTERRUPTED_EXIT = 130
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -70,7 +76,6 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as error:
         print(f"Ошибка в {args.config}: {error}", file=sys.stderr)
         return 2
-    store = CandidateStore(config.work_dir)
     handlers: dict[str, Callable[[Config, CandidateStore, argparse.Namespace], int]] = {
         "sources": _sources,
         "topics": _topics,
@@ -82,7 +87,20 @@ def main(argv: list[str] | None = None) -> int:
         "relabel": _relabel,
         "stats": _stats,
     }
-    return handlers[args.command](config, store, args)
+    handler = handlers[args.command]
+    if args.command not in WRITING_COMMANDS:
+        return handler(config, CandidateStore(config.work_dir), args)
+    try:
+        lock = WorkLock(config.work_dir)
+        lock.acquire()
+    except LockedError as error:
+        print(f"Ошибка: {error}", file=sys.stderr)
+        return 2
+    try:
+        # Фразы читаются уже под блокировкой: другой процесс их не перепишет.
+        return handler(config, CandidateStore(config.work_dir), args)
+    finally:
+        lock.release()
 
 
 def _pick(config: Config, role: str, names: list[str] | None) -> list[Source]:
@@ -135,7 +153,16 @@ def _generate(config: Config, store: CandidateStore, args: argparse.Namespace) -
     if not sources:
         print("Нет доступных генераторов. Проверьте `corpus-gen sources`.", file=sys.stderr)
         return 1
-    report = pipeline.generate(config, store, args.topic, args.count, sources)
+    try:
+        report = pipeline.generate(config, store, args.topic, args.count, sources)
+    except pipeline.Interrupted as stopped:
+        print(
+            f"\nПрервано. Новых фраз сохранено: {stopped.saved}, не выполнено запросов: "
+            f"{stopped.remaining}. Сохранённое уже в {store.path}; запустите `corpus-gen generate` "
+            "ещё раз, если фраз мало.",
+            file=sys.stderr,
+        )
+        return INTERRUPTED_EXIT
     print(f"Добавлено фраз: {report.added}, дублей пропущено: {report.duplicates}")
     for error in report.errors or []:
         print(f"Ошибка: {error}", file=sys.stderr)
@@ -159,7 +186,16 @@ def _label(config: Config, store: CandidateStore, args: argparse.Namespace) -> i
                 "Внимание: разметчиков из разных семейств меньше двух — все фразы уйдут на ручную проверку.",
                 file=sys.stderr,
             )
-    counts = pipeline.label(config, store, labelers, limit=args.limit)
+    try:
+        counts = pipeline.label(config, store, labelers, limit=args.limit)
+    except pipeline.Interrupted as stopped:
+        print(
+            f"\nПрервано. Разметок сохранено за этот запуск: {stopped.saved}, осталось запросов: "
+            f"{stopped.remaining}. Запустите `corpus-gen label` ещё раз — разметка продолжится, "
+            "уже полученные разметки повторно не запрашиваются.",
+            file=sys.stderr,
+        )
+        return INTERRUPTED_EXIT
     print(_label_summary(counts))
     if counts.get(pipeline.CHECK_FAILED):
         print(

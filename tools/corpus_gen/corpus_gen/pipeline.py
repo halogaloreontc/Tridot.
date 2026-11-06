@@ -2,22 +2,24 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import json
+import queue
 import re
+import signal
 import subprocess
 import threading
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any, Callable, Iterator, Sequence, TypeVar
 
 from . import prompts
 from .config import Config, Source
 from .topics import DEFAULT_CONNECTOR, Catalog, ConnectorTopics, load_catalog, row_connector, split_ref
 from .providers import Provider, ProviderError, make_provider
-from .store import CandidateStore, append_jsonl, candidate_id, clean_phrase, corpus_rows, normalize_text
+from .store import CandidateStore, Checkpoint, append_jsonl, candidate_id, clean_phrase, corpus_rows, normalize_text
 
 ProviderFactory = Callable[[Source], Provider]
 ParserRunner = Callable[[Config, list[dict[str, Any]]], dict[str, dict[str, Any]]]
@@ -42,6 +44,19 @@ CHECK_FAILED = "check_failed"  # проверка приложением не у
 def catalog_for(config: Config) -> Catalog:
     """Темы и намерения коннекторов из topics/*.toml (settings.topics_dir в config.toml)."""
     return load_catalog(config.topics_dir)
+
+
+class Interrupted(Exception):
+    """Команду прервали (Ctrl+C, SIGTERM, SIGHUP); сделанное уже сохранено.
+
+    saved — сколько сохранено за запуск (разметок у label, новых фраз у generate),
+    remaining — сколько запросов к моделям не выполнено.
+    """
+
+    def __init__(self, saved: int, remaining: int) -> None:
+        super().__init__(f"прервано: сохранено {saved}, не выполнено {remaining}")
+        self.saved = saved
+        self.remaining = remaining
 
 
 @dataclass
@@ -76,13 +91,17 @@ def generate(
     report = Report()
     known = _known_texts(config, store)
     examples = _examples(config, connector, topic_.intents)
-    usage: list[dict[str, Any]] = []
-    lock = threading.Lock()
+    checkpoint = Checkpoint(store)
+    lock = checkpoint.lock
+    stop = threading.Event()
+    batches = -(-count // per_request) if count > 0 else 0
+    # Пачки, которые больше не нужны: выполненные и брошенные после ошибки источника.
+    finished = Counter[str]()
 
     def run(source: Source) -> None:
         provider = factory(source)
         remaining = count
-        while remaining > 0:
+        while remaining > 0 and not stop.is_set():
             size = min(per_request, remaining)
             remaining -= size
             try:
@@ -93,15 +112,21 @@ def generate(
                 )
             except Exception as error:  # noqa: BLE001 — сеть, лимиты, отказ, не-JSON
                 with lock:
-                    report.error(f"{source.name}: {error}")
-                    usage.append(_usage_row(source, "generate", error))
+                    if not checkpoint.closed:
+                        report.error(f"{source.name}: {error}")
+                        checkpoint.add_usage(_usage_row(source, "generate", error))
+                        finished[source.name] = batches
                 return
             phrases = completion.data.get("phrases")
             with lock:
-                usage.append(_usage_row(source, "generate", completion))
+                if checkpoint.closed:
+                    return  # прервали, файл уже записан
+                checkpoint.add_usage(_usage_row(source, "generate", completion))
                 if not isinstance(phrases, list):
                     report.error(f"{source.name}: в ответе нет списка phrases")
+                    finished[source.name] = batches
                     return
+                finished[source.name] += 1
                 for phrase in phrases:
                     if not isinstance(phrase, str) or not phrase.strip():
                         continue
@@ -111,10 +136,20 @@ def generate(
                         report.duplicates += 1
                     else:
                         report.added += 1
+                        checkpoint.changed()
 
-    _run_parallel(sources, run)
-    store.record_usage(usage)
-    store.save()
+    # Сохранение после прерывания — внутри stop_signals(): иначе второй SIGHUP между
+    # выходом из блока и сохранением убил бы процесс обычным для сигнала способом.
+    with stop_signals():
+        try:
+            _run_jobs(sources, run, len(sources), stop=stop, tick=checkpoint.maybe_save)
+        except KeyboardInterrupt:
+            stop.set()
+            _final_save(checkpoint)
+            with lock:
+                undone = sum(batches - finished[s.name] for s in sources)
+            raise Interrupted(report.added, undone) from None
+        _final_save(checkpoint)
     return report
 
 
@@ -251,9 +286,11 @@ def label(
     pending += recheck
     providers: dict[str, Provider] = {}
     semaphores = {s.name: threading.Semaphore(s.max_concurrency) for s in labelers}
-    lock = threading.Lock()
-    usage: list[dict[str, Any]] = []
+    checkpoint = Checkpoint(store)
+    lock = checkpoint.lock
+    stop = threading.Event()
     jobs: list[tuple[dict[str, Any], Source]] = []
+    progress = {"labels": 0, "finished": 0}
 
     connectors: dict[str, ConnectorTopics] = {}
     for row in pending:
@@ -269,9 +306,13 @@ def label(
                 providers[source.name] = factory(source)
 
     def run(job: tuple[dict[str, Any], Source]) -> None:
+        # Статус фразы здесь не меняется (остаётся new/error до решения в конце), поэтому
+        # после прерывания повторный label запросит только недостающие разметки.
         row, source = job
         connector = connectors[row["cid"]]
         with semaphores[source.name]:
+            if stop.is_set():
+                return
             try:
                 completion = providers[source.name].complete(
                     prompts.label_system(connector),
@@ -280,20 +321,48 @@ def label(
                 )
             except Exception as error:  # noqa: BLE001
                 with lock:
-                    row.setdefault("errors", []).append(_error_text(source, error))
-                    usage.append(_usage_row(source, "label", error))
+                    if not checkpoint.closed:
+                        row.setdefault("errors", []).append(_error_text(source, error))
+                        checkpoint.add_usage(_usage_row(source, "label", error))
+                        checkpoint.changed()
+                        progress["finished"] += 1
                 return
         with lock:
-            usage.append(_usage_row(source, "label", completion))
+            if checkpoint.closed:
+                return  # прервали, файл уже записан
+            checkpoint.add_usage(_usage_row(source, "label", completion))
             try:
                 row["labels"][source.name] = normalize_label(completion.data, connector)
+                progress["labels"] += 1
             except ProviderError as error:
                 row.setdefault("errors", []).append(_error_text(source, error))
+            checkpoint.changed()
+            progress["finished"] += 1
 
     workers = max(1, sum(s.max_concurrency for s in labelers))
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        list(pool.map(run, jobs))
+    # Сохранение после прерывания — внутри stop_signals() (см. generate).
+    with stop_signals():
+        try:
+            _run_jobs(jobs, run, workers, stop=stop, tick=checkpoint.maybe_save)
+            return _decide_all(config, pending, recheck, labelers, connectors, router, checkpoint)
+        except KeyboardInterrupt:
+            stop.set()
+            _final_save(checkpoint)
+            with lock:
+                raise Interrupted(progress["labels"], len(jobs) - progress["finished"]) from None
 
+
+def _decide_all(
+    config: Config,
+    pending: list[dict[str, Any]],
+    recheck: list[dict[str, Any]],
+    labelers: list[Source],
+    connectors: dict[str, ConnectorTopics],
+    router: RouterRunner,
+    checkpoint: Checkpoint,
+) -> Counter[str]:
+    """Статусы фраз после разметки; прерывание здесь не страшно — разметки уже в файле."""
+    checkpoint.flush()
     counts: Counter[str] = Counter()
     to_check: list[tuple[dict[str, Any], Source]] = []
     for row in pending:
@@ -319,8 +388,9 @@ def label(
         counts[row["status"]] += 1
     if recheck:
         counts[RECHECKED] = len(recheck)
-    store.record_usage(usage)
-    store.save()
+    with checkpoint.lock:
+        checkpoint.changed()
+    _final_save(checkpoint)
     return counts
 
 
@@ -726,11 +796,107 @@ def _usage_row(source: Source, stage: str, completion: Any) -> dict[str, Any]:
     }
 
 
-def _run_parallel(sources: list[Source], run: Callable[[Source], None]) -> None:
-    if not sources:
+T = TypeVar("T")
+
+# Как часто главный поток просыпается без новых ответов, чтобы сохранить прогресс.
+_TICK = 1.0
+
+
+def _run_jobs(
+    items: Sequence[T],
+    run: Callable[[T], None],
+    workers: int,
+    *,
+    stop: threading.Event,
+    tick: Callable[[], Any],
+) -> None:
+    """Выполняет run(item) в workers потоках; главный поток ждёт и вызывает tick.
+
+    Потоки — daemon, а не ThreadPoolExecutor: при Ctrl+C процесс не должен ждать
+    зависших HTTP-запросов (у локальных моделей ответ идёт минутами). Ошибка или
+    KeyboardInterrupt внутри run (например, в тесте) поднимается в главном потоке;
+    stop останавливает раздачу новых заданий, а начатые запросы бросаются.
+    """
+    if not items:
         return
-    with ThreadPoolExecutor(max_workers=len(sources)) as pool:
-        list(pool.map(run, sources))
+    todo: queue.SimpleQueue[T] = queue.SimpleQueue()
+    for item in items:
+        todo.put(item)
+    done: queue.SimpleQueue[BaseException | None] = queue.SimpleQueue()
+
+    def worker() -> None:
+        while not stop.is_set():
+            try:
+                item = todo.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                run(item)
+            except BaseException as error:  # noqa: BLE001 — передаём в главный поток
+                done.put(error)
+            else:
+                done.put(None)
+
+    for number in range(min(workers, len(items))):
+        threading.Thread(target=worker, name=f"corpus-gen-{number}", daemon=True).start()
+    finished = 0
+    try:
+        while finished < len(items):
+            try:
+                error = done.get(timeout=_TICK)
+            except queue.Empty:
+                tick()
+                continue
+            finished += 1
+            if error is not None:
+                raise error
+            tick()
+    finally:
+        stop.set()
+
+
+_STOP_SIGNALS = tuple(getattr(signal, name) for name in ("SIGTERM", "SIGHUP") if hasattr(signal, name))
+_ALL_STOP_SIGNALS = (signal.SIGINT, *_STOP_SIGNALS)
+
+
+def _raise_interrupt(signum: int, _frame: Any) -> None:
+    # Первый сигнал прерывает команду, следующие игнорируются до конца stop_signals():
+    # закрытие терминала шлёт SIGHUP дважды (от ядра и от bash), и второй не должен
+    # убить процесс, пока сохраняется сделанное.
+    for number in _ALL_STOP_SIGNALS:
+        signal.signal(number, signal.SIG_IGN)
+    raise KeyboardInterrupt(f"сигнал {signum}")
+
+
+@contextlib.contextmanager
+def stop_signals() -> Iterator[None]:
+    """Ctrl+C, SIGTERM и SIGHUP (закрыли терминал) прерывают команду одинаково.
+
+    Последнее сохранение после прерывания нужно делать внутри этого блока: обработчики
+    восстанавливаются только на выходе, а до тех пор повторные сигналы игнорируются.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    previous = {number: signal.signal(number, _raise_interrupt) for number in _ALL_STOP_SIGNALS}
+    try:
+        yield
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
+def _final_save(checkpoint: Checkpoint) -> None:
+    """Последнее сохранение; повторный Ctrl+C или сигнал во время записи игнорируются."""
+    if threading.current_thread() is not threading.main_thread():
+        checkpoint.flush(close=True)
+        return
+    previous = {number: signal.signal(number, signal.SIG_IGN) for number in _ALL_STOP_SIGNALS}
+    try:
+        checkpoint.flush(close=True)
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
 
 
 # Статусы, которые сбрасывает relabel. Решения человека (accepted, rejected)
