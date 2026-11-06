@@ -103,7 +103,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String? _noticeChecked;
 
   /// Кому писать в дуэте, выбор в поле ввода: `null` — основному. Живёт,
-  /// пока открыт этот чат, и не сохраняется.
+  /// пока открыт этот чат, и не сохраняется. Обращение по имени («Нода,
+  /// …») меняет его так же, как нажатие на переключатель
+  /// ([AssistantController.addresseeAfter]): к кому обратились, тот и
+  /// продолжает. Смена настроек его не трогает.
   String? _addressee;
 
   /// «Команда обрабатывается…» от помощника, который сейчас отвечает.
@@ -391,6 +394,12 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _sending = false;
       _working = null;
+      // Пока готовился ответ, адресата могли выбрать в поле: обращение
+      // по имени важнее, без него выбор остаётся.
+      _addressee = widget.assistant.addresseeAfter(
+        response,
+        current: _addressee,
+      );
       _cube = cubeStateFor(response.status);
       _messages.add(_answer(response));
     });

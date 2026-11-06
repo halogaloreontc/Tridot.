@@ -143,6 +143,25 @@ String _draft(WidgetTester tester) => tester
     .controller!
     .text;
 
+/// Кто выбран в «Кому:» (`null` — переключателя нет).
+String? _addressee(WidgetTester tester) {
+  if (find.byKey(const Key('addressee-switch')).evaluate().isEmpty) {
+    return null;
+  }
+  for (final persona in <String>['rio', 'noda']) {
+    final semantics = tester.widget<Semantics>(
+      find
+          .ancestor(
+            of: find.byKey(Key('addressee-$persona')),
+            matching: find.byType(Semantics),
+          )
+          .first,
+    );
+    if (semantics.properties.selected ?? false) return persona;
+  }
+  return null;
+}
+
 /// Всё, что смена настроек помощников не должна трогать.
 Future<Map<String, Object?>> _snapshot(
   WidgetTester tester,
@@ -164,6 +183,7 @@ Future<Map<String, Object?>> _snapshot(
     'disabled': choice.disabled.toList()..sort(),
     'enabled': choice.enabled.toList()..sort(),
     'composer': find.byKey(const Key('assistant-composer')).evaluate().length,
+    'addressee': _addressee(tester),
   };
 }
 
@@ -218,6 +238,7 @@ void main() {
       // Обращение по имени важнее выбора в поле.
       await _say(tester, 'Рио, 3+3');
       expect(_history(tester).last, 'rio: 3 + 3 = 6');
+      expect(_addressee(tester), 'rio', reason: 'к кому обратились');
       expect(
         (await store.load()).toJson().toString(),
         isNot(contains('addressee')),
@@ -254,6 +275,154 @@ void main() {
         await _tapSetting(tester, key);
       }
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('к кому обратились, тот и продолжает', () {
+    testWidgets('обращение по имени переключает «Кому:» и держится в чате',
+        (tester) async {
+      await _pump(tester, settings: InMemorySettingsStore());
+      expect(_addressee(tester), 'rio');
+
+      await _say(tester, 'Нода, расскажи шутку');
+      expect(_history(tester).last, startsWith('noda: '));
+      expect(_addressee(tester), 'noda');
+
+      for (final text in <String>['ещё шутку', '2+2', 'покажи задачи']) {
+        await _say(tester, text);
+        expect(_history(tester).last, startsWith('noda: '), reason: text);
+        expect(_addressee(tester), 'noda', reason: text);
+      }
+
+      await _say(tester, 'спасибо, Рио');
+      expect(_history(tester).last, startsWith('rio: '));
+      expect(_addressee(tester), 'rio');
+      await _say(tester, '3+3');
+      expect(_history(tester).last, 'rio: 3 + 3 = 6');
+
+      await _say(tester, 'говори короче, Нода');
+      expect(_addressee(tester), 'noda');
+      await _say(tester, 'Рио, 4+4');
+      expect(_addressee(tester), 'rio');
+      // Нажатие на переключатель работает, как раньше.
+      await tester.tap(find.byKey(const Key('addressee-noda')));
+      await tester.pump();
+      expect(_addressee(tester), 'noda');
+      await _say(tester, '5+5');
+      expect(_history(tester).last, startsWith('noda: '));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('«пусть отвечает Рио», когда Рио и так основной, — снова Rio',
+        (tester) async {
+      await _pump(tester, settings: InMemorySettingsStore());
+      await _say(tester, 'Нода, привет');
+      expect(_addressee(tester), 'noda');
+      await _say(tester, 'пусть отвечает Рио');
+      expect(_history(tester).last, startsWith('rio: '));
+      expect(_addressee(tester), 'rio');
+      await _say(tester, '2+2');
+      expect(_history(tester).last, 'rio: 2 + 2 = 4');
+    });
+
+    testWidgets('«Рио де Жанейро …» — город, адресат не меняется',
+        (tester) async {
+      await _pump(tester, settings: InMemorySettingsStore());
+      await _openSettings(tester);
+      await _tapSetting(tester, 'main-persona-noda');
+      await _openTasks(tester);
+      expect(_addressee(tester), 'noda');
+      await _say(tester, 'Рио де Жанейро красивый город');
+      expect(_addressee(tester), 'noda');
+      await _say(tester, '2+2');
+      expect(_history(tester).last, startsWith('noda: '));
+    });
+
+    testWidgets('«спасибо, Рио» на вопрос Noda — переключает «Кому:» на Rio',
+        (tester) async {
+      final h = await _pump(tester, settings: InMemorySettingsStore());
+      await h.tasks.create(title: 'Купить хлеб');
+      await _say(tester, 'Нода, я купил хлеб');
+      expect(_addressee(tester), 'noda');
+      await _say(tester, 'спасибо, Рио');
+      expect(_history(tester).last, startsWith('rio: '));
+      expect(_addressee(tester), 'rio');
+      expect(h.assistant.session.pendingConfirmation, isNotNull);
+      await _say(tester, 'да, Рио');
+      expect(_history(tester).last, startsWith('rio: '));
+      expect(await h.tasks.listActive(), isEmpty);
+      await _say(tester, '2+2');
+      expect(_history(tester).last, 'rio: 2 + 2 = 4');
+    });
+
+    testWidgets('новый чат сбрасывает адресата', (tester) async {
+      await _pump(tester, settings: InMemorySettingsStore());
+      await _say(tester, 'Нода, 2+2');
+      expect(_addressee(tester), 'noda');
+      await _openSettings(tester);
+      await _tapSetting(tester, 'clear-chat');
+      await tester
+          .tap(find.byKey(const ValueKey<String>('clear-chat-confirm')));
+      await tester.pumpAndSettle();
+      await _openTasks(tester);
+      expect(_addressee(tester), 'rio');
+      await _say(tester, '2+2');
+      expect(_history(tester).last, startsWith('rio: '));
+    });
+
+    testWidgets('на «да» отвечает спросивший, адресат не меняется',
+        (tester) async {
+      final h = await _pump(tester, settings: InMemorySettingsStore());
+      await h.tasks.create(title: 'Купить хлеб');
+      await _say(tester, 'Нода, я купил хлеб');
+      expect(h.assistant.session.pendingConfirmation, isNotNull);
+      await tester.tap(find.byKey(const Key('addressee-rio')));
+      await tester.pump();
+      await _say(tester, 'да');
+      expect(_history(tester).last, startsWith('noda: '));
+      expect(_addressee(tester), 'rio');
+      expect(await h.tasks.listActive(), isEmpty);
+    });
+
+    testWidgets('соло: имя не закрепляется; в дуэте адресат прежний',
+        (tester) async {
+      await _pump(tester, settings: InMemorySettingsStore());
+      await _say(tester, 'Нода, 2+2');
+      await _openSettings(tester);
+      await _tapSetting(tester, 'assistant-mode-solo');
+      await _openTasks(tester);
+      await _say(tester, 'Рио, 3+3');
+      await _say(tester, '4+4');
+      expect(_history(tester).last, startsWith('rio: '));
+      await _openSettings(tester);
+      await _tapSetting(tester, 'solo-persona-noda');
+      await _tapSetting(tester, 'assistant-mode-duo');
+      await _openTasks(tester);
+      // В соло «Рио, …» — просто текст: адресат из дуэта — Noda.
+      expect(_addressee(tester), 'noda');
+      await _say(tester, '5+5');
+      expect(_history(tester).last, startsWith('noda: '));
+    });
+
+    testWidgets(
+        'смена основного: адресат, равный основному, — просто основной, '
+        'выбор не сбрасывается', (tester) async {
+      await _pump(tester, settings: InMemorySettingsStore());
+      await _say(tester, 'Нода, 2+2');
+      await _openSettings(tester);
+      await _tapSetting(tester, 'main-persona-noda');
+      await _openTasks(tester);
+      expect(_addressee(tester), 'noda');
+      await _say(tester, '3+3');
+      expect(_history(tester).last, startsWith('noda: '));
+      // Обращение к основному снимает выбор: дальше — тот, кто основной.
+      await _say(tester, 'Нода, 4+4');
+      await _openSettings(tester);
+      await _tapSetting(tester, 'main-persona-rio');
+      await _openTasks(tester);
+      expect(_addressee(tester), 'rio');
+      await _say(tester, '5+5');
+      expect(_history(tester).last, startsWith('rio: '));
     });
   });
 
@@ -351,12 +520,12 @@ void main() {
       final h = await _pump(tester, settings: store);
       await h.tasks.create(title: 'Отчёт', dueAt: DateTime(2026, 11, 5, 10));
       await _say(tester, 'Добавь задачу купить хлеб');
+      // Адресат — Noda: к ней обратились по имени, дальше пишем ей.
       await _say(tester, 'Нода, покажи задачи');
-      await tester.tap(find.byKey(const Key('addressee-noda')));
-      await tester.pump();
       // Последнее сообщение — вопрос задач: ждём «да».
       await _say(tester, 'я купил хлеб');
       expect(h.assistant.session.pendingConfirmation, isNotNull);
+      expect(_history(tester).last, startsWith('noda: '));
       await tester.enterText(
         find.byKey(const Key('assistant-input')),
         'черновик',
@@ -364,6 +533,7 @@ void main() {
       await tester.pump();
       final before = await _snapshot(tester, h);
       expect(before['selected'], isNotNull);
+      expect(before['addressee'], 'noda');
       expect((before['history']! as List<String>).length, 7);
 
       for (final key in <String>[
@@ -392,11 +562,11 @@ void main() {
         await _openSettings(tester);
         await _tapSetting(tester, key);
         await _openTasks(tester);
-        expect(
-          await _snapshot(tester, h),
-          before,
-          reason: 'после «$key»',
-        );
+        final now = await _snapshot(tester, h);
+        // В соло переключателя нет: адресат проверяется после возврата в
+        // дуэт.
+        if (now['addressee'] == null) now['addressee'] = before['addressee'];
+        expect(now, before, reason: 'после «$key»');
       }
       expect(tester.takeException(), isNull);
 
@@ -458,7 +628,14 @@ void main() {
         expect(after.sublist(0, history.length), history, reason: text);
         expect(after.length, history.length + 2, reason: text);
         history = after;
+        if (text == 'Нода, говори официально') {
+          expect(_addressee(tester), 'noda', reason: 'обратились по имени');
+        }
       }
+      expect(_history(tester).last, startsWith('rio: '));
+      // «Пусть отвечает Рио»: основной — Rio, выбор Noda снят.
+      expect(_addressee(tester), 'rio');
+      await _say(tester, 'покажи задачи');
       expect(_history(tester).last, startsWith('rio: '));
 
       // Экран настроек показывает то же, что попросили в чате.

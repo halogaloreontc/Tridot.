@@ -39,6 +39,9 @@ void main() {
 
     for (final text in <String>[
       'Рио-де-Жанейро — купить билеты',
+      'Рио де Жанейро красивый город',
+      'Рио  де Жанейро',
+      'рио де',
       'Нодаа, привет',
       'Riot покажи',
       'Купить билет в Рио',
@@ -47,6 +50,35 @@ void main() {
     ]) {
       test('не обращение: «$text»', () {
         expect(PersonaAddressing.parse(text), isNull);
+      });
+    }
+  });
+
+  group('обращение в конце', () {
+    for (final (text, persona, rest) in <(String, String, String)>[
+      ('да, Рио', 'rio', 'да'),
+      ('спасибо, Нода!', 'noda', 'спасибо'),
+      ('нет — Noda', 'noda', 'нет'),
+      ('да - рио.', 'rio', 'да'),
+    ]) {
+      test(text, () {
+        final addressing = PersonaAddressing.parseTrailing(text);
+        expect(addressing, isNotNull);
+        expect(addressing!.persona.id, persona);
+        expect(addressing.rest, rest);
+      });
+    }
+
+    for (final text in <String>[
+      'съездить в Рио',
+      'Рио',
+      ', Нода',
+      'да, Рио?',
+      'да, Нодаа',
+      'да, Рио-де-Жанейро',
+    ]) {
+      test('не обращение: «$text»', () {
+        expect(PersonaAddressing.parseTrailing(text), isNull);
       });
     }
   });

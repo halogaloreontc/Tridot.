@@ -431,15 +431,27 @@ final class AssistantSession {
   /// Запоминает действие до следующего сообщения. Вызывается из `run`
   /// вместе с ответом-вопросом `needsClarification`. Новое ожидание
   /// заменяет прежнее.
-  void requestConfirmation(PendingConfirmation pending) {
+  ///
+  /// Запоминается и тот, кто спросил ([pendingSpeaker], по умолчанию —
+  /// текущий [speaker]): в дуэте на «да» или «нет» отвечает он, даже если
+  /// адресат в поле ввода с тех пор сменился.
+  void requestConfirmation(PendingConfirmation pending, {Persona? speaker}) {
     _pendingConfirmation = pending;
+    _pendingSpeaker = speaker ?? this.speaker;
   }
+
+  Persona? _pendingSpeaker;
+
+  /// Кто задал вопрос [pendingConfirmation]; `null`, если ожидания нет.
+  Persona? get pendingSpeaker =>
+      _pendingConfirmation == null ? null : _pendingSpeaker;
 
   /// Забирает ожидание: после этого его больше нет. Вызывает маршрутизатор
   /// в начале каждого сообщения.
   PendingConfirmation? takePendingConfirmation() {
     final pending = _pendingConfirmation;
     _pendingConfirmation = null;
+    _pendingSpeaker = null;
     return pending;
   }
 

@@ -32,8 +32,13 @@ import '../services/clock.dart';
 /// коннектора.
 ///
 /// Отвечает один из помощников ([personas], docs/PLANS.md, «Rio и Noda»):
-/// в дуэте — основной или тот, к кому обратились по имени («Noda, …»),
-/// в соло — выбранный. Голос (стиль, род, обращение, эмодзи) фиксируется
+/// в дуэте — основной, адресат из поля ввода или тот, к кому обратились по
+/// имени («Noda, …»), в соло — выбранный. Обращение по имени в дуэте
+/// отмечается в ответе ([AssistantResponse.addressedPersonaId]), и
+/// интерфейс делает названного адресатом чата ([addresseeAfter]): к кому
+/// обратились, тот и продолжает. На «да» или «нет» в дуэте отвечает тот,
+/// кто спросил ([AssistantSession.pendingSpeaker]), если в ответе никого
+/// не назвали по имени. Голос (стиль, род, обращение, эмодзи) фиксируется
 /// в начале сообщения: смена настроек посреди ответа применится со
 /// следующего. Тексты — из каталога ответов ([AssistantSession.replies]).
 final class AssistantController {
@@ -124,11 +129,42 @@ final class AssistantController {
     return (Personas.byId(addressee) ?? settings.main, message, false);
   }
 
+  /// Адресат чата после ответа [response]; [current] — адресат до
+  /// сообщения (`null` — основной). В дуэте обращение по имени делает
+  /// названного адресатом, как выбор в поле ввода: следующие сообщения без
+  /// имени получает он. Основной — снова `null`. Просьба сменить основного
+  /// («пусть отвечает Рио») тоже возвращает `null`: дальше отвечает новый
+  /// основной. В соло адресат не используется и не меняется.
+  String? addresseeAfter(AssistantResponse response, {String? current}) {
+    final settings = personas;
+    if (settings.mode == AssistantMode.solo) return current;
+    if (response.settingsChange?.mainPersona != null) return null;
+    final addressed = Personas.byId(response.addressedPersonaId);
+    if (addressed == null) return current;
+    return addressed.id == settings.main.id ? null : addressed.id;
+  }
+
   /// Отвечает на сообщение пользователя. [addressee] — помощник,
-  /// выбранный в поле ввода (только в дуэте).
+  /// выбранный в поле ввода (только в дуэте). Если к помощнику обратились
+  /// по имени, ответ это отмечает ([AssistantResponse.addressedPersonaId]).
   Future<AssistantResponse> handle(String message, {String? addressee}) async {
+    // Кто ответит и обратились ли по имени — по настройкам на начало
+    // сообщения.
     final settings = personas;
     final (persona, text, addressed) = resolve(message, addressee: addressee);
+    final response = await _handle(settings, persona, text, addressed);
+    // Навык мог отметить адресата сам: «Нода, пусть отвечает Рио» — дальше
+    // отвечает Рио, а не та, к кому обратились в начале.
+    if (!addressed || response.addressedPersonaId != null) return response;
+    return response.withAddressed(persona.id);
+  }
+
+  Future<AssistantResponse> _handle(
+    PersonaSettings settings,
+    Persona persona,
+    String text,
+    bool addressed,
+  ) async {
     session
       ..voice = settings.voiceOf(persona)
       ..speaker = persona
@@ -150,14 +186,15 @@ final class AssistantController {
           )
           .withPersona(persona.id);
     }
-    final response = await _route(text);
+    final response = await _route(text, addressed: addressed);
     final change = response.settingsChange;
     // Просьба из беседы («говори короче») — к настройкам на сейчас: если
     // их поменяли во время ответа, эти перемены не теряются. Интерфейс
     // применяет то же изменение и сохраняет его.
     if (change != null) personas = change.apply(personas);
-    // Беседа может ответить от другого помощника: «пусть отвечает Рио».
-    return response.withPersona(response.personaId ?? persona.id);
+    // Беседа может ответить от другого помощника: «пусть отвечает Рио»,
+    // на «да» отвечает спросивший (_speakAsAsker).
+    return response.withPersona(response.personaId ?? session.speaker.id);
   }
 
   /// Приветствие основного (в соло — единственного) помощника.
@@ -214,18 +251,64 @@ final class AssistantController {
         personaId: persona.id,
       );
 
-  Future<AssistantResponse> _route(String message) async {
+  /// Ответ на вопрос подтверждения в дуэте звучит от того, кто спросил,
+  /// даже если адресат в поле ввода с тех пор сменился. Если в ответе
+  /// назвали помощника по имени в начале ([addressed]: «Рио, да»), отвечает
+  /// названный. Имя в конце ([trailing]: «да, Рио», «спасибо, Рио») —
+  /// тоже обращение: отвечает названный. В соло помощник один — тот, что
+  /// в настройках сейчас.
+  void _speakAsAsker(
+    Persona? asker, {
+    required bool addressed,
+    Persona? trailing,
+  }) {
+    if (session.personas.mode != AssistantMode.duo) return;
+    final speaker = trailing ?? (addressed ? null : asker);
+    if (speaker == null) return;
+    session
+      ..speaker = speaker
+      ..voice = session.personas.voiceOf(speaker);
+  }
+
+  /// Ответ на вопрос подтверждения с именем в конце отмечает названного
+  /// адресатом, как обращение в начале ([handle]).
+  static AssistantResponse _markTrailing(
+    AssistantResponse response,
+    Persona? trailing,
+  ) =>
+      trailing == null ? response : response.withAddressed(trailing.id);
+
+  Future<AssistantResponse> _route(
+    String message, {
+    required bool addressed,
+  }) async {
     final connectors = _connectors;
     final utterance = Utterance.analyze(message, now: session.clock.now());
+    final asker = session.pendingSpeaker;
     final pending = session.takePendingConfirmation();
     final owner = pending == null
         ? null
         : connectors
             .where((Connector c) => c.info.id == pending.connectorId)
             .firstOrNull;
+    // «Да, Рио», «спасибо, Нода»: имя в конце ответа на вопрос — тоже
+    // обращение (в дуэте). Само «да» или «нет» ищем в тексте без имени.
+    final trailing = pending != null &&
+            owner != null &&
+            !addressed &&
+            session.personas.mode == AssistantMode.duo
+        ? PersonaAddressing.parseTrailing(message)
+        : null;
+    final named = trailing?.persona;
+    final answerUtterance = trailing == null
+        ? utterance
+        : Utterance.analyze(trailing.rest, now: session.clock.now());
     if (pending != null && owner != null) {
-      final reply = ConfirmationReply.of(utterance);
-      if (reply != null) return _answer(owner, pending, reply);
+      final reply = ConfirmationReply.of(answerUtterance);
+      if (reply != null) {
+        _speakAsAsker(asker, addressed: addressed, trailing: named);
+        return _markTrailing(await _answer(owner, pending, reply), named);
+      }
     }
     final candidates = <(Connector, ConnectorMatch)>[];
     for (final connector in connectors) {
@@ -243,12 +326,13 @@ final class AssistantController {
       // «Да, купил хлеб», «нет, не купил»: ответ с пояснением. Если в
       // пояснении явная команда («нет, добавь задачу молоко»), это уже
       // новое сообщение, а не ответ.
-      final reply = ConfirmationReply.leading(utterance);
+      final reply = ConfirmationReply.leading(answerUtterance);
       if (reply != null &&
           candidates.every(
             ((Connector, ConnectorMatch) c) => c.$2.implicit || c.$2.fallback,
           )) {
-        return _answer(owner, pending, reply);
+        _speakAsAsker(asker, addressed: addressed, trailing: named);
+        return _markTrailing(await _answer(owner, pending, reply), named);
       }
       // «Хорошо», «спасибо» в ответ на вопрос: не согласие и не новая
       // команда. Молча снять вопрос нельзя — пользователь решит, что
@@ -258,11 +342,16 @@ final class AssistantController {
         ((Connector, ConnectorMatch) c) => c.$2.acknowledgement,
       );
       if (candidates.isEmpty && before > 0) {
+        // Переспрашивает тот, кто спросил (или названный по имени).
+        _speakAsAsker(asker, addressed: addressed, trailing: named);
         session.requestConfirmation(pending);
-        return session.reply(
-          'common.confirm.unclear',
-          intent: 'confirm.unclear',
-          status: AssistantStatus.needsClarification,
+        return _markTrailing(
+          session.reply(
+            'common.confirm.unclear',
+            intent: 'confirm.unclear',
+            status: AssistantStatus.needsClarification,
+          ),
+          named,
         );
       }
     }

@@ -1014,6 +1014,217 @@ void main() {
     });
   });
 
+  group('к кому обратились, тот и продолжает', () {
+    final mixed = _pack('jokes.mixed', <Map<String, Object?>>[
+      <String, Object?>{'id': 'r', 'text': 'Шутка для Rio.', 'persona': 'rio'},
+      <String, Object?>{
+        'id': 'n',
+        'text': 'Шутка для Noda.',
+        'persona': 'noda',
+      },
+    ]);
+
+    /// Разговор в одном чате: адресат после ответа — как в интерфейсе.
+    Future<List<AssistantResponse>> chat(
+      _Fixture f,
+      List<String> messages,
+    ) async {
+      String? addressee;
+      final responses = <AssistantResponse>[];
+      for (final message in messages) {
+        final response = await f.say(message, addressee: addressee);
+        addressee = f.assistant.addresseeAfter(response, current: addressee);
+        responses.add(response);
+      }
+      return responses;
+    }
+
+    test('«Нода, расскажи шутку» → «ещё шутку» — снова Noda, из её шуток',
+        () async {
+      final f = await _fixture(packs: <String>[mixed]);
+      final responses = await chat(f, <String>[
+        'Нода, расскажи шутку',
+        'ещё шутку',
+        'расскажи ещё шутку',
+        'Рио, расскажи шутку',
+        'ещё шутку',
+      ]);
+      expect(
+        responses.map((AssistantResponse r) => r.personaId),
+        <String>['noda', 'noda', 'noda', 'rio', 'rio'],
+      );
+      for (final response in responses.take(3)) {
+        expect(response.message, contains('Шутка для Noda.'));
+        // Дружеский стиль Noda по умолчанию.
+        expect(response.message, isNot(contains('Шутка для Rio.')));
+      }
+      for (final response in responses.skip(3)) {
+        expect(response.message, contains('Шутка для Rio.'));
+      }
+    });
+
+    test('имя в конце реплики тоже закрепляет адресата', () async {
+      final f = await _fixture(packs: <String>[mixed]);
+      final responses = await chat(f, <String>[
+        'расскажи шутку, Нода',
+        'ещё шутку',
+        'спасибо, Рио',
+        'ещё шутку',
+      ]);
+      expect(
+        responses.map((AssistantResponse r) => r.personaId),
+        <String>['noda', 'noda', 'rio', 'rio'],
+      );
+      expect(
+        responses.map((AssistantResponse r) => r.addressedPersonaId),
+        <String?>['noda', null, 'rio', null],
+      );
+    });
+
+    test('«говори короче, Нода», дальше без имени — Noda кратко', () async {
+      final f = await _fixture();
+      final responses = await chat(f, <String>[
+        'говори короче, Нода',
+        'Добавь задачу купить хлеб',
+      ]);
+      expect(responses.last.personaId, 'noda');
+      expect(f.assistant.personas.styleOf(Personas.noda), ReplyStyles.brief);
+      expect(f.assistant.personas.styleOf(Personas.rio), ReplyStyles.neutral);
+    });
+
+    test('«пусть отвечает Рио» после обращения к Noda — отвечает Rio',
+        () async {
+      final f = await _fixture();
+      final responses = await chat(f, <String>[
+        'Нода, привет',
+        'Noda будь основной',
+        'пусть отвечает Рио',
+        '2+2',
+      ]);
+      expect(responses[2].addressedPersonaId, isNull, reason: 'не обращение');
+      expect(responses.last.personaId, 'rio');
+      expect(f.assistant.personas.mainPersona, 'rio');
+    });
+
+    test('«пусть отвечает Рио», когда Рио и так основной, — снимает Noda',
+        () async {
+      for (final request in <String>[
+        'пусть отвечает Рио',
+        'Нода, пусть отвечает Рио',
+      ]) {
+        final f = await _fixture();
+        String? addressee;
+        final responses = <AssistantResponse>[];
+        for (final message in <String>['Нода, привет', request, '2+2']) {
+          final response = await f.say(message, addressee: addressee);
+          addressee = f.assistant.addresseeAfter(response, current: addressee);
+          responses.add(response);
+          if (message == request) {
+            expect(addressee, isNull, reason: request);
+          }
+        }
+        expect(responses[1].replyId, 'talk.set.already', reason: request);
+        expect(responses[1].personaId, 'rio', reason: request);
+        expect(responses[1].settingsChange, isNull, reason: request);
+        expect(responses.last.personaId, 'rio', reason: request);
+        expect(f.assistant.personas.mainPersona, 'rio');
+      }
+    });
+
+    test('«Рио, пусть отвечает Нода», когда Нода основная, — снимает Rio',
+        () async {
+      final f = await _fixture(
+        personas: const PersonaSettings(mainPersona: 'noda'),
+      );
+      final responses = await chat(f, <String>[
+        'Рио, привет',
+        'Рио, пусть отвечает Нода',
+        '2+2',
+      ]);
+      expect(responses[1].personaId, 'noda');
+      expect(responses[1].replyId, 'talk.set.already');
+      expect(responses.last.personaId, 'noda');
+    });
+
+    test('соло: «пусть отвечает Рио», когда Рио выбран, — как раньше',
+        () async {
+      final f = await _fixture(
+        personas: const PersonaSettings(mode: AssistantMode.solo),
+      );
+      final response = await f.say('пусть отвечает Рио');
+      expect(response.replyId, 'talk.set.already');
+      expect(response.personaId, 'rio');
+      expect(response.addressedPersonaId, isNull);
+    });
+
+    test('«спасибо, Рио» на вопрос Noda — переспрашивает Rio, он адресат',
+        () async {
+      for (final ack in <String>['спасибо, Рио', 'Рио, спасибо']) {
+        final f = await _fixture();
+        await f.tasks.create(title: 'Купить хлеб');
+        String? addressee;
+        final responses = <AssistantResponse>[];
+        for (final message in <String>['Нода, я купил хлеб', ack, '2+2']) {
+          final response = await f.say(message, addressee: addressee);
+          addressee = f.assistant.addresseeAfter(response, current: addressee);
+          responses.add(response);
+        }
+        expect(responses[0].personaId, 'noda', reason: ack);
+        expect(responses[1].replyId, 'common.confirm.unclear', reason: ack);
+        expect(responses[1].personaId, 'rio', reason: ack);
+        expect(responses[1].addressedPersonaId, 'rio', reason: ack);
+        expect(addressee, isNull, reason: ack);
+        expect(responses.last.personaId, 'rio', reason: ack);
+      }
+    });
+
+    test('«да, Рио» на вопрос Noda — действие то же, отвечает Rio', () async {
+      for (final yes in <String>['да, Рио', 'Рио, да']) {
+        final f = await _fixture();
+        await f.tasks.create(title: 'Купить хлеб');
+        final responses = await chat(f, <String>[
+          'Нода, я купил хлеб',
+          yes,
+          '2+2',
+        ]);
+        expect(responses[1].personaId, 'rio', reason: yes);
+        expect(responses[1].addressedPersonaId, 'rio', reason: yes);
+        expect(await f.tasks.listActive(), isEmpty, reason: yes);
+        expect(responses.last.personaId, 'rio', reason: yes);
+      }
+    });
+
+    test('«да» без имени на вопрос Noda — отвечает Noda, адресат прежний',
+        () async {
+      final f = await _fixture();
+      await f.tasks.create(title: 'Купить хлеб');
+      final responses = await chat(f, <String>[
+        'Нода, я купил хлеб',
+        'да',
+        '2+2',
+      ]);
+      expect(responses[1].personaId, 'noda');
+      expect(responses[1].addressedPersonaId, isNull);
+      expect(responses.last.personaId, 'noda');
+    });
+
+    test('соло: шутки «ещё» — от выбранного, имя не закрепляется', () async {
+      final f = await _fixture(
+        packs: <String>[mixed],
+        personas: const PersonaSettings(mode: AssistantMode.solo),
+      );
+      final responses = await chat(f, <String>[
+        'Нода, расскажи шутку',
+        'ещё шутку',
+      ]);
+      expect(
+        responses.map((AssistantResponse r) => r.personaId),
+        <String>['rio', 'rio'],
+      );
+      expect(responses.first.addressedPersonaId, isNull);
+    });
+  });
+
   group('«Как дела?» без проверки здоровья', () {
     test('не говорит «все работают» о непроверенном', () async {
       final f = await _fixture(extra: <Connector>[_UncheckedConnector()]);

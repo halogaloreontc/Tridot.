@@ -136,20 +136,24 @@ final class TalkConnector implements Connector, ConnectorHealth {
     final request = payload! as TalkRequest;
     final command = match.commandId;
     // «Спасибо, Нода», «как дела, Нода?»: в дуэте отвечает названный
-    // помощник, его голосом. В соло имя — просто текст. Просьба «пусть
-    // отвечает Рио» решает, кто подтвердит, сама (_setting).
+    // помощник, его голосом, и он же становится адресатом чата
+    // ([AssistantResponse.addressedPersonaId]). В соло имя — просто текст.
+    // Просьба «пусть отвечает Рио» решает, кто подтвердит, сама (_setting):
+    // имя в ней — не обращение, а новый основной.
     final named = Personas.byId(request.persona);
-    if (named != null &&
-        named.id != session.speaker.id &&
-        session.personas.mode == AssistantMode.duo &&
-        request.setting != TalkSettingKind.main) {
-      session
-        ..speaker = named
-        ..voice = session.personas.voiceOf(named);
-      final response = await _run(request, command, session);
-      return response.withPersona(named.id);
+    if (named == null ||
+        session.personas.mode != AssistantMode.duo ||
+        request.setting == TalkSettingKind.main) {
+      return _run(request, command, session);
     }
-    return _run(request, command, session);
+    if (named.id == session.speaker.id) {
+      return (await _run(request, command, session)).withAddressed(named.id);
+    }
+    session
+      ..speaker = named
+      ..voice = session.personas.voiceOf(named);
+    final response = await _run(request, command, session);
+    return response.withPersona(named.id).withAddressed(named.id);
   }
 
   Future<AssistantResponse> _run(
@@ -626,12 +630,27 @@ final class TalkConnector implements Connector, ConnectorHealth {
             ),
     };
     if (change.isNoOpFor(settings)) {
+      if (request.setting != TalkSettingKind.main || !duo) {
+        return _say(
+          session,
+          'talk.set.already',
+          command: command,
+          status: AssistantStatus.noAction,
+        );
+      }
+      // «Пусть отвечает Рио», а Рио и так основной: настройки не меняются,
+      // но просьба ясна — отвечает основной, и выбор адресата снимается
+      // (адресат-основной — это `null`, [AssistantController.addresseeAfter]).
+      final main = named ?? speaker;
+      session
+        ..speaker = main
+        ..voice = settings.voiceOf(main);
       return _say(
         session,
         'talk.set.already',
         command: command,
         status: AssistantStatus.noAction,
-      );
+      ).withPersona(main.id).withAddressed(main.id);
     }
     final updated = change.apply(settings);
     // Подтверждение звучит уже новым голосом: «без смайликов» — без

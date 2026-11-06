@@ -13,6 +13,7 @@ final class AssistantResponse {
     this.values = const <String, String>{},
     this.personaId,
     this.settingsChange,
+    this.addressedPersonaId,
   });
 
   /// Готовый текст для пользователя. В истории чата хранится именно он:
@@ -37,6 +38,12 @@ final class AssistantResponse {
   /// не меняются.
   final PersonaSettingsChange? settingsChange;
 
+  /// К кому пользователь обратился по имени в этом сообщении (только в
+  /// дуэте): «Нода, расскажи шутку», «спасибо, Нода», «Нода». Интерфейс
+  /// делает его адресатом чата (`AssistantController.addresseeAfter`):
+  /// «к кому обратились, тот и продолжает». `null` — по имени не обращались.
+  final String? addressedPersonaId;
+
   /// Тот же ответ от помощника [personaId].
   AssistantResponse withPersona(String personaId) => AssistantResponse(
         message: message,
@@ -47,5 +54,19 @@ final class AssistantResponse {
         values: values,
         personaId: personaId,
         settingsChange: settingsChange,
+        addressedPersonaId: addressedPersonaId,
+      );
+
+  /// Тот же ответ, в котором пользователь обратился к [personaId] по имени.
+  AssistantResponse withAddressed(String personaId) => AssistantResponse(
+        message: message,
+        intent: intent,
+        status: status,
+        task: task,
+        replyId: replyId,
+        values: values,
+        personaId: this.personaId,
+        settingsChange: settingsChange,
+        addressedPersonaId: personaId,
       );
 }
