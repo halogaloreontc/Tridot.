@@ -50,3 +50,19 @@
 {"id":"reg-050","text":"Добавь задачу «Отчёт» в 15.11","intent":"createTask","title":"Отчёт","due":"2026-11-03T15:11","precision":"dateTime","note":"после «в» число с точкой — время; 15:11 сегодня уже прошло"}
 {"id":"reg-051","text":"Добавь задачу «Звонок» завтра в 9 утра","intent":"createTask","title":"Звонок","due":"2026-11-03T09:00","precision":"dateTime","note":"час без минут и «утра»; раньше known_gap gap-002"}
 {"id":"reg-052","text":"Добавь задачу «Отчёт» в 10:00 15.11","intent":"createTask","title":"Отчёт","due":"2026-11-15T10:00","precision":"dateTime","note":"раньше 15.11 после «в 10:00» читалось как время 15:11 — конфликт времён"}
+{"id":"reg-053","text":"поставь задачу разместить стулья феррара 66580 в ячейки 1с","now":"2026-11-06T13:05","intent":"createTask","title":"Разместить стулья феррара 66580 в ячейки 1с","due":null,"note":"раньше «поставь задачу» не было маркером создания и помощник отвечал «не понял»; артикул и «1с» — не срок","source":"manual"}
+{"id":"reg-054","text":"поставить задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«поставить задачу» — создание","source":"manual"}
+{"id":"reg-055","text":"Поставь задачу купить хлеб на завтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"reg-056","text":"поставь мне задачу позвонить маме в пятницу в 10","intent":"createTask","title":"Позвонить маме","due":"2026-11-06T10:00","precision":"dateTime","source":"manual"}
+{"id":"reg-057","text":"Поставь новую задачу: проверить остатки","intent":"createTask","title":"Проверить остатки","due":null,"source":"manual"}
+{"id":"reg-058","text":"заведи задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«заведи задачу» — создание","source":"manual"}
+{"id":"reg-059","text":"Заведите напоминание оплатить счёт завтра в 9","intent":"createTask","title":"Оплатить счёт","due":"2026-11-03T09:00","precision":"dateTime","source":"manual"}
+{"id":"reg-060","text":"сделай задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«сделай задачу» — создание, а не завершение","source":"manual"}
+{"id":"reg-061","text":"Задача: купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«Задача:» в начале фразы — заголовок новой задачи","source":"manual"}
+{"id":"reg-062","text":"нужно поставить задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«нужно» перед маркером — вступление, а не часть названия","source":"manual"}
+{"id":"reg-063","text":"мне надо добавить задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"source":"manual"}
+{"id":"reg-064","text":"запиши задачу разместить стулья феррара 66580 в ячейки 1с","now":"2026-11-06T13:05","intent":"createTask","title":"Разместить стулья феррара 66580 в ячейки 1с","due":null,"source":"manual"}
+{"id":"reg-065","text":"создай задачу разместить стулья феррара 66580 в ячейки 1с","now":"2026-11-06T13:05","intent":"createTask","title":"Разместить стулья феррара 66580 в ячейки 1с","due":null,"source":"manual"}
+{"id":"reg-066","text":"поставь чайник","intent":"unknown","note":"«поставь» без «задачу» — не команда","source":"manual"}
+{"id":"reg-067","text":"сделай погромче","intent":"unknown","note":"«сделай» без «задачу» — не команда","source":"manual"}
+{"id":"reg-068","text":"задача купить хлеб","intent":"unknown","note":"без двоеточия «задача …» не заголовок","source":"manual"}

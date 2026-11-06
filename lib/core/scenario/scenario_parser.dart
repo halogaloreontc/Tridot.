@@ -246,6 +246,10 @@ final class ScenarioParser {
     'также',
     'нет',
     'не',
+    // «Нужно поставить задачу …», «мне надо добавить …».
+    'мне',
+    'надо',
+    'нужно',
   };
 
   static const Set<String> _remindVerbs = <String>{'напомни', 'напомните'};
@@ -760,7 +764,8 @@ final class ScenarioParser {
       final word = words[i];
       final negated =
           i > 0 && (words[i - 1] == 'не' || words[i - 1] == 'нет') && joined(i);
-      final create = _createLength(word, i, words);
+      final create =
+          _isTitleHeading(utterance, i) ? 1 : _createLength(word, i, words);
       if (create > 0) {
         return negated
             ? const _Marker.unknown()
@@ -799,9 +804,54 @@ final class ScenarioParser {
     'напомните',
   };
 
+  /// Глаголы, которые создают задачу только вместе с существительным:
+  /// «поставь задачу …», «заведи напоминание …». Без него это не команда:
+  /// «поставь чайник», «сделай погромче».
+  static const Set<String> _createWithNounVerbs = <String>{
+    'поставь',
+    'поставьте',
+    'поставить',
+    'заведи',
+    'заведите',
+    'завести',
+    'сделай',
+    'сделайте',
+  };
+
+  /// Есть ли после глагола в позиции [index] существительное «задачу»
+  /// (через «мне», «пожалуйста», «новую»): «поставь мне новую задачу».
+  bool _nounFollows(int index, List<String> words) {
+    for (var i = index + 1; i < words.length && i <= index + 3; i++) {
+      final word = words[i];
+      if (_objectNouns.contains(word)) return true;
+      if (_addressees.contains(word) ||
+          _politeWords.contains(word) ||
+          _newAdjectives.contains(word)) {
+        continue;
+      }
+      return false;
+    }
+    return false;
+  }
+
+  /// «Задача: купить хлеб» — существительное с двоеточием в начале фразы
+  /// работает как заголовок новой задачи.
+  bool _isTitleHeading(Utterance utterance, int index) {
+    if (index != 0 || !_objectNouns.contains(utterance.words[0])) return false;
+    final tokens = utterance.tokens;
+    if (tokens.length < 2) return false;
+    return utterance.analysisText
+        .substring(tokens[0].span.end, tokens[1].span.start)
+        .trim()
+        .startsWith(':');
+  }
+
   /// Сколько слов занимает маркер создания в позиции [index]; 0 — не он.
   int _createLength(String word, int index, List<String> words) {
     if (_createVerbs.contains(word)) return 1;
+    if (_createWithNounVerbs.contains(word) && _nounFollows(index, words)) {
+      return 1;
+    }
     final isNewTask = word == 'новая' &&
         index + 1 < words.length &&
         words[index + 1] == 'задача';

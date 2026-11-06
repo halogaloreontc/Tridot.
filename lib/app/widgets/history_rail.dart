@@ -31,6 +31,7 @@ final class HistoryRail extends StatelessWidget {
     required this.onSelect,
     this.activeIndex,
     this.compact = false,
+    this.cardInset = 48,
   });
 
   final List<HistoryEntry> entries;
@@ -39,6 +40,11 @@ final class HistoryRail extends StatelessWidget {
 
   /// Узкий экран: вся колонка — одна кнопка, открывающая список команд.
   final bool compact;
+
+  /// Сколько от правого края окна до правого края карточки при наведении.
+  /// Хозяин ставит её левее хроники, чтобы карточка не уходила на панель
+  /// задач и за край окна.
+  final double cardInset;
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +67,7 @@ final class HistoryRail extends StatelessWidget {
                         age: entries.length - 1 - index,
                         active: index == activeIndex,
                         compact: compact,
+                        cardInset: cardInset,
                         onTap: compact
                             ? () => _openList(context)
                             : () => onSelect(index),
@@ -126,10 +133,12 @@ final class _Mark extends StatefulWidget {
     required this.age,
     required this.active,
     required this.compact,
+    required this.cardInset,
     required this.onTap,
   });
 
   final HistoryEntry entry;
+  final double cardInset;
 
   /// 0 — последняя команда, дальше — старше.
   final int age;
@@ -140,6 +149,14 @@ final class _Mark extends StatefulWidget {
   @override
   State<_Mark> createState() => _MarkState();
 }
+
+/// Наибольшая ширина карточки при наведении: длинная команда переносится,
+/// а не растягивает карточку на весь экран.
+const double _cardWidth = 340;
+
+/// Обрезает длинный текст для карточки: она — напоминание, а не сообщение.
+String _clip(String text, int max) =>
+    text.length <= max ? text : '${text.substring(0, max - 1).trimRight()}…';
 
 final class _MarkState extends State<_Mark> {
   bool _hover = false;
@@ -167,7 +184,9 @@ final class _MarkState extends State<_Mark> {
       child: Align(
         alignment: Alignment.centerRight,
         child: Padding(
-          padding: EdgeInsets.only(right: widget.compact ? 4 : 0),
+          // Отступ от разделителя панели задач или края окна: полосы
+          // не должны сливаться с границей.
+          padding: EdgeInsets.only(right: widget.compact ? 4 : 8),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             width: width,
@@ -185,7 +204,12 @@ final class _MarkState extends State<_Mark> {
       key: Key('history-tip-${widget.entry.timestamp}-${widget.age}'),
       preferBelow: false,
       verticalOffset: 0,
-      margin: const EdgeInsets.only(right: 48),
+      // Карточка центрируется на полосе, а правое поле не пускает её правее
+      // [cardInset] от края окна: она остаётся слева от хроники, над
+      // сообщениями, а не над панелью задач.
+      margin: EdgeInsets.only(left: 16, right: widget.cardInset),
+      // Ограничение включает поля карточки.
+      constraints: BoxConstraints(maxWidth: _cardWidth + 16 + widget.cardInset),
       waitDuration: const Duration(milliseconds: 200),
       decoration: BoxDecoration(
         color: AssistantColors.raised,
@@ -200,7 +224,7 @@ final class _MarkState extends State<_Mark> {
             style: technicalTextStyle,
           ),
           TextSpan(
-            text: widget.entry.command,
+            text: _clip(widget.entry.command, 120),
             style: const TextStyle(
               fontSize: 14,
               color: AssistantColors.textStrong,
@@ -208,7 +232,7 @@ final class _MarkState extends State<_Mark> {
           ),
           if (widget.entry.result != null)
             TextSpan(
-              text: '\n${widget.entry.result}',
+              text: '\n${_clip(widget.entry.result!, 160)}',
               style: const TextStyle(fontSize: 13, color: AssistantColors.text),
             ),
           const TextSpan(

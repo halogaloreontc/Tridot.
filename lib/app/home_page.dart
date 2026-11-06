@@ -53,6 +53,37 @@ const double narrowBreakpoint = 700;
 /// Ширина, начиная с которой панель задач стоит колонкой рядом с чатом.
 const double panelBreakpoint = 1200;
 
+/// Подсказка пустой панели задач: пример команды без кавычек на своей
+/// строке, чтобы он не рвался посередине.
+const String emptyTasksHint = 'Напишите в чате, например:\nзавтра купить хлеб';
+
+/// Наибольшая ширина колонки чата (сообщения, «Кому», быстрые действия и
+/// поле ввода) без хроники команд.
+const double chatColumnWidth = 760;
+
+/// Общий отступ содержимого колонки чата от её краёв: по нему выровнены
+/// текст ответов, правый край пузырей, «Кому:», быстрые действия и поле
+/// ввода.
+const double chatInset = 16;
+
+/// Ширина колонки хроники команд справа от колонки чата.
+double historyRailWidth({required bool narrow}) => narrow ? 24 : 32;
+
+/// Сколько от правого края окна до правого края хроники команд. Хроника
+/// стоит вплотную к колонке чата, а колонка (вместе с хроникой) — по
+/// центру области между боковым меню и панелью задач.
+double historyRailRight({
+  required double width,
+  required double sidebarWidth,
+  required double panelWidth,
+  required bool narrow,
+}) {
+  final chat = width - sidebarWidth - panelWidth;
+  final column = chatColumnWidth + historyRailWidth(narrow: narrow);
+  final free = chat - column;
+  return panelWidth + (free > 0 ? free / 2 : 0);
+}
+
 final class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
@@ -720,6 +751,12 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         final narrow = width < narrowBreakpoint;
         final wide = width >= panelBreakpoint;
         final sidebarExpanded = width >= 1100;
+        final railRight = historyRailRight(
+          width: width,
+          sidebarWidth: narrow ? 0 : (sidebarExpanded ? 232 : 64),
+          panelWidth: wide && _panelOpen ? 321 : 0,
+          narrow: narrow,
+        );
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: AssistantColors.background,
@@ -746,19 +783,24 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-                // Хроника команд: у правого края чата и ровно по центру
-                // высоты всего экрана — зеркальная пара кубику у ответа.
+                // Хроника команд: вплотную справа к колонке чата и ровно по
+                // центру высоты всего экрана — зеркальная пара кубику у
+                // ответа. Место под неё оставлено в колонке (_chatColumn).
                 if (_section == AppSection.tasks &&
                     _mode == AssistantViewMode.dialogue)
                   Positioned(
                     top: 0,
                     bottom: 0,
-                    right: wide && _panelOpen ? 321 : 0,
+                    right: railRight,
                     child: HistoryRail(
                       entries: _historyEntries,
                       activeIndex: _highlightedCommand,
                       onSelect: _jumpToCommand,
                       compact: narrow,
+                      // Карточка при наведении — слева от хроники, над
+                      // сообщениями, а не над панелью задач.
+                      cardInset:
+                          railRight + historyRailWidth(narrow: narrow) + 4,
                     ),
                   ),
               ],
@@ -1141,31 +1183,53 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       );
     }
-    return Row(
-      children: <Widget>[
-        Expanded(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: ListView(
-                controller: _chatScroll,
-                reverse: true,
-                padding: const EdgeInsets.fromLTRB(8, 16, 16, 16),
-                children: rows.reversed.toList(),
-              ),
-            ),
-          ),
+    return _chatColumn(
+      alignment: Alignment.topCenter,
+      // Полоса прокрутки вставала между сообщениями и хроникой и читалась
+      // как лишняя линия; к сообщениям ведёт хроника, колесо и тачпад.
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: ListView(
+          key: const Key('chat-list'),
+          controller: _chatScroll,
+          reverse: true,
+          padding: const EdgeInsets.fromLTRB(chatInset, 16, chatInset, 16),
+          children: rows.reversed.toList(),
         ),
-        // Место под хронику: сама она лежит слоем поверх экрана (см. build),
-        // чтобы стоять по центру высоты всего экрана, а не области чата.
-        SizedBox(width: _railWidth),
-      ],
+      ),
     );
   }
 
-  double get _railWidth =>
-      MediaQuery.sizeOf(context).width < narrowBreakpoint ? 24 : 32;
+  /// Колонка чата: не шире [chatColumnWidth] плюс место под хронику
+  /// команд справа, по центру. Одна и та же для ленты сообщений, «Кому» и
+  /// нижней части, поэтому их края совпадают. Сама хроника лежит слоем
+  /// поверх экрана (см. build), чтобы стоять по центру высоты всего
+  /// экрана, а не области чата.
+  Widget _chatColumn({
+    required AlignmentGeometry alignment,
+    required Widget child,
+    double? maxHeight,
+  }) {
+    final rail = historyRailWidth(
+      narrow: MediaQuery.sizeOf(context).width < narrowBreakpoint,
+    );
+    return Align(
+      alignment: alignment,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: chatColumnWidth + rail,
+          maxHeight: maxHeight ?? double.infinity,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            Expanded(child: child),
+            SizedBox(width: rail),
+          ],
+        ),
+      ),
+    );
+  }
 
   List<HistoryEntry> get _historyEntries => <HistoryEntry>[
         for (var i = 0; i < _messages.length; i++)
@@ -1182,7 +1246,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget _cubeWidget() => StatusCube(
         state: _cube,
         reduceMotion: _settings.reduceMotion,
-        size: 16,
+        size: 14,
       );
 
   Widget _latestAnswer() {
@@ -1204,44 +1268,42 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget _buildBottomArea(double available) {
     final selected = _selectedTask;
     final compact = available < 420;
-    return Align(
+    return _chatColumn(
       alignment: Alignment.bottomCenter,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 760, maxHeight: available * .55),
-        child: SingleChildScrollView(
-          reverse: true,
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              if (!compact)
-                _QuickActions(
-                  hasSelection: selected != null && selected.isActive,
-                  sending: _sending,
-                  onSend: _send,
-                  onTemplate: _applyTemplate,
-                ),
-              CommandComposer(
-                controller: _input,
-                focusNode: _inputFocus,
+      maxHeight: available * .55,
+      child: SingleChildScrollView(
+        reverse: true,
+        padding: const EdgeInsets.fromLTRB(chatInset, 4, chatInset, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (!compact)
+              _QuickActions(
+                hasSelection: selected != null && selected.isActive,
                 sending: _sending,
-                mode: _mode,
-                onModeChanged: _setMode,
                 onSend: _send,
-                onTemplate: _insertTemplate,
-                onDocumentSource: (DocumentSource source) => _announce(
-                  'Подключение «${source.label}» — следующий этап: '
-                  'документы будут создаваться и правиться через помощника.',
-                ),
-                onVoice: () => _announce(
-                  'Голосовой режим в разработке. Пока напишите команду текстом.',
-                ),
-                previousCommand: _previousCommand,
-                nextCommand: _nextCommand,
+                onTemplate: _applyTemplate,
               ),
-            ],
-          ),
+            CommandComposer(
+              controller: _input,
+              focusNode: _inputFocus,
+              sending: _sending,
+              mode: _mode,
+              onModeChanged: _setMode,
+              onSend: _send,
+              onTemplate: _insertTemplate,
+              onDocumentSource: (DocumentSource source) => _announce(
+                'Подключение «${source.label}» — следующий этап: '
+                'документы будут создаваться и правиться через помощника.',
+              ),
+              onVoice: () => _announce(
+                'Голосовой режим в разработке. Пока напишите команду текстом.',
+              ),
+              previousCommand: _previousCommand,
+              nextCommand: _nextCommand,
+            ),
+          ],
         ),
       ),
     );
@@ -1253,20 +1315,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// после смены основного в настройках отвечает новый основной.
   Widget _buildAddresseeSwitch() {
     final main = _settings.personas.main;
-    return Align(
+    return _chatColumn(
       alignment: Alignment.bottomCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: _AddresseeSwitch(
-              main: main,
-              selected: Personas.byId(_addressee) ?? main,
-              onChanged: (Persona persona) => setState(
-                () => _addressee = persona.id == main.id ? null : persona.id,
-              ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(chatInset, 4, chatInset, 0),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: _AddresseeSwitch(
+            main: main,
+            selected: Personas.byId(_addressee) ?? main,
+            onChanged: (Persona persona) => setState(
+              () => _addressee = persona.id == main.id ? null : persona.id,
             ),
           ),
         ),
@@ -1311,7 +1370,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       body = const EmptyState(
         icon: Icons.check_circle_outline,
         title: 'Активных задач нет',
-        hint: 'Напишите в чате: Добавь задачу «…» на завтра',
+        hint: emptyTasksHint,
       );
     } else {
       final now = _now;
@@ -1345,19 +1404,27 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         children: <Widget>[
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-            child: Row(
+            // Wrap, а не Row: при крупном системном шрифте счётчик уходит
+            // на вторую строку, а не сжимает заголовок до буквы в строке.
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 4,
               children: <Widget>[
-                const Expanded(
-                  child: Text(
-                    'Активные',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AssistantColors.textStrong,
-                    ),
+                const Text(
+                  'Активные',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AssistantColors.textStrong,
                   ),
                 ),
-                Text(_panelSummary(), style: technicalTextStyle),
+                Text(
+                  _panelSummary(),
+                  key: const Key('tasks-panel-summary'),
+                  style: technicalTextStyle,
+                ),
               ],
             ),
           ),
@@ -1571,6 +1638,7 @@ final class _MessageRow extends StatelessWidget {
         ? AssistantColors.danger
         : AssistantColors.warning;
     final current = task;
+    final cube = this.cube;
     final author = fromUser ? null : Personas.byId(message.personaId);
     final content = Column(
       crossAxisAlignment:
@@ -1595,9 +1663,17 @@ final class _MessageRow extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Кубик — состояние именно этого ответа, поэтому стоит в
+                // строке автора, а не отдельным значком слева от текста.
+                if (cube != null) ...<Widget>[
+                  const SizedBox(width: 8),
+                  cube,
+                ],
               ],
             ),
-          ),
+          )
+        else if (cube != null)
+          Padding(padding: const EdgeInsets.only(bottom: 4), child: cube),
         if (label != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 2),
@@ -1668,32 +1744,16 @@ final class _MessageRow extends StatelessWidget {
           ),
       ],
     );
+    // Текст ответа начинается у левого края колонки — там же, где «Кому:»,
+    // быстрые действия и поле ввода; пузырь команды кончается у правого.
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          // Кубик (16 px) только у последнего ответа; колонка держит ритм.
-          SizedBox(
-            width: 28,
-            child: cube == null
-                ? null
-                : Padding(
-                    padding: const EdgeInsets.only(top: 3),
-                    child: Align(alignment: Alignment.topLeft, child: cube),
-                  ),
-          ),
-          Expanded(
-            child: Align(
-              alignment:
-                  fromUser ? Alignment.centerRight : Alignment.centerLeft,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
-                child: content,
-              ),
-            ),
-          ),
-        ],
+      child: Align(
+        alignment: fromUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: content,
+        ),
       ),
     );
   }
@@ -1902,8 +1962,11 @@ final class _QuickActions extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: AssistantColors.text,
                 side: const BorderSide(color: AssistantColors.border),
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                // Та же высота и форма, что у «Кому:» над ними: на
+                // настольной плотности кнопки иначе становятся ниже.
+                minimumSize: const Size(0, 32),
+                visualDensity: VisualDensity.standard,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 shape: const StadiumBorder(),
               ),
             ),
@@ -2124,7 +2187,7 @@ final class _AddresseeSwitch extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       child: Wrap(
         key: const Key('addressee-switch'),
-        spacing: 6,
+        spacing: 8,
         runSpacing: 4,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: <Widget>[
@@ -2138,10 +2201,10 @@ final class _AddresseeSwitch extends StatelessWidget {
               child: InkWell(
                 key: Key('addressee-${persona.id}'),
                 onTap: () => onChanged(persona),
-                borderRadius: BorderRadius.circular(12),
+                customBorder: const StadiumBorder(),
                 child: Container(
                   constraints: const BoxConstraints(minHeight: 32),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
                     color: persona.id == selected.id
                         ? AssistantColors.bubble
@@ -2151,7 +2214,7 @@ final class _AddresseeSwitch extends StatelessWidget {
                           ? Color(persona.accentColor)
                           : AssistantColors.borderSoft,
                     ),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,

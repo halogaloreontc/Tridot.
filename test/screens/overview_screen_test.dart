@@ -125,7 +125,8 @@ void main() {
     expect(find.byKey(const Key('overview-empty')), findsOneWidget);
     expect(
       find.text(
-        'Создайте первую задачу в чате: Добавь задачу «…» на завтра',
+        'Создайте первую задачу в чате, например:\n'
+        'добавь задачу купить хлеб на завтра',
       ),
       findsOneWidget,
     );

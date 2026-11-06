@@ -99,8 +99,8 @@ final class OverviewScreen extends StatelessWidget {
                     key: Key('overview-empty'),
                     icon: Icons.inbox_outlined,
                     title: 'Задач пока нет',
-                    hint: 'Создайте первую задачу в чате: '
-                        'Добавь задачу «…» на завтра',
+                    hint: 'Создайте первую задачу в чате, например:\n'
+                        'добавь задачу купить хлеб на завтра',
                   ),
                 )
               else ...<Widget>[
