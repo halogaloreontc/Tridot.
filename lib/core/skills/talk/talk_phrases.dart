@@ -1,4 +1,5 @@
 import '../../connectors/due_parser.dart';
+import '../../personas/persona.dart';
 import '../../replies/reply_catalog.dart';
 
 /// О чём реплика беседы.
@@ -88,7 +89,7 @@ enum TalkSettingKind {
   /// «Не шути».
   jokesOff,
 
-  /// «Noda, будь основной», «пусть отвечает Рио».
+  /// «Noda, будь основной», «пусть отвечает Лиорио».
   main,
 }
 
@@ -120,7 +121,7 @@ final class TalkRequest {
   /// Стиль для [TalkSettingKind.style]: id из [ReplyStyles].
   final String? style;
 
-  /// Помощник, названный в просьбе («пусть отвечает Рио»): `rio`, `noda`.
+  /// Помощник, названный в просьбе («пусть отвечает Лио»): `rio`, `noda`.
   /// `null` — тот, кто отвечает.
   final String? persona;
 
@@ -167,12 +168,19 @@ abstract final class TalkPhrases {
     'вообще',
   };
 
-  /// Имена помощников: «привет, Нода», «пусть отвечает Рио».
-  static const Map<String, String> _names = <String, String>{
-    'rio': 'rio',
-    'рио': 'rio',
-    'noda': 'noda',
-    'нода': 'noda',
+  /// Имена для обращения → id: «привет, Нода», «пусть отвечает Лио»
+  /// ([Persona.addressNames]). Годятся где угодно в реплике.
+  static final Map<String, String> _names = <String, String>{
+    for (final persona in Personas.all)
+      for (final form in persona.addressNames) form: persona.id,
+  };
+
+  /// Косвенные падежи имён → id: «сделай Ноду основной»
+  /// ([Persona.inflectedForms]). Только на месте `<имя>` в образцах
+  /// просьб: «привет Ноду» — не обращение и не беседа.
+  static final Map<String, String> _inflectedNames = <String, String>{
+    for (final persona in Personas.all)
+      for (final form in persona.inflectedForms) form: persona.id,
   };
 
   /// Вместо имени в образцах просьб.
@@ -520,6 +528,10 @@ abstract final class TalkPhrases {
     'отвечает <имя>': _main,
     'основной <имя>': _main,
     'основная <имя>': _main,
+    'сделай <имя> основной': _main,
+    'сделай <имя> основным': _main,
+    'сделай основной <имя>': _main,
+    'сделай основным <имя>': _main,
   };
 
   static const TalkRequest _brief = TalkRequest(
@@ -674,16 +686,20 @@ abstract final class TalkPhrases {
   /// с именем помощника на месте `<имя>` или без него.
   static TalkRequest? _recognizeWords(List<String> words) {
     String? persona;
+    var inflected = false;
     for (final word in words) {
-      final name = _names[word];
+      final name = _names[word] ?? _inflectedNames[word];
       if (name == null) continue;
       if (persona != null && persona != name) return null;
       persona = name;
+      if (!_names.containsKey(word)) inflected = true;
     }
-    if (_isRude(words)) return TalkRequest(TalkTopic.rude, persona: persona);
+    if (!inflected && _isRude(words)) {
+      return TalkRequest(TalkTopic.rude, persona: persona);
+    }
     final kept = <String>[
       for (final word in words)
-        if (_names.containsKey(word))
+        if (_names.containsKey(word) || _inflectedNames.containsKey(word))
           _nameSlot
         else if (!_fillers.contains(word))
           word,
@@ -691,7 +707,8 @@ abstract final class TalkPhrases {
     if (kept.isEmpty) return null;
     final withName = _phrases[kept.join(' ')];
     if (withName != null) return withName.withPersona(persona);
-    if (persona == null) return null;
+    // Косвенный падеж — только в образце просьбы: «привет Ноду» — мимо.
+    if (persona == null || inflected) return null;
     // Имя как обращение где угодно, кроме образцов просьб: «привет, Нода».
     final plain = kept.where((String w) => w != _nameSlot).join(' ');
     if (plain.isEmpty) return null;

@@ -31,7 +31,7 @@ import '../services/clock.dart';
 /// сбрасываются, снимается только ожидание подтверждения выключенного
 /// коннектора.
 ///
-/// Отвечает один из помощников ([personas], docs/PLANS.md, «Rio и Noda»):
+/// Отвечает один из помощников ([personas], docs/PLANS.md, «Liorio и Noda»):
 /// в дуэте — основной, адресат из поля ввода или тот, к кому обратились по
 /// имени («Noda, …»), в соло — выбранный. Обращение по имени в дуэте
 /// отмечается в ответе ([AssistantResponse.addressedPersonaId]), и
@@ -133,7 +133,7 @@ final class AssistantController {
   /// сообщения (`null` — основной). В дуэте обращение по имени делает
   /// названного адресатом, как выбор в поле ввода: следующие сообщения без
   /// имени получает он. Основной — снова `null`. Просьба сменить основного
-  /// («пусть отвечает Рио») тоже возвращает `null`: дальше отвечает новый
+  /// («пусть отвечает Лиорио») тоже возвращает `null`: дальше отвечает новый
   /// основной. В соло адресат не используется и не меняется.
   String? addresseeAfter(AssistantResponse response, {String? current}) {
     final settings = personas;
@@ -153,8 +153,8 @@ final class AssistantController {
     final settings = personas;
     final (persona, text, addressed) = resolve(message, addressee: addressee);
     final response = await _handle(settings, persona, text, addressed);
-    // Навык мог отметить адресата сам: «Нода, пусть отвечает Рио» — дальше
-    // отвечает Рио, а не та, к кому обратились в начале.
+    // Навык мог отметить адресата сам: «Нода, пусть отвечает Лио» — дальше
+    // отвечает Liorio, а не та, к кому обратились в начале.
     if (!addressed || response.addressedPersonaId != null) return response;
     return response.withAddressed(persona.id);
   }
@@ -192,7 +192,7 @@ final class AssistantController {
     // их поменяли во время ответа, эти перемены не теряются. Интерфейс
     // применяет то же изменение и сохраняет его.
     if (change != null) personas = change.apply(personas);
-    // Беседа может ответить от другого помощника: «пусть отвечает Рио»,
+    // Беседа может ответить от другого помощника: «пусть отвечает Лиорио»,
     // на «да» отвечает спросивший (_speakAsAsker).
     return response.withPersona(response.personaId ?? session.speaker.id);
   }
@@ -253,8 +253,8 @@ final class AssistantController {
 
   /// Ответ на вопрос подтверждения в дуэте звучит от того, кто спросил,
   /// даже если адресат в поле ввода с тех пор сменился. Если в ответе
-  /// назвали помощника по имени в начале ([addressed]: «Рио, да»), отвечает
-  /// названный. Имя в конце ([trailing]: «да, Рио», «спасибо, Рио») —
+  /// назвали помощника по имени в начале ([addressed]: «Лио, да»), отвечает
+  /// названный. Имя в конце ([trailing]: «да, Лиорио», «спасибо, Лио») —
   /// тоже обращение: отвечает названный. В соло помощник один — тот, что
   /// в настройках сейчас.
   void _speakAsAsker(
@@ -291,7 +291,7 @@ final class AssistantController {
         : connectors
             .where((Connector c) => c.info.id == pending.connectorId)
             .firstOrNull;
-    // «Да, Рио», «спасибо, Нода»: имя в конце ответа на вопрос — тоже
+    // «Да, Лиорио», «спасибо, Нода»: имя в конце ответа на вопрос — тоже
     // обращение (в дуэте). Само «да» или «нет» ищем в тексте без имени.
     final trailing = pending != null &&
             owner != null &&

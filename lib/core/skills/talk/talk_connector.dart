@@ -16,7 +16,7 @@ export 'talk_phrases.dart';
 ///
 /// Беседа заготовленная, а не свободная (ADR-001): понимает только
 /// короткие реплики целиком ([TalkPhrases]) и отвечает записями каталога
-/// ответов голосом Rio или Noda. Совпадения беседы — на крайний случай
+/// ответов голосом Liorio или Noda. Совпадения беседы — на крайний случай
 /// ([ConnectorMatch.fallback]): любая команда задач, калькулятора или
 /// подключения важнее.
 final class TalkConnector implements Connector, ConnectorHealth {
@@ -138,7 +138,7 @@ final class TalkConnector implements Connector, ConnectorHealth {
     // «Спасибо, Нода», «как дела, Нода?»: в дуэте отвечает названный
     // помощник, его голосом, и он же становится адресатом чата
     // ([AssistantResponse.addressedPersonaId]). В соло имя — просто текст.
-    // Просьба «пусть отвечает Рио» решает, кто подтвердит, сама (_setting):
+    // Просьба «пусть отвечает Лиорио» решает, кто подтвердит, сама (_setting):
     // имя в ней — не обращение, а новый основной.
     final named = Personas.byId(request.persona);
     if (named == null ||
@@ -638,7 +638,7 @@ final class TalkConnector implements Connector, ConnectorHealth {
           status: AssistantStatus.noAction,
         );
       }
-      // «Пусть отвечает Рио», а Рио и так основной: настройки не меняются,
+      // «Пусть отвечает Лиорио», а Лиорио и так основной: настройки не меняются,
       // но просьба ясна — отвечает основной, и выбор адресата снимается
       // (адресат-основной — это `null`, [AssistantController.addresseeAfter]).
       final main = named ?? speaker;

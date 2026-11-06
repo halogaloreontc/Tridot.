@@ -1,3 +1,4 @@
+import '../personas/persona.dart';
 import 'utterance.dart';
 
 /// Разговорное вступление перед командой: приветствие, благодарность,
@@ -73,7 +74,9 @@ abstract final class SocialPrefix {
   };
 
   /// Имена помощников: после приветствия — обращение («привет, Нода, …»).
-  static const Set<String> _names = <String>{'rio', 'noda', 'рио', 'нода'};
+  static final Set<String> _names = <String>{
+    for (final persona in Personas.all) ...persona.addressNames,
+  };
 
   /// «Как дела», «как ты» после приветствия.
   static const Set<String> _howWords = <String>{'дела', 'ты', 'вы', 'жизнь'};

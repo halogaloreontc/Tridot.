@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/app_info.dart';
 import '../core/formatting/due_format.dart';
 import '../core/models/assistant_types.dart';
 import '../core/models/task.dart';
@@ -840,7 +841,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   // сокращается, а не вылезает за край.
                   const Flexible(
                     child: Text(
-                      'Помощник',
+                      AppInfo.name,
+                      key: ValueKey<String>('app-name'),
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 16,
@@ -1309,7 +1311,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// «Кому: Rio | Noda» над нижней частью, вне её прокрутки: при узком
+  /// «Кому: Liorio | Noda» над нижней частью, вне её прокрутки: при узком
   /// экране и крупном тексте поле ввода прокручивается, а переключатель
   /// остаётся на виду и нажимается. Выбор основного — `null`: тогда
   /// после смены основного в настройках отвечает новый основной.

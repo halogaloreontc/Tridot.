@@ -191,7 +191,7 @@ void main() {
       );
       expectError(
         withEntry(<String, Object?>{'id': 'j1', 'text': 'а', 'persona': 'bob'}),
-        'any, rio, noda',
+        'any, rio (Liorio), noda',
       );
       expectError(
         withEntry(<String, Object?>{
@@ -227,6 +227,20 @@ void main() {
       ).pack!;
       expect(pack.entries.single.text, '<b>жирный</b> **звёзды** \${код}');
     });
+  });
+
+  test('persona: «liorio» читается как id «rio», записывается «rio»', () {
+    final pack = PackFormat.parse(
+      jsonEncode(
+        withEntry(<String, Object?>{
+          'id': 'j1',
+          'text': 'а',
+          'persona': 'liorio',
+        }),
+      ),
+    ).pack!;
+    expect(pack.entries.single.persona, PackPersona.rio);
+    expect(pack.encode(), contains('"persona":"rio"'));
   });
 
   test('PackPersona.suits', () {

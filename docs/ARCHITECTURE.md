@@ -14,7 +14,7 @@ Flutter UI
    CalculatorConnector → Calculator (свой разбор, точные дроби)
    другие коннекторы → HttpTransport / SecretStore (ADR-004)
 → ответ: session.reply(id, факты) → ReplyLibrary (стиль, род, «вы»/«ты»,
-  эмодзи помощника) → AssistantResponse с автором Rio или Noda (ADR-006)
+  эмодзи помощника) → AssistantResponse с автором Liorio или Noda (ADR-006, ADR-008)
 ```
 
 Коннекторы — `lib/core/connectors/`, как написать свой — `docs/CONNECTORS.md`. Навыки, подключения и паки — `lib/core/extensions/`, `docs/EXTENSIONS.md`. Каталог ответов и помощники — `lib/core/replies/`, `lib/core/personas/`, `docs/REPLIES.md`.

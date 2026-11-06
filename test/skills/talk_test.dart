@@ -180,7 +180,7 @@ void main() {
       'без смайликов': TalkTopic.setting,
       'шути меньше': TalkTopic.setting,
       'Noda будь основной': TalkTopic.setting,
-      'пусть отвечает Рио': TalkTopic.setting,
+      'пусть отвечает Лиорио': TalkTopic.setting,
       // Вступление и другая реплика: важнее вторая.
       'привет, говори короче': TalkTopic.setting,
       'спасибо, пока': TalkTopic.bye,
@@ -234,17 +234,63 @@ void main() {
       expect(TalkPhrases.recognize('спасибо, Нода')!.persona, 'noda');
       expect(TalkPhrases.recognize('как дела, Нода?')!.persona, 'noda');
       expect(
-        TalkPhrases.recognize('привет, Рио, говори короче')!.persona,
+        TalkPhrases.recognize('привет, Лиорио, говори короче')!.persona,
         'rio',
       );
       expect(TalkPhrases.recognize('спасибо')!.persona, isNull);
-      expect(TalkPhrases.recognize('Нода, спасибо, Рио'), isNull);
+      expect(TalkPhrases.recognize('Нода, спасибо, Лиорио'), isNull);
     });
 
     test('имя в просьбе об основном — кого назначить', () {
-      expect(TalkPhrases.recognize('пусть отвечает Рио')!.persona, 'rio');
+      expect(TalkPhrases.recognize('пусть отвечает Лиорио')!.persona, 'rio');
       expect(TalkPhrases.recognize('Noda будь основной')!.persona, 'noda');
       expect(TalkPhrases.recognize('будь основной')!.persona, isNull);
+    });
+
+    test('все имена Liorio и Noda, косвенные падежи — в просьбах', () {
+      for (final (text, persona) in <(String, String)>[
+        ('пусть отвечает Лио', 'rio'),
+        ('пусть отвечает Lio', 'rio'),
+        ('пусть отвечает Liorio', 'rio'),
+        ('Лио, будь основным', 'rio'),
+        ('Лиорио будь основным', 'rio'),
+        ('сделай Лиорио основным', 'rio'),
+        ('пусть отвечает Нодочка', 'noda'),
+        ('Нодь, будь основной', 'noda'),
+        ('сделай Ноду основной', 'noda'),
+        ('сделай основной Нодочку', 'noda'),
+        ('спасибо, Лио', 'rio'),
+        ('спасибо, нодь', 'noda'),
+        ('привет, Нодочка', 'noda'),
+      ]) {
+        final request = TalkPhrases.recognize(text);
+        expect(request, isNotNull, reason: text);
+        expect(request!.persona, persona, reason: text);
+      }
+      // Прежнее имя — уже не имя: «Рио» остаётся лишним словом.
+      expect(TalkPhrases.recognize('пусть отвечает Рио'), isNull);
+      expect(TalkPhrases.recognize('пусть отвечает Лион'), isNull);
+      expect(TalkPhrases.recognize('Лио, пусть отвечает Нода'), isNull);
+    });
+
+    test('косвенный падеж вне просьбы — не имя и не беседа', () {
+      for (final text in <String>[
+        'привет Ноду',
+        'спасибо ноды',
+        'спасибо, Ноде',
+        'пока нодой',
+        'привет, Нодочку',
+        'дура Ноду',
+        'Ноду',
+        'Ноду, привет',
+      ]) {
+        expect(TalkPhrases.recognize(text), isNull, reason: text);
+      }
+      // В образце просьбы падеж работает, в том числе после вступления.
+      expect(
+        TalkPhrases.recognize('спасибо, сделай Ноду основной')?.persona,
+        'noda',
+      );
     });
   });
 
@@ -599,13 +645,13 @@ void main() {
 
       final rio = await f.say('кто ты');
       expect(rio.replyId, 'talk.who.main');
-      expect(rio.message, startsWith('Я Rio, основной помощник'));
+      expect(rio.message, startsWith('Я Liorio, основной помощник'));
       expect(rio.message, contains('Noda'));
 
       final noda = await f.say('кто ты', addressee: 'noda');
       expect(noda.replyId, 'talk.who.secondary');
       expect(noda.personaId, 'noda');
-      expect(noda.message, contains('Rio'));
+      expect(noda.message, contains('Liorio'));
     });
 
     test('соло: единственный помощник', () async {
@@ -698,7 +744,7 @@ void main() {
           _pack('jokes.mixed', <Map<String, Object?>>[
             <String, Object?>{
               'id': 'r',
-              'text': 'Шутка для Rio.',
+              'text': 'Шутка для Liorio.',
               'persona': 'rio',
             },
             <String, Object?>{
@@ -717,7 +763,7 @@ void main() {
         ],
       );
 
-      expect((await f.say('анекдот')).message, 'Шутка для Rio.');
+      expect((await f.say('анекдот')).message, 'Шутка для Liorio.');
       final noda = await f.say('Нода, анекдот');
       expect(noda.message, contains('Шутка для Noda.'));
     });
@@ -798,7 +844,7 @@ void main() {
 
       expect(response.intent, TalkConnector.settingCommand);
       expect(response.settingsChange, isNotNull);
-      expect(f.assistant.personas.styleOf(Personas.rio), ReplyStyles.brief);
+      expect(f.assistant.personas.styleOf(Personas.liorio), ReplyStyles.brief);
       expect(f.assistant.personas.styleOf(Personas.noda), 'friendly');
       expect(response.message, 'Понял. Коротко.');
       expect((await f.say('Добавь задачу купить хлеб')).message, isNot(''));
@@ -810,16 +856,16 @@ void main() {
       await f.say('Noda, говори официально');
 
       expect(f.assistant.personas.styleOf(Personas.noda), 'business');
-      expect(f.assistant.personas.styleOf(Personas.rio), 'neutral');
+      expect(f.assistant.personas.styleOf(Personas.liorio), 'neutral');
     });
 
     final cases = <String, bool Function(PersonaSettings)>{
       'говори подробнее': (PersonaSettings p) =>
-          p.styleOf(Personas.rio) == 'neutral',
+          p.styleOf(Personas.liorio) == 'neutral',
       'давай повеселее': (PersonaSettings p) =>
-          p.styleOf(Personas.rio) == 'friendly',
+          p.styleOf(Personas.liorio) == 'friendly',
       'говори по-деловому': (PersonaSettings p) =>
-          p.styleOf(Personas.rio) == 'business',
+          p.styleOf(Personas.liorio) == 'business',
       'давай на ты': (PersonaSettings p) => p.address == ReplyAddress.informal,
       'без смайликов': (PersonaSettings p) => !p.emoji,
       'шути больше': (PersonaSettings p) => p.jokes == JokeFrequency.normal,
@@ -869,7 +915,7 @@ void main() {
       expect(f.assistant.personas, const PersonaSettings());
     });
 
-    test('«Noda будь основной» и «пусть отвечает Рио» в дуэте', () async {
+    test('«Noda будь основной» и «пусть отвечает Лиорио» в дуэте', () async {
       final f = await _fixture();
 
       final noda = await f.say('Noda будь основной');
@@ -878,10 +924,29 @@ void main() {
       expect(noda.message, contains('Noda'));
       expect((await f.say('привет')).personaId, 'noda');
 
-      final rio = await f.say('пусть отвечает Рио');
+      final rio = await f.say('пусть отвечает Лиорио');
       expect(f.assistant.personas.mainPersona, 'rio');
       expect(rio.personaId, 'rio');
       expect((await f.say('привет')).personaId, 'rio');
+    });
+
+    test('«сделай Ноду основной», «Лио, будь основным» — по всем именам',
+        () async {
+      final f = await _fixture();
+
+      final noda = await f.say('сделай Ноду основной');
+      expect(f.assistant.personas.mainPersona, 'noda');
+      expect(noda.personaId, 'noda');
+
+      final liorio = await f.say('Лио, будь основным');
+      expect(f.assistant.personas.mainPersona, 'rio');
+      expect(liorio.personaId, 'rio');
+      expect(liorio.message, contains('Liorio'));
+
+      await f.say('пусть отвечает Нодочка');
+      expect(f.assistant.personas.mainPersona, 'noda');
+      await f.say('пусть отвечает Lio');
+      expect(f.assistant.personas.mainPersona, 'rio');
     });
 
     test('в соло — кто отвечает', () async {
@@ -1010,13 +1075,20 @@ void main() {
       final response = await f.say('говори короче, Нода');
       expect(response.personaId, 'noda');
       expect(f.assistant.personas.styleOf(Personas.noda), ReplyStyles.brief);
-      expect(f.assistant.personas.styleOf(Personas.rio), ReplyStyles.neutral);
+      expect(
+        f.assistant.personas.styleOf(Personas.liorio),
+        ReplyStyles.neutral,
+      );
     });
   });
 
   group('к кому обратились, тот и продолжает', () {
     final mixed = _pack('jokes.mixed', <Map<String, Object?>>[
-      <String, Object?>{'id': 'r', 'text': 'Шутка для Rio.', 'persona': 'rio'},
+      <String, Object?>{
+        'id': 'r',
+        'text': 'Шутка для Liorio.',
+        'persona': 'rio',
+      },
       <String, Object?>{
         'id': 'n',
         'text': 'Шутка для Noda.',
@@ -1046,7 +1118,7 @@ void main() {
         'Нода, расскажи шутку',
         'ещё шутку',
         'расскажи ещё шутку',
-        'Рио, расскажи шутку',
+        'Лиорио, расскажи шутку',
         'ещё шутку',
       ]);
       expect(
@@ -1056,10 +1128,10 @@ void main() {
       for (final response in responses.take(3)) {
         expect(response.message, contains('Шутка для Noda.'));
         // Дружеский стиль Noda по умолчанию.
-        expect(response.message, isNot(contains('Шутка для Rio.')));
+        expect(response.message, isNot(contains('Шутка для Liorio.')));
       }
       for (final response in responses.skip(3)) {
-        expect(response.message, contains('Шутка для Rio.'));
+        expect(response.message, contains('Шутка для Liorio.'));
       }
     });
 
@@ -1068,7 +1140,7 @@ void main() {
       final responses = await chat(f, <String>[
         'расскажи шутку, Нода',
         'ещё шутку',
-        'спасибо, Рио',
+        'спасибо, Лиорио',
         'ещё шутку',
       ]);
       expect(
@@ -1089,16 +1161,19 @@ void main() {
       ]);
       expect(responses.last.personaId, 'noda');
       expect(f.assistant.personas.styleOf(Personas.noda), ReplyStyles.brief);
-      expect(f.assistant.personas.styleOf(Personas.rio), ReplyStyles.neutral);
+      expect(
+        f.assistant.personas.styleOf(Personas.liorio),
+        ReplyStyles.neutral,
+      );
     });
 
-    test('«пусть отвечает Рио» после обращения к Noda — отвечает Rio',
+    test('«пусть отвечает Лиорио» после обращения к Noda — отвечает Liorio',
         () async {
       final f = await _fixture();
       final responses = await chat(f, <String>[
         'Нода, привет',
         'Noda будь основной',
-        'пусть отвечает Рио',
+        'пусть отвечает Лиорио',
         '2+2',
       ]);
       expect(responses[2].addressedPersonaId, isNull, reason: 'не обращение');
@@ -1106,11 +1181,11 @@ void main() {
       expect(f.assistant.personas.mainPersona, 'rio');
     });
 
-    test('«пусть отвечает Рио», когда Рио и так основной, — снимает Noda',
+    test('«пусть отвечает Лиорио», когда Лиорио и так основной, — снимает Noda',
         () async {
       for (final request in <String>[
-        'пусть отвечает Рио',
-        'Нода, пусть отвечает Рио',
+        'пусть отвечает Лиорио',
+        'Нода, пусть отвечает Лиорио',
       ]) {
         final f = await _fixture();
         String? addressee;
@@ -1131,14 +1206,14 @@ void main() {
       }
     });
 
-    test('«Рио, пусть отвечает Нода», когда Нода основная, — снимает Rio',
+    test('«Лиорио, пусть отвечает Нода», когда Нода основная, — снимает Liorio',
         () async {
       final f = await _fixture(
         personas: const PersonaSettings(mainPersona: 'noda'),
       );
       final responses = await chat(f, <String>[
-        'Рио, привет',
-        'Рио, пусть отвечает Нода',
+        'Лиорио, привет',
+        'Лиорио, пусть отвечает Нода',
         '2+2',
       ]);
       expect(responses[1].personaId, 'noda');
@@ -1146,20 +1221,20 @@ void main() {
       expect(responses.last.personaId, 'noda');
     });
 
-    test('соло: «пусть отвечает Рио», когда Рио выбран, — как раньше',
+    test('соло: «пусть отвечает Лиорио», когда Лиорио выбран, — как раньше',
         () async {
       final f = await _fixture(
         personas: const PersonaSettings(mode: AssistantMode.solo),
       );
-      final response = await f.say('пусть отвечает Рио');
+      final response = await f.say('пусть отвечает Лиорио');
       expect(response.replyId, 'talk.set.already');
       expect(response.personaId, 'rio');
       expect(response.addressedPersonaId, isNull);
     });
 
-    test('«спасибо, Рио» на вопрос Noda — переспрашивает Rio, он адресат',
+    test('«спасибо, Лиорио» на вопрос Noda — переспрашивает Liorio, он адресат',
         () async {
-      for (final ack in <String>['спасибо, Рио', 'Рио, спасибо']) {
+      for (final ack in <String>['спасибо, Лиорио', 'Лиорио, спасибо']) {
         final f = await _fixture();
         await f.tasks.create(title: 'Купить хлеб');
         String? addressee;
@@ -1178,8 +1253,9 @@ void main() {
       }
     });
 
-    test('«да, Рио» на вопрос Noda — действие то же, отвечает Rio', () async {
-      for (final yes in <String>['да, Рио', 'Рио, да']) {
+    test('«да, Лиорио» на вопрос Noda — действие то же, отвечает Liorio',
+        () async {
+      for (final yes in <String>['да, Лиорио', 'Лиорио, да']) {
         final f = await _fixture();
         await f.tasks.create(title: 'Купить хлеб');
         final responses = await chat(f, <String>[

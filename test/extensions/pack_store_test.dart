@@ -143,7 +143,7 @@ void main() {
             },
             <String, Object?>{
               'id': 'a2',
-              'text': 'для Rio',
+              'text': 'для Liorio',
               'tags': <String>['кофе'],
               'persona': 'rio',
             },

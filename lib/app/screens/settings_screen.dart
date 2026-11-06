@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_info.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
@@ -29,7 +30,7 @@ class SettingsScreen extends StatelessWidget {
   /// Навыки, подключения и паки; `null` — раздел «Расширения» не показан.
   final ExtensionRegistry? extensions;
 
-  static const applicationName = 'Личный помощник';
+  static const applicationName = AppInfo.name;
 
   Future<void> _confirmClear(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -146,7 +147,7 @@ class SettingsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     const Text(
-                      '$applicationName · локально, без интернета '
+                      '$applicationName · личный помощник, локально, без интернета '
                       'и языковой модели',
                       style: TextStyle(color: AssistantColors.text),
                     ),

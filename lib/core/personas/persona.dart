@@ -1,6 +1,6 @@
 import '../replies/reply_library.dart';
 
-/// Личность помощника: Rio или Noda (docs/PLANS.md, «Rio и Noda»).
+/// Личность помощника: Liorio или Noda (docs/PLANS.md, «Liorio и Noda»).
 ///
 /// Данные и коннекторы у них общие; различаются имя, род, цвет и стиль
 /// общения.
@@ -9,20 +9,44 @@ final class Persona {
     required this.id,
     required this.name,
     required this.russianName,
+    this.nicknames = const <String>[],
+    this.inflectedForms = const <String>[],
     required this.gender,
     required this.accentColor,
     required this.description,
   });
 
-  /// Постоянный id латиницей: `rio`, `noda`. Хранится в настройках и в
-  /// истории чата.
+  /// Постоянный id латиницей: `rio`, `noda`. Хранится в настройках, в
+  /// истории чата и в паках. У Liorio id остался `rio` от прежнего имени:
+  /// старые настройки и история читаются как есть (ADR-008).
   final String id;
 
-  /// Имя в интерфейсе: «Rio».
+  /// Имя в интерфейсе: «Liorio».
   final String name;
 
-  /// Имя кириллицей: «Рио». По нему тоже можно обратиться.
+  /// Имя кириллицей: «Лиорио». По нему тоже можно обратиться.
   final String russianName;
+
+  /// Другие имена для обращения, в нижнем регистре: краткое «лио»,
+  /// ласковое «нодочка», разговорное «нодь».
+  final List<String> nicknames;
+
+  /// Косвенные падежи имени, в нижнем регистре: «ноду», «ноде». Только
+  /// для беседы («сделай Ноду основной»), обращением не считаются.
+  /// «Лиорио» не склоняется.
+  final List<String> inflectedForms;
+
+  /// Имена, по которым обращаются в начале и в конце сообщения, в нижнем
+  /// регистре: латиницей, кириллицей и [nicknames].
+  List<String> get addressNames => <String>[
+        name.toLowerCase(),
+        russianName.toLowerCase(),
+        ...nicknames,
+      ];
+
+  /// Все формы имени в нижнем регистре: [addressNames] и
+  /// [inflectedForms].
+  List<String> get nameForms => <String>[...addressNames, ...inflectedForms];
 
   /// Род, в котором помощник говорит о себе: «добавил» или «добавила».
   final ReplyGender gender;
@@ -39,10 +63,13 @@ final class Persona {
 
 /// Встроенные личности.
 abstract final class Personas {
-  static const Persona rio = Persona(
+  /// Liorio. Id `rio` — от прежнего имени «Rio», менять его нельзя:
+  /// он в настройках и истории пользователя (ADR-008).
+  static const Persona liorio = Persona(
     id: 'rio',
-    name: 'Rio',
-    russianName: 'Рио',
+    name: 'Liorio',
+    russianName: 'Лиорио',
+    nicknames: <String>['lio', 'лио'],
     gender: ReplyGender.male,
     accentColor: 0xFF8FB3D9,
     description: 'Спокойный и собранный, говорит о себе в мужском роде.',
@@ -52,19 +79,36 @@ abstract final class Personas {
     id: 'noda',
     name: 'Noda',
     russianName: 'Нода',
+    nicknames: <String>['нодочка', 'нодь'],
+    inflectedForms: <String>['ноды', 'ноде', 'ноду', 'нодой', 'нодочку'],
     gender: ReplyGender.female,
     accentColor: 0xFFD9A3C4,
     description: 'Живая и внимательная, говорит о себе в женском роде.',
   );
 
-  static const List<Persona> all = <Persona>[rio, noda];
+  static const List<Persona> all = <Persona>[liorio, noda];
 
   /// Личность по id; неизвестный id — `null`.
   static Persona? byId(String? id) =>
       all.where((Persona p) => p.id == id).firstOrNull;
 
+  /// Личность по имени для обращения ([Persona.addressNames]) без учёта
+  /// регистра: «Лио», «Noda». Не имя — `null`.
+  static Persona? byAddressName(String word) {
+    final lower = word.toLowerCase();
+    return all.where((Persona p) => p.addressNames.contains(lower)).firstOrNull;
+  }
+
+  /// Личность по любой форме имени ([Persona.nameForms]) без учёта
+  /// регистра: «Ноду», «Лиорио». Не имя — `null`.
+  static Persona? byNameForm(String word) {
+    final lower = word.toLowerCase();
+    return all.where((Persona p) => p.nameForms.contains(lower)).firstOrNull;
+  }
+
   /// Вторая личность пары.
-  static Persona other(Persona persona) => persona.id == rio.id ? noda : rio;
+  static Persona other(Persona persona) =>
+      persona.id == liorio.id ? noda : liorio;
 }
 
 /// Как помощники делят работу.
@@ -110,7 +154,7 @@ final class PersonaSettings {
     this.jokes = JokeFrequency.rare,
   });
 
-  /// По умолчанию Rio говорит нейтрально, Noda — дружески.
+  /// По умолчанию Liorio говорит нейтрально, Noda — дружески.
   static const Map<String, String> defaultStyles = <String, String>{
     'rio': ReplyStyles.neutral,
     'noda': ReplyStyles.friendly,
@@ -136,11 +180,11 @@ final class PersonaSettings {
 
   final JokeFrequency jokes;
 
-  /// Основной в дуэте (неизвестный id — Rio).
-  Persona get main => Personas.byId(mainPersona) ?? Personas.rio;
+  /// Основной в дуэте (неизвестный id — Liorio).
+  Persona get main => Personas.byId(mainPersona) ?? Personas.liorio;
 
-  /// Отвечающий в соло (неизвестный id — Rio).
-  Persona get solo => Personas.byId(soloPersona) ?? Personas.rio;
+  /// Отвечающий в соло (неизвестный id — Liorio).
+  Persona get solo => Personas.byId(soloPersona) ?? Personas.liorio;
 
   /// Кто отвечает, если к помощнику не обратились по имени.
   Persona get responder => mode == AssistantMode.duo ? main : solo;

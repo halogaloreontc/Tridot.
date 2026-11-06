@@ -93,7 +93,9 @@ void main() {
     expect(find.text('Кубик и переходы без движения'), findsOneWidget);
     expect(find.text('Время под сообщениями'), findsOneWidget);
     expect(
-      find.text('Личный помощник · локально, без интернета и языковой модели'),
+      find.text(
+        'Qenqrit · личный помощник, локально, без интернета и языковой модели',
+      ),
       findsOneWidget,
     );
     final reduce = tester.widget<SwitchListTile>(
@@ -467,7 +469,7 @@ void main() {
         .widget<Text>(find.byKey(ValueKey<String>('style-preview-$persona')))
         .data!;
 
-    testWidgets('по умолчанию: дуэт, основной Rio, примеры стилей',
+    testWidgets('по умолчанию: дуэт, основной Liorio, примеры стилей',
         (tester) async {
       await tester.pumpWidget(host());
       expect(find.text('Помощники'), findsOneWidget);
@@ -495,7 +497,7 @@ void main() {
       final changes = <AppSettings>[];
       await tester.pumpWidget(personasHost(changes));
       await tap(tester, 'style-rio-business');
-      expect(changes.last.personas.styleOf(Personas.rio), 'business');
+      expect(changes.last.personas.styleOf(Personas.liorio), 'business');
       expect(
         preview(tester, 'rio'),
         'Задача «Купить хлеб» создана, срок — завтра в 10:00.',
@@ -559,7 +561,7 @@ void main() {
       );
       // Пак выключили — стиль сохранён, но говорит нейтрально.
       await tap(tester, 'extension-replies.sea');
-      expect(changes.last.personas.styleOf(Personas.rio), 'replies.sea');
+      expect(changes.last.personas.styleOf(Personas.liorio), 'replies.sea');
       expect(
         find.byKey(const ValueKey<String>('style-missing-rio')),
         findsOneWidget,

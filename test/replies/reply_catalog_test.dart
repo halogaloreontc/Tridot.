@@ -101,7 +101,7 @@ void main() {
       }
     });
 
-    test('нейтральный, Rio, «вы» — прежние тексты слово в слово', () {
+    test('нейтральный, Liorio, «вы» — прежние тексты слово в слово', () {
       String neutral(String id, [Map<String, String> v = const {}]) =>
           library.render(Reply(id, v), const ReplyVoice());
       expect(

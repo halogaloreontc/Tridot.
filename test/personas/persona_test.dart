@@ -17,17 +17,31 @@ void main() {
       ('НОДА: добавь задачу купить хлеб', 'noda', 'добавь задачу купить хлеб'),
       ('Нода — сколько будет 2+2', 'noda', 'сколько будет 2+2'),
       ('Noda - покажи задачи', 'noda', 'покажи задачи'),
-      ('Rio покажи задачи', 'rio', 'покажи задачи'),
-      ('Рио, перенеси её на завтра', 'rio', 'перенеси её на завтра'),
-      ('  rio:покажи', 'rio', 'покажи'),
+      ('Liorio покажи задачи', 'rio', 'покажи задачи'),
+      ('Лиорио, перенеси её на завтра', 'rio', 'перенеси её на завтра'),
+      ('  liorio:покажи', 'rio', 'покажи'),
       ('Нода', 'noda', ''),
-      ('Rio,', 'rio', ''),
+      ('Liorio,', 'rio', ''),
       ('Noda!', 'noda', ''),
       ('Нода.', 'noda', ''),
       ('Noda?', 'noda', ''),
       ('Noda;2+2', 'noda', '2+2'),
-      ('Рио! покажи задачи', 'rio', 'покажи задачи'),
+      ('Лиорио! покажи задачи', 'rio', 'покажи задачи'),
       ('Нода… сколько будет 2+2', 'noda', 'сколько будет 2+2'),
+      // Краткое имя Liorio и другие имена Noda.
+      ('Лио, покажи задачи', 'rio', 'покажи задачи'),
+      ('лио: 2+2', 'rio', '2+2'),
+      ('LIO — покажи задачи', 'rio', 'покажи задачи'),
+      ('Lio покажи задачи', 'rio', 'покажи задачи'),
+      ('Лио!', 'rio', ''),
+      ('Лио', 'rio', ''),
+      ('лиорио - сколько будет 2+2', 'rio', 'сколько будет 2+2'),
+      ('Нодочка, покажи задачи', 'noda', 'покажи задачи'),
+      ('нодочка: 2+2', 'noda', '2+2'),
+      ('Нодь, покажи задачи', 'noda', 'покажи задачи'),
+      ('НОДЬ! 2+2', 'noda', '2+2'),
+      ('нодь покажи задачи', 'noda', 'покажи задачи'),
+      ('Нодь?', 'noda', ''),
     ]) {
       test(text, () {
         final addressing = PersonaAddressing.parse(text);
@@ -38,13 +52,27 @@ void main() {
     }
 
     for (final text in <String>[
+      // Прежнее имя и город — просто текст.
       'Рио-де-Жанейро — купить билеты',
       'Рио де Жанейро красивый город',
       'Рио  де Жанейро',
-      'рио де',
+      'Рио, покажи задачи',
+      'Rio, покажи задачи',
+      'rio:покажи',
+      // Слова, которые только начинаются с имени.
+      'Лион — красивый город',
+      'Лиона, привет',
+      'лиорион, привет',
+      'Лио-Лио',
+      'Lion, покажи',
       'Нодаа, привет',
+      'Нодальный анализ',
+      'нодьа, привет',
+      'Нодочкин, привет',
       'Riot покажи',
-      'Купить билет в Рио',
+      // Имя в середине фразы и косвенный падеж.
+      'Купить билет в Лиорио',
+      'Ноду покажи',
       'Добавь задачу «Noda, позвонить»',
       '',
     ]) {
@@ -56,10 +84,15 @@ void main() {
 
   group('обращение в конце', () {
     for (final (text, persona, rest) in <(String, String, String)>[
-      ('да, Рио', 'rio', 'да'),
+      ('да, Лиорио', 'rio', 'да'),
       ('спасибо, Нода!', 'noda', 'спасибо'),
       ('нет — Noda', 'noda', 'нет'),
-      ('да - рио.', 'rio', 'да'),
+      ('да - лиорио.', 'rio', 'да'),
+      ('да, Лио', 'rio', 'да'),
+      ('спасибо, lio!', 'rio', 'спасибо'),
+      ('нет — Liorio', 'rio', 'нет'),
+      ('спасибо, Нодочка', 'noda', 'спасибо'),
+      ('да, нодь!', 'noda', 'да'),
     ]) {
       test(text, () {
         final addressing = PersonaAddressing.parseTrailing(text);
@@ -70,12 +103,19 @@ void main() {
     }
 
     for (final text in <String>[
-      'съездить в Рио',
-      'Рио',
+      'съездить в Лиорио',
+      'съездить в Лион',
+      'Лиорио',
+      'Лио',
       ', Нода',
-      'да, Рио?',
+      'да, Лиорио?',
       'да, Нодаа',
+      'да, Лион',
+      'да, Нодальный',
+      'да, Рио',
+      'да, Rio',
       'да, Рио-де-Жанейро',
+      'спасибо Лио',
     ]) {
       test('не обращение: «$text»', () {
         expect(PersonaAddressing.parseTrailing(text), isNull);
@@ -84,19 +124,20 @@ void main() {
   });
 
   group('настройки помощников', () {
-    test('по умолчанию: дуэт, основной Rio, Rio нейтральный, Noda дружеская',
+    test(
+        'по умолчанию: дуэт, основной Liorio, Liorio нейтральный, Noda дружеская',
         () {
       const settings = PersonaSettings();
       expect(settings.mode, AssistantMode.duo);
-      expect(settings.main, Personas.rio);
+      expect(settings.main, Personas.liorio);
       expect(settings.notifier, Personas.noda);
-      expect(settings.solo, Personas.rio);
-      expect(settings.styleOf(Personas.rio), ReplyStyles.neutral);
+      expect(settings.solo, Personas.liorio);
+      expect(settings.styleOf(Personas.liorio), ReplyStyles.neutral);
       expect(settings.styleOf(Personas.noda), ReplyStyles.friendly);
       expect(settings.address, ReplyAddress.formal);
       expect(settings.emoji, isTrue);
       expect(settings.jokes, JokeFrequency.rare);
-      expect(Personas.rio.gender, ReplyGender.male);
+      expect(Personas.liorio.gender, ReplyGender.male);
       expect(Personas.noda.gender, ReplyGender.female);
     });
 
@@ -146,8 +187,8 @@ void main() {
         'show_timestamps': false,
       });
       expect(settings.personas.mode, AssistantMode.duo);
-      expect(settings.personas.main, Personas.rio);
-      expect(settings.personas.solo, Personas.rio);
+      expect(settings.personas.main, Personas.liorio);
+      expect(settings.personas.solo, Personas.liorio);
       expect(settings.personas.styles, <String, String>{
         'rio': 'brief',
         'noda': 'friendly',
@@ -211,6 +252,50 @@ void main() {
       expect(await File(tasksPath).readAsString(), tasksBefore);
     });
 
+    test('файл настроек до переименования Rio в Liorio читается как был',
+        () async {
+      final folder = await Directory.systemTemp.createTemp('rename_');
+      addTearDown(() => folder.delete(recursive: true));
+      final path = '${folder.path}/settings.json';
+      // Так писала прежняя версия: id `rio` остался прежним (ADR-008).
+      const old = <String, Object?>{
+        'reduce_motion': true,
+        'show_timestamps': false,
+        'disabled_extensions': <String>['calc'],
+        'enabled_extensions': <String>[],
+        'notice_day': '2026-11-05',
+        'assistant_mode': 'duo',
+        'main_persona': 'rio',
+        'solo_persona': 'rio',
+        'persona_styles': <String, String>{
+          'noda': 'brief',
+          'rio': 'business',
+        },
+        'address': 'ty',
+        'emoji': false,
+        'jokes': 'normal',
+      };
+      await File(path).writeAsString(jsonEncode(old));
+      final loaded = await JsonSettingsStore(path).load();
+      final personas = loaded.personas;
+      expect(personas.main, Personas.liorio);
+      expect(personas.main.name, 'Liorio');
+      expect(personas.main.initial, 'L');
+      expect(personas.solo, Personas.liorio);
+      expect(personas.notifier, Personas.noda);
+      expect(personas.styleOf(Personas.liorio), 'business');
+      expect(personas.styleOf(Personas.noda), 'brief');
+      expect(personas.address, ReplyAddress.informal);
+      expect(personas.emoji, isFalse);
+      expect(personas.jokes, JokeFrequency.normal);
+      expect(loaded.noticeDay, '2026-11-05');
+      expect(loaded.reduceMotion, isTrue);
+      expect(loaded.disabledExtensions, <String>{'calc'});
+      // Сохранение ничего не переименовывает: файл тот же.
+      await JsonSettingsStore(path).save(loaded);
+      expect(jsonDecode(await File(path).readAsString()), old);
+    });
+
     test('испорченный файл настроек — по умолчанию, задачи не тронуты',
         () async {
       final folder = await Directory.systemTemp.createTemp('settings_');
@@ -229,7 +314,7 @@ void main() {
             await JsonSettingsStore('${folder.path}/settings.json').load();
         expect(settings.personas, const PersonaSettings(), reason: broken);
         expect(settings.personas.mode, AssistantMode.duo);
-        expect(settings.personas.main, Personas.rio);
+        expect(settings.personas.main, Personas.liorio);
       }
       expect(await tasks.readAsBytes(), before);
     });

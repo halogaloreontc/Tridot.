@@ -11,7 +11,7 @@ import 'task_tile.dart';
 /// как часто шутить.
 ///
 /// Смена настроек меняет только то, как помощник говорит дальше: задачи,
-/// история, черновик и выбор остаются (docs/PLANS.md, «Rio и Noda»).
+/// история, черновик и выбор остаются (docs/PLANS.md, «Liorio и Noda»).
 class PersonasSection extends StatefulWidget {
   const PersonasSection({
     super.key,

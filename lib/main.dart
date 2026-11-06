@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app/assistant_theme.dart';
 import 'app/home_page.dart';
+import 'core/app_info.dart';
 import 'core/connectors/connector.dart';
 import 'core/connectors/tasks_connector.dart';
 import 'core/extensions/extension_registry.dart';
@@ -98,7 +99,7 @@ final class AssistantApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Личный помощник',
+      title: AppInfo.name,
       debugShowCheckedModeBanner: false,
       theme: AssistantTheme.dark(),
       darkTheme: AssistantTheme.dark(),

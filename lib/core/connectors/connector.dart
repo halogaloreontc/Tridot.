@@ -1,3 +1,4 @@
+import '../app_info.dart';
 import '../extensions/extension_registry.dart';
 import '../models/assistant_types.dart';
 import '../models/task.dart';
@@ -39,7 +40,7 @@ final class ConnectorInfo {
   }) : assert(kind != ExtensionKind.pack, 'Пак — данные, а не коннектор');
 
   /// Автор встроенных расширений.
-  static const String defaultAuthor = 'Личный помощник';
+  static const String defaultAuthor = AppInfo.name;
 
   /// Постоянный идентификатор латиницей: `tasks`, `warehouse`. Попадает
   /// в корпус фраз (поле `connector`) и в [ConnectorMatch.connectorId].
@@ -368,7 +369,7 @@ final class AssistantSession {
 
   /// Кто отвечает на текущее сообщение. Маршрутизатор ставит его вместе
   /// с [voice].
-  Persona speaker = Personas.rio;
+  Persona speaker = Personas.liorio;
 
   /// Настройки помощников на начало текущего сообщения.
   PersonaSettings personas = const PersonaSettings();

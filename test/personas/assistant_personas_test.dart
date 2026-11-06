@@ -72,7 +72,7 @@ void main() {
   });
 
   group('дуэт', () {
-    test('по умолчанию отвечает Rio нейтрально', () async {
+    test('по умолчанию отвечает Liorio нейтрально', () async {
       final (assistant, _) = _assistant();
       final response = await assistant.handle('Добавь задачу купить хлеб');
       expect(response.personaId, 'rio');
@@ -93,7 +93,7 @@ void main() {
       final created = (await tasks.listActive()).single;
       expect(created.title, 'Купить хлеб', reason: 'имя не в названии');
 
-      final rio = await assistant.handle('Рио: покажи задачи');
+      final rio = await assistant.handle('Лиорио: покажи задачи');
       expect(rio.personaId, 'rio');
       expect(rio.message, startsWith('Активных задач: 1.'));
 
@@ -102,7 +102,7 @@ void main() {
       expect(calc.message, contains('2 + 2 = 4'));
     });
 
-    test('Noda говорит о себе в женском роде, Rio — в мужском', () async {
+    test('Noda говорит о себе в женском роде, Liorio — в мужском', () async {
       final (assistant, _) = _assistant(
         personas: const PersonaSettings(
           styles: <String, String>{'rio': 'neutral', 'noda': 'neutral'},
@@ -125,13 +125,13 @@ void main() {
         'noda',
       );
       expect(
-        (await assistant.handle('Rio, покажи задачи', addressee: 'noda'))
+        (await assistant.handle('Liorio, покажи задачи', addressee: 'noda'))
             .personaId,
         'rio',
       );
     });
 
-    test('основной — Noda: отвечает она, второй пишет Rio', () async {
+    test('основной — Noda: отвечает она, второй пишет Liorio', () async {
       final (assistant, _) =
           _assistant(personas: const PersonaSettings(mainPersona: 'noda'));
       expect((await assistant.handle('покажи задачи')).personaId, 'noda');
@@ -183,7 +183,8 @@ void main() {
       return responses;
     }
 
-    test('«Нода, …» — дальше без имени отвечает Noda, «Рио, …» — снова Rio',
+    test(
+        '«Нода, …» — дальше без имени отвечает Noda, «Лиорио, …» — снова Liorio',
         () async {
       final (assistant, tasks) = _assistant();
       final addressees = <String?>[];
@@ -193,7 +194,7 @@ void main() {
           'Нода, добавь задачу купить хлеб',
           'покажи задачи',
           '2+2',
-          'Рио, 3+3',
+          'Лиорио, 3+3',
           'покажи задачи',
         ],
         addressees: addressees,
@@ -216,7 +217,7 @@ void main() {
       final response = await assistant.handle('Нода, 2+2', addressee: 'rio');
       expect(response.personaId, 'noda');
       expect(assistant.addresseeAfter(response, current: 'rio'), isNull);
-      final rio = await assistant.handle('Рио, 2+2');
+      final rio = await assistant.handle('Лиорио, 2+2');
       expect(assistant.addresseeAfter(rio), 'rio');
     });
 
@@ -242,7 +243,7 @@ void main() {
       expect(question.personaId, 'noda');
       expect(question.status, AssistantStatus.needsClarification);
       expect(assistant.session.pendingSpeaker, Personas.noda);
-      // Пользователь выбрал в поле Rio и ответил «да».
+      // Пользователь выбрал в поле Liorio и ответил «да».
       final yes = await assistant.handle('да', addressee: 'rio');
       expect(yes.personaId, 'noda');
       expect(yes.message, contains('Купить хлеб'));
@@ -255,13 +256,13 @@ void main() {
       );
     });
 
-    test('«Рио, да» на вопрос Noda: действие то же, отвечает названный',
+    test('«Лиорио, да» на вопрос Noda: действие то же, отвечает названный',
         () async {
       final (assistant, tasks) = _assistant();
       await tasks.create(title: 'Купить хлеб');
       await assistant.handle('я купил хлеб', addressee: 'noda');
       expect(assistant.session.pendingSpeaker, Personas.noda);
-      final yes = await assistant.handle('Рио, да', addressee: 'noda');
+      final yes = await assistant.handle('Лиорио, да', addressee: 'noda');
       expect(yes.personaId, 'rio');
       expect((await tasks.listActive()), isEmpty);
       expect(assistant.addresseeAfter(yes, current: 'noda'), isNull);
@@ -299,7 +300,7 @@ void main() {
         final (assistant, _) =
             _assistant(personas: PersonaSettings(mainPersona: main));
         final second = main == 'rio' ? 'noda' : 'rio';
-        for (final name in <String>['Рио', 'Нода']) {
+        for (final name in <String>['Лиорио', 'Нода']) {
           await assistant.handle('$name, 2+2');
           expect(
             assistant.overdueNotice(overdue)!.personaId,
@@ -324,7 +325,7 @@ void main() {
       expect(response.personaId, 'noda');
       expect(response.message, 'Создала задачу «Купить хлеб».');
       final addressed = await assistant.handle(
-        'Rio, добавь задачу позвонить',
+        'Liorio, добавь задачу позвонить',
         addressee: 'rio',
       );
       expect(addressed.personaId, 'noda', reason: 'в соло один помощник');

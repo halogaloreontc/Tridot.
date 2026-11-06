@@ -8,7 +8,7 @@
 {"id": "talk-008", "text": "йо", "connector": "talk", "intent": "talk.greet", "source": "manual"}
 {"id": "talk-009", "text": "👋", "connector": "talk", "intent": "talk.greet", "source": "manual"}
 {"id": "talk-010", "text": "Нода, привет", "connector": "talk", "intent": "talk.greet", "source": "manual"}
-{"id": "talk-011", "text": "привет, Rio", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-011", "text": "привет, Liorio", "connector": "talk", "intent": "talk.greet", "source": "manual"}
 {"id": "talk-012", "text": "пока", "connector": "talk", "intent": "talk.bye", "source": "manual"}
 {"id": "talk-013", "text": "До завтра!", "connector": "talk", "intent": "talk.bye", "source": "manual"}
 {"id": "talk-014", "text": "до свидания", "connector": "talk", "intent": "talk.bye", "source": "manual"}
@@ -66,7 +66,7 @@
 {"id": "talk-066", "text": "шути больше", "connector": "talk", "intent": "talk.setting", "source": "manual"}
 {"id": "talk-067", "text": "не шути", "connector": "talk", "intent": "talk.setting", "source": "manual"}
 {"id": "talk-068", "text": "Noda будь основной", "connector": "talk", "intent": "talk.setting", "source": "manual"}
-{"id": "talk-069", "text": "пусть отвечает Рио", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-069", "text": "пусть отвечает Лиорио", "connector": "talk", "intent": "talk.setting", "source": "manual"}
 {"id": "talk-070", "text": "пока не забыл, купить хлеб", "connector": "talk", "intent": "unknown", "note": "прощание только целиком", "source": "manual"}
 {"id": "talk-071", "text": "привет, добавь задачу купить хлеб", "connector": "talk", "intent": "unknown", "note": "явная задача важнее приветствия", "source": "manual"}
 {"id": "talk-072", "text": "спасибо, перенеси отчёт на завтра", "connector": "talk", "intent": "unknown", "note": "команда после благодарности", "source": "manual"}
@@ -99,3 +99,9 @@
 {"id": "talk-099", "text": "можно без эмодзи", "connector": "talk", "intent": "talk.setting", "source": "manual"}
 {"id": "talk-100", "text": "а ты кто", "connector": "talk", "intent": "talk.whoAreYou", "source": "manual"}
 {"id": "talk-101", "text": "спасибо, Нода", "connector": "talk", "intent": "talk.thanks", "source": "manual"}
+{"id": "talk-102", "text": "Лио, привет", "connector": "talk", "intent": "talk.greet", "source": "manual"}
+{"id": "talk-103", "text": "спасибо, Нодочка", "connector": "talk", "intent": "talk.thanks", "source": "manual"}
+{"id": "talk-104", "text": "пусть отвечает Лио", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-105", "text": "сделай Ноду основной", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-106", "text": "Нодь, расскажи шутку", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-107", "text": "привет, Лио, добавь задачу хлеб", "connector": "tasks", "intent": "createTask", "title": "Хлеб", "note": "краткое имя помощника после приветствия", "source": "manual"}
