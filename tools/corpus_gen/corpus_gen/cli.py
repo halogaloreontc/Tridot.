@@ -147,14 +147,43 @@ def _label(config: Config, store: CandidateStore, args: argparse.Namespace) -> i
     if not labelers:
         print("Нет доступных разметчиков. Проверьте `corpus-gen sources`.", file=sys.stderr)
         return 1
-    if len({s.family for s in labelers}) < 2:
+    if len({s.family for s in labelers}) < 3:
+        if config.single_labeler_check:
+            print(
+                "Разметчиков из разных семейств меньше трёх: у фраз с одним разметчиком разметка "
+                "сверяется с приложением, на ручную проверку уходят только расхождения.",
+                file=sys.stderr,
+            )
+        elif len({s.family for s in labelers}) < 2:
+            print(
+                "Внимание: разметчиков из разных семейств меньше двух — все фразы уйдут на ручную проверку.",
+                file=sys.stderr,
+            )
+    counts = pipeline.label(config, store, labelers, limit=args.limit)
+    print(_label_summary(counts))
+    if counts.get(pipeline.CHECK_FAILED):
         print(
-            "Внимание: разметчиков из разных семейств меньше двух — все фразы уйдут на ручную проверку.",
+            f"Проверка приложением не удалась у фраз: {counts[pipeline.CHECK_FAILED]} — они остались "
+            "disputed, причина видна в `corpus-gen review`. Проверьте `dart run tool/route_phrases.dart`.",
             file=sys.stderr,
         )
-    counts = pipeline.label(config, store, labelers, limit=args.limit)
-    print("Итог разметки: " + (", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "нечего размечать"))
     return 0
+
+
+def _label_summary(counts: Counter[str]) -> str:
+    extra = {pipeline.AGREED_BY_PARSER, pipeline.RECHECKED, pipeline.CHECK_FAILED}
+    statuses = [f"{k}={v}" for k, v in sorted(counts.items()) if k not in extra]
+    if not statuses:
+        return "Итог разметки: нечего размечать"
+    details = []
+    if counts.get(pipeline.AGREED_BY_PARSER):
+        details.append(f"agreed (по парсеру)={counts[pipeline.AGREED_BY_PARSER]}")
+    if counts.get(pipeline.RECHECKED):
+        details.append(f"перепроверено спорных с одной разметкой={counts[pipeline.RECHECKED]}")
+    if counts.get(pipeline.CHECK_FAILED):
+        details.append(f"проверка не удалась={counts[pipeline.CHECK_FAILED]}")
+    summary = "Итог разметки: " + ", ".join(statuses)
+    return summary + (f"; из них {', '.join(details)}" if details else "")
 
 
 def _review(config: Config, store: CandidateStore, args: argparse.Namespace) -> int:
@@ -179,6 +208,10 @@ def _review(config: Config, store: CandidateStore, args: argparse.Namespace) -> 
             comment = f"  // {label['comment']}" if label.get("comment") else ""
             confident = "" if label.get("confident", True) else "  [не уверен]"
             print(f"  {number}. {name}: {json.dumps(fields, ensure_ascii=False)}{confident}{comment}")
+        if row.get("check"):
+            print(f"    проверка: {row['check']}")
+        elif row["status"] == "agreed" and pipeline.APP_CHECK_MARK in (row.get("final_by") or []):
+            print("    проверка: совпало с приложением (единственный разметчик)")
         while True:
             try:
                 answer = input("> ").strip().lower()

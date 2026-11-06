@@ -63,6 +63,9 @@ class Config:
     sources: tuple[Source, ...] = field(default_factory=tuple)
     # Каталог файлов тем topics/*.toml (по одному на коннектор).
     topics_dir: Path = DEFAULT_TOPICS_DIR
+    # Фразу с единственным доступным разметчиком сверять с приложением
+    # (tool/route_phrases.dart): совпало — agreed, нет — disputed. False — всегда disputed.
+    single_labeler_check: bool = True
 
     def source(self, name: str) -> Source:
         for source in self.sources:
@@ -84,6 +87,9 @@ def load_config(path: Path) -> Config:
     sources = tuple(_parse_source(item) for item in raw.get("source", []))
     names = [s.name for s in sources]
     duplicates = {n for n in names if names.count(n) > 1}
+    single_labeler_check = settings.get("single_labeler_check", True)
+    if not isinstance(single_labeler_check, bool):
+        raise ValueError("settings.single_labeler_check должен быть true или false")
     if duplicates:
         raise ValueError(f"повторяющиеся имена источников: {sorted(duplicates)}")
     return Config(
@@ -95,6 +101,7 @@ def load_config(path: Path) -> Config:
         dart=settings.get("dart", "dart"),
         sources=sources,
         topics_dir=(base / settings["topics_dir"]).resolve() if "topics_dir" in settings else DEFAULT_TOPICS_DIR,
+        single_labeler_check=single_labeler_check,
     )
 
 
