@@ -147,8 +147,10 @@ class SettingsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     const Text(
-                      '$applicationName · личный помощник, локально, без интернета '
-                      'и языковой модели',
+                      // Приложение — не помощник: помощники в нём работают
+                      // (ADR-009).
+                      '$applicationName · приложение с помощниками, локально, '
+                      'без интернета и языковой модели',
                       style: TextStyle(color: AssistantColors.text),
                     ),
                     const SizedBox(height: 8),

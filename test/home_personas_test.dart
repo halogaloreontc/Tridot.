@@ -216,7 +216,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('подпись Liorio с меткой «L», название Qenqrit в меню',
+    testWidgets('подпись Liorio с меткой «L», название Связной в меню',
         (tester) async {
       await _pump(tester, settings: InMemorySettingsStore());
       final author = find.byKey(const ValueKey<String>('message-author-rio'));
@@ -232,7 +232,8 @@ void main() {
       expect(find.text('Rio'), findsNothing);
       expect(find.text('R'), findsNothing);
       expect(find.byKey(const ValueKey<String>('app-name')), findsOneWidget);
-      expect(find.text('Qenqrit'), findsOneWidget);
+      expect(find.text('Связной'), findsOneWidget);
+      expect(find.text('Qenqrit'), findsNothing);
       expect(find.text('Помощник'), findsNothing);
     });
 

@@ -788,8 +788,84 @@ void main() {
 
       expect(
         response.message,
-        'Я Noda, ваш помощник: отвечаю на сообщения, веду задачи и считаю.',
+        'Я Noda, помощница в Связном: отвечаю на ваши сообщения, веду задачи '
+        'и считаю.',
       );
+    });
+
+    // Название приложения и роль помощника не путаются (ADR-009): помощник
+    // представляется «помощником»/«помощницей» в Связном, а «связным» себя
+    // не называет. Noda говорит о себе в женском роде, о Liorio — в
+    // мужском, и наоборот.
+    test('дуэт, нейтрально: роль в своём роде, название — «в Связном»',
+        () async {
+      final f = await _fixture(
+        personas: const PersonaSettings(
+          styles: <String, String>{'rio': 'neutral', 'noda': 'neutral'},
+        ),
+      );
+
+      final rio = await f.say('кто ты');
+      expect(
+        rio.message,
+        'Я Liorio, основной помощник в Связном: отвечаю на сообщения, веду '
+        'задачи и считаю. Noda — вторая помощница: пишет первой о просроченных '
+        'задачах. К любому из нас можно обратиться по имени.',
+      );
+
+      final noda = await f.say('кто ты', addressee: 'noda');
+      expect(
+        noda.message,
+        'Я Noda, вторая помощница в Связном: пишу первой о просроченных '
+        'задачах и отвечаю, если ко мне обратиться по имени. Основной '
+        'помощник — Liorio.',
+      );
+    });
+
+    for (final style in ReplyStyles.builtIn) {
+      for (final persona in Personas.all) {
+        for (final mode in AssistantMode.values) {
+          test(
+              '$style, ${persona.name}, ${mode.name}: не «связной», '
+              'а помощник в Связном', () async {
+            final f = await _fixture(
+              personas: PersonaSettings(
+                mode: mode,
+                mainPersona: persona.id,
+                soloPersona: persona.id,
+                styles: <String, String>{'rio': style, 'noda': style},
+              ),
+            );
+
+            final response = await f.say('кто ты');
+
+            final text = response.message;
+            expect(response.personaId, persona.id);
+            expect(text, contains('в Связном'), reason: text);
+            expect(
+              RegExp('связн', caseSensitive: false).allMatches(text).length,
+              1,
+              reason: text,
+            );
+            final self =
+                text.substring(0, text.indexOf('в Связном')).toLowerCase();
+            if (persona.gender == ReplyGender.female) {
+              expect(self, contains('помощница'), reason: text);
+              expect(self, isNot(contains('помощник')), reason: text);
+            } else {
+              expect(self, contains('помощник'), reason: text);
+              expect(self, isNot(contains('помощница')), reason: text);
+            }
+          });
+        }
+      }
+    }
+
+    test('пара помощников разного рода: о втором каталог говорит в обратном',
+        () {
+      for (final persona in Personas.all) {
+        expect(Personas.other(persona).gender, isNot(persona.gender));
+      }
     });
 
     test('«что умеешь» — только включённое, по примеру', () async {

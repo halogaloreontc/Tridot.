@@ -30,6 +30,7 @@ const Map<String, String> facts = <String, String>{
   'overdue': '2',
   'problems': '«Склад» не работает: нет связи с сервером (с 14:05)',
   'other': 'Noda',
+  'appPrepositional': 'Связном',
   'skills': '«Задачи» — например, «Покажи задачи»',
   'joke': 'Кофе-брейк — это когда кофе работает, а я отдыхаю.',
   'unchecked': '«Пример склада»',

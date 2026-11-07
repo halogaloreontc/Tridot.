@@ -5,7 +5,12 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = Qenqrit
+PRODUCT_NAME = Relay
+
+// Название для пользователя (ADR-009): CFBundleName и CFBundleDisplayName —
+// строка меню приложения и панель «О программе». Имя пакета Relay.app —
+// PRODUCT_NAME выше.
+APP_DISPLAY_NAME = Связной
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.example.localAssistant

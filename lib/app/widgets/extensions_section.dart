@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_info.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
@@ -191,7 +192,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 8),
           child: Text(
-            'Соберите помощника под себя: включайте только нужное. '
+            'Настройте ${AppInfo.name} под себя: включайте только нужное. '
             'Изменения применяются сразу, задачи и чат не сбрасываются.',
             style: technicalTextStyle,
           ),

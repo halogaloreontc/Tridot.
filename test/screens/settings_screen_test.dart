@@ -94,7 +94,8 @@ void main() {
     expect(find.text('Время под сообщениями'), findsOneWidget);
     expect(
       find.text(
-        'Qenqrit · личный помощник, локально, без интернета и языковой модели',
+        'Связной · приложение с помощниками, локально, без интернета и '
+        'языковой модели',
       ),
       findsOneWidget,
     );
@@ -199,6 +200,12 @@ void main() {
       }
       expect(find.text('Паки'), findsOneWidget);
       expect(find.text('Подключений пока нет'), findsOneWidget);
+      // Расширения ставятся в приложение, а не в помощника (ADR-009).
+      expect(
+        find.textContaining('Настройте Связной под себя'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Соберите помощника'), findsNothing);
       expect(find.text('Калькулятор'), findsOneWidget);
       expect(find.text('Задачи'), findsOneWidget);
       expect(find.text('Мои шутки'), findsOneWidget);

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../app_info.dart';
 import '../../connectors/connector.dart';
 import '../../extensions/extension_registry.dart';
 import '../../formatting/due_format.dart';
@@ -448,16 +449,24 @@ final class TalkConnector implements Connector, ConnectorHealth {
   AssistantResponse _who(AssistantSession session, String command) {
     final speaker = session.speaker;
     final settings = session.personas;
+    // Помощник представляется вместе с приложением, но себя «связным» не
+    // называет: роль — «помощник»/«помощница», название — «в Связном»
+    // (ADR-009). О втором помощнике пары каталог говорит в обратном роде:
+    // Liorio и Noda разного рода.
     final values = <String, String>{
       'name': speaker.name,
       'other': Personas.other(speaker).name,
+      'appPrepositional': AppInfo.namePrepositional,
     };
     if (settings.mode == AssistantMode.solo) {
       return _say(
         session,
         'talk.who.solo',
         command: command,
-        values: <String, String>{'name': speaker.name},
+        values: <String, String>{
+          'name': speaker.name,
+          'appPrepositional': AppInfo.namePrepositional,
+        },
       );
     }
     return _say(

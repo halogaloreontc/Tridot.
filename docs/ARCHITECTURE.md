@@ -17,6 +17,8 @@ Flutter UI
   эмодзи помощника) → AssistantResponse с автором Liorio или Noda (ADR-006, ADR-008)
 ```
 
+Название приложения — `AppInfo` (`lib/core/app_info.dart`, ADR-009): «Связной» в русском интерфейсе, Relay — латиницей. Приложение — хаб, а помощники Liorio и Noda работают в нём; роль помощника и название приложения не смешиваются.
+
 Коннекторы — `lib/core/connectors/`, как написать свой — `docs/CONNECTORS.md`. Навыки, подключения и паки — `lib/core/extensions/`, `docs/EXTENSIONS.md`. Каталог ответов и помощники — `lib/core/replies/`, `lib/core/personas/`, `docs/REPLIES.md`.
 
 ## Правила
