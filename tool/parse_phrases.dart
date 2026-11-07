@@ -32,9 +32,14 @@ Future<void> processLines(
     final input = jsonDecode(line) as Map<String, dynamic>;
     final nowText = input['now'] as String?;
     final now = nowText == null ? defaultNow : DateTime.parse(nowText);
-    stdout.writeln(
-      jsonEncode(<String, Object?>{'id': input['id'], ...convert(input, now)}),
-    );
+    Map<String, Object?> result;
+    try {
+      result = convert(input, now);
+    } on Object catch (error) {
+      // Одна сломанная фраза не должна ронять проверку остальных.
+      result = <String, Object?>{'error': '$error'};
+    }
+    stdout.writeln(jsonEncode(<String, Object?>{'id': input['id'], ...result}));
   }
 }
 

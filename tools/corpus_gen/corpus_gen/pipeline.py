@@ -440,6 +440,12 @@ def check_with_app(
             row["check"] = "проверка приложением не удалась: " + (failure or "нет результата для фразы")
             counts[CHECK_FAILED] += 1
             continue
+        if "error" in result:
+            row["check"] = "проверка приложением не удалась: приложение упало на фразе: " + _short(
+                str(result["error"])
+            )
+            counts[CHECK_FAILED] += 1
+            continue
         label_ = row["labels"][source.name]
         try:
             mismatches = app_mismatches(label_, connectors[row["cid"]], result)
@@ -703,7 +709,12 @@ def promote(
             lines.append(line)
             row["status"] = "promoted"
             continue
-        mismatches = parser_mismatches(line, row["final"], parsed[row["cid"]])
+        result = parsed[row["cid"]]
+        if "error" in result:
+            counts["parser_error"] += 1
+            row.setdefault("errors", []).append("парсер упал на фразе: " + _short(str(result["error"])))
+            continue
+        mismatches = parser_mismatches(line, row["final"], result)
         if mismatches:
             line["status"] = "known_gap"
             line["note"] = "парсер сейчас: " + ", ".join(mismatches)

@@ -57,4 +57,13 @@ void main() {
       containsAll(<String>['tasks', 'warehouse_example']),
     );
   });
+
+  test('фраза из одних кавычек не роняет разбор', () {
+    for (final text in ['«купить хлеб»', '"спасибо"', '👍']) {
+      final parse = routed(text)['parse']! as Map<String, Object?>;
+      expect(parse['intent'], isNotNull, reason: text);
+    }
+    final parse = routed('«купить хлеб»')['parse']! as Map<String, Object?>;
+    expect(parse['intent'], 'unknown');
+  });
 }

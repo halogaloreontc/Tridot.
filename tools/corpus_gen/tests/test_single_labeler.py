@@ -416,3 +416,17 @@ def test_tasks_label_claimed_by_corpus_warehouse_is_disputed(project: Path) -> N
     run(config, store, LABEL_CREATE, FakeRouter({TASK_TEXT: routed}))
     assert store.rows[0]["status"] == "disputed"
     assert store.rows[0]["check"] == "приложение: коннектор=warehouse_example"
+
+
+def test_app_error_for_one_phrase_fails_only_that_phrase(project: Path) -> None:
+    config = config_for(project)
+    store = CandidateStore(config.work_dir)
+    add_rows(config, store, [TASK_TEXT, "«сломанная»"])
+    router = FakeRouter({TASK_TEXT: ROUTED_CREATE, "«сломанная»": {"error": "Bad state: No element"}})
+    counts = run(config, store, LABEL_CREATE, router)
+    good, broken = CandidateStore(config.work_dir).rows
+    assert good["status"] == "agreed"
+    assert broken["status"] == "disputed"
+    assert broken["check"].startswith("проверка приложением не удалась: приложение упало на фразе")
+    assert "Bad state" in broken["check"]
+    assert counts[pipeline.CHECK_FAILED] == 1

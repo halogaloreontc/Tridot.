@@ -746,6 +746,8 @@ final class ScenarioParser {
 
   _Marker _detectIntent(Utterance utterance) {
     final words = utterance.words;
+    // Фраза из одних кавычек («купить хлеб») — команды в ней нет.
+    if (words.isEmpty) return const _Marker.unknown();
     // «Нет, добавь…» — поправка собеседнику, а не отрицание команды:
     // отрицанием считается только «не»/«нет» прямо перед словом.
     bool joined(int i) {
