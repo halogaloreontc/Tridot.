@@ -229,7 +229,17 @@ final class DueParser {
     // Точные моменты «через N минут/часов».
     final moments = <DateTime>[];
     var dateText = normalized;
-    var ambiguousHour = false;
+    // Номера в [times] времён без уточнения «утра/вечера»: их уточняет часть
+    // суток («вечером в 8» — 20:00). Среди них — час 1–6 без уточнения
+    // («к 5»), который без части суток неоднозначен.
+    final unqualified = <int>{};
+    final ambiguous = <int>{};
+    // Номера одиночных часов без минут: «в 8», «к 5».
+    final bare = <int>{};
+    // «утром», «днём», «после обеда», «вечером».
+    final parts = _partMentions(normalized, words);
+    final partKinds = <PartOfDay>{for (final found in parts) found.part};
+    final part = partKinds.length == 1 ? partKinds.single : null;
 
     void consume(int start, int end, {bool source = false}) {
       final span = _withPreposition(normalized, words, start, end);
@@ -247,7 +257,7 @@ final class DueParser {
           normalized,
           words,
           now,
-          _pickDistinct(times),
+          _weekdayClock(_pickDistinct(times), part),
           _merge(spans),
           sourceEnds,
         ),
@@ -271,6 +281,11 @@ final class DueParser {
             _isSource(normalized, word.start),
           ),
         );
+      }
+      // Часть суток занимает свой фрагмент без предлога: «в пятницу
+      // вечером» — предлог уже у дня.
+      for (final found in parts) {
+        spans.add(CharSpan(found.start, found.end));
       }
     }
 
@@ -307,6 +322,8 @@ final class DueParser {
         final adjusted = _applySuffix(hour, suffix.last.group(0)!);
         if (adjusted == null) return fail(DueIssue.invalidTime);
         hour = adjusted;
+      } else {
+        unqualified.add(times.length);
       }
       times.add(
         _Mention((hour, minute), _isSource(normalized, match.start)),
@@ -343,6 +360,7 @@ final class DueParser {
         if (!looksLikeTime || second > 59) {
           return fail(DueIssue.invalidTime);
         }
+        unqualified.add(times.length);
         times.add(_Mention((first, second), source));
         mask(match.start, match.end);
         continue;
@@ -359,6 +377,7 @@ final class DueParser {
       }
       if (looksLikeTime && second <= 59) {
         // «на 18.30»: такой даты нет, но это корректное время.
+        unqualified.add(times.length);
         times.add(_Mention((first, second), source));
         mask(match.start, match.end);
         continue;
@@ -387,6 +406,35 @@ final class DueParser {
       for (final word in words)
         if (_dayWords.containsKey(word.group(0))) word.end,
     };
+    // «завтра вечером в 8 встреча»: часть суток сразу после дня тоже день.
+    // Одна часть суток днём не считается: в «вечером в 2 магазина» число —
+    // количество, а не час.
+    for (final found in parts) {
+      final chained = dayEnds.any((int end) {
+        if (end > found.start) return false;
+        final gap = normalized.substring(end, found.start).trim();
+        return gap.isEmpty || gap == ',';
+      });
+      if (chained) dayEnds.add(found.end);
+    }
+    // Час сразу после одной части суток: «утром в 5 пробежка», «вечером
+    // в 8 встреча». Число здесь может быть и количеством («вечером в 2
+    // магазина», «днём в 10 классе»), поэтому часом оно считается, только
+    // если попадает в часть суток и дальше не слово, согласованное
+    // с числом.
+    bool afterPart(RegExpMatch preposition, int hour, String? nextWord) {
+      if (part == null) return false;
+      final adjusted = _applySuffix(hour, part.hourSuffix);
+      if (adjusted == null || !part.admitsHour(adjusted)) return false;
+      if (nextWord != null && _countedNoun(nextWord, hour)) return false;
+      for (final found in parts) {
+        if (found.end > preposition.start) continue;
+        final gap = normalized.substring(found.end, preposition.start).trim();
+        if (gap.isEmpty || gap == ',') return true;
+      }
+      return false;
+    }
+
     bool afterDay(RegExpMatch preposition) {
       for (final end in dayEnds) {
         if (end > preposition.start) continue;
@@ -416,6 +464,8 @@ final class DueParser {
           : suffix.isNotEmpty ||
               _dayWords.containsKey(nextWord) ||
               _politeWords.contains(nextWord) ||
+              // «в 8 вечером», «в 2 после обеда».
+              parts.any((_PartFound p) => p.start == next.start) ||
               // «в 10 позвонить»: час перед действием.
               (_onlySpaces(dateText, token.end, next.start) &&
                   isInfinitive(nextWord!)) ||
@@ -429,6 +479,7 @@ final class DueParser {
               _startsDayPhrase(masked, i + 1) ||
               // «завтра в 10 созвон»: час сразу после дня.
               afterDay(masked[i - 1]) ||
+              afterPart(masked[i - 1], int.parse(value), nextWord) ||
               (!_onlySpaces(dateText, token.end, next.start) &&
                   _onlyPunctuation(dateText, token.end, next.start));
       if (!freeAfter) continue;
@@ -444,13 +495,38 @@ final class DueParser {
         final adjusted = _applySuffix(hour, suffix.last.group(0)!);
         if (adjusted == null) return fail(DueIssue.invalidTime);
         hour = adjusted;
-      } else if (hour >= 1 && hour <= 6) {
+      } else {
         // «к 5» — и 05:00, и 17:00. Фрагмент уже занят, чтобы «к 5» не
-        // попало в название; срок уточняется у пользователя.
-        ambiguousHour = true;
+        // попало в название; срок уточняется у пользователя, если его
+        // не уточняет часть суток («к 5 вечером»).
+        if (hour >= 1 && hour <= 6) ambiguous.add(times.length);
+        unqualified.add(times.length);
+        bare.add(times.length);
       }
       times.add(_Mention((hour, 0), false));
     }
+
+    // Часть суток уточняет время без «утра/вечера»: «завтра вечером в 8» —
+    // 20:00, «утром в 5» — 05:00. Несовместимое («утром в 20:00») остаётся
+    // как написано: точное время важнее.
+    if (part != null) {
+      for (final index in unqualified) {
+        final mention = times[index];
+        // «утром в 12» — полдень, а не полночь, как «в 12 утра».
+        if (part == PartOfDay.morning && mention.value.$1 == 12) continue;
+        final adjusted = _applySuffix(mention.value.$1, part.hourSuffix);
+        if (adjusted == null || !part.admitsHour(adjusted)) {
+          // «вечером в 1», «вечером в 12», «днём в 10»: час не попадает
+          // в часть суток. Одиночный час переспрашивается, а не становится
+          // дневным; «утром в 20:00» с минутами остаётся как написано.
+          if (bare.contains(index)) ambiguous.add(index);
+          continue;
+        }
+        times[index] = _Mention((adjusted, mention.value.$2), mention.isSource);
+        ambiguous.remove(index);
+      }
+    }
+    final ambiguousHour = ambiguous.isNotEmpty;
 
     collectDays();
 
@@ -460,7 +536,8 @@ final class DueParser {
       return DueParseResult(issue: DueIssue.conflictingDays, spans: merged);
     }
     final clock = _pickDistinct(times);
-    if (clock.length > 1) {
+    // «утром или вечером» — тоже несколько времён.
+    if (clock.length > 1 || partKinds.length > 1) {
       return DueParseResult(issue: DueIssue.conflictingTimes, spans: merged);
     }
 
@@ -470,8 +547,30 @@ final class DueParser {
 
     final explicitDay = days.isEmpty ? null : days.single;
     final time = clock.isEmpty ? null : clock.single;
-    if (explicitDay == null && time == null) {
+    if (explicitDay == null && time == null && part == null) {
       return DueParseResult(spans: merged);
+    }
+
+    if (time == null && part != null) {
+      // Часть суток без точного времени: условный час части и точность
+      // partOfDay. Прошедшей часть считается с её концом: «вечером»
+      // в 19:30 — ещё сегодня. Как с часом: без дня прошедшая часть —
+      // завтра («утром» в 16:30), с явным днём — «уже прошло».
+      if (explicitDay != null && explicitDay.isBefore(today)) {
+        return DueParseResult(issue: DueIssue.inPast, spans: merged);
+      }
+      var day = explicitDay ?? today;
+      if (!part.endOn(day).isAfter(now)) {
+        if (explicitDay != null) {
+          return DueParseResult(issue: DueIssue.inPast, spans: merged);
+        }
+        day = DateTime(day.year, day.month, day.day + 1);
+      }
+      return DueParseResult(
+        dueAt: DateTime(day.year, day.month, day.day, part.hour),
+        precision: DuePrecision.partOfDay,
+        spans: merged,
+      );
     }
 
     if (time == null) {
@@ -510,6 +609,215 @@ final class DueParser {
       precision: DuePrecision.dateTime,
       spans: merged,
     );
+  }
+
+  // ------------------------------------------------------- части суток
+
+  /// Части суток наречием: «утром», «днём», «вечером», ласкательные
+  /// «утречком», «вечерком». «Ночью» сроком не считается: это и поздний
+  /// вечер, и раннее утро — остаётся в названии. «После работы»,
+  /// «в обед», «к вечеру» — тоже пока не сроки.
+  static const Map<String, PartOfDay> _partWords = <String, PartOfDay>{
+    'утром': PartOfDay.morning,
+    'утречком': PartOfDay.morning,
+    'днем': PartOfDay.day,
+    'вечером': PartOfDay.evening,
+    'вечерком': PartOfDay.evening,
+  };
+
+  /// Слова перед частью суток, с которыми она не срок: «с утром» («с днём
+  /// рождения»), «за вечером», «каждым утром», «перед вечером».
+  static const Set<String> _partBlockersBefore = <String>{
+    'с',
+    'со',
+    'за',
+    'перед',
+    'под',
+    'над',
+    'каждым',
+    'целым',
+    'тем',
+    'одним',
+    'другим',
+    'следующим',
+  };
+
+  /// Части суток существительным после «на»: «перенеси на вечер», «на утро
+  /// пятницы». «На день» сроком не считается: «на день рождения», «на один
+  /// день».
+  static const Map<String, PartOfDay> _partNouns = <String, PartOfDay>{
+    'утро': PartOfDay.morning,
+    'вечер': PartOfDay.evening,
+  };
+
+  /// Исходная часть суток перед «на вечер»: «с утра на вечер» — это
+  /// откуда переносят, не срок.
+  static const Set<String> _sourceParts = <String>{
+    'утра',
+    'вечера',
+    'обеда',
+  };
+
+  /// Слова сразу после «на вечер», «на утро», с которыми это срок: конец
+  /// фразы, день («на вечер завтра»), предлог или союз. Иначе это событие:
+  /// «билеты на вечер встречи выпускников».
+  static const Set<String> _partNounFollowers = <String>{
+    'в',
+    'во',
+    'на',
+    'к',
+    'и',
+    'или',
+    'а',
+    'но',
+    'для',
+    'с',
+    'со',
+    'по',
+    'у',
+    'после',
+    'через',
+    'пожалуйста',
+  };
+
+  /// Месяцы: «5 ноября вечером» — дату словами разбор пока не понимает,
+  /// и часть суток рядом с ней не срок, иначе срок вышел бы уверенно
+  /// неверным (сегодня вечером вместо 5 ноября).
+  static const List<String> _monthStems = <String>[
+    'январ',
+    'феврал',
+    'март',
+    'апрел',
+    'мая',
+    'мае',
+    'июн',
+    'июл',
+    'август',
+    'сентябр',
+    'октябр',
+    'ноябр',
+    'декабр',
+  ];
+
+  /// Слова дня, которые разбор не понимает: «5-го», «числа», «вчера».
+  /// Рядом с ними часть суток не срок.
+  static bool _unparsedDayWord(String word) =>
+      word == 'го' ||
+      word == 'числа' ||
+      word == 'вчера' ||
+      word == 'позавчера' ||
+      _monthStems.any(word.startsWith);
+
+  /// Слова после части суток, с которыми она не срок: «днём рождения»,
+  /// «днём раньше».
+  static const Set<String> _partBlockersAfter = <String>{
+    'рождения',
+    'раньше',
+    'позже',
+    'ранее',
+  };
+
+  /// Слово после «в N» похоже на существительное при числе: «в 10 классе»,
+  /// «в 3 кабинете», «в 5 магазинах», «в 2 магазина».
+  static bool _countedNoun(String word, int number) {
+    if (!RegExp(r'^[а-я]+$').hasMatch(word) || word.length < 3) return false;
+    if (word.endsWith('е') ||
+        word.endsWith('ах') ||
+        word.endsWith('ях') ||
+        word.endsWith('ов') ||
+        word.endsWith('ев')) {
+      return true;
+    }
+    return number >= 2 &&
+        number <= 4 &&
+        (word.endsWith('а') || word.endsWith('я'));
+  }
+
+  /// Части суток в тексте: «утром», «вечером», «после обеда», «этим
+  /// вечером» (вместе с «этим»).
+  static List<_PartFound> _partMentions(String text, List<RegExpMatch> words) {
+    String word(int i) => words[i].group(0)!;
+    bool adjacent(int left, int right) =>
+        _onlySpaces(text, words[left].end, words[right].start);
+    final result = <_PartFound>[];
+    // Рядом с частью суток дата, которую разбор не понимает: «5 ноября
+    // вечером», «вечером 5-го», «вчера вечером».
+    bool nextToUnparsedDay(int first, int last) {
+      if (first > 0 &&
+          adjacent(first - 1, first) &&
+          _unparsedDayWord(word(first - 1))) {
+        return true;
+      }
+      if (last + 1 >= words.length || !adjacent(last, last + 1)) return false;
+      final next = word(last + 1);
+      if (_unparsedDayWord(next)) return true;
+      return _allDigits.hasMatch(next) &&
+          last + 2 < words.length &&
+          _unparsedDayWord(word(last + 2));
+    }
+
+    for (var i = 0; i < words.length; i++) {
+      // «на вечер», «на утро пятницы», «с утра на вечер».
+      final noun = _partNouns[word(i)];
+      if (noun != null && i > 0 && adjacent(i - 1, i) && word(i - 1) == 'на') {
+        final followed = i + 1 >= words.length ||
+            !_onlySpaces(text, words[i].end, words[i + 1].start) ||
+            _partNounFollowers.contains(word(i + 1)) ||
+            _dayWords.containsKey(word(i + 1)) ||
+            _weekdayForms[word(i + 1)]?.$2 == _genitivePrepositions;
+        if (!followed || nextToUnparsedDay(i, i)) continue;
+        var start = i - 1;
+        if (start >= 2 &&
+            adjacent(start - 1, start) &&
+            adjacent(start - 2, start - 1) &&
+            _sourceParts.contains(word(start - 1)) &&
+            (word(start - 2) == 'с' || word(start - 2) == 'со')) {
+          start -= 2;
+        }
+        result.add(_PartFound(words[start].start, words[i].end, noun));
+        continue;
+      }
+      var part = _partWords[word(i)];
+      var last = i;
+      if (part == null &&
+          word(i) == 'после' &&
+          i + 1 < words.length &&
+          word(i + 1) == 'обеда' &&
+          adjacent(i, i + 1)) {
+        part = PartOfDay.afternoon;
+        last = i + 1;
+        // «после обеда с клиентом» — после события, а не время.
+        if (last + 1 < words.length &&
+            (word(last + 1) == 'с' || word(last + 1) == 'со')) {
+          continue;
+        }
+      }
+      if (part == null) continue;
+      if (i > 0 &&
+          adjacent(i - 1, i) &&
+          _partBlockersBefore.contains(word(i - 1))) {
+        continue;
+      }
+      if (last + 1 < words.length &&
+          adjacent(last, last + 1) &&
+          _partBlockersAfter.contains(word(last + 1))) {
+        continue;
+      }
+      final start =
+          i > 0 && adjacent(i - 1, i) && word(i - 1) == 'этим' ? i - 1 : i;
+      if (nextToUnparsedDay(start, last)) continue;
+      result.add(_PartFound(words[start].start, words[last].end, part));
+      i = last;
+    }
+    return result;
+  }
+
+  /// Время для правила «сегодняшний день недели»: с частью суток без часа
+  /// день ещё сегодняшний, пока часть не кончилась («в пятницу вечером»
+  /// в пятницу днём — сегодня).
+  static Set<(int, int)> _weekdayClock(Set<(int, int)> clock, PartOfDay? part) {
+    if (clock.isNotEmpty || part == null) return clock;
+    return <(int, int)>{(part.endHour - 1, 59)};
   }
 
   // ------------------------------------------- дни недели и «через N …»
@@ -1106,8 +1414,15 @@ final class DueParser {
       }
       final preposition =
           start > 0 && adjacent(start - 1, start) ? word(start - 1) : null;
-      final withPreposition =
-          preposition != null && prepositions.contains(preposition);
+      // «на вечер пятницы», «на утро понедельника»: родительный падеж
+      // после части суток.
+      final afterPartNoun = prepositions == _genitivePrepositions &&
+          _partNouns.containsKey(preposition) &&
+          start > 1 &&
+          adjacent(start - 2, start - 1) &&
+          word(start - 2) == 'на';
+      final withPreposition = afterPartNoun ||
+          (preposition != null && prepositions.contains(preposition));
       // Сразу за днём идёт время или дата: «пятница 10:00», «пт в 18».
       // Только без чужого предлога («в среде 10:00» — не день), не после
       // числа («60 вт в 10» — ватты) и в именительном падеже или с
@@ -1449,6 +1764,33 @@ final class DueParser {
     final candidate = DateTime(year, month, day);
     return candidate.month == month && candidate.day == day;
   }
+}
+
+/// Часть суток, найденная в тексте, с фрагментом.
+final class _PartFound {
+  const _PartFound(this.start, this.end, this.part);
+
+  final int start;
+  final int end;
+  final PartOfDay part;
+}
+
+/// Уточнение часа частью суток: «вечером в 8» — как «в 8 вечера».
+extension on PartOfDay {
+  String get hourSuffix => switch (this) {
+        PartOfDay.morning => 'утра',
+        PartOfDay.day || PartOfDay.afternoon => 'дня',
+        PartOfDay.evening => 'вечера',
+      };
+
+  /// Час, уточнённый частью суток, в неё попадает: «вечером в 8» — 20:00
+  /// подходит, «вечером в 1» — 13:00 нет.
+  bool admitsHour(int hour) => switch (this) {
+        PartOfDay.morning => hour >= 4 && hour <= 12,
+        PartOfDay.day => hour >= 12 && hour <= 17,
+        PartOfDay.afternoon => hour >= 12 && hour <= 18,
+        PartOfDay.evening => hour >= 17 && hour <= 23,
+      };
 }
 
 /// Какая неделя имеется в виду: «эту», «следующую» или ближайший день.

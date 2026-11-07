@@ -38,7 +38,7 @@
 {"id":"tgt-002","text":"не выполнил отчёт","intent":"unknown","note":"«не» первым словом"}
 {"id":"tgt-003","text":"Я не сделал?","intent":"unknown"}
 {"id":"tgt-004","text":"Перенеси отчёт на завтра","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-11-03","precision":"date"}
-{"id":"tgt-005","text":"Перенеси встречу с 15:00 на 17:00","intent":"rescheduleTask","targetQuery":"Встречу","due":"2026-11-02T17:00","precision":"dateTime","note":"исходный срок «с 15:00» тоже вырезается"}
+{"id":"tgt-005","text":"Перенеси встречу с 15:00 на 17:00","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-02T17:00","precision":"dateTime","note":"исходный срок «с 15:00» тоже вырезается"}
 {"id":"tgt-006","text":"Перенеси задачу купить хлеб на послезавтра в 10:00","intent":"rescheduleTask","targetQuery":"Купить хлеб","due":"2026-11-04T10:00","precision":"dateTime"}
 {"id":"tgt-007","text":"Заверши отчёт","intent":"completeTask","targetQuery":"Отчёт"}
 {"id":"tgt-008","text":"Отметь задачу купить хлеб как выполненную","intent":"completeTask","targetQuery":"Купить хлеб"}
@@ -49,4 +49,4 @@
 {"id":"tgt-013","text":"Готово","intent":"completeTask","targetQuery":null}
 {"id":"tgt-014","text":"Перенеси задачу «Отчёт» на завтра","intent":"rescheduleTask","title":"Отчёт","targetQuery":null,"due":"2026-11-03","precision":"date","note":"в кавычках — точное название, не запрос"}
 {"id":"tgt-015","text":"Задача выполнена","intent":"completeTask","targetQuery":null}
-{"id":"tgt-016","text":"Отложи покупку краски пожалуйста на 20.11","intent":"rescheduleTask","targetQuery":"Покупку краски","due":"2026-11-20","precision":"date"}
+{"id":"tgt-016","text":"Отложи покупку краски пожалуйста на 20.11","intent":"rescheduleTask","targetQuery":"Покупка краски","due":"2026-11-20","precision":"date"}

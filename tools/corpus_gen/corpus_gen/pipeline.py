@@ -570,11 +570,12 @@ def normalize_label(data: dict[str, Any], connector: ConnectorTopics | None = No
 def _normalize_due(due: str, precision: Any) -> tuple[str, str]:
     """Приводит срок к формату корпуса и сверяет его с precision модели.
 
-    «2026-11-03» → date; «2026-11-03T10:00[:00]» → dateTime. Противоречие
-    (precision=date при времени не 00:00, dateTime без времени) — ошибка
-    разметки, а не повод угадывать.
+    «2026-11-03» → date; «2026-11-03T10:00[:00]» → dateTime; часть суток —
+    «2026-11-03T19:00» с precision=partOfDay. Противоречие (precision=date при
+    времени не 00:00, dateTime или partOfDay без времени) — ошибка разметки, а не
+    повод угадывать.
     """
-    if precision not in (None, "date", "dateTime"):
+    if precision not in (None, *prompts.PRECISIONS):
         raise ProviderError(f"недопустимый precision: {precision!r}")
     has_time = "T" in due or " " in due
     try:
@@ -585,14 +586,14 @@ def _normalize_due(due: str, precision: Any) -> tuple[str, str]:
         raise ProviderError(f"недопустимый год в due: {due!r}")
     if precision is None:
         precision = "dateTime" if has_time else "date"
-    if precision == "dateTime" and not has_time:
-        raise ProviderError(f"precision=dateTime, но в due нет времени: {due!r}")
+    if precision in ("dateTime", "partOfDay") and not has_time:
+        raise ProviderError(f"precision={precision}, но в due нет времени: {due!r}")
     if precision == "date" and has_time and (moment.hour, moment.minute, moment.second) != (0, 0, 0):
         raise ProviderError(f"precision=date, но в due есть время: {due!r}")
     date = f"{moment.year:04d}-{moment.month:02d}-{moment.day:02d}"
     if precision == "date":
         return date, "date"
-    return f"{date}T{moment.hour:02d}:{moment.minute:02d}", "dateTime"
+    return f"{date}T{moment.hour:02d}:{moment.minute:02d}", precision
 
 
 def comparable(label_: dict[str, Any]) -> tuple[Any, ...]:

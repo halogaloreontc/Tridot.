@@ -350,8 +350,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final now = _now;
     var next = DateTime(now.year, now.month, now.day + 1);
     for (final task in _active) {
-      final due = task.dueAt;
-      if (task.duePrecision == DuePrecision.dateTime &&
+      // Для даты без времени момент — полночь, она уже в `next`.
+      final due = overdueMoment(task);
+      if (task.duePrecision != DuePrecision.date &&
           due != null &&
           due.isAfter(now) &&
           due.isBefore(next)) {

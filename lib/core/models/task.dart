@@ -2,7 +2,63 @@ enum TaskStatus { inbox, planned, inProgress, done, cancelled }
 
 enum TaskPriority { low, normal, high, urgent }
 
-enum DuePrecision { date, dateTime }
+/// Точность срока задачи.
+enum DuePrecision {
+  /// Только день: «завтра», «в пятницу».
+  date,
+
+  /// День и точное время: «завтра в 10:00».
+  dateTime,
+
+  /// День и часть суток без точного времени: «завтра вечером». Время
+  /// в [Task.dueAt] — условное ([PartOfDay.hour]), показывается словами
+  /// («вечером»), а срок считается прошедшим только с концом части суток.
+  partOfDay,
+}
+
+/// Часть суток для срока с точностью [DuePrecision.partOfDay]: условный
+/// час, к которому ставится срок, и час, когда часть суток кончается.
+enum PartOfDay {
+  /// «утром» — 9:00, до полудня.
+  morning(9, 12, 'утром'),
+
+  /// «днём» — 13:00, до 17:00.
+  day(13, 17, 'днём'),
+
+  /// «после обеда» — 14:00, до 18:00.
+  afternoon(14, 18, 'после обеда'),
+
+  /// «вечером» — 19:00, до полуночи.
+  evening(19, 24, 'вечером');
+
+  const PartOfDay(this.hour, this.endHour, this.label);
+
+  /// Условный час срока.
+  final int hour;
+
+  /// Час конца части суток (24 — полночь следующего дня).
+  final int endHour;
+
+  /// Как часть суток пишется после дня: «завтра вечером».
+  final String label;
+
+  /// Часть суток по условному часу срока. Чужой час (срок поправили
+  /// вручную) относится к ближайшей части: до 12 — утро, до 14 — день,
+  /// до 17 — после обеда, позже — вечер.
+  static PartOfDay of(DateTime due) {
+    for (final part in values) {
+      if (part.hour == due.hour) return part;
+    }
+    if (due.hour < 12) return morning;
+    if (due.hour < 14) return day;
+    if (due.hour < 17) return afternoon;
+    return evening;
+  }
+
+  /// Момент, когда часть суток дня [due] кончается.
+  DateTime endOn(DateTime due) =>
+      DateTime(due.year, due.month, due.day, endHour);
+}
 
 class Task {
   const Task({
@@ -95,8 +151,7 @@ class Task {
       dueAt: json['due_at'] == null
           ? null
           : DateTime.parse(json['due_at'] as String),
-      duePrecision: DuePrecision.values
-          .byName(json['due_precision'] as String? ?? 'dateTime'),
+      duePrecision: _precisionFromJson(json['due_precision']),
       tags: (json['tags'] as List<dynamic>? ?? const <dynamic>[])
           .map((dynamic e) => e.toString())
           .toList(),
@@ -109,5 +164,14 @@ class Task {
           ? null
           : DateTime.parse(json['deleted_at'] as String),
     );
+  }
+
+  /// Старые файлы без поля — `dateTime`; незнакомое значение (файл из
+  /// более новой версии) тоже читается как `dateTime`, а не роняет загрузку.
+  static DuePrecision _precisionFromJson(Object? value) {
+    for (final precision in DuePrecision.values) {
+      if (precision.name == value) return precision;
+    }
+    return DuePrecision.dateTime;
   }
 }

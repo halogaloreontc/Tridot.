@@ -28,3 +28,39 @@
 {"id":"rev-028","text":"отметь звонок маме выполненным","intent":"completeTask","targetQuery":"Звонок маме"}
 {"id":"rev-029","text":"Добавь задачу купить хлеб к 17","intent":"createTask","title":"Купить хлеб","due":"2026-11-02T17:00","precision":"dateTime","note":"час больше 12 — без уточнения"}
 {"id":"rev-030","text":"добавь звонок в 5 утра","intent":"createTask","title":"Звонок","due":"2026-11-03T05:00","precision":"dateTime","note":"с уточнением час 1–6 понятен"}
+{"id":"rev-031","text":"напомни о моей встрече с клиентом","intent":"createTask","title":"Моя встреча с клиентом","due":null,"note":"местоимение перед главным словом: «моей» → «моя», не «мояя»"}
+{"id":"rev-032","text":"напомни о нашей встрече","intent":"createTask","title":"Наша встреча","due":null}
+{"id":"rev-033","text":"напомни насчёт нашей встречи","intent":"createTask","title":"Наша встреча","due":null}
+{"id":"rev-034","text":"напомни о третьей встрече","intent":"createTask","title":"Третья встреча","due":null}
+{"id":"rev-035","text":"напомни о брате","intent":"createTask","title":"О брате","due":null,"note":"мужской род на «-ате» не угадать — как написано"}
+{"id":"rev-036","text":"напомни о ребёнке","intent":"createTask","title":"О ребёнке","due":null,"note":"«-нке» — мужской род, не «Ребёнка»"}
+{"id":"rev-037","text":"напомни о списке покупок","intent":"createTask","title":"О списке покупок","due":null}
+{"id":"rev-038","text":"напомни о малыше","intent":"createTask","title":"О малыше","due":null}
+{"id":"rev-039","text":"напомни насчёт помощи маме","intent":"createTask","title":"Насчёт помощи маме","due":null,"note":"женский род на «-ь»: не «Помоща»"}
+{"id":"rev-040","text":"напомни о гарантии на телефон","intent":"createTask","title":"Гарантия на телефон","due":null}
+{"id":"rev-041","text":"напомни о путешествии","intent":"createTask","title":"Путешествие","due":null}
+{"id":"rev-042","text":"напомни о Евгении","intent":"createTask","title":"О Евгении","due":null,"note":"Евгений или Евгения — не угадать"}
+{"id":"rev-043","text":"добавь рагу на ужин","intent":"createTask","title":"Рагу на ужин","due":null,"note":"несклоняемое на «-у»"}
+{"id":"rev-044","text":"напомни про Баку","intent":"createTask","title":"Баку","due":null}
+{"id":"rev-045","text":"добавь Олегу цветы","intent":"createTask","title":"Олегу цветы","due":null,"note":"дательный падеж: не «Олега цветы»"}
+{"id":"rev-046","text":"добавь заказчику документы","intent":"createTask","title":"Заказчику документы","due":null}
+{"id":"rev-047","text":"добавь созвон 5 ноября вечером","intent":"createTask","title":"Созвон 5 ноября вечером","due":null,"note":"дату словами разбор не понимает — часть суток рядом с ней тоже не срок"}
+{"id":"rev-048","text":"добавь созвон 5-го вечером","intent":"createTask","title":"Созвон 5-го вечером","due":null}
+{"id":"rev-049","text":"добавь встречу вчера вечером","intent":"createTask","title":"Встреча вчера вечером","due":null,"note":"«вчера» не срок — и «вечером» рядом не сегодняшний вечер"}
+{"id":"rev-050","text":"добавь созвон вечером в 1","intent":"createTask","title":"Созвон","due":null,"issue":"ambiguousHour","note":"13:00 — не вечер: переспросить"}
+{"id":"rev-051","text":"добавь созвон завтра вечером в 12","intent":"createTask","title":"Созвон","due":null,"issue":"ambiguousHour"}
+{"id":"rev-052","text":"добавь вечером в 2 магазина зайти","intent":"createTask","title":"В 2 магазина зайти","due":"2026-11-02T19:00","precision":"partOfDay","note":"«в 2 магазина» — количество, не час"}
+{"id":"rev-053","text":"добавь днём в 10 классе провести урок","intent":"createTask","title":"В 10 классе провести урок","due":"2026-11-02T13:00","precision":"partOfDay"}
+{"id":"rev-054","text":"напомни утром в 3 поликлинику позвонить","intent":"createTask","title":"В 3 поликлинику позвонить","due":"2026-11-03T09:00","precision":"partOfDay","note":"3:00 — не утро: не час"}
+{"id":"rev-055","text":"поставь кипятить воду","intent":"unknown","note":"бытовая просьба, не задача"}
+{"id":"rev-056","text":"поставь стирать бельё","intent":"unknown"}
+{"id":"rev-057","text":"поставь смотреть фильм","intent":"unknown"}
+{"id":"rev-058","text":"перенеси созвон на вечер","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-02T19:00","precision":"partOfDay","note":"«на вечер» — срок переноса"}
+{"id":"rev-059","text":"перенеси встречу на утро","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-03T09:00","precision":"partOfDay","note":"утро уже прошло — завтра"}
+{"id":"rev-060","text":"перенеси созвон на вечер пятницы","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-06T19:00","precision":"partOfDay"}
+{"id":"rev-061","text":"перенеси встречу с утра на вечер завтра","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-03T19:00","precision":"partOfDay","note":"«с утра» — откуда переносят"}
+{"id":"rev-062","text":"добавь созвон завтра утром в 3","intent":"createTask","title":"Созвон","due":null,"issue":"ambiguousHour","note":"3:00 — не утро: переспросить, а не ставить 03:00"}
+{"id":"rev-063","text":"поставь подготовить отчёт","intent":"createTask","title":"Подготовить отчёт","due":null,"note":"закрытый список бытовых глаголов не мешает делам"}
+{"id":"rev-064","text":"поставь созвониться с клиентом","intent":"createTask","title":"Созвониться с клиентом","due":null}
+{"id":"rev-065","text":"добавь купить билеты на вечер встречи выпускников","intent":"createTask","title":"Купить билеты на вечер встречи выпускников","due":null,"note":"«на вечер встречи» — событие, не срок"}
+{"id":"rev-066","text":"добавь утром в 5 пробежку","intent":"createTask","title":"Пробежка","due":"2026-11-03T05:00","precision":"dateTime","note":"час в пределах утра — время"}

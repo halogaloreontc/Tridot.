@@ -78,7 +78,10 @@ final class TaskService {
   ///
   /// Слова сравниваются по основе: первые `min(5, длина)` букв, причём для
   /// пары слов берётся меньшая длина — «хлеб» совпадает с «хлеба», «отчёт»
-  /// с «отчёта». Слова короче трёх букв и числа совпадают только целиком:
+  /// с «отчёта». Короткие слова совпадают и с другим падежным окончанием
+  /// (одна-две гласные после общей основы от трёх букв): «мама» с «маму»,
+  /// «плана» с «плане» — так задача «Маму поздравить» находится по запросу
+  /// «Мама», а старая «Встречу» — по новому «Встреча». Слова короче трёх букв и числа совпадают только целиком:
   /// «ип» не совпадает с «ипотеку», «2» — с «2027». Служебные слова («в»,
   /// «на», «задачу») не учитываются. Оценка — доля совпавших слов запроса.
   /// В результат попадают задачи с оценкой не ниже 0.5 и хотя бы одним
@@ -196,7 +199,40 @@ final class TaskService {
     }
     var length = a.length < b.length ? a.length : b.length;
     if (length > 5) length = 5;
-    return a.substring(0, length) == b.substring(0, length);
+    if (a.substring(0, length) == b.substring(0, length)) return true;
+    return _sameInflected(a, b);
+  }
+
+  /// Падежные окончания, которыми могут различаться короткие слова.
+  static const Set<String> _caseEndings = <String>{
+    'а',
+    'я',
+    'у',
+    'ю',
+    'е',
+    'и',
+    'ы',
+    'о',
+    'ой',
+    'ей',
+    'ом',
+    'ем',
+  };
+
+  /// «маму» и «мама», «плана» и «плане»: общая основа — всё, кроме
+  /// окончания, и оба окончания — падежные.
+  static bool _sameInflected(String a, String b) {
+    for (final stemLength in <int>[a.length - 1, a.length - 2]) {
+      if (stemLength < 3 || stemLength > b.length) continue;
+      if (a.substring(0, stemLength) != b.substring(0, stemLength)) continue;
+      final left = a.substring(stemLength);
+      final right = b.substring(stemLength);
+      if (_caseEndings.contains(left) &&
+          (right.isEmpty || _caseEndings.contains(right))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static bool _sameVerbStem(String a, String b) {

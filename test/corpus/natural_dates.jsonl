@@ -11,14 +11,14 @@
 {"id": "nd-007", "text": "добавь спорт в понедельник", "intent": "createTask", "title": "Спорт", "due": "2026-11-09", "precision": "date", "note": "сегодня понедельник, времени нет — следующий понедельник"}
 {"id": "nd-008", "text": "добавь спорт в понедельник в 18:00", "intent": "createTask", "title": "Спорт", "due": "2026-11-02T18:00", "precision": "dateTime", "note": "сегодня понедельник и 18:00 ещё не прошло — сегодня"}
 {"id": "nd-009", "text": "добавь спорт в понедельник в 10", "intent": "createTask", "title": "Спорт", "due": "2026-11-09T10:00", "precision": "dateTime", "note": "сегодня понедельник, 10:00 уже прошло — через неделю"}
-{"id": "nd-010", "text": "добавь встречу в пт в 11:30", "intent": "createTask", "title": "Встречу", "due": "2026-11-06T11:30", "precision": "dateTime"}
+{"id": "nd-010", "text": "добавь встречу в пт в 11:30", "intent": "createTask", "title": "Встреча", "due": "2026-11-06T11:30", "precision": "dateTime"}
 {"id": "nd-011", "text": "перенеси её на пт", "intent": "rescheduleTask", "title": null, "targetQuery": null, "due": "2026-11-06", "precision": "date"}
 {"id": "nd-012", "text": "добавь созвон в ср в 15", "intent": "createTask", "title": "Созвон", "due": "2026-11-04T15:00", "precision": "dateTime"}
 {"id": "nd-013", "text": "добавь отчёт пт 18:00", "intent": "createTask", "title": "Отчёт", "due": "2026-11-06T18:00", "precision": "dateTime", "note": "сокращение без предлога, но перед временем"}
 {"id": "nd-014", "text": "добавь купить подарок до субботы", "intent": "createTask", "title": "Купить подарок", "due": "2026-11-07", "precision": "date"}
 {"id": "nd-015", "text": "добавь подготовить слайды к четвергу", "intent": "createTask", "title": "Подготовить слайды", "due": "2026-11-05", "precision": "date"}
-{"id": "nd-016", "text": "добавь встречу в следующую пятницу", "intent": "createTask", "title": "Встречу", "due": "2026-11-13", "precision": "date"}
-{"id": "nd-017", "text": "добавь встречу в следующий вторник в 12:00", "intent": "createTask", "title": "Встречу", "due": "2026-11-10T12:00", "precision": "dateTime"}
+{"id": "nd-016", "text": "добавь встречу в следующую пятницу", "intent": "createTask", "title": "Встреча", "due": "2026-11-13", "precision": "date"}
+{"id": "nd-017", "text": "добавь встречу в следующий вторник в 12:00", "intent": "createTask", "title": "Встреча", "due": "2026-11-10T12:00", "precision": "dateTime"}
 {"id": "nd-018", "text": "добавь ретро на следующей неделе в пятницу", "intent": "createTask", "title": "Ретро", "due": "2026-11-13", "precision": "date"}
 {"id": "nd-019", "text": "добавь ретро в среду на следующей неделе", "intent": "createTask", "title": "Ретро", "due": "2026-11-11", "precision": "date"}
 {"id": "nd-020", "text": "добавь сдать отчёт в эту пятницу", "intent": "createTask", "title": "Сдать отчёт", "due": "2026-11-06", "precision": "date"}
@@ -26,7 +26,7 @@
 {"id": "nd-022", "text": "напомни в пятницу в 18:00 забрать посылку", "now": "2026-11-06T09:00", "intent": "createTask", "title": "Забрать посылку", "due": "2026-11-06T18:00", "precision": "dateTime", "note": "сегодня пятница, время впереди — сегодня"}
 {"id": "nd-023", "text": "напомни в пятницу в 18:00 забрать посылку", "now": "2026-11-06T19:00", "intent": "createTask", "title": "Забрать посылку", "due": "2026-11-13T18:00", "precision": "dateTime", "note": "сегодня пятница, время прошло — следующая пятница"}
 {"id": "nd-024", "text": "напомни в пятницу забрать посылку", "now": "2026-11-06T09:00", "intent": "createTask", "title": "Забрать посылку", "due": "2026-11-13", "precision": "date", "note": "сегодня пятница без времени — следующая пятница"}
-{"id": "nd-025", "text": "добавь стирку в понедельник", "now": "2026-11-08T12:00", "intent": "createTask", "title": "Стирку", "due": "2026-11-09", "precision": "date"}
+{"id": "nd-025", "text": "добавь стирку в понедельник", "now": "2026-11-08T12:00", "intent": "createTask", "title": "Стирка", "due": "2026-11-09", "precision": "date"}
 {"id": "nd-026", "text": "добавь отчёт в эту пятницу в 10", "now": "2026-11-06T09:00", "intent": "createTask", "title": "Отчёт", "due": "2026-11-06T10:00", "precision": "dateTime"}
 {"id": "nd-027", "text": "добавь отчёт в эту пятницу в 10", "now": "2026-11-06T11:00", "intent": "createTask", "title": "Отчёт", "due": null, "issue": "inPast"}
 {"id": "nd-028", "text": "добавь позвонить через 2 часа", "intent": "createTask", "title": "Позвонить", "due": "2026-11-02T18:30", "precision": "dateTime"}
@@ -44,15 +44,15 @@
 {"id": "nd-040", "text": "добавь съездить на дачу на выходных", "now": "2026-11-08T12:00", "intent": "createTask", "title": "Съездить на дачу", "due": "2026-11-14", "precision": "date", "note": "в воскресенье ближайшие выходные — следующие"}
 {"id": "nd-041", "text": "добавь сдать отчёт в конце недели", "intent": "createTask", "title": "Сдать отчёт", "due": "2026-11-06", "precision": "date"}
 {"id": "nd-042", "text": "добавь сдать отчёт к концу недели", "intent": "createTask", "title": "Сдать отчёт", "due": "2026-11-06", "precision": "date"}
-{"id": "nd-043", "text": "добавь планёрку на следующей неделе", "intent": "createTask", "title": "Планёрку", "due": "2026-11-09", "precision": "date", "note": "без дня — понедельник следующей недели"}
+{"id": "nd-043", "text": "добавь планёрку на следующей неделе", "intent": "createTask", "title": "Планёрка", "due": "2026-11-09", "precision": "date", "note": "без дня — понедельник следующей недели"}
 {"id": "nd-044", "text": "добавь поход в кино на этих выходных", "intent": "createTask", "title": "Поход в кино", "due": "2026-11-07", "precision": "date"}
 {"id": "nd-045", "text": "добавь поход в кино на следующих выходных", "intent": "createTask", "title": "Поход в кино", "due": "2026-11-14", "precision": "date"}
 {"id": "nd-046", "text": "перенеси звонок клиенту на пятницу", "intent": "rescheduleTask", "targetQuery": "Звонок клиенту", "due": "2026-11-06", "precision": "date"}
 {"id": "nd-047", "text": "перенеси отчёт на следующей неделе в среду", "intent": "rescheduleTask", "targetQuery": "Отчёт", "due": "2026-11-11", "precision": "date"}
-{"id": "nd-048", "text": "сдвинь встречу с командой через 3 дня", "intent": "rescheduleTask", "targetQuery": "Встречу с командой", "due": "2026-11-05", "precision": "date"}
+{"id": "nd-048", "text": "сдвинь встречу с командой через 3 дня", "intent": "rescheduleTask", "targetQuery": "Встреча с командой", "due": "2026-11-05", "precision": "date"}
 {"id": "nd-049", "text": "перенеси созвон с пятницы на понедельник", "intent": "rescheduleTask", "targetQuery": "Созвон", "due": "2026-11-09", "precision": "date", "note": "«с пятницы» — исходный срок"}
 {"id": "nd-050", "text": "Перенеси её на следующую среду", "intent": "rescheduleTask", "targetQuery": null, "due": "2026-11-11", "precision": "date"}
-{"id": "nd-051", "text": "отложи стирку на выходных", "intent": "rescheduleTask", "targetQuery": "Стирку", "due": "2026-11-07", "precision": "date"}
+{"id": "nd-051", "text": "отложи стирку на выходных", "intent": "rescheduleTask", "targetQuery": "Стирка", "due": "2026-11-07", "precision": "date"}
 {"id": "nd-052", "text": "добавь позвонить в пятницу 10.11", "intent": "createTask", "title": "Позвонить", "due": null, "issue": "conflictingDays"}
 {"id": "nd-053", "text": "добавь позвонить в пятницу или в субботу", "intent": "createTask", "title": "Позвонить", "due": null, "issue": "conflictingDays"}
 {"id": "nd-054", "text": "добавь позвонить завтра в пятницу", "intent": "createTask", "title": "Позвонить", "due": null, "issue": "conflictingDays"}
@@ -67,7 +67,7 @@
 {"id": "nd-063", "text": "добавь перейти через дорогу", "intent": "createTask", "title": "Перейти через дорогу", "due": null}
 {"id": "nd-064", "text": "добавь в 10 в пятницу позвонить", "intent": "createTask", "title": "Позвонить", "due": "2026-11-06T10:00", "precision": "dateTime"}
 {"id": "nd-065", "text": "Добавь задачу «Пятница» завтра", "intent": "createTask", "title": "Пятница", "due": "2026-11-03", "precision": "date"}
-{"id": "nd-066", "text": "добавь пробежку во вторник в 7 утра", "intent": "createTask", "title": "Пробежку", "due": "2026-11-03T07:00", "precision": "dateTime"}
+{"id": "nd-066", "text": "добавь пробежку во вторник в 7 утра", "intent": "createTask", "title": "Пробежка", "due": "2026-11-03T07:00", "precision": "dateTime"}
 {"id": "nd-067", "text": "добавь позвонить в эту среду", "intent": "createTask", "title": "Позвонить", "due": "2026-11-04", "precision": "date"}
 {"id": "nd-068", "text": "добавь отчёт в эту среду", "now": "2026-11-05T10:00", "intent": "createTask", "title": "Отчёт", "due": null, "issue": "inPast"}
 {"id": "nd-069", "text": "добавь отчёт через 3 дня в 25:00", "intent": "createTask", "title": "Отчёт", "due": null, "issue": "invalidTime"}

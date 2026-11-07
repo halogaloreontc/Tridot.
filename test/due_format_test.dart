@@ -72,4 +72,66 @@ void main() {
     );
     expect(groups.first.$2.single.dueAt, DateTime(2026, 11, 2, 9));
   });
+  group('часть суток', () {
+    test('срок пишется словами, без условного часа', () {
+      expect(
+        formatDue(DateTime(2026, 11, 3, 19), DuePrecision.partOfDay, now),
+        'завтра вечером',
+      );
+      expect(
+        formatDue(DateTime(2026, 11, 2, 9), DuePrecision.partOfDay, now),
+        'сегодня утром',
+      );
+      expect(
+        formatDue(DateTime(2026, 11, 2, 13), DuePrecision.partOfDay, now),
+        'сегодня днём',
+      );
+      expect(
+        formatDue(DateTime(2026, 11, 6, 14), DuePrecision.partOfDay, now),
+        '6 ноября после обеда',
+      );
+    });
+
+    test('просрочено с концом части суток', () {
+      final evening = _task(DateTime(2026, 11, 2, 19), DuePrecision.partOfDay);
+      expect(isOverdue(evening, DateTime(2026, 11, 2, 19, 30)), isFalse);
+      expect(isOverdue(evening, DateTime(2026, 11, 2, 23, 59)), isFalse);
+      expect(isOverdue(evening, DateTime(2026, 11, 3)), isTrue);
+      final morning = _task(DateTime(2026, 11, 2, 9), DuePrecision.partOfDay);
+      expect(isOverdue(morning, DateTime(2026, 11, 2, 11, 59)), isFalse);
+      expect(isOverdue(morning, DateTime(2026, 11, 2, 12)), isTrue);
+      expect(groupOf(morning, now), TaskGroup.overdue);
+      expect(overdueMoment(morning), DateTime(2026, 11, 2, 12));
+      expect(overdueMoment(evening), DateTime(2026, 11, 3));
+    });
+
+    test('часть суток по часу срока', () {
+      expect(PartOfDay.of(DateTime(2026, 11, 2, 9)), PartOfDay.morning);
+      expect(PartOfDay.of(DateTime(2026, 11, 2, 13)), PartOfDay.day);
+      expect(PartOfDay.of(DateTime(2026, 11, 2, 14)), PartOfDay.afternoon);
+      expect(PartOfDay.of(DateTime(2026, 11, 2, 19)), PartOfDay.evening);
+      // Срок поправили вручную — ближайшая часть.
+      expect(PartOfDay.of(DateTime(2026, 11, 2, 7)), PartOfDay.morning);
+      expect(PartOfDay.of(DateTime(2026, 11, 2, 21)), PartOfDay.evening);
+    });
+
+    test('точность сохраняется в JSON и читается старыми и новыми данными', () {
+      final task = _task(DateTime(2026, 11, 3, 19), DuePrecision.partOfDay);
+      final json = task.toJson();
+      expect(json['due_precision'], 'partOfDay');
+      expect(Task.fromJson(json).duePrecision, DuePrecision.partOfDay);
+      // Старый файл без поля и файл более новой версии с незнакомым
+      // значением — dateTime, загрузка не падает.
+      expect(
+        Task.fromJson(<String, dynamic>{...json}..remove('due_precision'))
+            .duePrecision,
+        DuePrecision.dateTime,
+      );
+      expect(
+        Task.fromJson(<String, dynamic>{...json, 'due_precision': 'week'})
+            .duePrecision,
+        DuePrecision.dateTime,
+      );
+    });
+  });
 }

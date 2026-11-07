@@ -1,4 +1,5 @@
 import '../connectors/due_parser.dart';
+import '../connectors/noun_forms.dart';
 import '../connectors/social_prefix.dart';
 import '../connectors/utterance.dart';
 import '../connectors/verb_forms.dart';
@@ -57,15 +58,18 @@ final class ParsedCommand {
   /// Метки проектов из команды: «#работа» вне кавычек, без «#».
   final List<String> projects;
 
-  /// Для создания — название новой задачи: из кавычек, а без них — остаток
-  /// фразы после команды, срока, меток и вежливых слов.
+  /// Для создания — название новой задачи: из кавычек (как есть), а без
+  /// них — остаток фразы после команды, срока, меток и вежливых слов,
+  /// начало которого приведено к именительному падежу ([NounForms]):
+  /// «напомни про встречу с клиентом» → «Встреча с клиентом».
   ///
   /// Для переноса и завершения — только точное название в кавычках.
   /// Название без кавычек для них — это [targetQuery].
   final String? title;
 
   /// Для переноса и завершения без кавычек: слова, по которым ищется задача
-  /// («Перенеси отчёт на завтра» → «Отчёт»). `null`, если кроме команды,
+  /// («Перенеси отчёт на завтра» → «Отчёт», «перенеси встречу» → «Встреча»).
+  /// `null`, если кроме команды,
   /// срока и слов вроде «её», «задачу» ничего не осталось — тогда
   /// контроллер берёт выбранную задачу. Для создания и списка всегда `null`.
   final String? targetQuery;
@@ -256,6 +260,23 @@ final class ScenarioParser {
 
   static const Set<String> _remindConjunctions = <String>{'что', 'чтобы'};
 
+  /// «Запиши меня к врачу» — просьба записаться, а не задача «Меня к врачу».
+  static const Set<String> _signUpVerbs = <String>{
+    'запиши',
+    'запишите',
+    'записать',
+  };
+
+  static const Set<String> _signUpObjects = <String>{'меня', 'нас'};
+
+  static const Set<String> _signUpPrepositions = <String>{
+    'к',
+    'ко',
+    'на',
+    'в',
+    'во',
+  };
+
   /// Название новой задачи без кавычек или `null`, если ничего не осталось.
   String? _createTitle(Utterance utterance, int markerIndex, int length) {
     final tokens = utterance.tokens;
@@ -325,12 +346,36 @@ final class ScenarioParser {
         i++;
         continue;
       }
+      // «Напомни о том, что …», «напомни про то, что …».
+      if (remind &&
+          !conjunctionTaken &&
+          i + 2 < tokens.length &&
+          ((word == 'о' && tokens[i + 1].text == 'том') ||
+              (word == 'про' && tokens[i + 1].text == 'то')) &&
+          _remindConjunctions.contains(tokens[i + 2].text)) {
+        remove
+          ..add(token.span)
+          ..add(tokens[i + 1].span)
+          ..add(tokens[i + 2].span);
+        conjunctionTaken = true;
+        i += 3;
+        continue;
+      }
       break;
     }
 
+    // «Запиши меня к врачу на пятницу» → «Записаться к врачу».
+    final signUp = _signUpVerbs.contains(tokens[markerIndex].text) &&
+        i + 1 < tokens.length &&
+        _signUpObjects.contains(tokens[i].text) &&
+        _signUpPrepositions.contains(tokens[i + 1].text);
+    if (signUp) remove.add(tokens[i].span);
+
     _trimEdgeWords(utterance, remove, _politeWords);
     final text = utterance.remainder(remove);
-    return text.isEmpty ? null : Utterance.capitalize(text);
+    if (text.isEmpty) return null;
+    if (signUp) return 'Записаться $text';
+    return Utterance.capitalize(NounForms.nominative(text));
   }
 
   /// Вступление перед маркером: приветствие ([SocialPrefix]), слова
@@ -488,11 +533,8 @@ final class ScenarioParser {
   /// Создание без маркера: после вступления и срока фраза начинается
   /// с инфинитива. «Купить хлеб?» — вопрос, не задача.
   ParsedCommand? _implicitCreate(Utterance utterance) {
-    if (utterance.isQuestion ||
-        utterance.quotedTitles.isNotEmpty ||
-        utterance.unbalancedQuotes) {
-      return null;
-    }
+    if (utterance.isQuestion || utterance.unbalancedQuotes) return null;
+    if (utterance.quotedTitles.isNotEmpty) return _implicitQuoted(utterance);
     final due = utterance.due;
     final tokens = utterance.tokens;
     final remove = <CharSpan>[...due.spans];
@@ -555,6 +597,57 @@ final class ScenarioParser {
     return ParsedCommand(
       intent: CommandIntent.createTask,
       title: Utterance.capitalize(text),
+      dueAt: due.dueAt,
+      duePrecision: due.precision,
+      dueIssue: due.issue,
+      projects: <String>[for (final tag in utterance.hashtags) tag.name],
+      implicit: true,
+    );
+  }
+
+  /// Слова надобности во вступлении: с ними название в кавычках — новая
+  /// задача («мне нужно «помыть машину» после обеда»).
+  static const Set<String> _needWords = <String>{
+    'надо',
+    'нужно',
+    'необходимо',
+  };
+
+  /// «Мне нужно «помыть машину» после обеда», «не забыть «Сдать отчёт»»:
+  /// кроме вступления с «надо»/«нужно»/«необходимо»/«не забыть» и срока
+  /// во фразе только название в кавычках. Без такого вступления фраза
+  /// из одних кавычек — не команда.
+  ParsedCommand? _implicitQuoted(Utterance utterance) {
+    if (utterance.quotedTitles.length != 1) return null;
+    final due = utterance.due;
+    final tokens = utterance.tokens;
+    var needs = false;
+    var i = SocialPrefix.length(utterance);
+    while (i < tokens.length) {
+      final token = tokens[i];
+      if (Utterance.isCovered(token, due.spans) ||
+          _politeWords.contains(token.text)) {
+        i++;
+        continue;
+      }
+      if (_implicitLeadIns.contains(token.text)) {
+        if (_needWords.contains(token.text)) needs = true;
+        i++;
+        continue;
+      }
+      if (token.text == 'не' &&
+          i + 1 < tokens.length &&
+          _dontForget.contains(tokens[i + 1].text)) {
+        needs = true;
+        i += 2;
+        continue;
+      }
+      return null;
+    }
+    if (!needs) return null;
+    return ParsedCommand(
+      intent: CommandIntent.createTask,
+      title: utterance.quotedTitles.single.text,
       dueAt: due.dueAt,
       duePrecision: due.precision,
       dueIssue: due.issue,
@@ -739,7 +832,12 @@ final class ScenarioParser {
         if (filler.contains(token.text)) token.span,
     ];
     final text = utterance.remainder(remove);
-    return text.isEmpty ? null : Utterance.capitalize(text);
+    if (text.isEmpty) return null;
+    // «Перенеси встречу» → «Встреча»: поиск сравнивает слова по основе,
+    // поэтому задача находится и по старому названию «Встречу».
+    return Utterance.capitalize(
+      NounForms.nominative(text, allowPreposition: false),
+    );
   }
 
   // ------------------------------------------------------------ намерение
@@ -766,8 +864,9 @@ final class ScenarioParser {
       final word = words[i];
       final negated =
           i > 0 && (words[i - 1] == 'не' || words[i - 1] == 'нет') && joined(i);
-      final create =
-          _isTitleHeading(utterance, i) ? 1 : _createLength(word, i, words);
+      final create = _isTitleHeading(utterance, i)
+          ? 1
+          : _createLength(utterance, word, i, words);
       if (create > 0) {
         return negated
             ? const _Marker.unknown()
@@ -848,10 +947,112 @@ final class ScenarioParser {
         .startsWith(':');
   }
 
+  /// «Поставь», «заведи» создают задачу и без «задачу», если дальше
+  /// инфинитив («поставь подготовить презентацию») или название в кавычках
+  /// («Поставь «Подготовить презентацию»»). «Сделай» — только с «задачу»:
+  /// «сделай погромче», «сделай «Ноду» основной» — не задачи.
+  static const Set<String> _createWithInfinitiveVerbs = <String>{
+    'поставь',
+    'поставьте',
+    'поставить',
+    'заведи',
+    'заведите',
+    'завести',
+  };
+
+  /// Инфинитивы после «поставь», с которыми это не задача, а просьба
+  /// о бытовом: кухня («поставь кипятить воду», «поставь варить кашу»),
+  /// стирка («поставь стирать бельё»), устройства и медиа («поставь
+  /// заряжать телефон», «поставь смотреть фильм», «поставь играть музыку»).
+  /// Список закрытый: «поставь подготовить отчёт», «поставь созвониться
+  /// с клиентом» — задачи.
+  static const Set<String> _notTaskAfterPut = <String>{
+    'играть',
+    'кипятить',
+    'варить',
+    'жарить',
+    'печь',
+    'запекать',
+    'тушить',
+    'греть',
+    'нагревать',
+    'подогревать',
+    'разогревать',
+    'размораживать',
+    'остужать',
+    'охлаждать',
+    'мариновать',
+    'настаиваться',
+    'размораживаться',
+    'стирать',
+    'сушить',
+    'полоскать',
+    'отжимать',
+    'заряжать',
+    'качать',
+    'скачивать',
+    'загружать',
+    'обновляться',
+    'смотреть',
+    'слушать',
+    'крутить',
+    'проигрывать',
+    'воспроизводить',
+    'петь',
+    'звучать',
+    'греться',
+    'нагреваться',
+    'заряжаться',
+    'кипеть',
+    'кипятиться',
+    'вариться',
+    'тушиться',
+    'печься',
+    'сушиться',
+    'стираться',
+    'остывать',
+    'стоять',
+    'лежать',
+  };
+
+  /// Сразу после глагола (через «мне», «пожалуйста», срок) — инфинитив-дело
+  /// или название в кавычках.
+  bool _taskFollows(Utterance utterance, int index) {
+    final tokens = utterance.tokens;
+    var i = index + 1;
+    while (i < tokens.length &&
+        (_addressees.contains(tokens[i].text) ||
+            _politeWords.contains(tokens[i].text) ||
+            Utterance.isCovered(tokens[i], utterance.due.spans))) {
+      i++;
+    }
+    // Ближайшее после глагола: слово или кавычки.
+    final wordStart = i < tokens.length ? tokens[i].span.start : null;
+    for (final quoted in utterance.quotedTitles) {
+      if (quoted.span.start < tokens[index].span.end) continue;
+      if (wordStart == null || quoted.span.start < wordStart) return true;
+      break;
+    }
+    if (i >= tokens.length) return false;
+    final verb = tokens[i].text;
+    return DueParser.isInfinitive(verb) &&
+        !_notImplicitVerbs.contains(verb) &&
+        !_notTaskAfterPut.contains(verb);
+  }
+
   /// Сколько слов занимает маркер создания в позиции [index]; 0 — не он.
-  int _createLength(String word, int index, List<String> words) {
+  int _createLength(
+    Utterance utterance,
+    String word,
+    int index,
+    List<String> words,
+  ) {
     if (_createVerbs.contains(word)) return 1;
     if (_createWithNounVerbs.contains(word) && _nounFollows(index, words)) {
+      return 1;
+    }
+    if (_createWithInfinitiveVerbs.contains(word) &&
+        _taskFollows(utterance, index)) {
       return 1;
     }
     final isNewTask = word == 'новая' &&

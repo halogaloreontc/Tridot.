@@ -16,11 +16,15 @@ const List<String> _monthsGenitive = <String>[
 ];
 
 /// Срок по-человечески относительно [now]: «сегодня в 18:00», «завтра»,
-/// «послезавтра в 9:30», «15 ноября», «10 января 2027 в 12:00».
+/// «послезавтра в 9:30», «15 ноября», «10 января 2027 в 12:00», «завтра
+/// вечером».
 String formatDue(DateTime due, DuePrecision precision, DateTime now) {
   final day = formatDay(due, now);
-  if (precision == DuePrecision.date) return day;
-  return '$day в ${formatTime(due)}';
+  return switch (precision) {
+    DuePrecision.date => day,
+    DuePrecision.dateTime => '$day в ${formatTime(due)}',
+    DuePrecision.partOfDay => '$day ${PartOfDay.of(due).label}',
+  };
 }
 
 String formatDay(DateTime due, DateTime now) {
@@ -43,14 +47,28 @@ String formatDay(DateTime due, DateTime now) {
 String formatTime(DateTime value) =>
     '${value.hour}:${value.minute.toString().padLeft(2, '0')}';
 
-/// Срок прошёл: для даты без времени — со следующего дня.
+/// Срок прошёл: для даты без времени — со следующего дня, для части
+/// суток — с её концом («вечером» — с полуночи).
 bool isOverdue(Task task, DateTime now) {
   final due = task.dueAt;
   if (due == null) return false;
-  if (task.duePrecision == DuePrecision.date) {
-    return _calendarDays(now, due) < 0;
-  }
-  return due.isBefore(now);
+  return switch (task.duePrecision) {
+    DuePrecision.date => _calendarDays(now, due) < 0,
+    DuePrecision.dateTime => due.isBefore(now),
+    DuePrecision.partOfDay => !PartOfDay.of(due).endOn(due).isAfter(now),
+  };
+}
+
+/// Момент, с которого задача просрочена, или `null` без срока: для даты —
+/// полночь следующего дня, для части суток — её конец.
+DateTime? overdueMoment(Task task) {
+  final due = task.dueAt;
+  if (due == null) return null;
+  return switch (task.duePrecision) {
+    DuePrecision.date => DateTime(due.year, due.month, due.day + 1),
+    DuePrecision.dateTime => due,
+    DuePrecision.partOfDay => PartOfDay.of(due).endOn(due),
+  };
 }
 
 /// Разница в календарных днях, без влияния перехода на летнее время.

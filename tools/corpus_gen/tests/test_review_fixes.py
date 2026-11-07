@@ -41,6 +41,8 @@ def test_read_jsonl_keeps_separator_inside_json_string(tmp_path: Path) -> None:
         ("2026-11-03", "date", ("2026-11-03", "date")),
         ("2026-11-03T10:00", "dateTime", ("2026-11-03T10:00", "dateTime")),
         ("2026-11-03T10:00", None, ("2026-11-03T10:00", "dateTime")),
+        ("2026-11-03T19:00", "partOfDay", ("2026-11-03T19:00", "partOfDay")),
+        ("2026-11-03 09:00:00", "partOfDay", ("2026-11-03T09:00", "partOfDay")),
     ],
 )
 def test_due_respects_model_precision(due: str, precision: Any, expected: tuple[str, str]) -> None:
@@ -53,6 +55,7 @@ def test_due_respects_model_precision(due: str, precision: Any, expected: tuple[
     [
         ("2026-11-03T10:00", "date"),
         ("2026-11-03", "dateTime"),
+        ("2026-11-03", "partOfDay"),
         ("0999-11-03", "date"),
         ("2026-11-03", "week"),
     ],
@@ -273,3 +276,12 @@ def test_relabel_resets_labels_but_keeps_phrases_and_promoted(tmp_path: Path) ->
     assert by_text["c"]["status"] == by_text["d"]["status"] == "new"
     assert by_text["e"]["status"] == "promoted"
     assert len(CandidateStore(tmp_path).rows) == 5
+
+
+def test_label_schema_and_spec_know_part_of_day() -> None:
+    """Схема разметки допускает partOfDay, а спецификация объясняет её и именительный падеж."""
+    from corpus_gen import prompts
+
+    assert "partOfDay" in prompts.PRECISIONS
+    assert "partOfDay" in prompts.LABEL_SYSTEM
+    assert "«Встреча с клиентом»" in prompts.LABEL_SYSTEM

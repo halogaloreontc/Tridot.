@@ -213,6 +213,31 @@ void main() {
     });
   });
 
+  group('часть суток', () {
+    test('срок «завтра вечером» показывается словами', () async {
+      final response =
+          await assistant.handle('Добавь купить хлеб завтра вечером');
+
+      expect(response.status, AssistantStatus.completed);
+      expect(response.task?.title, 'Купить хлеб');
+      expect(response.task?.dueAt, DateTime(2026, 11, 3, 19));
+      expect(response.task?.duePrecision, DuePrecision.partOfDay);
+      expect(
+        response.message,
+        'Создал задачу «Купить хлеб» на завтра вечером.',
+      );
+    });
+
+    test('перенос на часть суток', () async {
+      await assistant.handle('Добавь задачу сдать отчёт');
+      final moved = await assistant.handle('Перенеси отчёт на пятницу утром');
+
+      expect(moved.task?.dueAt, DateTime(2026, 11, 6, 9));
+      expect(moved.task?.duePrecision, DuePrecision.partOfDay);
+      expect(moved.message, contains('6 ноября утром'));
+    });
+  });
+
   group('поиск целевой задачи', () {
     test('переносит задачу по словам без кавычек', () async {
       final report = await assistant.handle('Добавь задачу сдать отчёт');
@@ -315,13 +340,36 @@ void main() {
       expect(done.task?.id, report.task!.id);
     });
 
+    test('задача со старым названием в винительном находится', () async {
+      // Название сохранено до приведения к именительному: «Встречу …».
+      final old = await service.create(title: 'Встречу с клиентом');
+      final short = await service.create(title: 'Маму поздравить');
+
+      final moved = await assistant.handle('Перенеси встречу на завтра');
+      expect(moved.status, AssistantStatus.completed);
+      expect(moved.task?.id, old.id);
+
+      final again = await assistant.handle('Перенеси маму на пятницу');
+      expect(again.status, AssistantStatus.completed);
+      expect(again.task?.id, short.id);
+    });
+
+    test('новое название в именительном находится по старой форме', () async {
+      final created = await assistant.handle('Напомни про встречу с клиентом');
+      expect(created.task?.title, 'Встреча с клиентом');
+
+      final done = await assistant.handle('Заверши встречу с клиентом');
+      expect(done.status, AssistantStatus.completed);
+      expect(done.task?.id, created.task!.id);
+    });
+
     test('слово из двух букв в названии не совпадает с длинным', () async {
       await assistant.handle('Добавь задачу налог ИП');
 
       final response = await assistant.handle('Перенеси ипотеку на завтра');
 
       expect(response.status, AssistantStatus.needsClarification);
-      expect(response.message, 'Не нашёл активную задачу «Ипотеку».');
+      expect(response.message, 'Не нашёл активную задачу «Ипотека».');
       expect((await service.listActive()).single.dueAt, isNull);
     });
 

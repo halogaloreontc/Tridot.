@@ -1,3 +1,2 @@
 {"id":"gap-004","status":"known_gap","text":"Добавь задачу «Отчёт» на 15 ноября","intent":"createTask","title":"Отчёт","due":"2026-11-15","precision":"date","note":"месяц словом"}
-{"id":"gap-007","status":"known_gap","text":"напомни во вторник утром позвонить","intent":"createTask","title":"Позвонить","due":"2026-11-03T09:00","precision":"dateTime","note":"части суток без часа («утром») ещё не поддерживаются; «утром» остаётся в названии"}
 {"id":"gap-008","status":"known_gap","text":"добавь позвонить на этой неделе","intent":"createTask","title":"Позвонить","due":null,"note":"«на этой неделе» без дня не даёт срока и пока остаётся в названии"}

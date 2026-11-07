@@ -38,7 +38,7 @@
 {"id":"imp-051","text":"купила молоко","now":"2026-11-05T12:00","intent":"completeTask","targetQuery":"Купила молоко"}
 {"id":"imp-052","text":"позвонил маме","now":"2026-11-05T12:00","intent":"completeTask","targetQuery":"Позвонил маме"}
 {"id":"imp-053","text":"отчёт сдал","now":"2026-11-05T12:00","intent":"completeTask","targetQuery":"Отчёт сдал","note":"глагол последним"}
-{"id":"imp-054","text":"сделал презентацию","now":"2026-11-05T12:00","intent":"completeTask","targetQuery":"Презентацию","note":"«сделал» — явный маркер завершения, он не входит в запрос"}
+{"id":"imp-054","text":"сделал презентацию","now":"2026-11-05T12:00","intent":"completeTask","targetQuery":"Презентация","note":"«сделал» — явный маркер завершения, он не входит в запрос"}
 {"id":"imp-055","text":"я уже оплатил интернет","now":"2026-11-05T12:00","intent":"completeTask","targetQuery":"Оплатил интернет"}
 {"id":"imp-056","text":"я не купил хлеб","now":"2026-11-05T12:00","intent":"unknown","note":"не сделано"}
 {"id":"imp-057","text":"купил хлеб?","now":"2026-11-05T12:00","intent":"unknown","note":"вопрос"}
