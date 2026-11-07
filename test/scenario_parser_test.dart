@@ -121,4 +121,134 @@ void main() {
       const Duration(hours: 24),
     );
   });
+
+  group('даты словами', () {
+    const due = DueParser();
+    final now = DateTime(2026, 11, 2, 16, 30);
+
+    test('фрагмент даты занимает число, месяц, год и предлог', () {
+      const text = 'сдать отчёт до 16 апреля 2027 года';
+      final result = due.parse(text, now);
+
+      expect(result.dueAt, DateTime(2027, 4, 16));
+      expect(result.precision, DuePrecision.date);
+      expect(result.spans, hasLength(1));
+      expect(
+        text.substring(result.spans.single.start, result.spans.single.end),
+        'до 16 апреля 2027 года',
+      );
+    });
+
+    test('несуществующая дата — invalidDate, и важнее неверного времени', () {
+      for (final text in <String>[
+        '31 февраля',
+        '30 февраля в 10',
+        '31 февраля в 25:00',
+        '31.04 в 25:30',
+        '30.02 в 25 часов',
+      ]) {
+        final result = due.parse(text, now);
+        expect(result.issue, DueIssue.invalidDate, reason: text);
+        expect(result.dueAt, isNull, reason: text);
+      }
+    });
+
+    test('час больше 23 с «часов» — invalidTime, без уточнения — не время', () {
+      final hours = due.parse('в 25 часов', now);
+      expect(hours.issue, DueIssue.invalidTime);
+      expect(hours.spans, isNotEmpty);
+
+      final bare = due.parse('встреча в 25', now);
+      expect(bare.issue, DueIssue.none);
+      expect(bare.spans, isEmpty);
+    });
+
+    test('число вплотную к двоеточию — не день', () {
+      // «15» — минуты времени 10:15, а не 15 ноября.
+      final result = due.parse('в 10:15 ноября', now);
+      expect(result.dueAt, DateTime(2026, 11, 3, 10, 15));
+      expect(result.precision, DuePrecision.dateTime);
+    });
+  });
+
+  group('части месяца', () {
+    const due = DueParser();
+    DateTime? at(String text, DateTime now) => due.parse(text, now).dueAt;
+
+    test('начало — 1-е число ещё не начавшегося месяца', () {
+      expect(at('в начале месяца', DateTime(2026, 11, 2)), DateTime(2026, 12));
+      expect(at('в начале месяца', DateTime(2026, 11, 1)), DateTime(2026, 12));
+      expect(
+        at('в начале месяца', DateTime(2026, 12, 20)),
+        DateTime(2027),
+      );
+      expect(
+        due.parse('в начале этого месяца', DateTime(2026, 11, 2)).issue,
+        DueIssue.inPast,
+      );
+    });
+
+    test('середина — 15-е этого месяца, если оно не прошло', () {
+      expect(
+        at('в середине месяца', DateTime(2026, 11, 15)),
+        DateTime(2026, 11, 15),
+      );
+      expect(
+        at('к середине месяца', DateTime(2026, 11, 16)),
+        DateTime(2026, 12, 15),
+      );
+    });
+
+    test('конец — последний день этого или следующего месяца', () {
+      expect(
+        at('в конце месяца', DateTime(2026, 2, 3)),
+        DateTime(2026, 2, 28),
+      );
+      expect(
+        at('до конца месяца', DateTime(2026, 11, 30, 20)),
+        DateTime(2026, 11, 30),
+      );
+      expect(
+        at('к концу следующего месяца', DateTime(2026, 12, 2)),
+        DateTime(2027, 1, 31),
+      );
+      expect(at('конец месяца', DateTime(2026, 11, 2)), isNull);
+    });
+  });
+
+  group('вопрос о списке задач', () {
+    test('вопрос о своих планах целиком — список', () {
+      for (final text in <String>[
+        'что у меня на завтра?',
+        'выведи весь список дел',
+        'какие у меня встречи на завтра?',
+        'покажи список «Дом»',
+        'мне бы посмотреть план на неделю',
+        'список',
+      ]) {
+        expect(
+          parser.parse(text).intent,
+          CommandIntent.listTasks,
+          reason: text,
+        );
+      }
+    });
+
+    test('лишнее слово — уже не список', () {
+      for (final text in <String>[
+        'какие есть планы на выходные в городе?',
+        'покажи список моих контактов',
+        'покажи мне «подготовить презентацию»',
+        'список «Дом» купить',
+      ]) {
+        expect(
+          parser.parse(text).intent,
+          isNot(CommandIntent.listTasks),
+          reason: text,
+        );
+      }
+      // Инфинитив без «хочу/бы» — задача.
+      expect(parser.parse('посмотреть план').intent, CommandIntent.createTask);
+    });
+  });
 }

@@ -14,3 +14,10 @@
 {"id":"unk-002","text":"","intent":"unknown"}
 {"id":"unk-003","text":"Привет","intent":"unknown"}
 {"id":"unk-004","text":"Покажи погоду","intent":"unknown"}
+{"id":"list-007","text":"что у меня на завтра?","intent":"listTasks"}
+{"id":"list-008","text":"какие у меня дела на сегодня","intent":"listTasks"}
+{"id":"list-009","text":"покажи список «Дом»","intent":"listTasks","note":"название списка в кавычках после «список»"}
+{"id":"list-010","text":"что мне нужно сделать?","intent":"listTasks"}
+{"id":"list-011","text":"какие есть планы на выходные в городе?","intent":"unknown","note":"лишние слова — не вопрос о своих задачах"}
+{"id":"list-012","text":"что мне сделать с котом?","intent":"unknown"}
+{"id":"list-013","text":"покажи список моих контактов","intent":"unknown"}

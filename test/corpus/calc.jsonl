@@ -67,3 +67,20 @@
 {"id": "calc-067", "text": "корень из 1/4", "connector": "calc", "intent": "calc.evaluate", "answer": "0,5", "note": "корень из дроби словами", "source": "manual"}
 {"id": "calc-068", "text": "2,5:0,5", "connector": "calc", "intent": "calc.evaluate", "answer": "5", "note": "двоеточие между десятичными — деление", "source": "manual"}
 {"id": "calc-069", "text": "10^-21", "connector": "calc", "intent": "calc.evaluate", "answer": "1 × 10^−21", "note": "длинная конечная дробь — точно", "source": "manual"}
+{"id": "calc-070", "text": "корень кубический из 27", "connector": "calc", "intent": "calc.evaluate", "answer": "3", "note": "кубический корень", "source": "manual"}
+{"id": "calc-071", "text": "кубический корень из -8", "connector": "calc", "intent": "calc.evaluate", "answer": "−2", "note": "кубический корень из отрицательного", "source": "manual"}
+{"id": "calc-072", "text": "кубический корень из 2", "connector": "calc", "intent": "calc.evaluate", "answer": "≈ 1,25992105", "source": "manual"}
+{"id": "calc-073", "text": "извлеките корень из 81", "connector": "calc", "intent": "calc.evaluate", "answer": "9", "note": "«извлеките» — маркер", "source": "manual"}
+{"id": "calc-074", "text": "дважды два", "connector": "calc", "intent": "calc.evaluate", "answer": "4", "note": "множитель словом", "source": "manual"}
+{"id": "calc-075", "text": "пятью пять", "connector": "calc", "intent": "calc.evaluate", "answer": "25", "source": "manual"}
+{"id": "calc-076", "text": "2 в степени 8 это сколько", "connector": "calc", "intent": "calc.evaluate", "answer": "256", "note": "«это сколько» в конце", "source": "manual"}
+{"id": "calc-077", "text": "5% от 3200, сколько?", "connector": "calc", "intent": "calc.evaluate", "answer": "160", "note": "«сколько» в конце", "source": "manual"}
+{"id": "calc-078", "text": "пять разделить на три сколько будет", "connector": "calc", "intent": "calc.evaluate", "answer": "≈ 1,666666667", "note": "числа словами и «сколько будет» в конце", "source": "manual"}
+{"id": "calc-079", "text": "сколько 12% от 5000 рублей", "connector": "calc", "intent": "calc.evaluate", "answer": "600", "note": "денежная единица после числа", "source": "manual"}
+{"id": "calc-080", "text": "300 ₽ + 15%", "connector": "calc", "intent": "calc.evaluate", "answer": "345", "source": "manual"}
+{"id": "calc-081", "text": "10/3 сколько", "connector": "calc", "intent": "unknown", "note": "«сколько» в конце — слабый маркер: целые через «/» вплотную не считаются", "source": "manual"}
+{"id": "calc-082", "text": "позвонить дважды", "connector": "calc", "intent": "unknown", "source": "manual"}
+{"id": "calc-083", "text": "извлеки данные из 5 файлов", "connector": "calc", "intent": "unknown", "note": "«извлеки» без корня — не маркер", "source": "manual"}
+{"id": "calc-084", "text": "извлеки два урока", "connector": "calc", "intent": "unknown", "source": "manual"}
+{"id": "calc-085", "text": "5 рублей + 5 евро", "connector": "calc", "intent": "unknown", "note": "разные валюты — не пример", "source": "manual"}
+{"id": "calc-086", "text": "100 долларов минус 20 евро", "connector": "calc", "intent": "unknown", "source": "manual"}

@@ -105,6 +105,9 @@ final class ScenarioParser {
       return const ParsedCommand(intent: CommandIntent.unknown);
     }
 
+    if (_isListQuery(utterance)) {
+      return const ParsedCommand(intent: CommandIntent.listTasks);
+    }
     final marker = _detectIntent(utterance);
     if (!marker.found) {
       return _implicitCreate(utterance) ??
@@ -1126,6 +1129,201 @@ final class ScenarioParser {
         words.any((String w) => w.startsWith('задач') || w == 'дела');
   }
 }
+
+/// Вопрос о своих планах целиком: «что у меня на сегодня по плану?»,
+/// «выведи весь список дел», «какие у меня встречи на завтра?», «покажи
+/// список "Дом"», «список». Все слова вне срока — из закрытого словаря
+/// [_listVocabulary], есть просьба показать или вопрос и есть то, что
+/// показывать: задачи, дела, планы, расписание, список. Любое чужое слово —
+/// и это уже не просьба о списке: «какие есть планы на выходные в городе?»,
+/// «покажи список моих контактов».
+bool _isListQuery(Utterance utterance) {
+  if (utterance.unbalancedQuotes) return false;
+  final tokens = utterance.tokensOutside(utterance.due.spans);
+  final words = <String>[for (final token in tokens) token.text];
+  if (words.isEmpty) return false;
+  // Название списка в кавычках — только сразу после «список» или как
+  // пример после «типа»: «покажи список "Дом"».
+  for (final quote in utterance.quotedTitles) {
+    final before = utterance.tokens
+        .where((UtteranceToken t) => t.span.end <= quote.span.start)
+        .toList(growable: false);
+    if (before.isEmpty || !_listQuoteHeads.contains(before.last.text)) {
+      return false;
+    }
+  }
+  if (words.length == 1 && words.single == 'список') {
+    return utterance.quotedTitles.isEmpty && utterance.hashtags.isEmpty;
+  }
+  var subject = utterance.hashtags.isNotEmpty;
+  var ask = utterance.isQuestion;
+  for (var i = 0; i < words.length; i++) {
+    final word = words[i];
+    if (_listSubjects.contains(word) || _listSubjectStem(word)) {
+      subject = true;
+      continue;
+    }
+    if (_listAsks.contains(word)) {
+      ask = true;
+      continue;
+    }
+    // «хочу глянуть», «мне бы посмотреть», «дай глянуть»: инфинитив —
+    // просьба только после желания; сам по себе это задача.
+    if (_listLookInfinitives.contains(word)) {
+      if (i == 0 || !_listWishes.contains(words[i - 1])) return false;
+      ask = true;
+      continue;
+    }
+    if (!_listVocabulary.contains(word)) return false;
+  }
+  // «что мне нужно сделать?», «что там у меня осталось?», «что у меня на
+  // завтра?».
+  if (!subject && words.contains('что')) {
+    final mine = words.contains('у') && words.contains('меня');
+    subject = (words.contains('мне') &&
+            (words.contains('сделать') || words.contains('делать'))) ||
+        words.contains('осталось') ||
+        words.contains('остались') ||
+        (mine && utterance.due.spans.isNotEmpty);
+  }
+  return subject && ask;
+}
+
+/// То, что показывает список: «задачи», «дела», «планы», «расписание».
+const Set<String> _listSubjects = <String>{
+  'дела',
+  'дел',
+  'делам',
+  'делах',
+  'план',
+  'плана',
+  'плану',
+  'планы',
+  'планов',
+  'планах',
+  'плане',
+  'планам',
+  'расписание',
+  'расписании',
+  'расписания',
+  'календарь',
+  'календаре',
+  'календаря',
+  'список',
+  'списке',
+  'списка',
+  'списки',
+  'встречи',
+  'встреч',
+};
+
+bool _listSubjectStem(String word) =>
+    word.startsWith('задач') ||
+    word.startsWith('незаверш') ||
+    word.startsWith('невыполн') ||
+    word.startsWith('несделан');
+
+/// Просьба показать или вопрос: «покажи», «выведи», «глянь», «что», «какие».
+const Set<String> _listAsks = <String>{
+  'покажи',
+  'покажите',
+  'выведи',
+  'выведите',
+  'глянь',
+  'гляньте',
+  'скажи',
+  'подскажи',
+  'что',
+  'какие',
+  'какой',
+  'какая',
+  'каких',
+};
+
+const Set<String> _listLookInfinitives = <String>{
+  'посмотреть',
+  'глянуть',
+  'взглянуть',
+  'увидеть',
+};
+
+const Set<String> _listWishes = <String>{'хочу', 'бы', 'дай', 'дайте'};
+
+/// После этих слов в просьбе о списке может стоять кавычка.
+const Set<String> _listQuoteHeads = <String>{
+  'список',
+  'списке',
+  'списка',
+  'типа',
+};
+
+/// Служебные слова вокруг просьбы о списке.
+const Set<String> _listVocabulary = <String>{
+  ..._listWishes,
+  'ну',
+  'а',
+  'и',
+  'так',
+  'там',
+  'тут',
+  'у',
+  'меня',
+  'мне',
+  'мой',
+  'мои',
+  'моя',
+  'мою',
+  'моем',
+  'моей',
+  'моих',
+  'мое',
+  'еще',
+  'сейчас',
+  'вообще',
+  'ка',
+  'же',
+  'типа',
+  'все',
+  'весь',
+  'вся',
+  'всех',
+  'осталось',
+  'остались',
+  'есть',
+  'по',
+  'в',
+  'во',
+  'на',
+  'для',
+  'то',
+  'нибудь',
+  'нужен',
+  'нужно',
+  'надо',
+  'того',
+  'я',
+  'не',
+  'сделал',
+  'сделала',
+  'сделать',
+  'делать',
+  'тегу',
+  'тегом',
+  'метке',
+  'эту',
+  'этой',
+  'эти',
+  'этот',
+  'неделю',
+  'неделе',
+  'месяц',
+  'месяце',
+  'покупок',
+  'пожалуйста',
+  'плиз',
+  'пж',
+  'пжлст',
+};
 
 final class _Marker {
   const _Marker(this.intent, this.index, this.length) : found = true;

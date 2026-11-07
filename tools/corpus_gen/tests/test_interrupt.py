@@ -74,7 +74,9 @@ def test_interrupted_label_keeps_finished_labels_and_rerun_asks_only_missing(pro
     assert (stopped.value.saved, stopped.value.remaining) == (3, 3)
 
     rows = read_jsonl(config.work_dir / "candidates.jsonl")
-    assert [bool(row["labels"]) for row in rows] == [True, True, True, False, False, False]
+    # Какие именно три фразы успели, зависит от того, какой поток первым займёт слот.
+    labelled = {row["text"] for row in rows if row["labels"]}
+    assert len(labelled) == 3
     assert {row["status"] for row in rows} == {"new"}  # статус решается только в конце
     assert len(read_jsonl(config.work_dir / "usage.jsonl")) == 3
 
@@ -83,7 +85,7 @@ def test_interrupted_label_keeps_finished_labels_and_rerun_asks_only_missing(pro
         config, CandidateStore(config.work_dir), SERIAL, factory=factory(again), router=FakeRouter()
     )
     assert again["calls"] == 3
-    assert all("Дело 0" not in user for _, user in again["asked"])
+    assert all(text not in user for text in labelled for _, user in again["asked"])
     assert sum(counts[s] for s in ("agreed", "disputed")) == len(TEXTS)
     rows = read_jsonl(config.work_dir / "candidates.jsonl")
     assert all(row["labels"] for row in rows) and "new" not in {row["status"] for row in rows}

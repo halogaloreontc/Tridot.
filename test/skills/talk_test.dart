@@ -194,6 +194,57 @@ void main() {
       'а ты кто': TalkTopic.whoAreYou,
       'всем привет': TalkTopic.greet,
       'привет, Нода, как дела?': TalkTopic.howAreYou,
+      // Просьбы о шутке своими словами.
+      'расскажи анекдот про кошку': TalkTopic.joke,
+      'покажи каламбур про слова': TalkTopic.joke,
+      'аха, ну давай ещё анекдотик': TalkTopic.joke,
+      'ахаха, ещё один, пожалуйста': TalkTopic.joke,
+      'а можно ещё одну?': TalkTopic.joke,
+      'Давай еще одну, только посмешнее': TalkTopic.joke,
+      'ну ты смешной, давай ещё': TalkTopic.joke,
+      'Еще одну шуточку, плиз': TalkTopic.joke,
+      'анекдот pls': TalkTopic.joke,
+      'Давай что-нибудь смешное, плз': TalkTopic.joke,
+      'Повесели меня': TalkTopic.joke,
+      'Нода, развлеки меня шуткой': TalkTopic.joke,
+      'Лио, ну давай что-нибудь поржать': TalkTopic.joke,
+      'хочу посмеяться': TalkTopic.joke,
+      'Пошути, а то скучно капец': TalkTopic.joke,
+      'пошути, но без матов': TalkTopic.joke,
+      'расскажи шутку, но короче, два предложения': TalkTopic.joke,
+      'Давай каламбур, если ты вообще на это способен': TalkTopic.joke,
+      'Ну и где твой юмор?': TalkTopic.joke,
+      'Лио, юморни': TalkTopic.joke,
+      'Лио, приколись чем-нибудь': TalkTopic.joke,
+      'расскажи чего-нибудь смешного': TalkTopic.joke,
+      'ну и тупая шутка, давай нормальную': TalkTopic.joke,
+      // Оценка, а не просьба о шутке.
+      'очень прикольно': TalkTopic.reaction,
+      'это прикольно': TalkTopic.reaction,
+      'ок, прикольно': TalkTopic.reaction,
+      'это прикол': TalkTopic.reaction,
+      'Лио, tell me a joke': TalkTopic.joke,
+      // Просьбы о стиле своими словами.
+      'шутки больше не надо, хватит': TalkTopic.setting,
+      'Хватит столько шутить': TalkTopic.setting,
+      'Ну, Нода, пошути побольше': TalkTopic.setting,
+      'каламбуры только по праздникам': TalkTopic.setting,
+      'Давай без этих смайликов': TalkTopic.setting,
+      'убери эмодзи из ответов': TalkTopic.setting,
+      'Добавь смайликов в ответы': TalkTopic.setting,
+      'ставь смайлики': TalkTopic.setting,
+      'Перейди на ты, Лио': TalkTopic.setting,
+      'Нода, перейди на вы пожалуйста': TalkTopic.setting,
+      'Общайся официально, ок?': TalkTopic.setting,
+      'Смени стиль на более дружелюбный': TalkTopic.setting,
+      'Меньше воды, пиши по сути': TalkTopic.setting,
+      'Без лишних слов, коротко': TalkTopic.setting,
+      'Распиши всё максимально детально': TalkTopic.setting,
+      'Слишком официально, сбавь тон': TalkTopic.setting,
+      'меньше ласкового': TalkTopic.setting,
+      'будь помягче пожалуйста': TalkTopic.setting,
+      'Пусть теперь всё говорит Нода': TalkTopic.setting,
+      'Лио, ты основной?': TalkTopic.whoAreYou,
     };
     for (final MapEntry(key: text, value: topic) in talk.entries) {
       test('«$text» — ${topic.name}', () {
@@ -213,6 +264,27 @@ void main() {
       'привет, пока не забыл купить хлеб',
       'спасибо, купить молоко',
       'привет, Нода, добавь задачу хлеб',
+      // Чужое слово рядом со словом о шутке или стиле — уже не беседа.
+      'расскажи шутку на корпоративе',
+      'добавь шутку в презентацию',
+      'добавь смайлики в презентацию',
+      'напиши отчёт подробнее',
+      'ещё',
+      'давай',
+      'говори по-русски',
+      'говори на английском',
+      'анекдот про',
+      'слишком официально',
+      'пусть Нода купит хлеб',
+      // Прилагательные, наречия и присказки от слов о шутке — не просьба.
+      'прикольный',
+      'юмористично',
+      'ну ты и юморист',
+      'шутки шутками',
+      'это шутка',
+      'что смешного',
+      'тупая шутка',
+      'хорошая шутка',
       '',
     ];
     for (final text in notTalk) {
@@ -220,6 +292,33 @@ void main() {
         expect(TalkPhrases.recognize(text), isNull);
       });
     }
+
+    test('что именно просят своими словами', () {
+      TalkSettingKind? kind(String text) =>
+          TalkPhrases.recognize(text)?.setting;
+      String? style(String text) => TalkPhrases.recognize(text)?.style;
+
+      expect(kind('шутки больше не надо, хватит'), TalkSettingKind.jokesOff);
+      expect(kind('Хватит столько шутить'), TalkSettingKind.jokesLess);
+      expect(kind('пошути побольше'), TalkSettingKind.jokesMore);
+      expect(kind('каламбуры только по праздникам'), TalkSettingKind.jokesLess);
+      expect(kind('Давай без этих смайликов'), TalkSettingKind.emojiOff);
+      expect(kind('Добавь смайликов в ответы'), TalkSettingKind.emojiOn);
+      expect(kind('Перейди на ты'), TalkSettingKind.informal);
+      expect(kind('перейди на вы'), TalkSettingKind.formal);
+      expect(style('Меньше воды, пиши по сути'), ReplyStyles.brief);
+      expect(style('Распиши всё максимально детально'), ReplyStyles.neutral);
+      expect(style('Слишком официально, сбавь тон'), ReplyStyles.neutral);
+      expect(style('будь помягче'), ReplyStyles.friendly);
+      expect(style('Общайся официально, ок?'), ReplyStyles.business);
+      // Два разных стиля сразу — непонятно, какой нужен.
+      expect(TalkPhrases.recognize('говори короче и подробнее'), isNull);
+      final main = TalkPhrases.recognize('Пусть теперь всё говорит Нода')!;
+      expect(main.setting, TalkSettingKind.main);
+      expect(main.persona, 'noda');
+      expect(TalkPhrases.recognize('Давай каламбур, плиз')!.pun, isTrue);
+      expect(TalkPhrases.recognize('расскажи анекдот')!.pun, isFalse);
+    });
 
     test('«каламбур» просит именно каламбур, «доброе утро» — утро', () {
       expect(TalkPhrases.recognize('каламбур')!.pun, isTrue);
@@ -322,6 +421,28 @@ void main() {
       final off = await f.say('привет');
       expect(off.intent, 'unknown');
       expect(off.message, TasksConnector.unknownResponse.message);
+    });
+
+    test('реплика беседы целиком — не задача без маркера', () async {
+      final f = await _fixture();
+
+      for (final text in <String>[
+        'хочу посмеяться',
+        'расскажи прикол',
+        'давай шутку, заскучал я',
+        'давай какой-нибудь прикол',
+      ]) {
+        final response = await f.say(text);
+        expect(response.intent, TalkConnector.jokeCommand, reason: text);
+      }
+      final emoji = await f.say('Добавь смайликов в ответы');
+      expect(emoji.intent, TalkConnector.settingCommand);
+      expect(await f.tasks.listActive(), isEmpty);
+
+      // С лишним словом — снова задача.
+      final task = await f.say('добавь задачу рассказать шутку');
+      expect(task.intent, 'task.create');
+      expect(task.task?.title, 'Рассказать шутку');
     });
 
     test('совпадение беседы — на крайний случай', () {

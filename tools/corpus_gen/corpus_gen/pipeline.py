@@ -327,17 +327,20 @@ def label(
                         checkpoint.changed()
                         progress["finished"] += 1
                 return
-        with lock:
-            if checkpoint.closed:
-                return  # прервали, файл уже записан
-            checkpoint.add_usage(_usage_row(source, "label", completion))
-            try:
-                row["labels"][source.name] = normalize_label(completion.data, connector)
-                progress["labels"] += 1
-            except ProviderError as error:
-                row.setdefault("errors", []).append(_error_text(source, error))
-            checkpoint.changed()
-            progress["finished"] += 1
+            # Ответ записывается, пока слот источника ещё занят: иначе следующий запрос к
+            # этому источнику мог начаться (и прервать работу) раньше, чем готовый ответ
+            # попал в файл, и при max_concurrency=1 он терялся бы при прерывании.
+            with lock:
+                if checkpoint.closed:
+                    return  # прервали, файл уже записан
+                checkpoint.add_usage(_usage_row(source, "label", completion))
+                try:
+                    row["labels"][source.name] = normalize_label(completion.data, connector)
+                    progress["labels"] += 1
+                except ProviderError as error:
+                    row.setdefault("errors", []).append(_error_text(source, error))
+                checkpoint.changed()
+                progress["finished"] += 1
 
     workers = max(1, sum(s.max_concurrency for s in labelers))
     # Сохранение после прерывания — внутри stop_signals() (см. generate).

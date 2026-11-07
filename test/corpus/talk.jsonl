@@ -105,3 +105,36 @@
 {"id": "talk-105", "text": "сделай Ноду основной", "connector": "talk", "intent": "talk.setting", "source": "manual"}
 {"id": "talk-106", "text": "Нодь, расскажи шутку", "connector": "talk", "intent": "talk.joke", "source": "manual"}
 {"id": "talk-107", "text": "привет, Лио, добавь задачу хлеб", "connector": "tasks", "intent": "createTask", "title": "Хлеб", "note": "краткое имя помощника после приветствия", "source": "manual"}
+{"id": "talk-108", "text": "ну давай анекдот про кошку", "connector": "talk", "intent": "talk.joke", "note": "анекдот с темой", "source": "manual"}
+{"id": "talk-109", "text": "а можно ещё одну?", "connector": "talk", "intent": "talk.joke", "note": "«ещё одну» — ещё шутку", "source": "manual"}
+{"id": "talk-110", "text": "ахаха, ещё один, пожалуйста", "connector": "talk", "intent": "talk.joke", "note": "смех и «ещё один»", "source": "manual"}
+{"id": "talk-111", "text": "аха, ну давай ещё анекдотик", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-112", "text": "Повесели меня, Нода", "connector": "talk", "intent": "talk.joke", "note": "глагол-просьба о шутке", "source": "manual"}
+{"id": "talk-113", "text": "развлеки меня шуткой", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-114", "text": "хочу посмеяться", "connector": "talk", "intent": "talk.joke", "note": "не задача «Посмеяться»: реплика беседы целиком", "source": "manual"}
+{"id": "talk-115", "text": "расскажи прикол", "connector": "talk", "intent": "talk.joke", "note": "не отчёт о сделанном", "source": "manual"}
+{"id": "talk-116", "text": "пошути, а то скучно", "connector": "talk", "intent": "talk.joke", "note": "причина после просьбы", "source": "manual"}
+{"id": "talk-117", "text": "расскажи шутку, но короче", "connector": "talk", "intent": "talk.joke", "note": "уточнение — не просьба о стиле", "source": "manual"}
+{"id": "talk-118", "text": "анекдот плз", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-119", "text": "Лио, tell me a joke", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-120", "text": "ещё каламбурчик, плиз", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-121", "text": "шутки больше не надо", "connector": "talk", "intent": "talk.setting", "note": "отказ от шуток — настройка", "source": "manual"}
+{"id": "talk-122", "text": "хватит столько шутить", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-123", "text": "каламбуры только по праздникам", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-124", "text": "убери эмодзи из ответов", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-125", "text": "добавь смайликов в ответы", "connector": "talk", "intent": "talk.setting", "note": "про ответы помощника, не задача", "source": "manual"}
+{"id": "talk-126", "text": "перейди на ты, Нода", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-127", "text": "меньше воды, пиши по сути", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-128", "text": "слишком официально, сбавь тон", "connector": "talk", "intent": "talk.setting", "note": "«слишком официально» — жалоба, «сбавь тон» — просьба", "source": "manual"}
+{"id": "talk-129", "text": "распиши всё подробно", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-130", "text": "пусть теперь всё говорит Нода", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-131", "text": "Лио, ты основной?", "connector": "talk", "intent": "talk.whoAreYou", "note": "вопрос, а не просьба: ответ «кто ты» называет основного", "source": "manual"}
+{"id": "talk-132", "text": "расскажи шутку на корпоративе", "connector": "talk", "intent": "unknown", "note": "чужое слово — не беседа", "source": "manual"}
+{"id": "talk-133", "text": "добавь смайлики в презентацию", "connector": "talk", "intent": "unknown", "note": "смайлики не в ответах — не настройка", "source": "manual"}
+{"id": "talk-134", "text": "говори по-русски", "connector": "talk", "intent": "unknown", "note": "язык ответов — не настройка стиля", "source": "manual"}
+{"id": "talk-135", "text": "ещё", "connector": "talk", "intent": "unknown", "note": "одно «ещё» — без просьбы", "source": "manual"}
+{"id": "talk-136", "text": "очень прикольно", "connector": "talk", "intent": "talk.reaction", "note": "оценка, а не просьба о шутке", "source": "manual"}
+{"id": "talk-137", "text": "это прикол", "connector": "talk", "intent": "talk.reaction", "source": "manual"}
+{"id": "talk-138", "text": "ну ты и юморист", "connector": "talk", "intent": "unknown", "note": "«юморист» — не просьба о шутке", "source": "manual"}
+{"id": "talk-139", "text": "что смешного", "connector": "talk", "intent": "unknown", "note": "обида, а не просьба", "source": "manual"}
+{"id": "talk-140", "text": "тупая шутка", "connector": "talk", "intent": "unknown", "note": "оценка без просьбы", "source": "manual"}

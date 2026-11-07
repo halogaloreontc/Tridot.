@@ -124,6 +124,17 @@ final class CalcSqrt extends CalcNode {
   int get _precedence => 5;
 }
 
+/// Кубический корень: «корень кубический из 27», «∛−8». Из отрицательного
+/// числа извлекается: ∛−8 = −2.
+final class CalcCbrt extends CalcNode {
+  const CalcCbrt(this.operand);
+
+  final CalcNode operand;
+
+  @override
+  int get _precedence => 5;
+}
+
 /// Как калькулятор понял сообщение: есть ли слово-маркер и что за пример.
 final class CalcRecognition {
   const CalcRecognition({
@@ -212,9 +223,11 @@ final class _CalcError implements Exception {
 /// Калькулятор: свой разбор примера и точный счёт, без выполнения кода.
 ///
 /// Понимает цифры с запятой или точкой, `+ - * / × ÷ : ^`, скобки, унарный
-/// минус, `%`, слова («плюс», «умножить на», «корень из», «в квадрате»,
-/// «15% от 2400», числа «ноль»…«тысяча») и маркеры («сколько будет»,
-/// «посчитай», «вычисли», «реши», «… равно?», «=» в конце).
+/// минус, `%`, `√`, `∛`, слова («плюс», «умножить на», «корень из»,
+/// «корень кубический из», «в квадрате», «15% от 2400», «дважды два»,
+/// числа «ноль»…«тысяча», «рублей» после числа) и маркеры («сколько
+/// будет», «посчитай», «вычисли», «реши», «извлеки корень», «… равно?», «=» и
+/// «сколько» в конце).
 abstract final class Calculator {
   /// Длиннее — не считаем: защита от злоупотребления.
   static const int maxLength = 200;
@@ -273,15 +286,21 @@ abstract final class Calculator {
     var text = message.toLowerCase().replaceAll('ё', 'е').trim();
     if (text.isEmpty) return null;
     var explicit = false;
+    var weakMarker = false;
 
-    // Хвост: «?», «=», «равно», «пожалуйста».
+    // Хвост: «?», «=», «равно», «пожалуйста», «сколько».
     while (true) {
+      final weakTail = _weakTail.firstMatch(text);
+      if (weakTail != null) {
+        weakMarker = true;
+        text = text.substring(0, weakTail.start).trimRight();
+        continue;
+      }
       final match = _tail.firstMatch(text);
       if (match == null || match.group(0)!.isEmpty) break;
       if (match.group(0)!.contains(_tailMarker)) explicit = true;
       text = text.substring(0, match.start).trimRight();
     }
-    var weakMarker = false;
     final head = _head.firstMatch(text);
     if (head != null) {
       explicit = true;
@@ -414,7 +433,11 @@ abstract final class Calculator {
   static final RegExp _head = RegExp(
     r'^(?:а\s+)?(?:пожалуйста[,\s]+)?'
     r'(?:сколько\s+будет|посчитай(?:те)?|подсчитай(?:те)?|сосчитай(?:те)?|'
-    r'вычисли(?:те)?|реши(?:те)?|рассчитай(?:те)?)'
+    r'вычисли(?:те)?|реши(?:те)?|рассчитай(?:те)?|'
+    // «Извлеки» — маркер только перед корнем: «извлеки два урока»,
+    // «извлеки данные из 5 файлов» — не примеры.
+    r'извлеки(?:те)?(?=[,\s]+(?:пожалуйста[,\s]+)?'
+    r'(?:квадратный\s+|кубический\s+)?корень))'
     r'(?:[,\s]+пожалуйста)?(?:[,:\s]+|$)',
   );
 
@@ -423,16 +446,22 @@ abstract final class Calculator {
     r'\s+(.+?)\s+на\s+(.+)$',
   );
 
+  /// Вопрос в конце: «5% от 3200, сколько?», «2 в степени 8 это
+  /// сколько», «пять разделить на три сколько будет» («будет» снимает
+  /// [_tail]). Маркер слабый, как «сколько» впереди ([_weakHead]).
+  static final RegExp _weakTail = RegExp(r'(?<![а-я])(?:это\s+)?сколько$');
+
   static final RegExp _weakHead =
       RegExp(r'^(?:а\s+)?(?:сколько|чему\s+равно|чему\s+равен)(?:[,:\s]+)');
 
   /// Есть ли в тексте хоть что-то от примера: цифра, знак или слово
   /// калькулятора («плюс», «корень», «пять»).
   static final RegExp _mathLike = RegExp(
-    '[\\d+*×·/÷:^√%²³]|(?<![а-я])(?:'
+    '[\\d+*×·/÷:^√∛%²³]|(?<![а-я])(?:'
     '${<String>[
       ..._Lexer._numberWords.keys,
       ..._Lexer._thousands,
+      ..._Lexer._timesWords.keys,
       'плюс',
       'минус',
       'корень',
@@ -502,7 +531,12 @@ abstract final class Calculator {
         CalcNegate(:final operand) =>
           operand is CalcNegate || _hasOperation(operand),
         CalcPercent(:final operand) => _hasOperation(operand),
-        CalcBinary() || CalcPercentOf() || CalcPower() || CalcSqrt() => true,
+        CalcBinary() ||
+        CalcPercentOf() ||
+        CalcPower() ||
+        CalcSqrt() ||
+        CalcCbrt() =>
+          true,
       };
 
   // --------------------------------------------------------------- счёт
@@ -575,7 +609,44 @@ abstract final class Calculator {
         final x = _toDouble(value);
         if (x < 0) throw const _CalcError(CalcFailure.negativeRoot);
         return _approx(math.sqrt(x));
+      case CalcCbrt(:final operand):
+        final value = _eval(operand);
+        if (value case _Exact(:final value)) {
+          final exact = _exactCbrt(value);
+          if (exact != null) return _Exact(exact);
+        }
+        final x = _toDouble(value);
+        final root = math.pow(x.abs(), 1 / 3).toDouble();
+        return _approx(x < 0 ? -root : root);
     }
+  }
+
+  /// Точный кубический корень дроби, если числитель и знаменатель —
+  /// точные кубы: ∛(8/27) = 2/3, ∛−8 = −2. Иначе `null`.
+  static Rational? _exactCbrt(Rational value) {
+    final n = _icbrt(value.numerator.abs());
+    final d = _icbrt(value.denominator);
+    if (n == null || d == null) return null;
+    return Rational(value.isNegative ? -n : n, d);
+  }
+
+  /// Целый кубический корень неотрицательного [x] или `null`, если [x] —
+  /// не точный куб. Двоичный поиск: числа здесь не длиннее [maxDigits].
+  static BigInt? _icbrt(BigInt x) {
+    if (x < BigInt.two) return x;
+    var low = BigInt.one;
+    var high = BigInt.one << (x.bitLength ~/ 3 + 1);
+    while (low <= high) {
+      final mid = (low + high) >> 1;
+      final cube = mid * mid * mid;
+      if (cube == x) return mid;
+      if (cube < x) {
+        low = mid + BigInt.one;
+      } else {
+        high = mid - BigInt.one;
+      }
+    }
+    return null;
   }
 
   static _Value _binary(CalcOperator operator, _Value a, _Value b) {
@@ -675,6 +746,8 @@ abstract final class Calculator {
         };
       case CalcSqrt(:final operand):
         return '√${wrap(operand, 6)}';
+      case CalcCbrt(:final operand):
+        return '∛${wrap(operand, 6)}';
     }
   }
 
@@ -833,6 +906,7 @@ enum _Kind {
   lparen,
   rparen,
   sqrt,
+  cbrt,
   square,
   cube,
 }
@@ -877,6 +951,11 @@ final class _Lexer {
   /// Слова-операции; длинные формы раньше коротких.
   static final List<(RegExp, _Kind)> _words = <(RegExp, _Kind)>[
     for (final (pattern, kind) in <(String, _Kind)>[
+      ('кубический корень из', _Kind.cbrt),
+      ('корень кубический из', _Kind.cbrt),
+      ('корень третьей степени из', _Kind.cbrt),
+      ('кубический корень', _Kind.cbrt),
+      ('корень кубический', _Kind.cbrt),
       ('квадратный корень из', _Kind.sqrt),
       ('корень квадратный из', _Kind.sqrt),
       ('квадратный корень', _Kind.sqrt),
@@ -994,6 +1073,37 @@ final class _Lexer {
 
   static const Set<String> _thousands = <String>{'тысяча', 'тысячи', 'тысяч'};
 
+  /// Множитель словом, как в таблице умножения: «дважды два», «трижды
+  /// три», «пятью пять» — число и знак умножения.
+  static const Map<String, int> _timesWords = <String, int>{
+    'дважды': 2,
+    'трижды': 3,
+    'четырежды': 4,
+    'пятью': 5,
+    'шестью': 6,
+    'семью': 7,
+    'восемью': 8,
+    'девятью': 9,
+    'десятью': 10,
+  };
+
+  /// Денежные единицы после числа ничего не меняют в примере: «12% от
+  /// 5000 рублей», «300 ₽ + 15%», «20 $ × 3». Две разные валюты в одном
+  /// примере — не пример: «5 рублей + 5 евро».
+  static final RegExp _currency = RegExp(
+    r'(?:рубл(?:ей|ями|ям|ях|ь|я)|руб\.?|₽|доллар(?:ов|ами|ам|а)?|\$|'
+    r'евро|€)(?![а-я])',
+  );
+
+  /// Валюта уже встреченной денежной единицы: «руб», «usd», «eur».
+  String? _currencySeen;
+
+  static String _currencyOf(String unit) {
+    if (unit.startsWith('доллар') || unit == r'$') return 'usd';
+    if (unit == 'евро' || unit == '€') return 'eur';
+    return 'rub';
+  }
+
   static final RegExp _word = RegExp('[а-я]+');
 
   bool _digitBefore(int index) =>
@@ -1026,6 +1136,20 @@ final class _Lexer {
         _pos = number.end;
         continue;
       }
+      if (_tokens.isNotEmpty && _tokens.last.kind == _Kind.number) {
+        final unit = _currency.matchAsPrefix(text, _pos);
+        if (unit != null) {
+          // Разные валюты в одном примере не складываются как числа:
+          // «5 рублей + 5 евро» — не 10. Курса у калькулятора нет.
+          final currency = _currencyOf(unit.group(0)!);
+          if (_currencySeen != null && _currencySeen != currency) {
+            throw const _CalcError(CalcFailure.malformed);
+          }
+          _currencySeen = currency;
+          _pos = unit.end;
+          continue;
+        }
+      }
       final char = text[_pos];
       final symbol = switch (char) {
         '+' => _Kind.plus,
@@ -1038,6 +1162,7 @@ final class _Lexer {
         '(' => _Kind.lparen,
         ')' => _Kind.rparen,
         '√' => _Kind.sqrt,
+        '∛' => _Kind.cbrt,
         '²' => _Kind.square,
         '³' => _Kind.cube,
         // «3 х 4»: буква «х» — умножение, только с пробелами вокруг.
@@ -1055,10 +1180,25 @@ final class _Lexer {
         _pos++;
         continue;
       }
-      if (_readWordOperator() || _readNumberWords()) continue;
+      if (_readTimesWord() || _readWordOperator() || _readNumberWords()) {
+        continue;
+      }
       throw const _CalcError(CalcFailure.malformed);
     }
     return _tokens;
+  }
+
+  /// «Дважды», «пятью»: множитель и знак умножения ([_timesWords]).
+  bool _readTimesWord() {
+    final match = _word.matchAsPrefix(text, _pos);
+    if (match == null) return false;
+    final factor = _timesWords[match.group(0)];
+    if (factor == null) return false;
+    _tokens
+      ..add(_Token(_Kind.number, value: Rational.fromInt(factor)))
+      ..add(const _Token(_Kind.times, word: true));
+    _pos = match.end;
+    return true;
   }
 
   bool _readWordOperator() {
@@ -1135,7 +1275,7 @@ final class _Lexer {
 /// unary   := ('-' | '+') unary | power
 /// power   := postfix ('^' unary)?
 /// postfix := primary ('%' | '²' | '³')*
-/// primary := число | '(' expr ')' | '√' unary
+/// primary := число | '(' expr ')' | ('√' | '∛') unary
 /// ```
 final class _Parser {
   _Parser(this.tokens);
@@ -1306,15 +1446,18 @@ final class _Parser {
             }
             _depth--;
             return inner;
-          case _Kind.sqrt:
+          case _Kind.sqrt || _Kind.cbrt:
             _pos++;
+            CalcNode root(CalcNode operand) => token.kind == _Kind.sqrt
+                ? CalcSqrt(operand)
+                : CalcCbrt(operand);
             // «корень из 1/4» словами — корень из дроби, как читается
             // вслух; знак «√1/4» — по правилам, (√1) / 4.
             if (token.word) {
               final fraction = _simpleFraction();
-              if (fraction != null) return CalcSqrt(fraction);
+              if (fraction != null) return root(fraction);
             }
-            return CalcSqrt(_unary());
+            return root(_unary());
           default:
             throw const _CalcError(CalcFailure.malformed);
         }

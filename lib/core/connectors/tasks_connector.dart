@@ -3,6 +3,7 @@ import '../models/task.dart';
 import '../replies/reply_library.dart';
 import '../scenario/scenario_parser.dart';
 import '../services/task_service.dart';
+import '../skills/talk/talk_phrases.dart';
 import 'connector.dart';
 
 /// Встроенный коннектор задач: создание, список, перенос и завершение.
@@ -113,6 +114,7 @@ final class TasksConnector implements Connector, ConnectorHealth {
       CommandIntent.unknown => ('', 0.0),
     };
     if (command.intent == CommandIntent.unknown) return null;
+    if (_isTalk(utterance, command)) return null;
     return ConnectorMatch(
       connectorId: id,
       commandId: commandId,
@@ -120,6 +122,20 @@ final class TasksConnector implements Connector, ConnectorHealth {
       payload: command,
       implicit: command.implicit,
     );
+  }
+
+  /// Реплика беседы целиком — не задача, даже если разбор задач нашёл
+  /// в ней поручение. Без маркера разбор угадывает по форме слов: «хочу
+  /// посмеяться» — будто дело «Посмеяться», «расскажи прикол» — будто
+  /// отчёт о сделанном. С маркером уступает только просьба о стиле ответов:
+  /// «добавь смайликов в ответы» — про ответы помощника, не задача.
+  /// Беседа узнаёт лишь короткую реплику целиком ([TalkPhrases]), поэтому
+  /// команда с любым лишним словом («добавь задачу рассказать шутку»)
+  /// остаётся задачей.
+  static bool _isTalk(Utterance utterance, ParsedCommand command) {
+    final talk = TalkPhrases.recognize(utterance.original);
+    if (talk == null) return false;
+    return command.implicit || talk.topic == TalkTopic.setting;
   }
 
   @override
