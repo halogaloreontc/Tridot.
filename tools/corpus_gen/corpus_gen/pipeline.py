@@ -257,8 +257,12 @@ def label(
     factory: ProviderFactory = make_provider,
     catalog: Catalog | None = None,
     router: RouterRunner | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> Counter[str]:
     """Размечает новые и упавшие фразы и решает их статус.
+
+    on_progress(готово, всего) вызывается из главного потока примерно раз в секунду и после
+    каждого ответа модели — для индикатора в CLI.
 
     Фраза с единственным доступным разметчиком (например, два источника двух семейств,
     и каждый генерировал сам) при settings.single_labeler_check сверяется с приложением
@@ -346,7 +350,14 @@ def label(
     # Сохранение после прерывания — внутри stop_signals() (см. generate).
     with stop_signals():
         try:
-            _run_jobs(jobs, run, workers, stop=stop, tick=checkpoint.maybe_save)
+            def tick() -> None:
+                checkpoint.maybe_save()
+                if on_progress is not None:
+                    with lock:
+                        finished = progress["finished"]
+                    on_progress(finished, len(jobs))
+
+            _run_jobs(jobs, run, workers, stop=stop, tick=tick)
             return _decide_all(config, pending, recheck, labelers, connectors, router, checkpoint)
         except KeyboardInterrupt:
             stop.set()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Callable
@@ -187,7 +188,7 @@ def _label(config: Config, store: CandidateStore, args: argparse.Namespace) -> i
                 file=sys.stderr,
             )
     try:
-        counts = pipeline.label(config, store, labelers, limit=args.limit)
+        counts = pipeline.label(config, store, labelers, limit=args.limit, on_progress=ProgressLine("Разметка"))
     except pipeline.Interrupted as stopped:
         print(
             f"\nПрервано. Разметок сохранено за этот запуск: {stopped.saved}, осталось запросов: "
@@ -204,6 +205,44 @@ def _label(config: Config, store: CandidateStore, args: argparse.Namespace) -> i
             file=sys.stderr,
         )
     return 0
+
+
+class ProgressLine:
+    """Строка «Разметка: 120 из 400 (30%), осталось ≈ 1 ч 10 мин» в stderr не чаще раза в 30 с.
+
+    Локальные модели размечают часами, а без индикатора не видно, идёт ли работа.
+    """
+
+    INTERVAL = 30.0
+
+    def __init__(self, title: str, clock: Callable[[], float] = time.monotonic, stream: Any = None) -> None:
+        self.title = title
+        self.clock = clock
+        self.stream = stream
+        self.started: float | None = None
+        self.shown_at: float | None = None
+        self.shown: tuple[int, int] | None = None
+
+    def __call__(self, done: int, total: int) -> None:
+        now = self.clock()
+        if self.started is None:
+            self.started = now
+        if total <= 0 or (done, total) == self.shown:
+            return
+        if self.shown_at is not None and now - self.shown_at < self.INTERVAL and done < total:
+            return
+        self.shown_at, self.shown = now, (done, total)
+        line = f"{self.title}: {done} из {total} ({100 * done // total}%)"
+        elapsed = now - self.started
+        if 0 < done < total and elapsed > 0:
+            line += f", осталось ≈ {_duration(elapsed / done * (total - done))}"
+        print(line, file=self.stream or sys.stderr, flush=True)
+
+
+def _duration(seconds: float) -> str:
+    minutes = max(1, round(seconds / 60))
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} ч {minutes} мин" if hours else f"{minutes} мин"
 
 
 def _label_summary(counts: Counter[str]) -> str:
