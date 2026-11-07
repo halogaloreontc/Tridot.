@@ -71,7 +71,7 @@
 {"id": "nd-067", "text": "добавь позвонить в эту среду", "intent": "createTask", "title": "Позвонить", "due": "2026-11-04", "precision": "date"}
 {"id": "nd-068", "text": "добавь отчёт в эту среду", "now": "2026-11-05T10:00", "intent": "createTask", "title": "Отчёт", "due": null, "issue": "inPast"}
 {"id": "nd-069", "text": "добавь отчёт через 3 дня в 25:00", "intent": "createTask", "title": "Отчёт", "due": null, "issue": "invalidTime"}
-{"id": "nd-070", "text": "ДОБАВЬ ПОЗВОНИТЬ В ПЯТНИЦУ", "intent": "createTask", "title": "ПОЗВОНИТЬ", "due": "2026-11-06", "precision": "date"}
+{"id": "nd-070", "text": "ДОБАВЬ ПОЗВОНИТЬ В ПЯТНИЦУ", "intent": "createTask", "title": "Позвонить", "due": "2026-11-06", "precision": "date", "note": "сообщение заглавными — название обычным предложением (решение 8)"}
 {"id": "nd-071", "text": "добавь купить молоко в вс", "intent": "createTask", "title": "Купить молоко", "due": "2026-11-08", "precision": "date"}
 {"id": "gap-009", "text": "добавь позвонить через 1.5 часа", "intent": "createTask", "title": "Позвонить", "due": "2026-11-02T18:00", "precision": "dateTime", "note": "бывший known_gap: дробные часы"}
 {"id": "nd-072", "text": "добавь задачу сдать отчёт в следующую неделю в пятницу", "intent": "createTask", "title": "Сдать отчёт", "due": "2026-11-13", "precision": "date", "note": "«следующую неделю» в винительном"}
@@ -130,3 +130,20 @@
 {"id": "nd-124", "text": "добавь созвон в ноябре вечером", "intent": "createTask", "title": "Созвон в ноябре вечером", "due": null, "note": "месяц без числа не понимается — часть суток рядом тоже не срок", "source": "manual"}
 {"id": "nd-125", "text": "добавь купить продукты на выходные", "intent": "createTask", "title": "Купить продукты", "due": "2026-11-07", "precision": "date", "note": "«на выходные» — как «на выходных»", "source": "manual"}
 {"id": "nd-126", "text": "отложи стирку на следующие выходные", "intent": "rescheduleTask", "targetQuery": "Стирка", "due": "2026-11-14", "precision": "date", "note": "как «на следующих выходных»", "source": "manual"}
+{"id":"gap-008","text":"добавь позвонить на этой неделе","intent":"createTask","title":"Позвонить","due":"2026-11-06","precision":"date","note":"«на этой неделе» без дня — пятница этой недели (было в gaps.jsonl)"}
+{"id":"nd-127","text":"добавь отчёт на этой неделе","now":"2026-11-07T10:00","intent":"createTask","title":"Отчёт","due":"2026-11-08","precision":"date","note":"суббота: «на этой неделе» — воскресенье этой недели"}
+{"id":"nd-128","text":"добавь отчёт этой недели","intent":"createTask","title":"Отчёт этой недели","due":null,"note":"без предлога «этой недели» — не срок"}
+{"id":"nd-129","text":"перенеси отчёт на эту неделю","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-11-06","precision":"date"}
+{"id":"nd-130","text":"добавь бассейн каждую пятницу","intent":"createTask","title":"Бассейн","due":"2026-11-06","precision":"date","note":"повторение — ближайшая пятница"}
+{"id":"nd-131","text":"добавь бассейн по понедельникам","now":"2026-11-02T09:00","intent":"createTask","title":"Бассейн","due":"2026-11-09","precision":"date","note":"сегодняшний день без времени — через неделю, как «в понедельник»"}
+{"id":"nd-132","text":"добавь бассейн по понедельникам и средам","intent":"createTask","title":"Бассейн","due":null,"issue":"conflictingDays","note":"два дня повторения — как «в среду или четверг»"}
+{"id":"nd-133","text":"по пятницам у меня бассейн?","intent":"unknown","note":"вопрос — не задача"}
+{"id":"nd-134","text":"напомни каждый понедельник в 9 планёрка","intent":"createTask","title":"Планёрка","due":"2026-11-09T09:00","precision":"dateTime"}
+{"id":"nd-135","text":"перенеси отчёт на 1-е","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-12-01","precision":"date","note":"число прошло — следующий месяц"}
+{"id":"nd-136","text":"перенеси отчёт на 31-е","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-12-31","precision":"date","note":"в ноябре нет 31-го — ближайший месяц, где оно есть"}
+{"id":"nd-137","text":"перенеси отчёт с 12-го на 18-е","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-11-18","precision":"date","note":"«с 12-го» — исходный срок"}
+{"id":"nd-138","text":"добавь созвон до 20-го","intent":"createTask","title":"Созвон","due":"2026-11-20","precision":"date"}
+{"id":"nd-139","text":"перенеси отчёт на вчера","intent":"rescheduleTask","targetQuery":"Отчёт","due":null,"issue":"inPast"}
+{"id":"nd-140","text":"перенеси на 2 дня назад","intent":"rescheduleTask","targetQuery":null,"due":null,"issue":"inPast"}
+{"id":"nd-141","text":"перенеси отчёт на попозже","intent":"rescheduleTask","targetQuery":"Отчёт","due":null,"note":"без нового срока — помощник спросит когда"}
+{"id":"nd-142","text":"добавь созвон в пятницу 7 вечера","intent":"createTask","title":"Созвон","due":"2026-11-06T19:00","precision":"dateTime","note":"час с «вечера» без предлога сразу после дня"}

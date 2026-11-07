@@ -75,7 +75,11 @@ final class Utterance {
   });
 
   /// Разбирает [text]; [now] нужен для сроков «завтра», «в 10:00».
-  factory Utterance.analyze(String text, {required DateTime now}) {
+  ///
+  /// Латинские буквы-двойники внутри русских слов («завтрa» с латинской
+  /// «a») заменяются русскими до разбора — и в [original] тоже.
+  factory Utterance.analyze(String message, {required DateTime now}) {
+    final text = fixHomoglyphs(message);
     final quotes = _extractQuoted(text);
     final hashtags = <Hashtag>[
       for (final match in _hashtag.allMatches(quotes.masked))
@@ -94,11 +98,13 @@ final class Utterance {
     }
     final analysisText = DueParser.normalizeChars(masked);
     final words = _word.allMatches(analysisText).toList(growable: false);
+    final texts = <String>[for (final word in words) word.group(0)!];
+    _fixCommandTypos(texts);
     final tokens = <UtteranceToken>[
       for (var i = 0; i < words.length; i++)
         UtteranceToken(
           index: i,
-          text: words[i].group(0)!,
+          text: texts[i],
           original: text.substring(words[i].start, words[i].end),
           span: CharSpan(words[i].start, words[i].end),
         ),
@@ -134,8 +140,27 @@ final class Utterance {
 
   static const String _edgePunctuation = ',.;:!?—–-…';
 
-  /// Сообщение как есть.
+  /// Сообщение как есть (с исправленными буквами-двойниками,
+  /// [fixHomoglyphs]).
   final String original;
+
+  /// Всё сообщение написано заглавными: «НАПОМНИ ВСТРЕЧА В 5 КОРПУСЕ».
+  /// Тогда [remainder] отдаёт текст строчными — название получается
+  /// обычным предложением («Встреча в 5 корпусе»). Аббревиатуры в таком
+  /// сообщении не отличить от остального текста, они тоже становятся
+  /// строчными. Названия в кавычках не меняются: это точное название.
+  bool get allCaps {
+    var letters = 0;
+    for (final rune in original.runes) {
+      final char = String.fromCharCode(rune);
+      final lower = char.toLowerCase();
+      final upper = char.toUpperCase();
+      if (lower == upper) continue;
+      if (char == lower) return false;
+      letters++;
+    }
+    return letters >= 4;
+  }
 
   /// [original] в нижнем регистре и с «е» вместо «ё»; длина та же.
   final String normalized;
@@ -219,7 +244,8 @@ final class Utterance {
   /// препинания по краям и «осиротевшие» запятые убираются. Пустая строка,
   /// если не осталось ни одного слова.
   String remainder(Iterable<CharSpan> remove) {
-    final chars = original.split('');
+    final source = allCaps ? _lowerSameLength(original) : original;
+    final chars = source.split('');
     for (var i = 0; i < chars.length; i++) {
       // Кавычки и метки уже заменены пробелами в analysisText.
       if (analysisText[i] == ' ' && original[i].trim().isNotEmpty) {
@@ -248,6 +274,192 @@ final class Utterance {
     }
     text = text.substring(start, end);
     return text;
+  }
+
+  /// Строчные буквы без изменения длины строки.
+  static String _lowerSameLength(String text) {
+    final buffer = StringBuffer();
+    for (var i = 0; i < text.length; i++) {
+      final lower = text[i].toLowerCase();
+      buffer.write(lower.length == 1 ? lower : text[i]);
+    }
+    return buffer.toString();
+  }
+
+  /// Латинские буквы, которые выглядят как русские.
+  static const Map<String, String> _homoglyphs = <String, String>{
+    'a': 'а',
+    'c': 'с',
+    'e': 'е',
+    'o': 'о',
+    'p': 'р',
+    'x': 'х',
+    'y': 'у',
+    'k': 'к',
+    'm': 'м',
+    't': 'т',
+    'A': 'А',
+    'B': 'В',
+    'C': 'С',
+    'E': 'Е',
+    'H': 'Н',
+    'K': 'К',
+    'M': 'М',
+    'O': 'О',
+    'P': 'Р',
+    'T': 'Т',
+    'X': 'Х',
+    'Y': 'У',
+  };
+
+  static final RegExp _mixedWord = RegExp('[A-Za-zА-Яа-яЁё]+');
+  static final RegExp _cyrillic = RegExp('[А-Яа-яЁё]');
+  static final RegExp _latinLetter = RegExp('[A-Za-z]');
+
+  /// Заменяет латинские буквы-двойники русскими в словах, где есть и те,
+  /// и другие: «завтрa» → «завтра». Слово меняется, только если в нём
+  /// русских букв больше, чем латинских, и все латинские — двойники. Так
+  /// не меняются слова целиком латиницей («iPhone», «recurring») и
+  /// латинские названия с русским окончанием: «Zoomе», «iPhoneа»,
+  /// «PDFку», «Excelе», «SMSку» (в каждом есть латинская буква без
+  /// русского двойника или латиницы больше). Длина строки сохраняется.
+  static String fixHomoglyphs(String text) {
+    if (!_latinLetter.hasMatch(text)) return text;
+    return text.replaceAllMapped(_mixedWord, (Match match) {
+      final word = match.group(0)!;
+      if (!_cyrillic.hasMatch(word) || !_latinLetter.hasMatch(word)) {
+        return word;
+      }
+      var latin = 0;
+      var cyrillic = 0;
+      for (final char in word.split('')) {
+        if (_latinLetter.hasMatch(char)) {
+          if (!_homoglyphs.containsKey(char)) return word;
+          latin++;
+        } else {
+          cyrillic++;
+        }
+      }
+      if (cyrillic <= latin) return word;
+      return word.split('').map((String c) => _homoglyphs[c] ?? c).join();
+    });
+  }
+
+  /// Слова команд, опечатки в которых исправляются ([_fixCommandTypos]).
+  /// Повелительные формы на «-ь» есть и в написании с «-и» («постави»):
+  /// так «поставни» — одна опечатка от «постави».
+  static const Map<String, String> _commandWords = <String, String>{
+    'добавь': 'добавь',
+    'добави': 'добавь',
+    'создай': 'создай',
+    'запиши': 'запиши',
+    'напомни': 'напомни',
+    'перенеси': 'перенеси',
+    'заверши': 'заверши',
+    'выполни': 'выполни',
+    'поставь': 'поставь',
+    'постави': 'поставь',
+    'отложи': 'отложи',
+    'сдвинь': 'сдвинь',
+    'передвинь': 'передвинь',
+    'покажи': 'покажи',
+    'отметь': 'отметь',
+    'отмети': 'отметь',
+  };
+
+  /// Настоящие слова в одной правке от слова команды: это не опечатки,
+  /// и в команду они не превращаются. «Записи в блоге не грузятся»,
+  /// «наполни ванну», «выполи грядку», «обложи налогом», «заверни
+  /// подарок», «отмени встречу», «отмерь ткань», «добавки хочешь?».
+  static const Set<String> _realWords = <String>{
+    'записи',
+    'запили',
+    'запаши',
+    'наполни',
+    'перевеси',
+    'переноси',
+    'заверни',
+    'выполи',
+    'подставь',
+    'обложи',
+    'отмени',
+    'отмерь',
+    'отмели',
+    'отметки',
+    'отметка',
+    'добавки',
+    'добавка',
+    'покачи',
+    'сдачу',
+  };
+
+  /// Слова после команды, опечатки в которых исправляются.
+  static const Map<String, String> _objectWords = <String, String>{
+    'задачу': 'задачу',
+    'напоминание': 'напоминание',
+  };
+
+  /// Опечатки в словах команд: «поставни задачу» → «поставь», «добавь
+  /// задау» → «задачу». Только слова от пяти букв, одна правка (замена,
+  /// вставка, пропуск, перестановка соседних букв) и только на месте
+  /// команды: первое слово сообщения — глагол команды, слово сразу после
+  /// команды — «задачу», «напоминание». Правка последней буквы (и
+  /// перестановка двух последних) не считается опечаткой: «напомню»,
+  /// «запишу», «задача», «напомин» — другие формы или обрывки. Правка
+  /// первой буквы тоже не опечатка: «запомни», «двинь», «оставь» —
+  /// другие слова. Настоящие слова рядом с командами ([_realWords]:
+  /// «наполни», «записи», «отмени») не исправляются. Остальной текст
+  /// («позвонитть») остаётся как написан.
+  static void _fixCommandTypos(List<String> words) {
+    String? fix(String word, Map<String, String> dictionary) {
+      if (word.length < 5 || dictionary.containsKey(word)) return null;
+      if (_realWords.contains(word)) return null;
+      if (!RegExp(r'^[а-я]+$').hasMatch(word)) return null;
+      for (final entry in dictionary.entries) {
+        if (entry.key.length < 5) continue;
+        if (_isTypo(word, entry.key)) return entry.value;
+      }
+      return null;
+    }
+
+    if (words.isEmpty) return;
+    final verb = fix(words.first, _commandWords);
+    if (verb != null) words[0] = verb;
+    for (var i = 1; i < words.length; i++) {
+      if (!_commandWords.containsKey(words[i - 1])) continue;
+      final object = fix(words[i], _objectWords);
+      if (object != null) words[i] = object;
+    }
+  }
+
+  /// Ровно одна правка между [typo] и [word], не на первой и не на
+  /// последней букве.
+  static bool _isTypo(String typo, String word) {
+    final a = typo;
+    final b = word;
+    if ((a.length - b.length).abs() > 1) return false;
+    var prefix = 0;
+    final shorter = a.length < b.length ? a.length : b.length;
+    while (prefix < shorter && a[prefix] == b[prefix]) {
+      prefix++;
+    }
+    if (prefix == 0) return false;
+    if (a.length == b.length) {
+      if (prefix >= a.length - 1) return false;
+      // Замена одной буквы.
+      if (a.substring(prefix + 1) == b.substring(prefix + 1)) return true;
+      // Перестановка соседних, но не двух последних: «напомин» — не
+      // «напомни».
+      return prefix + 2 < a.length &&
+          a[prefix] == b[prefix + 1] &&
+          a[prefix + 1] == b[prefix] &&
+          a.substring(prefix + 2) == b.substring(prefix + 2);
+    }
+    final longer = a.length > b.length ? a : b;
+    final short = a.length > b.length ? b : a;
+    // Лишняя или пропущенная буква в конце — другая форма слова.
+    if (prefix >= short.length) return false;
+    return longer.substring(prefix + 1) == short.substring(prefix);
   }
 
   static bool _isEdge(String char) =>

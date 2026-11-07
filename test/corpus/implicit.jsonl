@@ -84,3 +84,12 @@
 {"id":"imp-098","text":"я купил","now":"2026-11-05T12:00","intent":"unknown","note":"без предмета задачу не угадать"}
 {"id":"imp-099","text":"вчера звонил","now":"2026-11-05T12:00","intent":"unknown"}
 {"id":"imp-100","text":"она купила хлеб","now":"2026-11-05T12:00","intent":"unknown"}
+{"id":"imp-101","text":"«Купить хлеб» завтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date","note":"кавычки и срок без команды — задача"}
+{"id":"imp-102","text":"«Купить хлеб» завтра для мамы с папой на даче","intent":"unknown","note":"после кавычек больше трёх слов — не команда"}
+{"id":"imp-103","text":"новая задача «Купить хлеб»","intent":"createTask","title":"Купить хлеб"}
+{"id":"imp-104","text":"купить хлеб, добавь","intent":"createTask","title":"Купить хлеб","note":"команда в конце"}
+{"id":"imp-105","text":"купить хлеб, не забудь","intent":"createTask","title":"Купить хлеб","note":"«не забудь» в конце — не отрицание"}
+{"id":"imp-106","text":"встреча с Петей завтра в 10, запиши","intent":"createTask","title":"Встреча с Петей","due":"2026-11-03T10:00","precision":"dateTime"}
+{"id":"imp-107","text":"перенеси на завтра, не забудь","intent":"rescheduleTask","targetQuery":null,"due":"2026-11-03","precision":"date","note":"команда в конце после другой команды — не цель"}
+{"id":"imp-108","text":"не забудь","intent":"unknown"}
+{"id":"imp-109","text":"«Отчёт» в пятницу, запиши","intent":"createTask","title":"Отчёт","due":"2026-11-06","precision":"date"}

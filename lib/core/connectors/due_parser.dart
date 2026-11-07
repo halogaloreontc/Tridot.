@@ -57,6 +57,8 @@ final class DueParseResult {
     this.precision,
     this.issue = DueIssue.none,
     this.spans = const <CharSpan>[],
+    this.hasSource = false,
+    this.recurring = false,
   });
 
   final DateTime? dueAt;
@@ -72,6 +74,14 @@ final class DueParseResult {
   /// передан в [DueParser.parse]. Заполняется и при [issue] ≠ none, чтобы
   /// неверный срок не попал в название задачи. Отсортированы, не пересекаются.
   final List<CharSpan> spans;
+
+  /// Во фразе есть исходный срок переноса: «с 12-го на 18-е», «с завтра
+  /// на пятницу».
+  final bool hasSource;
+
+  /// Срок назван повторением: «по пятницам», «каждую пятницу». Повторяющихся
+  /// задач пока нет — срок равен ближайшему такому дню (docs/PLANS.md).
+  final bool recurring;
 }
 
 /// Разбор сроков в русском тексте: только то, что можно понять однозначно.
@@ -132,6 +142,14 @@ final class DueParser {
   static const Set<String> _dayparts = <String>{
     'утра',
     'дня',
+    'вечера',
+    'ночи',
+  };
+
+  /// Уточнения часа без предлога после дня: «завтра 9 утра». «Дня» сюда
+  /// не входит: «завтра 2 дня» — скорее длительность.
+  static const Set<String> _bareHourSuffixes = <String>{
+    'утра',
     'вечера',
     'ночи',
   };
@@ -203,6 +221,24 @@ final class DueParser {
     'послезавтра': 2,
   };
 
+  /// Прошедшие дни: срок только после «на» или «с» («перенеси на вчера» —
+  /// уже прошло).
+  static const Map<String, int> _pastDayWords = <String, int>{
+    'вчера': -1,
+    'позавчера': -2,
+  };
+
+  /// Окончания порядкового числа дня после дефиса: «20-е», «12-го», «к
+  /// 20-му».
+  static const Set<String> _ordinalEndings = <String>{
+    'е',
+    'ое',
+    'го',
+    'ого',
+    'му',
+    'ому',
+  };
+
   /// Посимвольная нормализация: нижний регистр и «ё» → «е» без изменения
   /// длины строки. Символ, у которого нижний регистр другой длины, остаётся.
   static String normalizeChars(String text) {
@@ -230,6 +266,7 @@ final class DueParser {
     // Точные моменты «через N минут/часов».
     final moments = <DateTime>[];
     var dateText = normalized;
+    var recurring = false;
     // Номера в [times] времён без уточнения «утра/вечера»: их уточняет часть
     // суток («вечером в 8» — 20:00). Среди них — час 1–6 без уточнения
     // («к 5»), который без части суток неоднозначен.
@@ -241,8 +278,14 @@ final class DueParser {
     final parts = _partMentions(normalized, words);
     final partKinds = <PartOfDay>{for (final found in parts) found.part};
     final part = partKinds.length == 1 ? partKinds.single : null;
+    // «В обед» кончается в 15:00, а не в 17:00, как «днём».
+    final lunch = part != null && parts.every((_PartFound p) => p.lunch);
+    final partEndHour = part == null ? null : (lunch ? 15 : part.endHour);
     // «15 ноября», «31 февраля» (несуществующая — уточнение invalidDate).
-    final monthDates = _monthMentions(normalized, words, today);
+    final monthDates = <_Found>[
+      ..._monthMentions(normalized, words, today),
+      ..._dayOfMonthMentions(normalized, words, today),
+    ];
     // Ошибка в дате или времени: разбор доходит до конца, чтобы все
     // фрагменты срока заняли свои места и не попали в название. Если неверны
     // и дата, и время, побеждает дата: «31 февраля в 25:00» — invalidDate.
@@ -272,23 +315,44 @@ final class DueParser {
       final calendar = <_Found>[
         ...monthDates,
         ..._relativeMentions(normalized, words, now),
+        ..._agoMentions(normalized, words, today),
         ..._calendarMentions(
           normalized,
           words,
           now,
-          _weekdayClock(_pickDistinct(times), part),
+          _weekdayClock(_pickDistinct(times), partEndHour),
           _merge(spans),
           sourceEnds,
         ),
       ];
       for (final found in calendar) {
         consume(found.start, found.end);
+        if (found.recurring) recurring = true;
         final moment = found.moment;
         if (moment != null) moments.add(moment);
         final date = found.date;
         if (date != null) dates.add(_Mention(date, found.isSource));
         final time = found.time;
         if (time != null) times.add(_Mention(time, found.isSource));
+      }
+      // «на вчера», «с позавчера»: прошедший день только с предлогом —
+      // иначе «вчера» не срок («вчера звонил»).
+      for (var k = 1; k < words.length; k++) {
+        final offset = _pastDayWords[words[k].group(0)];
+        final preposition = words[k - 1].group(0);
+        if (offset == null ||
+            !_onlySpaces(normalized, words[k - 1].end, words[k].start) ||
+            !(preposition == 'на' ||
+                _sourcePrepositions.contains(preposition))) {
+          continue;
+        }
+        consume(words[k].start, words[k].end);
+        dates.add(
+          _Mention(
+            DateTime(today.year, today.month, today.day + offset),
+            _isSource(normalized, words[k].start),
+          ),
+        );
       }
       for (final word in words) {
         final offset = _dayWords[word.group(0)];
@@ -305,14 +369,39 @@ final class DueParser {
       // вечером» — предлог уже у дня.
       for (final found in parts) {
         spans.add(CharSpan(found.start, found.end));
+        final offset = found.dayOffset;
+        if (offset != null) {
+          dates.add(
+            _Mention(
+              DateTime(today.year, today.month, today.day + offset),
+              false,
+            ),
+          );
+        }
       }
     }
 
     // При ошибке во времени или дате дни всё равно занимают свои фрагменты,
     // чтобы «через 3 дня» или «завтра» не попали в название.
+    DueParseResult done({
+      DateTime? dueAt,
+      DuePrecision? precision,
+      DueIssue issue = DueIssue.none,
+      required List<CharSpan> spans,
+    }) =>
+        DueParseResult(
+          dueAt: dueAt,
+          precision: precision,
+          issue: issue,
+          spans: spans,
+          hasSource: dates.any((_Mention<DateTime> m) => m.isSource) ||
+              times.any((_Mention<(int, int)> m) => m.isSource),
+          recurring: recurring,
+        );
+
     DueParseResult fail(DueIssue issue) {
       collectDays();
-      return DueParseResult(
+      return done(
         issue: issue,
         spans: _bridge(normalized, words, _merge(spans)),
       );
@@ -442,6 +531,8 @@ final class DueParser {
         if (found.date != null) found.end,
       for (final word in words)
         if (_dayWords.containsKey(word.group(0))) word.end,
+      for (final found in parts)
+        if (found.dayOffset != null) found.end,
     };
     // «завтра вечером в 8 встреча»: часть суток сразу после дня тоже день.
     // Одна часть суток днём не считается: в «вечером в 2 магазина» число —
@@ -485,14 +576,25 @@ final class DueParser {
       final token = masked[i];
       final value = token.group(0)!;
       if (value.length > 2 || int.tryParse(value) == null) continue;
-      if (i == 0 || !_hourPrepositions.contains(masked[i - 1].group(0))) {
-        continue;
-      }
-      if (!_onlySpaces(dateText, masked[i - 1].end, token.start)) continue;
       if (_touchesNumberPunctuation(dateText, token.start, token.end)) {
         continue;
       }
       final suffix = _suffixAfter(dateText, masked, token.end);
+      final hasPreposition = i > 0 &&
+          _hourPrepositions.contains(masked[i - 1].group(0)) &&
+          _onlySpaces(dateText, masked[i - 1].end, token.start);
+      // «на завтра 9 утра», «в пятницу 7 вечера»: час без предлога сразу
+      // после дня — только с «утра», «вечера», «ночи».
+      if (!hasPreposition &&
+          !(suffix.isNotEmpty &&
+              _bareHourSuffixes.contains(suffix.last.group(0)) &&
+              dayEnds.any((int end) {
+                if (end > token.start) return false;
+                final gap = normalized.substring(end, token.start).trim();
+                return gap.isEmpty || gap == ',';
+              }))) {
+        continue;
+      }
       final next = i + 1 < masked.length ? masked[i + 1] : null;
       final nextWord = next?.group(0);
       final afterNext = i + 2 < masked.length ? masked[i + 2] : null;
@@ -585,22 +687,22 @@ final class DueParser {
     final merged = _bridge(normalized, words, _merge(spans));
     final days = _pickDistinct(dates);
     if (days.length > 1) {
-      return DueParseResult(issue: DueIssue.conflictingDays, spans: merged);
+      return done(issue: DueIssue.conflictingDays, spans: merged);
     }
     final clock = _pickDistinct(times);
     // «утром или вечером» — тоже несколько времён.
     if (clock.length > 1 || partKinds.length > 1) {
-      return DueParseResult(issue: DueIssue.conflictingTimes, spans: merged);
+      return done(issue: DueIssue.conflictingTimes, spans: merged);
     }
 
     if (ambiguousHour) {
-      return DueParseResult(issue: DueIssue.ambiguousHour, spans: merged);
+      return done(issue: DueIssue.ambiguousHour, spans: merged);
     }
 
     final explicitDay = days.isEmpty ? null : days.single;
     final time = clock.isEmpty ? null : clock.single;
     if (explicitDay == null && time == null && part == null) {
-      return DueParseResult(spans: merged);
+      return done(spans: merged);
     }
 
     if (time == null && part != null) {
@@ -609,16 +711,17 @@ final class DueParser {
       // в 19:30 — ещё сегодня. Как с часом: без дня прошедшая часть —
       // завтра («утром» в 16:30), с явным днём — «уже прошло».
       if (explicitDay != null && explicitDay.isBefore(today)) {
-        return DueParseResult(issue: DueIssue.inPast, spans: merged);
+        return done(issue: DueIssue.inPast, spans: merged);
       }
       var day = explicitDay ?? today;
-      if (!part.endOn(day).isAfter(now)) {
+      final end = DateTime(day.year, day.month, day.day, partEndHour!);
+      if (!end.isAfter(now)) {
         if (explicitDay != null) {
-          return DueParseResult(issue: DueIssue.inPast, spans: merged);
+          return done(issue: DueIssue.inPast, spans: merged);
         }
         day = DateTime(day.year, day.month, day.day + 1);
       }
-      return DueParseResult(
+      return done(
         dueAt: DateTime(day.year, day.month, day.day, part.hour),
         precision: DuePrecision.partOfDay,
         spans: merged,
@@ -627,9 +730,9 @@ final class DueParser {
 
     if (time == null) {
       if (explicitDay!.isBefore(today)) {
-        return DueParseResult(issue: DueIssue.inPast, spans: merged);
+        return done(issue: DueIssue.inPast, spans: merged);
       }
-      return DueParseResult(
+      return done(
         dueAt: explicitDay,
         precision: DuePrecision.date,
         spans: merged,
@@ -651,12 +754,12 @@ final class DueParser {
     }
     if (!result.isAfter(now)) {
       if (explicitDay != null) {
-        return DueParseResult(issue: DueIssue.inPast, spans: merged);
+        return done(issue: DueIssue.inPast, spans: merged);
       }
       // Только время, и оно уже прошло: ближайшее будущее — завтра.
       result = DateTime(day.year, day.month, day.day + 1, time.$1, time.$2);
     }
-    return DueParseResult(
+    return done(
       dueAt: result,
       precision: DuePrecision.dateTime,
       spans: merged,
@@ -668,7 +771,7 @@ final class DueParser {
   /// Части суток наречием: «утром», «днём», «вечером», ласкательные
   /// «утречком», «вечерком». «Ночью» сроком не считается: это и поздний
   /// вечер, и раннее утро — остаётся в названии. «После работы»,
-  /// «в обед», «к вечеру» — тоже пока не сроки.
+  /// «к вечеру» — тоже пока не сроки; «в обед» — в [_partMentions].
   static const Map<String, PartOfDay> _partWords = <String, PartOfDay>{
     'утром': PartOfDay.morning,
     'утречком': PartOfDay.morning,
@@ -700,6 +803,17 @@ final class DueParser {
   static const Map<String, PartOfDay> _partNouns = <String, PartOfDay>{
     'утро': PartOfDay.morning,
     'вечер': PartOfDay.evening,
+  };
+
+  /// Прилагательные дня перед «утро»/«вечер» после «на»: «на завтрашнее
+  /// утро», «на завтрашний вечер», «на сегодняшний вечер».
+  static const Map<String, int> _dayAdjectives = <String, int>{
+    'сегодняшнее': 0,
+    'сегодняшний': 0,
+    'завтрашнее': 1,
+    'завтрашний': 1,
+    'послезавтрашнее': 2,
+    'послезавтрашний': 2,
   };
 
   /// Исходная часть суток перед «на вечер»: «с утра на вечер» — это
@@ -817,14 +931,56 @@ final class DueParser {
     }
 
     for (var i = 0; i < words.length; i++) {
+      // «в обед» — середина дня: условные 13:00, кончается в 15:00. «На
+      // обед», «сходить на обед» — само событие, не срок.
+      if (word(i) == 'обед' &&
+          i > 0 &&
+          adjacent(i - 1, i) &&
+          (word(i - 1) == 'в' || word(i - 1) == 'во')) {
+        if (nextToUnparsedDay(i - 1, i)) continue;
+        result.add(
+          _PartFound(
+            words[i - 1].start,
+            words[i].end,
+            PartOfDay.day,
+            lunch: true,
+          ),
+        );
+        continue;
+      }
       // «на вечер», «на утро пятницы», «с утра на вечер».
       final noun = _partNouns[word(i)];
+      final followed = noun != null &&
+          (i + 1 >= words.length ||
+              !_onlySpaces(text, words[i].end, words[i + 1].start) ||
+              _partNounFollowers.contains(word(i + 1)) ||
+              _dayWords.containsKey(word(i + 1)) ||
+              _weekdayForms[word(i + 1)]?.$2 == _genitivePrepositions);
+      // «на завтрашнее утро», «на завтрашний вечер»: день — в прилагательном.
+      // Прилагательное само говорит о времени, поэтому после него может
+      // стоять и цель: «перенеси на завтрашний вечер звонок». Слово в
+      // родительном падеже после — событие: «на завтрашний вечер встречи
+      // выпускников» — не срок.
+      final dayOffset =
+          noun != null && i > 1 ? _dayAdjectives[word(i - 1)] : null;
+      if (dayOffset != null &&
+          adjacent(i - 1, i) &&
+          adjacent(i - 2, i - 1) &&
+          word(i - 2) == 'на') {
+        final genitiveAfter =
+            i + 1 < words.length && _genitiveEnding.hasMatch(word(i + 1));
+        if ((!followed && genitiveAfter) || nextToUnparsedDay(i, i)) continue;
+        result.add(
+          _PartFound(
+            words[i - 2].start,
+            words[i].end,
+            noun!,
+            dayOffset: dayOffset,
+          ),
+        );
+        continue;
+      }
       if (noun != null && i > 0 && adjacent(i - 1, i) && word(i - 1) == 'на') {
-        final followed = i + 1 >= words.length ||
-            !_onlySpaces(text, words[i].end, words[i + 1].start) ||
-            _partNounFollowers.contains(word(i + 1)) ||
-            _dayWords.containsKey(word(i + 1)) ||
-            _weekdayForms[word(i + 1)]?.$2 == _genitivePrepositions;
         if (!followed || nextToUnparsedDay(i, i)) continue;
         var start = i - 1;
         if (start >= 2 &&
@@ -875,9 +1031,9 @@ final class DueParser {
   /// Время для правила «сегодняшний день недели»: с частью суток без часа
   /// день ещё сегодняшний, пока часть не кончилась («в пятницу вечером»
   /// в пятницу днём — сегодня).
-  static Set<(int, int)> _weekdayClock(Set<(int, int)> clock, PartOfDay? part) {
-    if (clock.isNotEmpty || part == null) return clock;
-    return <(int, int)>{(part.endHour - 1, 59)};
+  static Set<(int, int)> _weekdayClock(Set<(int, int)> clock, int? endHour) {
+    if (clock.isNotEmpty || endHour == null) return clock;
+    return <(int, int)>{(endHour - 1, 59)};
   }
 
   // ------------------------------------------- дни недели и «через N …»
@@ -918,6 +1074,33 @@ final class DueParser {
     'воскресенья': (DateTime.sunday, _genitivePrepositions),
     'воскресенью': (DateTime.sunday, _dativePrepositions),
     'вс': (DateTime.sunday, _anyWeekdayPreposition),
+  };
+
+  /// Дни недели во множественном числе после «по»: «по пятницам».
+  static const Map<String, int> _recurringWeekdays = <String, int>{
+    'понедельникам': DateTime.monday,
+    'вторникам': DateTime.tuesday,
+    'средам': DateTime.wednesday,
+    'четвергам': DateTime.thursday,
+    'пятницам': DateTime.friday,
+    'субботам': DateTime.saturday,
+    'воскресеньям': DateTime.sunday,
+  };
+
+  /// «каждую пятницу», «каждый понедельник», «каждое воскресенье».
+  static const Set<String> _everyWords = <String>{
+    'каждую',
+    'каждый',
+    'каждое',
+    'каждая',
+  };
+
+  /// Слова повторения перед «по пятницам»: «recurring по пятницам»,
+  /// «еженедельно по пятницам» — часть срока.
+  static const Set<String> _recurrenceWords = <String>{
+    'recurring',
+    'еженедельно',
+    'регулярно',
   };
 
   /// «в пятницу», «на среду», «по четверг».
@@ -1327,6 +1510,139 @@ final class DueParser {
   /// после даты («15 ноября 5000 рублей») годом не считается.
   static final RegExp _plainYear = RegExp(r'^(?:19|20|21)\d\d$');
 
+  /// Число месяца без названия месяца: «на 20 число», «на 20-е», «на 18-е
+  /// число», «до 20-го», «к 20-му» — срок; «с 12-го», «с 12-го числа» —
+  /// исходный срок переноса. День — в этом месяце, если ещё не прошёл,
+  /// иначе в следующем (в месяце без такого числа — в ближайшем, где оно
+  /// есть). Без предлога «12-го» — исходный срок, только если во фразе
+  /// есть и новый («с встречи 12-го на 18-е»); иначе это не срок («созвон
+  /// 5-го вечером» — разбор такой даты не угадывает).
+  List<_Found> _dayOfMonthMentions(
+    String text,
+    List<RegExpMatch> words,
+    DateTime today,
+  ) {
+    String word(int i) => words[i].group(0)!;
+    bool adjacent(int left, int right) =>
+        _onlySpaces(text, words[left].end, words[right].start);
+    DateTime? resolve(int day) {
+      for (var offset = 0; offset <= 2; offset++) {
+        final candidate = DateTime(today.year, today.month + offset, day);
+        if (candidate.day != day) continue;
+        if (offset == 0 && candidate.isBefore(today)) continue;
+        return candidate;
+      }
+      return null;
+    }
+
+    final result = <_Found>[];
+    final bare = <_Found>[];
+    for (var i = 0; i < words.length; i++) {
+      final value = word(i);
+      if (value.length > 2 || !_allDigits.hasMatch(value)) continue;
+      final day = int.parse(value);
+      if (day < 1 || day > 31) continue;
+      if (_touchesNumberPunctuation(text, words[i].start, words[i].end)) {
+        continue;
+      }
+      var last = i;
+      String? ending;
+      final end = words[i].end;
+      if (i + 1 < words.length &&
+          end < text.length &&
+          (text[end] == '-' || text[end] == '–') &&
+          words[i + 1].start == end + 1 &&
+          _ordinalEndings.contains(word(i + 1))) {
+        ending = word(i + 1);
+        last = i + 1;
+      }
+      var noun = false;
+      if (last + 1 < words.length &&
+          adjacent(last, last + 1) &&
+          (word(last + 1) == 'число' || word(last + 1) == 'числа')) {
+        noun = true;
+        last++;
+      }
+      if (ending == null && !noun) continue;
+      final preposition = i > 0 && adjacent(i - 1, i) ? word(i - 1) : null;
+      final genitive = ending == 'го' || ending == 'ого';
+      final accusative = ending == 'е' ||
+          ending == 'ое' ||
+          (ending == null && word(last) == 'число');
+      final dative = ending == 'му' || ending == 'ому';
+      final date = resolve(day);
+      final source = _sourcePrepositions.contains(preposition);
+      if ((preposition == 'на' && accusative) ||
+          (preposition == 'до' && genitive) ||
+          ((preposition == 'к' || preposition == 'ко') && dative) ||
+          (source && genitive)) {
+        result.add(
+          date == null
+              ? _Found(words[i].start, words[last].end, invalid: true)
+              : _Found(
+                  words[i].start,
+                  words[last].end,
+                  date: date,
+                  isSource: source,
+                ),
+        );
+        i = last;
+        continue;
+      }
+      if (genitive &&
+          date != null &&
+          (preposition == null ||
+              !_attachedPrepositions.contains(preposition))) {
+        bare.add(
+          _Found(words[i].start, words[last].end, date: date, isSource: true),
+        );
+        i = last;
+      }
+    }
+    if (result.any((_Found f) => !f.isSource && !f.invalid)) {
+      result.addAll(bare);
+    }
+    return result;
+  }
+
+  /// «на 5 дней назад», «на неделю назад» — прошедший день: перенос туда —
+  /// «уже прошло».
+  List<_Found> _agoMentions(
+    String text,
+    List<RegExpMatch> words,
+    DateTime today,
+  ) {
+    final result = <_Found>[];
+    for (var i = 0; i + 1 < words.length; i++) {
+      if (words[i].group(0) != 'на' ||
+          !_onlySpaces(text, words[i].end, words[i + 1].start)) {
+        continue;
+      }
+      final component = _readComponent(text, words, i + 1);
+      if (component == null) continue;
+      final (unit, values, last) = component;
+      if (values.length != 1 ||
+          last + 1 >= words.length ||
+          words[last + 1].group(0) != 'назад' ||
+          !_onlySpaces(text, words[last].end, words[last + 1].start)) {
+        continue;
+      }
+      final amount = values.single.toInt();
+      // «на 2 часа назад» — тоже прошлое: вчерашний день достаточно,
+      // чтобы срок стал «уже прошло».
+      final date = switch (unit) {
+        _Unit.minute ||
+        _Unit.hour =>
+          DateTime(today.year, today.month, today.day - 1),
+        _Unit.day => DateTime(today.year, today.month, today.day - amount),
+        _Unit.week => DateTime(today.year, today.month, today.day - 7 * amount),
+        _Unit.month => _addMonths(today, -amount),
+      };
+      result.add(_Found(words[i + 1].start, words[last + 1].end, date: date));
+    }
+    return result;
+  }
+
   /// «через 3 дня», «через час», «через пару недель», «через полчаса»,
   /// «через 2 часа 30 минут». Минуты и часы дают точное время, дни,
   /// недели и месяцы — день. Диапазон «через 10-15 минут» даёт два срока,
@@ -1444,6 +1760,9 @@ final class DueParser {
   }
 
   static final RegExp _allDigits = RegExp(r'^\d+$');
+
+  /// Окончание, похожее на родительный падеж: «(вечер) встречи».
+  static final RegExp _genitiveEnding = RegExp(r'[аяиы]$');
 
   /// Дни недели, «на следующей неделе», «на выходных», «в конце недели».
   ///
@@ -1577,11 +1896,27 @@ final class DueParser {
         continue;
       }
       weekScope = scope;
+      // «на этой неделе», «на эту неделю» без дня — пятница этой недели,
+      // а в субботу и воскресенье — её воскресенье. Без предлога («отчёт
+      // этой недели») — не срок.
+      final thisWeek = scope == _WeekScope.current &&
+          i > 0 &&
+          adjacent(i - 1, i) &&
+          (word(i - 1) == 'на' || word(i - 1) == 'в' || word(i - 1) == 'во');
       weekSpans.add(
         _Found(
           words[i].start,
           words[i + 1].end,
-          date: scope == _WeekScope.next ? weekDay(1, DateTime.monday) : null,
+          date: scope == _WeekScope.next
+              ? weekDay(1, DateTime.monday)
+              : thisWeek
+                  ? weekDay(
+                      0,
+                      today.weekday <= DateTime.friday
+                          ? DateTime.friday
+                          : DateTime.sunday,
+                    )
+                  : null,
         ),
       );
       used
@@ -1589,10 +1924,13 @@ final class DueParser {
         ..add(i + 1);
     }
 
-    // «на выходных», «в эти выходные», «на следующих выходных».
+    // «на выходных», «в эти выходные», «на следующих выходных», «на
+    // выходной».
     for (var i = 1; i < words.length; i++) {
       final value = word(i);
-      if (value != 'выходных' && value != 'выходные') continue;
+      if (value != 'выходных' && value != 'выходные' && value != 'выходной') {
+        continue;
+      }
       var start = i;
       var scope = _WeekScope.nearest;
       final modifier = _weekModifier(word(i - 1));
@@ -1623,7 +1961,79 @@ final class DueParser {
     }
 
     final takenStarts = <int>{for (final span in taken) span.start};
+    final takenEnds = <int>{for (final span in taken) span.end};
     final weekdays = <_Found>[];
+
+    // Ближайший такой день: сегодня — только если названное время ещё
+    // не прошло, иначе через неделю.
+    DateTime nearest(int weekday) {
+      var delta = (weekday - today.weekday) % 7;
+      if (delta == 0) {
+        final time = clock.length == 1 ? clock.single : null;
+        final stillToday = time != null &&
+            DateTime(today.year, today.month, today.day, time.$1, time.$2)
+                .isAfter(now);
+        if (!stillToday) delta = 7;
+      }
+      return DateTime(today.year, today.month, today.day + delta);
+    }
+
+    // Повторение: «по пятницам», «каждую пятницу», «recurring по
+    // пятницам», «по понедельникам и средам». Повторяющихся задач пока нет:
+    // срок — ближайший такой день, как у «в пятницу».
+    int? lastRecurring;
+    for (var i = 0; i < words.length; i++) {
+      if (used.contains(i)) continue;
+      final plural = _recurringWeekdays[word(i)];
+      final single = _weekdayForms[word(i)];
+      int? weekday;
+      var start = i;
+      if (plural != null &&
+          i > 0 &&
+          adjacent(i - 1, i) &&
+          word(i - 1) == 'по') {
+        weekday = plural;
+        start = i - 1;
+      } else if (plural != null &&
+          lastRecurring != null &&
+          i - 2 == lastRecurring &&
+          (word(i - 1) == 'и' || word(i - 1) == 'или') &&
+          adjacent(i - 1, i)) {
+        weekday = plural;
+      } else if (plural != null &&
+          lastRecurring != null &&
+          i - 1 == lastRecurring &&
+          text.substring(words[i - 1].end, words[i].start).contains(',') &&
+          _onlyPunctuation(text, words[i - 1].end, words[i].start)) {
+        weekday = plural;
+      } else if (single != null &&
+          single.$2 == _accusativePrepositions &&
+          i > 0 &&
+          adjacent(i - 1, i) &&
+          _everyWords.contains(word(i - 1))) {
+        weekday = single.$1;
+        start = i - 1;
+      }
+      if (weekday == null) continue;
+      if (start > 0 &&
+          adjacent(start - 1, start) &&
+          _recurrenceWords.contains(word(start - 1))) {
+        start--;
+      }
+      lastRecurring = i;
+      for (var k = start; k <= i; k++) {
+        used.add(k);
+      }
+      weekdays.add(
+        _Found(
+          words[start].start,
+          words[i].end,
+          date: nearest(weekday),
+          recurring: true,
+        ),
+      );
+    }
+
     // Индекс последнего принятого дня недели: «в среду или четверг» —
     // второй день без своего предлога всё равно день.
     int? lastWeekday;
@@ -1657,7 +2067,20 @@ final class DueParser {
           start > 1 &&
           adjacent(start - 2, start - 1) &&
           word(start - 2) == 'на';
+      // «на следующую неделю вторник»: день сразу за неделей.
+      final afterWeek = start > 0 &&
+          weekSpans.any((_Found w) => w.end == words[start - 1].end) &&
+          _onlyPunctuation(text, words[start - 1].end, words[start].start) &&
+          prepositions == _accusativePrepositions;
+      // «на 15:00 пятницы»: родительный падеж сразу за временем.
+      final afterTime = start == i &&
+          start > 0 &&
+          prepositions == _genitivePrepositions &&
+          takenEnds.contains(words[start - 1].end) &&
+          adjacent(start - 1, start);
       final withPreposition = afterPartNoun ||
+          afterWeek ||
+          afterTime ||
           (preposition != null && prepositions.contains(preposition));
       // Сразу за днём идёт время или дата: «пятница 10:00», «пт в 18».
       // Только без чужого предлога («в среде 10:00» — не день), не после
@@ -1702,15 +2125,7 @@ final class DueParser {
         case _WeekScope.current:
           date = weekDay(0, weekday);
         case _WeekScope.nearest:
-          var delta = (weekday - today.weekday) % 7;
-          if (delta == 0) {
-            final time = clock.length == 1 ? clock.single : null;
-            final stillToday = time != null &&
-                DateTime(today.year, today.month, today.day, time.$1, time.$2)
-                    .isAfter(now);
-            if (!stillToday) delta = 7;
-          }
-          date = DateTime(today.year, today.month, today.day + delta);
+          date = nearest(weekday);
       }
       weekdays.add(
         _Found(
@@ -1818,6 +2233,14 @@ final class DueParser {
         _onlySpaces(text, previous.end, from) &&
         _attachedPrepositions.contains(previous.group(0))) {
       from = previous.start;
+      // «перенеси на через 2 дня»: лишнее «на» перед «через».
+      final extra = before(from);
+      if (previous.group(0) == 'через' &&
+          extra != null &&
+          extra.group(0) == 'на' &&
+          _onlySpaces(text, extra.end, from)) {
+        from = extra.start;
+      }
     }
     return CharSpan(from, end);
   }
@@ -2066,11 +2489,23 @@ final class DueParser {
 
 /// Часть суток, найденная в тексте, с фрагментом.
 final class _PartFound {
-  const _PartFound(this.start, this.end, this.part);
+  const _PartFound(
+    this.start,
+    this.end,
+    this.part, {
+    this.lunch = false,
+    this.dayOffset,
+  });
 
   final int start;
   final int end;
   final PartOfDay part;
+
+  /// «В обед»: условное время дня (13:00), но кончается раньше — в 15:00.
+  final bool lunch;
+
+  /// День из прилагательного перед частью суток: «на завтрашнее утро» — 1.
+  final int? dayOffset;
 }
 
 /// Уточнение часа частью суток: «вечером в 8» — как «в 8 вечера».
@@ -2109,11 +2544,15 @@ final class _Found {
     this.moment,
     this.isSource = false,
     this.invalid = false,
+    this.recurring = false,
   });
 
   final int start;
   final int end;
   final DateTime? date;
+
+  /// Повторение: «по пятницам», «каждую пятницу».
+  final bool recurring;
   final (int, int)? time;
 
   /// Точный момент для «через N минут/часов»: с ним итоговый срок не

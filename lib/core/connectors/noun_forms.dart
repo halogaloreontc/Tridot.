@@ -428,16 +428,33 @@ abstract final class NounForms {
   /// удалось привести («о звонке маме» → «звонок маме»). Иначе предлог
   /// остаётся: «о Москве».
   ///
+  /// [allowPo]: ещё и «по» — для цели завершения: «закрой задачу по
+  /// подготовке презентации» → «подготовка презентации». Слово после «по»
+  /// приводится по правилам предложного падежа (у слов на «-а/-я» дательный
+  /// с ним совпадает); иначе «по» остаётся: «по отчёту».
+  ///
   /// Название с инфинитивом не меняется: «машину помыть», «Машу
-  /// забрать» — винительный падеж там к месту. Без предлога главное слово
+  /// забрать» — винительный падеж там к месту. Предлог прямо перед
+  /// инфинитивом убирается: «про позвонить подруге» → «позвонить подруге».
+  /// Без предлога главное слово
   /// меняется, только если за ним конец группы: «встречу провёл»,
   /// «клиенту счёт» остаются как написано.
-  static String nominative(String text, {bool allowPreposition = true}) {
+  static String nominative(
+    String text, {
+    bool allowPreposition = true,
+    bool allowPo = false,
+  }) {
     final words = _word.allMatches(text).toList(growable: false);
     if (words.isEmpty) return text;
     final normalized = <String>[
       for (final word in words) _normalize(word.group(0)!),
     ];
+    if (allowPreposition &&
+        words.length > 1 &&
+        _infinitivePrepositions.contains(normalized.first) &&
+        VerbForms.isInfinitive(normalized[1])) {
+      return text.substring(words[1].start);
+    }
     if (normalized.any(VerbForms.isInfinitive)) return text;
     bool adjacent(int left, int right) =>
         text.substring(words[left].end, words[right].start).trim().isEmpty;
@@ -451,6 +468,11 @@ abstract final class NounForms {
         grammaticalCase = _Case.prepositional;
         start = 1;
       } else if (first == 'про') {
+        start = 1;
+      } else if (allowPo &&
+          first == 'по' &&
+          (normalized.length < 2 || normalized[1] != 'поводу')) {
+        grammaticalCase = _Case.prepositional;
         start = 1;
       } else if (first == 'насчет') {
         grammaticalCase = _Case.genitive;
@@ -520,6 +542,14 @@ abstract final class NounForms {
   }
 
   static final RegExp _word = RegExp('[A-Za-zА-Яа-яЁё0-9]+');
+
+  /// Предлоги, которые убираются перед инфинитивом: «про позвонить маме».
+  static const Set<String> _infinitivePrepositions = <String>{
+    'про',
+    'о',
+    'об',
+    'насчет',
+  };
 
   static String _normalize(String word) =>
       word.toLowerCase().replaceAll('ё', 'е');
