@@ -10,6 +10,10 @@ abstract interface class StorageInfo {
   /// Путь к файлу или null, если данные только в памяти.
   String? get location;
 
+  /// Папка истории чатов (`chats/`, ADR-010) или null, если чаты только в
+  /// памяти.
+  String? get chatsLocation;
+
   /// Размер данных в байтах; null, если файла ещё нет.
   Future<int?> sizeBytes();
 
@@ -20,11 +24,21 @@ abstract interface class StorageInfo {
 }
 
 final class JsonStorageInfo implements StorageInfo {
-  JsonStorageInfo(this.filePath, {Clock clock = const SystemClock()})
-      : _clock = clock;
+  JsonStorageInfo(
+    this.filePath, {
+    this.chatsDirectory,
+    Clock clock = const SystemClock(),
+  }) : _clock = clock;
 
   final String filePath;
+
+  /// Папка чатов: её файлы входят в размер. Резервная копия — по-прежнему
+  /// только tasks.json (копия чатов — docs/PLANS.md).
+  final String? chatsDirectory;
   final Clock _clock;
+
+  @override
+  String? get chatsLocation => chatsDirectory;
 
   @override
   String get label => 'JSON на этом устройстве';
@@ -35,10 +49,20 @@ final class JsonStorageInfo implements StorageInfo {
   @override
   bool get canBackup => true;
 
+  /// tasks.json и все файлы чатов; null, если нет ни того, ни другого.
   @override
   Future<int?> sizeBytes() async {
     final file = File(filePath);
-    return await file.exists() ? file.length() : null;
+    int? total = await file.exists() ? await file.length() : null;
+    final chats = chatsDirectory;
+    if (chats != null && await Directory(chats).exists()) {
+      await for (final entity in Directory(chats).list()) {
+        if (entity is File && entity.path.endsWith('.json')) {
+          total = (total ?? 0) + await entity.length();
+        }
+      }
+    }
+    return total;
   }
 
   @override
@@ -68,6 +92,9 @@ final class MemoryStorageInfo implements StorageInfo {
 
   @override
   String? get location => null;
+
+  @override
+  String? get chatsLocation => null;
 
   @override
   bool get canBackup => false;

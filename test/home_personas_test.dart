@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
+import 'package:local_assistant/core/chats/chat_models.dart';
+import 'package:local_assistant/core/chats/chat_store.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/models/task.dart';
@@ -60,6 +62,7 @@ Future<_Harness> _pump(
   Clock? clock,
   Size size = _tall,
   Key? key,
+  ChatStore? chats,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -86,6 +89,7 @@ Future<_Harness> _pump(
         tasks: tasks,
         clock: time,
         settingsStore: settings,
+        chatStore: chats ?? InMemoryChatStore(),
       ),
     ),
   );
@@ -185,6 +189,33 @@ Future<Map<String, Object?>> _snapshot(
     'composer': find.byKey(const Key('assistant-composer')).evaluate().length,
     'addressee': _addressee(tester),
   };
+}
+
+/// Все сохранённые чаты (ADR-010): id, родитель, адресат и сообщения —
+/// автор, помощник, текст, ссылка. Смена настроек их не трогает.
+Future<Map<String, Object?>> _chats(ChatStore store) async {
+  await store.flush();
+  final threads = await store.loadIndex()
+    ..sort((ChatThread a, ChatThread b) => a.id.compareTo(b.id));
+  return <String, Object?>{
+    for (final thread in threads)
+      thread.id: <String, Object?>{
+        'parent': thread.parentTaskId,
+        'addressee': thread.addressee,
+        'messages': <String>[
+          for (final m in await store.loadMessages(thread.id))
+            '${m.author.name}/${m.personaId}: ${m.text} '
+                '→ ${m.link?.chatId}',
+        ],
+      },
+  };
+}
+
+/// Название задачи в шапке открытого чата задачи (`null` — главный чат).
+String? _openChat(WidgetTester tester) {
+  final title = find.byKey(const Key('task-chat-title'));
+  if (title.evaluate().isEmpty) return null;
+  return tester.widget<Text>(title).data;
 }
 
 Task _overdue(String title) => Task(
@@ -674,6 +705,76 @@ void main() {
         isTrue,
       );
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'чаты задач: смена настроек и перезапуск не трогают чаты, '
+        'адресатов и сообщения', (tester) async {
+      final store = InMemorySettingsStore();
+      final chats = InMemoryChatStore();
+      final repository = InMemoryTaskRepository();
+      final h = await _pump(
+        tester,
+        settings: store,
+        repository: repository,
+        chats: chats,
+      );
+      await _say(tester, 'Добавь задачу «Купить хлеб» на завтра');
+      final bread = (await h.tasks.listActive()).single;
+      final link = find.byKey(ValueKey<String>('open-task-chat-${bread.id}'));
+      await tester.ensureVisible(link);
+      await tester.tap(link);
+      await tester.pumpAndSettle();
+      expect(_openChat(tester), 'Купить хлеб');
+      // В чате задачи адресат — Noda, в главном — основной.
+      await _say(tester, 'Нода, на пятницу в 10');
+      await _say(tester, 'добавь задачу купить масло');
+      expect(_addressee(tester), 'noda');
+      final before = await _chats(chats);
+      final history = _history(tester);
+      expect(before.length, 3, reason: 'главный и два чата задач');
+
+      for (final key in <String>[
+        'assistant-mode-solo',
+        'solo-persona-noda',
+        'assistant-mode-duo',
+        'main-persona-noda',
+        'main-persona-rio',
+        'style-rio-brief',
+        'style-noda-business',
+        'address-ty',
+        'setting-emoji',
+        'jokes-off',
+      ]) {
+        await _openSettings(tester);
+        await _tapSetting(tester, key);
+        await _openTasks(tester);
+        expect(await _chats(chats), before, reason: 'после «$key»');
+        expect(_openChat(tester), 'Купить хлеб', reason: 'после «$key»');
+        expect(_history(tester), history, reason: 'после «$key»');
+      }
+      expect(_addressee(tester), 'noda');
+      expect(tester.takeException(), isNull);
+
+      // Перезапуск над теми же хранилищами: чаты те же, открыт главный.
+      await _pump(
+        tester,
+        settings: store,
+        repository: repository,
+        chats: chats,
+        key: const ValueKey<String>('после перезапуска'),
+      );
+      expect(await _chats(chats), before);
+      expect(_openChat(tester), isNull);
+      final main = before[ChatThread.mainId]! as Map<String, Object?>;
+      expect(
+        _history(tester).length,
+        (main['messages']! as List<String>).length,
+      );
+      await _openSettings(tester);
+      await _tapSetting(tester, 'main-persona-noda');
+      await _openTasks(tester);
+      expect(await _chats(chats), before, reason: 'после перезапуска');
     });
 
     testWidgets('старые ответы сохраняют автора и текст', (tester) async {

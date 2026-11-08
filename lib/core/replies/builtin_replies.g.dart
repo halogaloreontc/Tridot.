@@ -54,6 +54,8 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "task.list": "Активных задач: {count}. Ближайшая — «{title}».",
     "task.list.withDue": "Активных задач: {count}. Ближайшая — «{title}», {due}.",
     "task.completed": "Задача «{title}» завершена.",
+    "task.reopened": "Задача «{title}» снова в работе.",
+    "task.chat.alreadyDone": "Задача «{title}» уже выполнена.",
     "task.rescheduled": "{м:Перенёс|ж:Перенесла} задачу «{title}» на {due}.",
     "task.notFound": "Не {м:нашёл|ж:нашла} активную задачу «{query}».",
     "task.overdue": "{вы:У вас|ты:У тебя} {count} {мн:count|просроченная задача|просроченные задачи|просроченных задач}: {titles}.",
@@ -221,6 +223,8 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
       "Отлично! Задача «{title}» завершена. {э:✅}",
       "Минус одно дело: «{title}» готово!"
     ],
+    "task.reopened": ["Задача «{title}» снова в работе — продолжаем! {э:💪}", "{м:Вернул|ж:Вернула} «{title}» в работу. {э:👌}"],
+    "task.chat.alreadyDone": "Задача «{title}» уже выполнена — ничего делать не нужно. {э:🙂}",
     "task.rescheduled": [
       "Без проблем! {м:Перенёс|ж:Перенесла} «{title}» на {due}. {э:👌}",
       "Готово, «{title}» теперь на {due}."
@@ -426,6 +430,8 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "task.list": "Задач: {count}. Ближайшая: «{title}».",
     "task.list.withDue": "Задач: {count}. Ближайшая: «{title}», {due}.",
     "task.completed": ["Завершено: «{title}».", "«{title}» — готово."],
+    "task.reopened": "Снова в работе: «{title}».",
+    "task.chat.alreadyDone": "Уже выполнено: «{title}».",
     "task.rescheduled": "Перенесено: «{title}» на {due}.",
     "task.notFound": "Нет активной задачи «{query}».",
     "task.overdue": "Просрочено: {count} — {titles}.",
@@ -550,6 +556,8 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "task.list": "Активных задач: {count}. Ближайшая по сроку — «{title}».",
     "task.list.withDue": "Активных задач: {count}. Ближайшая по сроку — «{title}», {due}.",
     "task.completed": ["Задача «{title}» выполнена.", "Задача «{title}» закрыта."],
+    "task.reopened": "Задача «{title}» возвращена в работу.",
+    "task.chat.alreadyDone": "Задача «{title}» уже выполнена.",
     "task.rescheduled": "Срок задачи «{title}» перенесён на {due}.",
     "task.notFound": "Активная задача «{query}» не найдена.",
     "task.overdue": "Внимание: {count} {мн:count|просроченная задача|просроченные задачи|просроченных задач} — {titles}.",

@@ -59,7 +59,13 @@ final class AssistantController {
         session = AssistantSession(clock: clock) {
     session
       ..replies = this.extensions.replyLibrary
-      ..extensions = this.extensions;
+      ..extensions = this.extensions
+      // Задачу завершили в её чате: в главном она больше не «её».
+      ..onForget = (String connectorId, String itemId) {
+        if (connectorId == TasksConnector.id && _mainSelection == itemId) {
+          _mainSelection = null;
+        }
+      };
     this.extensions.addListener(_onExtensionsChanged);
   }
 
@@ -120,6 +126,55 @@ final class AssistantController {
   /// Задачу завершили или удалили не через диалог.
   void forgetTask(String id) => session.forget(TasksConnector.id, id);
 
+  // ------------------------------------------------------------ чаты
+
+  /// Чат, открытый в интерфейсе: задача чата или `null` — главный.
+  String? _viewChatTaskId;
+
+  /// Выбор («её») главного чата, пока открыт чат задачи: при возврате в
+  /// главный он восстанавливается.
+  String? _mainSelection;
+
+  /// Сколько сообщений сейчас обрабатывается.
+  int _inFlight = 0;
+
+  /// Смену чата отложили до конца ответа.
+  bool _chatChangePending = false;
+
+  /// Задача чата, открытого в интерфейсе; `null` — главный.
+  String? get chatTaskId => _viewChatTaskId;
+
+  /// Интерфейс открыл другой чат: чат задачи [taskId] или главный
+  /// (`null`). Вопрос, который ждал ответа, снимается (его карточка в
+  /// покинутом чате устаревает): «да» в другом чате не применит чужой
+  /// вопрос. Отмена массовых изменений («Отменить») остаётся. В чате задачи
+  /// «её» — эта задача; в главном — прежний выбор главного чата.
+  ///
+  /// Если ответ ещё готовится, смена применится после него: контекст
+  /// сообщения не меняется посреди ответа.
+  void enterChat({String? taskId}) {
+    _viewChatTaskId = taskId;
+    session.takePendingConfirmation()?.onDropped?.call();
+    if (_inFlight > 0) {
+      _chatChangePending = true;
+      return;
+    }
+    _applyChat();
+  }
+
+  void _applyChat() {
+    final target = _viewChatTaskId;
+    if (session.chatTaskId == null) _mainSelection = selectedTaskId;
+    session.chatTaskId = target;
+    if (target != null) {
+      selectTask(target);
+    } else if (_mainSelection != null) {
+      selectTask(_mainSelection!);
+    } else {
+      clearSelection();
+    }
+  }
+
   /// Кто ответит на [message]: в дуэте обращение по имени («Noda, …»)
   /// важнее адресата [addressee] из поля ввода, а без них отвечает
   /// основной. В соло — всегда выбранный помощник, имя — просто текст.
@@ -152,14 +207,36 @@ final class AssistantController {
   /// Отвечает на сообщение пользователя. [addressee] — помощник,
   /// выбранный в поле ввода (только в дуэте). Если к помощнику обратились
   /// по имени, ответ это отмечает ([AssistantResponse.addressedPersonaId]).
-  Future<AssistantResponse> handle(String message, {String? addressee}) async {
+  ///
+  /// [chatTaskId] — задача чата, в котором отправлено сообщение (`null` —
+  /// главный чат): в чате задачи она — цель «готово», «закрой», «перенеси
+  /// на завтра» без вопроса «какую?» (docs/CONNECTORS.md, «Чат задачи»).
+  Future<AssistantResponse> handle(
+    String message, {
+    String? addressee,
+    String? chatTaskId,
+  }) async {
     // Кто ответит и обратились ли по имени — по настройкам на начало
     // сообщения.
     final settings = personas;
     final (persona, text, addressed) = resolve(message, addressee: addressee);
+    _inFlight++;
+    session.chatTaskId = chatTaskId;
+    if (chatTaskId != null) selectTask(chatTaskId);
     final before = session.pendingConfirmation;
     _answered = null;
-    final response = await _handle(settings, persona, text, addressed);
+    final AssistantResponse response;
+    try {
+      response = await _handle(settings, persona, text, addressed);
+    } finally {
+      _inFlight--;
+      if (_inFlight == 0 && _chatChangePending) {
+        _chatChangePending = false;
+        // Ответ пришёл в покинутый чат: его вопрос там и остаётся.
+        session.takePendingConfirmation()?.onDropped?.call();
+        _applyChat();
+      }
+    }
     // Вопрос сняли без ответа (другое сообщение): его карточка устарела.
     if (before != null &&
         !identical(session.pendingConfirmation, before) &&
@@ -295,7 +372,8 @@ final class AssistantController {
     required bool addressed,
   }) async {
     final connectors = _connectors;
-    final utterance = Utterance.analyze(message, now: session.clock.now());
+    final utterance = Utterance.analyze(message, now: session.clock.now())
+        .withChat(session.chatTaskId);
     final asker = session.pendingSpeaker;
     final pending = session.takePendingConfirmation();
     final owner = pending == null

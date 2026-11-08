@@ -38,10 +38,14 @@ class StorageScreen extends StatefulWidget {
     required this.completed,
     required this.now,
     required this.onReopen,
+    this.chatCount = 0,
   });
 
   final StorageInfo info;
   final int activeCount;
+
+  /// Сколько чатов с сообщениями (главный и чаты задач).
+  final int chatCount;
 
   /// Выполненные задачи, новые первыми.
   final List<Task> completed;
@@ -193,6 +197,15 @@ class _StorageScreenState extends State<StorageScreen> {
                           'активных: ${widget.activeCount} · '
                           'выполненных: ${completed.length}',
                           key: const ValueKey<String>('storage-counts'),
+                          style: const TextStyle(color: AssistantColors.text),
+                        ),
+                      ),
+                      _InfoRow(
+                        label: 'Чаты',
+                        child: Text(
+                          '${widget.chatCount} · '
+                          '${info.chatsLocation ?? 'только в памяти'}',
+                          key: const ValueKey<String>('storage-chats'),
                           style: const TextStyle(color: AssistantColors.text),
                         ),
                       ),

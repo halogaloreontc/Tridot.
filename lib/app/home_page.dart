@@ -1,12 +1,17 @@
 import 'dart:async';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
 
 import '../core/app_info.dart';
+import '../core/chats/chat_book.dart';
+import '../core/chats/chat_models.dart';
+import '../core/chats/chat_store.dart';
 import '../core/formatting/due_format.dart';
 import '../core/models/assistant_types.dart';
 import '../core/models/bulk.dart';
 import '../core/models/task.dart';
+import '../core/replies/reply_library.dart';
 import '../core/scenario/assistant_controller.dart';
 import '../core/services/clock.dart';
 import '../core/services/task_service.dart';
@@ -20,11 +25,13 @@ import 'screens/projects_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/storage_screen.dart';
 import 'widgets/bulk_checklist_card.dart';
+import 'widgets/chat_list.dart';
 import 'widgets/command_composer.dart';
 import 'widgets/document_view.dart';
 import 'widgets/history_rail.dart';
 import 'widgets/personas_section.dart';
 import 'widgets/status_cube.dart';
+import 'widgets/task_chat_header.dart';
 import 'widgets/task_tile.dart';
 
 /// Разделы бокового меню.
@@ -95,6 +102,7 @@ final class HomePage extends StatefulWidget {
     this.clock = const SystemClock(),
     this.storage = const MemoryStorageInfo(),
     this.settingsStore,
+    this.chatStore,
   });
 
   final AssistantController assistant;
@@ -102,6 +110,10 @@ final class HomePage extends StatefulWidget {
   final Clock clock;
   final StorageInfo storage;
   final SettingsStore? settingsStore;
+
+  /// Где хранятся чаты (ADR-010). По умолчанию — в памяти, как задачи и
+  /// настройки в тестах и режиме «Только в памяти».
+  final ChatStore? chatStore;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -120,9 +132,27 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   late final SettingsStore _settingsStore =
       widget.settingsStore ?? InMemorySettingsStore();
-  late List<_ChatMessage> _messages = <_ChatMessage>[_welcome()];
 
-  /// В чате только приветствие, показанное до загрузки настроек: его
+  /// Все чаты: главный и чаты задач (ADR-010).
+  late final ChatBook _book = ChatBook(
+    store: widget.chatStore ?? InMemoryChatStore(),
+    clock: widget.clock,
+  );
+
+  /// Сообщения открытого чата.
+  List<ChatMessage> get _messages => _book.current.messages;
+
+  /// Чаты прочитаны: до этого сообщения ждут, а помощник не пишет первым.
+  bool _chatsLoaded = false;
+
+  /// Загрузка чатов: сообщение, отправленное раньше, ждёт её.
+  late final Future<void> _chatsReady;
+
+  /// Сколько раз создавался чат задачи. Обновление списка задач, начатое
+  /// до создания, не удаляет новый чат ([_refresh], [ChatBook.prune]).
+  int _chatCreations = 0;
+
+  /// В главном чате только приветствие, показанное до загрузки настроек: его
   /// можно произнести голосом основного помощника из настроек.
   bool _pristineWelcome = true;
 
@@ -136,15 +166,21 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// День, за который уже проверены просроченные задачи.
   String? _noticeChecked;
 
-  /// Кому писать в дуэте, выбор в поле ввода: `null` — основному. Живёт,
-  /// пока открыт этот чат, и не сохраняется. Обращение по имени («Нода,
-  /// …») меняет его так же, как нажатие на переключатель
+  /// Кому писать в дуэте, выбор в поле ввода: `null` — основному. У
+  /// каждого чата свой и сохраняется вместе с чатом
+  /// ([ChatThread.addressee]). Обращение по имени («Нода, …») меняет его
+  /// так же, как нажатие на переключатель
   /// ([AssistantController.addresseeAfter]): к кому обратились, тот и
   /// продолжает. Смена настроек его не трогает.
-  String? _addressee;
+  String? get _addressee => _book.current.addressee;
+
+  set _addressee(String? value) => _book.setAddressee(_book.currentId, value);
 
   /// «Команда обрабатывается…» от помощника, который сейчас отвечает.
-  _ChatMessage? _working;
+  ChatMessage? _working;
+
+  /// Чат, в котором ждут ответа [_working].
+  String? _workingChatId;
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
   final List<String> _commands = <String>[];
   int? _commandCursor;
@@ -196,7 +232,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ]) {
       controller.addListener(_onDocumentEdited);
     }
+    _book.resetMain(<ChatMessage>[_welcome()]);
     _settingsReady = _loadSettings();
+    _chatsReady = _loadChats();
     _refresh();
   }
 
@@ -225,6 +263,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _docProject.dispose();
     _docBody.dispose();
     _docBodyFocus.dispose();
+    // Отложенная запись чатов — сразу, при закрытии экрана.
+    unawaited(_book.flush());
     super.dispose();
   }
 
@@ -232,23 +272,44 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _refresh();
     if (state == AppLifecycleState.paused) _saveDocument();
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      unawaited(_book.flush());
+    }
   }
 
+  /// Закрытие окна на компьютере: отложенная запись чатов успевает
+  /// закончиться до выхода (на телефоне её даёт пауза приложения). Диск не
+  /// отвечает — выход не держим дольше [_exitFlushLimit].
+  @override
+  Future<AppExitResponse> didRequestAppExit() async {
+    try {
+      await _book.flush().timeout(_exitFlushLimit);
+    } on Object {
+      // Не успели или не записали: выходим всё равно.
+    }
+    return AppExitResponse.exit;
+  }
+
+  static const Duration _exitFlushLimit = Duration(seconds: 3);
+
   /// Приветствие основного помощника.
-  _ChatMessage _welcome() =>
+  ChatMessage _welcome() =>
       _answer(widget.assistant.welcome(), withStatus: false);
 
   /// Ответ помощника в историю: готовый текст и автор. Смена стиля или
   /// помощника потом его не переписывает.
   /// [withStatus] — показывать ли «Уточните»/«Ошибка» по статусу ответа
   /// (у приветствия и «обрабатывается…» статуса нет).
-  _ChatMessage _answer(
+  ChatMessage _answer(
     AssistantResponse response, {
     bool withStatus = true,
   }) =>
-      _ChatMessage(
+      ChatMessage(
+        id: _book.newMessageId(),
+        author: ChatAuthor.persona,
         text: response.message,
-        fromUser: false,
         timestamp: _now,
         status: withStatus ? response.status : null,
         taskId: response.task?.id,
@@ -269,7 +330,20 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _settings = settings;
       _settingsLoaded = true;
       // Приветствие до загрузки настроек звучало голосом по умолчанию.
-      if (_pristineWelcome) _messages = <_ChatMessage>[_welcome()];
+      if (_pristineWelcome) _book.resetMain(<ChatMessage>[_welcome()]);
+    });
+    _maybeNotice();
+  }
+
+  /// Чаты с диска. Если в главном есть сохранённые сообщения, они
+  /// заменяют приветствие; чаты задач читаются при открытии.
+  Future<void> _loadChats() async {
+    final restored = await _book.load();
+    if (!mounted) return;
+    setState(() {
+      _chatsLoaded = true;
+      if (restored) _pristineWelcome = false;
+      _messageKeys.clear();
     });
     _maybeNotice();
   }
@@ -301,7 +375,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// запоминается в настройках, поэтому ни перезапуск, ни смена настроек
   /// помощников сообщение не повторяют.
   void _maybeNotice() {
-    if (!mounted || !_settingsLoaded || !_loaded || _loadError != null) return;
+    if (!mounted ||
+        !_settingsLoaded ||
+        !_chatsLoaded ||
+        !_loaded ||
+        _loadError != null) {
+      return;
+    }
     // Пока готовится ответ, напоминание не вклиниваем между командой и
     // ответом: после ответа _send вызовет _refresh → _maybeNotice.
     if (_sending) return;
@@ -313,14 +393,18 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final overdue = _active.where((Task t) => isOverdue(t, now)).toList();
     final notice = widget.assistant.overdueNotice(overdue);
     if (notice == null) return;
+    // Напоминание — в главный чат; если открыт другой, у главного точка
+    // «не прочитано» в меню.
     setState(() {
       _pristineWelcome = false;
-      _messages.add(_answer(notice));
+      _book.append(ChatThread.mainId, _answer(notice));
     });
     _changeSettings(_settings.copyWith(noticeDay: today));
   }
 
   Future<void> _refresh() async {
+    final creations = _chatCreations;
+    var chatRemoved = false;
     try {
       final active = await widget.tasks.listActive();
       final all = await widget.tasks.listAll();
@@ -332,7 +416,15 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _completed = completed;
         _loadError = null;
         _loaded = true;
+        // Чаты удалённых задач удаляются; выполненных — остаются. Пока
+        // список читался, могли создать чат новой задачи: тогда не трогаем.
+        if (_book.loaded && creations == _chatCreations) {
+          chatRemoved = _book.prune(<String>{
+            for (final task in all) task.id,
+          });
+        }
       });
+      if (chatRemoved) _onChatChanged();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -371,7 +463,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
   }
 
-  Task? get _selectedTask => _findTask(widget.assistant.selectedTaskId);
+  /// Задача, с которой работает помощник: в чате задачи — она сама, в
+  /// главном — выбранная («её»).
+  Task? get _selectedTask =>
+      _findTask(_book.current.taskId ?? widget.assistant.selectedTaskId);
 
   Task? _findTask(String? id) {
     if (id == null) return null;
@@ -386,22 +481,37 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _input.text).trim();
     if (text.isEmpty || _sending) return;
-    if (!_settingsLoaded) {
-      // Настройки ещё читаются: ждём их, иначе ответит помощник по
-      // умолчанию, а не выбранный. Повторная отправка в это время — нет.
+    if (!_settingsLoaded || !_chatsLoaded) {
+      // Настройки или чаты ещё читаются: ждём их, иначе ответит помощник
+      // по умолчанию, а не выбранный, и сообщение затрётся историей с
+      // диска. Повторная отправка в это время — нет.
       _sending = true;
       try {
         await _settingsReady;
       } on Object {
         // Не прочитались — отвечаем с настройками по умолчанию.
       }
+      try {
+        await _chatsReady;
+      } on Object {
+        // Чаты не прочитались — пишем в пустые.
+      }
       _sending = false;
       if (!mounted) return;
     }
     _cubeTimer?.cancel();
-    // Адресат и голос фиксируются сейчас: смена настроек во время ответа
-    // применится со следующего сообщения.
+    // Чат, адресат и голос фиксируются сейчас: ответ придёт в этот чат,
+    // даже если пользователь успеет открыть другой, а смена настроек во
+    // время ответа применится со следующего сообщения.
+    final chatId = _book.currentId;
+    final chatTaskId = _book.current.taskId;
     final addressee = _duo ? _addressee : null;
+    final command = ChatMessage(
+      id: _book.newMessageId(),
+      author: ChatAuthor.user,
+      text: text,
+      timestamp: _now,
+    );
     setState(() {
       _sending = true;
       _pristineWelcome = false;
@@ -410,14 +520,19 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         widget.assistant.working(text, addressee: addressee),
         withStatus: false,
       );
-      _messages.add(_ChatMessage(text: text, fromUser: true, timestamp: _now));
+      _workingChatId = chatId;
+      _book.append(chatId, command);
       _commands.add(text);
       _commandCursor = null;
       if (preset == null) _input.clear();
     });
     _scrollToLatest();
     await _saveDocument();
-    final response = await widget.assistant.handle(text, addressee: addressee);
+    final response = await widget.assistant.handle(
+      text,
+      addressee: addressee,
+      chatTaskId: chatTaskId,
+    );
     if (!mounted) return;
     // «Говори короче», «давай на ты»: тот же путь, что у экрана настроек,
     // — к настройкам на сейчас, с сохранением в settings.json.
@@ -427,17 +542,42 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _settings.copyWith(personas: change.apply(_settings.personas)),
       );
     }
+    // Ответ о новой (или уже существующей) задаче ведёт в её чат.
+    final task = response.task;
+    final aboutTask = response.intent == 'task.create' && task != null;
+    var reply = _answer(response);
+    if (aboutTask) {
+      reply = reply.withLink(
+        ChatLink(chatId: ChatThread.taskChatId(task.id), taskId: task.id),
+      );
+    }
     setState(() {
       _sending = false;
       _working = null;
+      _workingChatId = null;
       // Пока готовился ответ, адресата могли выбрать в поле: обращение
       // по имени важнее, без него выбор остаётся.
-      _addressee = widget.assistant.addresseeAfter(
-        response,
-        current: _addressee,
+      _book.setAddressee(
+        chatId,
+        widget.assistant.addresseeAfter(
+          response,
+          current: _book.thread(chatId)?.addressee,
+        ),
       );
       _cube = cubeStateFor(response.status);
-      _messages.add(_answer(response));
+      _book.append(chatId, reply);
+      if (aboutTask &&
+          response.status == AssistantStatus.completed &&
+          _book.taskThread(task.id) == null) {
+        // Новая задача: её чат начинается с команды и ответа.
+        _chatCreations++;
+        _book.onTaskCreated(
+          task.id,
+          fromChatId: chatId,
+          command: command,
+          reply: reply,
+        );
+      }
     });
     _cubeTimer = Timer(const Duration(milliseconds: 1600), () {
       if (mounted && !_sending) setState(() => _cube = CubeState.idle);
@@ -529,14 +669,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  /// «Очистить историю чатов»: чаты задач удаляются, главный начинается с
+  /// приветствия. Задачи не меняются.
   void _clearChat() {
     // Вопрос со списком снимается, отменить прежние массовые изменения
     // из чата больше нельзя.
     widget.assistant.clearConversation();
+    unawaited(_book.clearAll());
+    widget.assistant.enterChat();
     setState(() {
-      _messages = <_ChatMessage>[_welcome()];
+      _book.append(ChatThread.mainId, _welcome());
       _pristineWelcome = false;
-      _addressee = null;
       _messageKeys.clear();
       _commands.clear();
       _commandCursor = null;
@@ -595,25 +738,101 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // ------------------------------------------------------------- задачи
 
-  void _selectTask(Task task, {bool openDocument = false}) {
-    widget.assistant.selectTask(task.id);
-    setState(() {
-      _section = AppSection.tasks;
-      if (openDocument) _mode = AssistantViewMode.document;
-    });
-    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
-      Navigator.of(context).pop();
+  // --------------------------------------------------------------- чаты
+
+  /// Открывает чат задачи [task] (создаёт его при первом открытии). [mode]
+  /// — режим после открытия; `null` — прежний (панель «Активные» не
+  /// переключает документ на диалог). Повторное нажатие на задачу открытого
+  /// чата ничего не меняет.
+  void _openTaskChat(Task task, {AssistantViewMode? mode}) {
+    if (_book.current.taskId == task.id && _section == AppSection.tasks) {
+      _closeDrawers();
+      if (mode != null && mode != _mode) _setMode(mode);
+      return;
     }
-    unawaited(_syncDocument());
+    _chatCreations++;
+    _switchChat(() => _book.openTask(task.id), mode: mode);
   }
 
-  void _toggleSelection(Task task) {
-    if (widget.assistant.selectedTaskId == task.id) {
-      setState(widget.assistant.clearSelection);
-      unawaited(_syncDocument());
-    } else {
-      _selectTask(task);
+  void _openChat(String chatId) {
+    if (chatId == _book.currentId && _section == AppSection.tasks) {
+      _closeDrawers();
+      return;
     }
+    _switchChat(() => _book.open(chatId), mode: AssistantViewMode.dialogue);
+  }
+
+  /// «Назад» из чата задачи: к предыдущему чату, иначе в главный.
+  void _goBack() => _switchChat(_book.back);
+
+  /// Переключение сразу: сообщения незагруженного чата появятся, когда
+  /// прочитаются.
+  void _switchChat(
+    Future<ChatThread> Function() open, {
+    AssistantViewMode? mode,
+  }) {
+    _closeDrawers();
+    unawaited(_saveDocument());
+    final wasLoaded = _book.loaded;
+    final loading = open();
+    if (wasLoaded) _onChatChanged(mode: mode);
+    unawaited(
+      loading.then((_) {
+        if (!mounted) return;
+        if (wasLoaded) {
+          setState(() {});
+        } else {
+          _onChatChanged(mode: mode);
+        }
+      }),
+    );
+  }
+
+  /// Открыт другой чат: контекст помощника («её», ожидание вопроса),
+  /// документ и лента — по нему.
+  void _onChatChanged({AssistantViewMode? mode}) {
+    widget.assistant.enterChat(taskId: _book.current.taskId);
+    setState(() {
+      _section = AppSection.tasks;
+      if (mode != null) _mode = mode;
+      _messageKeys.clear();
+      _highlightedCommand = null;
+    });
+    unawaited(_syncDocument());
+    _scrollToLatest();
+  }
+
+  void _closeDrawers() {
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold == null) return;
+    if (scaffold.isEndDrawerOpen) scaffold.closeEndDrawer();
+    if (scaffold.isDrawerOpen) scaffold.closeDrawer();
+  }
+
+  /// «Выполнено» / «Вернуть в работу» в шапке чата задачи: строка об этом
+  /// — в чат голосом основного помощника.
+  Future<void> _setDoneFromHeader(Task task, {required bool done}) async {
+    final chatId = ChatThread.taskChatId(task.id);
+    try {
+      final updated = done
+          ? await widget.tasks.complete(task.id)
+          : await widget.tasks.reopen(task.id);
+      if (done) widget.assistant.forgetTask(task.id);
+      final line = widget.assistant.speak(
+        Reply(
+          done ? 'task.completed' : 'task.reopened',
+          <String, String>{'title': updated.title},
+        ),
+        widget.assistant.personas.responder,
+        intent: done ? 'task.complete' : 'task.reopen',
+      );
+      if (!mounted) return;
+      setState(() => _book.append(chatId, _answer(line)));
+      _scrollToLatest();
+    } catch (error) {
+      if (mounted) _announce('Не получилось: $error');
+    }
+    await _refresh();
   }
 
   Future<void> _toggleDone(Task task) async {
@@ -915,6 +1134,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: ListView(
               padding: EdgeInsets.zero,
               children: <Widget>[
+                _buildChatList(expanded: expanded),
                 for (final section in items)
                   _NavItem(
                     section: section,
@@ -972,6 +1192,34 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  /// «Главный» и последние чаты задач в боковом меню.
+  Widget _buildChatList({required bool expanded}) {
+    final inChats = _section == AppSection.tasks;
+    return ChatList(
+      expanded: expanded,
+      mainActive: inChats && _book.current.isMain,
+      mainUnread: _book.main.unread,
+      entries: <ChatListEntry>[
+        for (final thread in _book.recent())
+          if (_findTask(thread.taskId) case final Task task)
+            ChatListEntry(
+              taskId: task.id,
+              title: task.title,
+              done: task.status == TaskStatus.done,
+              unread: thread.unread,
+              active: inChats && _book.currentId == thread.id,
+            ),
+      ],
+      onOpenMain: () => _openChat(ChatThread.mainId),
+      onOpenTask: (String taskId) {
+        final task = _findTask(taskId);
+        if (task != null) {
+          _openTaskChat(task, mode: AssistantViewMode.dialogue);
+        }
+      },
+    );
+  }
+
   void _goTo(AppSection section) {
     unawaited(_saveDocument());
     setState(() => _section = section);
@@ -981,7 +1229,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (section != AppSection.tasks) unawaited(_refresh());
   }
 
-  /// Выход из чата по задаче в общий чат: выбор снимается, режим —
+  /// Выход из выбранной задачи в главном чате: выбор снимается, режим —
   /// «Диалог», курсор в поле ввода — можно сразу создавать новую задачу.
   void _exitTask() {
     unawaited(_saveDocument());
@@ -995,10 +1243,15 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _buildWorkspace({required bool narrow, required bool wide}) {
     final selected = _selectedTask;
-    final taskInFocus =
-        _section == AppSection.tasks && selected != null && selected.isActive
-            ? selected
-            : null;
+    final chatTaskId =
+        _section == AppSection.tasks ? _book.current.taskId : null;
+    final inTaskChat = chatTaskId != null;
+    final taskInFocus = !inTaskChat &&
+            _section == AppSection.tasks &&
+            selected != null &&
+            selected.isActive
+        ? selected
+        : null;
     // Material, а не ColoredBox: на нём рисуются подсветка и всплески
     // нажатий у ListTile и кнопок во всех разделах.
     return Material(
@@ -1011,13 +1264,14 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               padding: EdgeInsets.symmetric(horizontal: narrow ? 4 : 16),
               child: Row(
                 children: <Widget>[
-                  // В чате по задаче слева — «назад» в общий чат (там
-                  // создаются новые задачи); на телефоне он заменяет меню.
-                  if (taskInFocus != null)
+                  // В чате задачи слева — «назад» к предыдущему чату, при
+                  // выбранной задаче в главном — снять выбор; на телефоне
+                  // он заменяет меню.
+                  if (inTaskChat || taskInFocus != null)
                     IconButton(
                       key: const Key('task-back'),
-                      tooltip: 'Назад к общему чату',
-                      onPressed: _exitTask,
+                      tooltip: inTaskChat ? 'Назад' : 'Назад к общему чату',
+                      onPressed: inTaskChat ? _goBack : _exitTask,
                       style: narrow
                           ? null
                           : IconButton.styleFrom(
@@ -1044,22 +1298,28 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   // Заголовок занимает всё свободное место, поэтому поиск и
                   // кнопка панели прижаты к правому краю.
                   Expanded(
-                    child: taskInFocus == null
-                        ? _SectionTitle(
-                            title: _section.title,
-                            subtitle: _section == AppSection.tasks &&
-                                    _active.isNotEmpty &&
-                                    !narrow
-                                ? '${_active.length} активных'
-                                : null,
-                          )
-                        : _TaskCrumb(
-                            task: taskInFocus,
-                            now: _now,
-                            narrow: narrow,
-                            onOpenDocument: () =>
-                                _setMode(AssistantViewMode.document),
-                          ),
+                    child: inTaskChat
+                        ? _buildTaskChatHeader(chatTaskId, narrow: narrow)
+                        : taskInFocus == null
+                            ? _SectionTitle(
+                                title: _section.title,
+                                subtitle: _section == AppSection.tasks &&
+                                        _active.isNotEmpty &&
+                                        !narrow
+                                    ? '${_active.length} активных'
+                                    : null,
+                              )
+                            : _TaskCrumb(
+                                task: taskInFocus,
+                                now: _now,
+                                narrow: narrow,
+                                onOpenDocument: () =>
+                                    _setMode(AssistantViewMode.document),
+                                onOpenChat: () => _openTaskChat(
+                                  taskInFocus,
+                                  mode: AssistantViewMode.dialogue,
+                                ),
+                              ),
                   ),
                   if (_section == AppSection.tasks && !narrow) ...<Widget>[
                     _SearchField(
@@ -1089,10 +1349,35 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildTaskChatHeader(String taskId, {required bool narrow}) {
+    final task = _findTask(taskId);
+    return TaskChatHeader(
+      task: task,
+      now: _now,
+      narrow: narrow,
+      onDone: () {
+        if (task != null) unawaited(_setDoneFromHeader(task, done: true));
+      },
+      onReopen: () {
+        if (task != null) unawaited(_setDoneFromHeader(task, done: false));
+      },
+      onReschedule: () {
+        if (_mode != AssistantViewMode.dialogue) {
+          _setMode(AssistantViewMode.dialogue);
+        }
+        _applyTemplate('Перенеси на |');
+      },
+      onOpenDocument: () => _setMode(AssistantViewMode.document),
+    );
+  }
+
   Widget _buildSection({required bool wide}) {
     final now = _now;
     final selectedId = _selectedTask?.id;
-    void open(Task task) => _selectTask(task, openDocument: true);
+    // Задача из списков открывается своим чатом, в режиме «Диалог»;
+    // документ — кнопкой в шапке чата.
+    void open(Task task) =>
+        _openTaskChat(task, mode: AssistantViewMode.dialogue);
     switch (_section) {
       case AppSection.overview:
         return OverviewScreen(
@@ -1125,6 +1410,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           activeCount: _active.length,
           completed: _completed,
           now: now,
+          chatCount:
+              _book.threads.where((ChatThread t) => t.messageCount > 0).length,
           onReopen: (Task task) async {
             await widget.tasks.reopen(task.id);
             await _refresh();
@@ -1135,7 +1422,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           settings: _settings,
           onChanged: _changeSettings,
           onClearChat: _clearChat,
-          messageCount: _messages.length,
+          messageCount: _book.totalMessages,
           extensions: widget.assistant.extensions,
         );
       case AppSection.tasks:
@@ -1217,18 +1504,28 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
       final key =
           message.fromUser ? _messageKeys.putIfAbsent(i, GlobalKey.new) : null;
+      final (linkLabel, linkKey) = _linkOf(message);
       rows.add(
         _MessageRow(
           key: key,
           message: message,
-          task: _findTask(message.taskId),
+          // В чате задачи плитка самой задачи под ответами не нужна: она в
+          // шапке.
+          task: message.taskId == _book.current.taskId
+              ? null
+              : _findTask(message.taskId),
           now: _now,
           showTime: _settings.showTimestamps,
           highlighted: commandIndexOf[i] == _highlightedCommand,
           cube: i == latestAnswer && !_sending ? _cubeWidget() : null,
           selectedId: _selectedTask?.id,
-          onOpenTask: (Task task) => _selectTask(task, openDocument: true),
+          onOpenTask: (Task task) =>
+              _openTaskChat(task, mode: AssistantViewMode.dialogue),
           onToggleDone: _toggleDone,
+          linkLabel: linkLabel,
+          linkKey: linkKey,
+          onOpenLink:
+              linkLabel == null ? null : () => _followLink(message.link!),
           checklist: _checklistCard(
             message,
             i,
@@ -1239,7 +1536,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
     }
     final working = _working;
-    if (_sending && working != null) {
+    if (_sending && working != null && _workingChatId == _book.currentId) {
       rows.add(
         _MessageRow(
           key: const Key('working-message'),
@@ -1269,6 +1566,34 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  /// Подпись и ключ ссылки под сообщением или `(null, null)`: «Открыть чат
+  /// задачи» в главном чате, «из чата «Главный»» под копией в чате задачи.
+  /// Ссылка на открытый чат или на удалённую задачу не показывается.
+  (String?, Key?) _linkOf(ChatMessage message) {
+    final link = message.link;
+    if (link == null || link.chatId == _book.currentId) return (null, null);
+    if (link.chatId == ChatThread.mainId) {
+      return ('из чата «Главный»', const Key('chat-origin-link'));
+    }
+    final task = _findTask(link.taskId);
+    if (task == null) return (null, null);
+    final current = _book.current;
+    // Копия в чате задачи ведёт в чат задачи-родителя.
+    if (!current.isMain && current.parentTaskId == task.id) {
+      return ('из чата «${task.title}»', const Key('chat-origin-link'));
+    }
+    return ('Открыть чат задачи', Key('open-task-chat-${task.id}'));
+  }
+
+  void _followLink(ChatLink link) {
+    final task = _findTask(link.taskId);
+    if (link.chatId != ChatThread.mainId && task != null) {
+      _openTaskChat(task, mode: AssistantViewMode.dialogue);
+    } else {
+      _openChat(link.chatId);
+    }
+  }
+
   Widget _buildDialogue() {
     // Карточке списка нужна высота видимой части чата, а не экрана.
     return LayoutBuilder(
@@ -1278,7 +1603,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget? _checklistCard(
-    _ChatMessage message,
+    ChatMessage message,
     int index,
     Map<String, int> lastWithChecklist,
     double viewportHeight,
@@ -1489,7 +1814,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 task: task,
                 now: now,
                 selected: task.id == selectedId,
-                onTap: () => _toggleSelection(task),
+                onTap: () => _openTaskChat(task),
                 onToggleDone: () => _toggleDone(task),
               ),
           ],
@@ -1565,32 +1890,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 }
 
 // ------------------------------------------------------------------ части
-
-final class _ChatMessage {
-  const _ChatMessage({
-    required this.text,
-    required this.fromUser,
-    required this.timestamp,
-    this.status,
-    this.taskId,
-    this.personaId,
-    this.checklist,
-  });
-
-  final String text;
-  final bool fromUser;
-  final DateTime timestamp;
-  final AssistantStatus? status;
-  final String? taskId;
-
-  /// Кто из помощников написал: `rio`, `noda`. Хранится вместе с готовым
-  /// текстом, поэтому смена помощника не переписывает историю.
-  final String? personaId;
-
-  /// Список массовой команды под ответом — данные, а не текст: карточка
-  /// показывает его текущее состояние ([BulkChecklist.toJson] для истории).
-  final BulkChecklist? checklist;
-}
 
 final class _NavItem extends StatelessWidget {
   const _NavItem({
@@ -1706,6 +2005,59 @@ final class _DaySeparator extends StatelessWidget {
   }
 }
 
+/// Ссылка на другой чат под сообщением. Текст переносится: при узком
+/// экране и крупном шрифте подпись не обрезается.
+final class _ChatLinkChip extends StatelessWidget {
+  const _ChatLinkChip({
+    super.key,
+    required this.label,
+    required this.origin,
+    required this.onTap,
+  });
+
+  final String label;
+
+  /// Ссылка назад, в чат, где создана задача (иначе — в чат задачи).
+  final bool origin;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            border: Border.all(color: AssistantColors.borderSoft),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Wrap(
+            spacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: <Widget>[
+              Icon(
+                origin ? Icons.subdirectory_arrow_left : Icons.forum_outlined,
+                size: 14,
+                color: AssistantColors.muted,
+              ),
+              Text(
+                label,
+                style: technicalTextStyle.copyWith(color: AssistantColors.text),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 final class _MessageRow extends StatelessWidget {
   const _MessageRow({
     super.key,
@@ -1719,9 +2071,17 @@ final class _MessageRow extends StatelessWidget {
     this.highlighted = false,
     this.selectedId,
     this.checklist,
+    this.linkLabel,
+    this.linkKey,
+    this.onOpenLink,
   });
 
-  final _ChatMessage message;
+  final ChatMessage message;
+
+  /// Ссылка на другой чат под сообщением: подпись, ключ и действие.
+  final String? linkLabel;
+  final Key? linkKey;
+  final VoidCallback? onOpenLink;
 
   /// Карточка массовой команды под текстом ответа.
   final Widget? checklist;
@@ -1844,6 +2204,16 @@ final class _MessageRow extends StatelessWidget {
               onToggleDone: () => onToggleDone(current),
             ),
           ),
+        if (linkLabel != null && onOpenLink != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: _ChatLinkChip(
+              key: linkKey,
+              label: linkLabel!,
+              origin: linkKey == const Key('chat-origin-link'),
+              onTap: onOpenLink!,
+            ),
+          ),
         if (showTime)
           Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -1907,6 +2277,7 @@ final class _TaskCrumb extends StatelessWidget {
     required this.now,
     required this.narrow,
     required this.onOpenDocument,
+    required this.onOpenChat,
   });
 
   final Task task;
@@ -1914,19 +2285,39 @@ final class _TaskCrumb extends StatelessWidget {
   final bool narrow;
   final VoidCallback onOpenDocument;
 
+  /// Открыть чат этой задачи.
+  final VoidCallback onOpenChat;
+
+  /// Меньше — строка «Задачи › «её»» и название в две строки, как на
+  /// узком экране: рядом с поиском и кнопкой панели полной строке тесно.
+  static const double _fullWidth = 480;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) =>
+            _build(context, narrow || constraints.maxWidth < _fullWidth),
+      );
+
+  Widget _build(BuildContext context, bool narrow) {
     final due = task.dueAt;
     const titleStyle = TextStyle(
       fontSize: 16,
       fontWeight: FontWeight.w600,
       color: AssistantColors.textStrong,
     );
+    final chatButton = IconButton(
+      key: const Key('open-task-chat'),
+      tooltip: 'Открыть чат задачи',
+      onPressed: onOpenChat,
+      iconSize: 16,
+      icon: const Icon(Icons.forum_outlined),
+    );
     if (narrow) {
       // Две строки помещаются в панель высотой 56, только пока шрифт не
       // крупный; иначе остаётся название задачи, подпись — в подсказке.
+      final Widget crumb;
       if (MediaQuery.textScalerOf(context).scale(1) > 1.3) {
-        return Tooltip(
+        crumb = Tooltip(
           message: 'Задачи › «её»',
           child: Text(
             task.title,
@@ -1936,21 +2327,29 @@ final class _TaskCrumb extends StatelessWidget {
             style: titleStyle,
           ),
         );
+      } else {
+        crumb = Column(
+          key: const Key('selected-task-strip'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          // Плотные строки: две строки и в панели над узкой колонкой
+          // помещаются в её высоту при любом шрифте.
+          children: <Widget>[
+            Text(
+              'Задачи › «её»',
+              maxLines: 1,
+              style: technicalTextStyle.copyWith(height: 1.2),
+            ),
+            Text(
+              task.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: titleStyle.copyWith(height: 1.25),
+            ),
+          ],
+        );
       }
-      return Column(
-        key: const Key('selected-task-strip'),
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          const Text('Задачи › «её»', style: technicalTextStyle),
-          Text(
-            task.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: titleStyle,
-          ),
-        ],
-      );
+      return Row(children: <Widget>[Expanded(child: crumb), chatButton]);
     }
     return Row(
       children: <Widget>[
@@ -1997,11 +2396,17 @@ final class _TaskCrumb extends StatelessWidget {
                 ),
                 if (due != null) ...<Widget>[
                   const SizedBox(width: 8),
-                  Text(
-                    formatDue(due, task.duePrecision, now),
-                    style: technicalTextStyle,
+                  // Срок тоже сжимается: рядом с поиском места мало.
+                  Flexible(
+                    child: Text(
+                      formatDue(due, task.duePrecision, now),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: technicalTextStyle,
+                    ),
                   ),
                 ],
+                chatButton,
                 IconButton(
                   tooltip: 'Открыть документ задачи',
                   onPressed: onOpenDocument,

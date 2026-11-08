@@ -37,9 +37,10 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AssistantColors.raised,
-        title: const Text('Очистить историю чата?'),
+        title: const Text('Очистить историю чатов?'),
         content: const Text(
-          'Сообщения будут удалены. Задачи останутся на месте.',
+          'Сообщения всех чатов, в том числе чатов задач, будут удалены. '
+          'Задачи останутся на месте.',
         ),
         actions: <Widget>[
           TextButton(
@@ -128,7 +129,7 @@ class SettingsScreen extends StatelessWidget {
                       ),
                       onPressed: canClear ? () => _confirmClear(context) : null,
                       icon: const Icon(Icons.delete_sweep_outlined, size: 18),
-                      label: const Text('Очистить историю чата'),
+                      label: const Text('Очистить историю чатов'),
                     ),
                     const SizedBox(height: 6),
                     Text(

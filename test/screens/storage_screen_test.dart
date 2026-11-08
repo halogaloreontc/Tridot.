@@ -23,6 +23,9 @@ final class FakeStorageInfo implements StorageInfo {
   @override
   final String? location;
 
+  @override
+  String? get chatsLocation => null;
+
   final int? size;
 
   @override

@@ -6,6 +6,7 @@ import '../scenario/scenario_parser.dart';
 import '../services/task_service.dart';
 import '../skills/talk/talk_phrases.dart';
 import 'connector.dart';
+import 'task_chat_phrases.dart';
 
 /// Встроенный коннектор задач: создание, список, перенос и завершение.
 ///
@@ -126,7 +127,21 @@ final class TasksConnector
         payload: BulkUndoRequest(),
       );
     }
-    final command = _parser.parseUtterance(utterance);
+    var command = _parser.parseUtterance(utterance);
+    if (command.intent == CommandIntent.unknown) {
+      // В чате задачи: «закрой», «на завтра» — о ней (TaskChatPhrases).
+      final inChat = TaskChatPhrases.match(utterance);
+      if (inChat != null) {
+        return ConnectorMatch(
+          connectorId: id,
+          commandId: inChat.intent == CommandIntent.completeTask
+              ? 'task.complete'
+              : 'task.reschedule',
+          confidence: inChat.intent == CommandIntent.completeTask ? 0.8 : 0.75,
+          payload: inChat,
+        );
+      }
+    }
     final (commandId, confidence) = switch (command.intent) {
       // Без маркера — ниже явных команд любого коннектора: «через 3 дня
       // сдать отчёт» с явным сроком увереннее, чем «купить хлеб».
@@ -296,6 +311,16 @@ final class TasksConnector
     final query =
         command.targetQuery ?? (command.pastTense ? command.title : null);
     if (command.pastTense && query != null) {
+      // «Я купил хлеб» в чате «Купить хлеб»: задача не угадана, а названа
+      // самим чатом — без вопроса.
+      final chatTask = await _chatTask(session);
+      if (chatTask != null &&
+          chatTask.isActive &&
+          await _isBestHit(chatTask, query)) {
+        final task = await _tasks.complete(chatTask.id);
+        session.forget(id, task.id);
+        return _completed(task, session);
+      }
       return _askToComplete(command, query, session);
     }
     final target = await _resolveTarget(
@@ -310,6 +335,30 @@ final class TasksConnector
     // требует нового выбора, а не тихо открывает её снова.
     session.forget(id, task.id);
     return _completed(task, session);
+  }
+
+  /// Задача чата, в котором пришло сообщение, или `null` (главный чат,
+  /// задачу удалили).
+  Future<Task?> _chatTask(AssistantSession session) async {
+    final chatTaskId = session.chatTaskId;
+    if (chatTaskId == null) return null;
+    for (final task in await _tasks.listAll()) {
+      if (task.id == chatTaskId) return task;
+    }
+    return null;
+  }
+
+  /// [task] среди лучших совпадений поиска по [query] (как в
+  /// [_askToComplete]).
+  Future<bool> _isBestHit(Task task, String query) async {
+    final exact = await _tasks.findActiveByTitle(query);
+    if (exact.isNotEmpty) return exact.any((Task t) => t.id == task.id);
+    final hits = await _tasks.searchActive(query, verbForms: true);
+    if (hits.isEmpty) return false;
+    final best = hits.first.score;
+    return hits.any(
+      (TaskSearchHit h) => h.task.id == task.id && best - h.score <= 0.1 + 1e-9,
+    );
   }
 
   /// «Я купил хлеб»: найти задачу и спросить, отметить ли её. Сразу
@@ -1192,6 +1241,26 @@ final class TasksConnector
     final titleQuestion = _titleClarification(command.titleIssue);
     if (titleQuestion != null) return _Target.ask(ask(titleQuestion));
 
+    final chatTask = await _chatTask(session);
+    if (chatTask != null) {
+      final other = await _otherTarget(command, chatTask, ask);
+      if (other != null) return other;
+      if (!chatTask.isActive) {
+        // «Готово» и «перенеси на завтра» в чате выполненной задачи ничего
+        // не меняют: вернуть её в работу — кнопкой в шапке чата.
+        return _Target.ask(
+          session.reply(
+            'task.chat.alreadyDone',
+            values: <String, String>{'title': chatTask.title},
+            intent: intent,
+            status: AssistantStatus.noAction,
+            task: chatTask,
+          ),
+        );
+      }
+      return _Target.id(chatTask.id);
+    }
+
     final name = command.title ?? command.targetQuery;
     if (name != null) {
       final exact = await _tasks.findActiveByTitle(name);
@@ -1240,6 +1309,72 @@ final class TasksConnector
     final selected = session.selectedItemFor(id);
     if (selected == null) return _Target.ask(ask(noContextQuestion));
     return _Target.id(selected);
+  }
+
+  /// Чат задачи: явно названная задача.
+  ///
+  /// - Название в кавычках — как везде (не нашлась — «не нашёл»).
+  /// - Без названия или с междометием вместо него («готово, спасибо»,
+  ///   «сделано, ура» — [TaskChatPhrases.isFiller]) — задача чата (`null`).
+  /// - Слова без кавычек: точное совпадение или уверенное единственное
+  ///   совпадение поиска — эта задача; среди лучших совпадений задача
+  ///   чата — она (`null`); иначе — тот же вопрос, что в главном чате
+  ///   («не нашёл», «какую из…», «вы имели в виду…»). Задачу чата по
+  ///   названию, которое ей не подходит, не меняем молча.
+  Future<_Target?> _otherTarget(
+    ParsedCommand command,
+    Task chatTask,
+    AssistantResponse Function(String, [Map<String, String>]) ask,
+  ) async {
+    final quoted = command.title;
+    if (quoted != null) {
+      final exact = await _tasks.findActiveByTitle(quoted);
+      if (exact.length == 1) return _Target.id(exact.single.id);
+      return _Target.ask(
+        exact.isEmpty
+            ? ask('task.notFound', <String, String>{'query': quoted})
+            : ask('task.ask.duplicates', <String, String>{'name': quoted}),
+      );
+    }
+    final query = command.targetQuery;
+    if (query == null || TaskChatPhrases.isFiller(query)) return null;
+    final exact = await _tasks.findActiveByTitle(query);
+    if (exact.length == 1) return _Target.id(exact.single.id);
+    if (exact.length > 1) {
+      if (exact.any((Task t) => t.id == chatTask.id)) return null;
+      return _Target.ask(
+        ask('task.ask.duplicates', <String, String>{'name': query}),
+      );
+    }
+    final hits = await _tasks.searchActive(query);
+    if (hits.isEmpty) {
+      // Выполненную задачу чата поиск по активным не найдёт: ответит
+      // «уже выполнена», ничего не меняя.
+      if (!chatTask.isActive) return null;
+      return _Target.ask(
+        ask('task.notFound', <String, String>{'query': query}),
+      );
+    }
+    final best = hits.first.score;
+    final close = hits
+        .where((TaskSearchHit h) => best - h.score <= 0.1 + 1e-9)
+        .toList(growable: false);
+    if (close.any((TaskSearchHit h) => h.task.id == chatTask.id)) return null;
+    if (close.length == 1) {
+      final hit = close.single;
+      if (hit.score >= confidentScore) return _Target.id(hit.task.id);
+      return _Target.ask(
+        ask('task.ask.didYouMean', <String, String>{'title': hit.task.title}),
+      );
+    }
+    final titles =
+        close.take(3).map((TaskSearchHit h) => '«${h.task.title}»').join(', ');
+    return _Target.ask(
+      ask(
+        'task.ask.severalMatch',
+        <String, String>{'name': query, 'candidates': titles},
+      ),
+    );
   }
 
   /// Срок задачи словами («завтра в 10:00») или `null` без срока.

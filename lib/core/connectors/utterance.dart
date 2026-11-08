@@ -72,6 +72,7 @@ final class Utterance {
     required this.unbalancedQuotes,
     required this.hashtags,
     required this.due,
+    this.chatTaskId,
   });
 
   /// Разбирает [text]; [now] нужен для сроков «завтра», «в 10:00».
@@ -120,6 +121,27 @@ final class Utterance {
       due: const DueParser().parse(analysisText, now),
     );
   }
+
+  /// То же сообщение, отправленное в чате задачи [chatTaskId] (`null` —
+  /// в главном чате). Ставит маршрутизатор.
+  Utterance withChat(String? chatTaskId) => chatTaskId == this.chatTaskId
+      ? this
+      : Utterance._(
+          original: original,
+          normalized: normalized,
+          analysisText: analysisText,
+          tokens: tokens,
+          quotedTitles: quotedTitles,
+          unbalancedQuotes: unbalancedQuotes,
+          hashtags: hashtags,
+          due: due,
+          chatTaskId: chatTaskId,
+        );
+
+  /// Задача чата, в котором написано сообщение (docs/CONNECTORS.md, «Чат
+  /// задачи»); `null` — главный чат. В чате задачи коннектор задач понимает
+  /// и короткие фразы без объекта: «закрой», «на завтра».
+  final String? chatTaskId;
 
   /// Открывающая кавычка → допустимые закрывающие.
   static const Map<String, Set<String>> _quotePairs = <String, Set<String>>{

@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'app/assistant_theme.dart';
 import 'app/home_page.dart';
 import 'core/app_info.dart';
+import 'core/chats/chat_store.dart';
 import 'core/connectors/connector.dart';
 import 'core/connectors/tasks_connector.dart';
 import 'core/extensions/extension_registry.dart';
@@ -34,6 +35,8 @@ Future<void> main() async {
   final folder = p.join(documents.path, 'assistant');
   final tasksPath = p.join(folder, 'tasks.json');
   final repository = JsonTaskRepository(tasksPath);
+  // История чатов (ADR-010): файл на чат в <документы>/assistant/chats.
+  final chatsPath = p.join(folder, 'chats');
   const clock = SystemClock();
   final tasks = TaskService(repository: repository, clock: clock);
   // Паки — только данные (ADR-005): встроенные из assets/packs,
@@ -60,8 +63,9 @@ Future<void> main() async {
       assistant: assistant,
       tasks: tasks,
       clock: clock,
-      storage: JsonStorageInfo(tasksPath),
+      storage: JsonStorageInfo(tasksPath, chatsDirectory: chatsPath),
       settingsStore: JsonSettingsStore(p.join(folder, 'settings.json')),
+      chatStore: JsonChatStore(chatsPath),
     ),
   );
 }
@@ -88,6 +92,7 @@ final class AssistantApp extends StatelessWidget {
     this.clock = const SystemClock(),
     this.storage = const MemoryStorageInfo(),
     this.settingsStore,
+    this.chatStore,
   });
 
   final AssistantController assistant;
@@ -95,6 +100,7 @@ final class AssistantApp extends StatelessWidget {
   final Clock clock;
   final StorageInfo storage;
   final SettingsStore? settingsStore;
+  final ChatStore? chatStore;
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +116,7 @@ final class AssistantApp extends StatelessWidget {
         clock: clock,
         storage: storage,
         settingsStore: settingsStore,
+        chatStore: chatStore,
       ),
     );
   }

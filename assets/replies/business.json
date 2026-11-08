@@ -21,6 +21,8 @@
     "task.list": "Активных задач: {count}. Ближайшая по сроку — «{title}».",
     "task.list.withDue": "Активных задач: {count}. Ближайшая по сроку — «{title}», {due}.",
     "task.completed": ["Задача «{title}» выполнена.", "Задача «{title}» закрыта."],
+    "task.reopened": "Задача «{title}» возвращена в работу.",
+    "task.chat.alreadyDone": "Задача «{title}» уже выполнена.",
     "task.rescheduled": "Срок задачи «{title}» перенесён на {due}.",
     "task.notFound": "Активная задача «{query}» не найдена.",
     "task.overdue": "Внимание: {count} {мн:count|просроченная задача|просроченные задачи|просроченных задач} — {titles}.",
