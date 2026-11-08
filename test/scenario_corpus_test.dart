@@ -6,6 +6,7 @@ import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/http_transport.dart';
 import 'package:local_assistant/core/connectors/secret_store.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
+import 'package:local_assistant/core/models/bulk.dart';
 import 'package:local_assistant/core/models/task.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
@@ -106,6 +107,8 @@ const Set<String> _allowedKeys = <String>{
   'source',
   'tags',
   'answer',
+  'scope',
+  'shift',
 };
 
 final DateTime _defaultNow = DateTime(2026, 11, 2, 16, 30);
@@ -186,7 +189,17 @@ const Set<String> _taskOnlyKeys = <String>{
   'issue',
   'titleIssue',
   'projects',
+  'scope',
+  'shift',
 };
+
+/// Намерения массовых команд: только у них есть `scope` и `shift`.
+const Set<String> _bulkIntents = <String>{'rescheduleMany', 'completeMany'};
+
+/// `all`, `overdue`, `noDue` или `date:ГГГГ-ММ-ДД`, затем метки `#тег`.
+final RegExp _scopePattern = RegExp(
+  r'^(all|overdue|noDue|date:\d{4}-\d{2}-\d{2})( #[^\s#]+)*$',
+);
 
 /// Проверяет строку целиком при загрузке, чтобы ошибка в данных указывала
 /// на файл и строку, а не роняла тест непонятным приведением типов.
@@ -234,6 +247,21 @@ void _validate(Map<String, dynamic> json, String location) {
   if (projects != null &&
       (projects is! List || projects.any((Object? p) => p is! String))) {
     fail('поле projects должно быть списком строк');
+  }
+  for (final key in <String>['scope', 'shift']) {
+    if (!json.containsKey(key)) continue;
+    final value = json[key];
+    if (!_bulkIntents.contains(json['intent'])) {
+      fail('поле $key бывает только у намерений $_bulkIntents');
+    }
+    if (value == null) continue;
+    if (key == 'scope' &&
+        (value is! String || !_scopePattern.hasMatch(value))) {
+      fail('недопустимое значение scope: $value');
+    }
+    if (key == 'shift' && DueShift.parse(value) == null) {
+      fail('недопустимое значение shift: $value (ожидается +1h, -2d, +30m)');
+    }
   }
   for (final key in <String>[
     'title',
@@ -365,6 +393,12 @@ final class _Case {
       parsed.dueIssue,
       issue == null ? DueIssue.none : DueIssue.values.byName(issue),
     );
+    if (json.containsKey('scope')) {
+      compare('scope', parsed.selection?.label, json['scope']);
+    }
+    if (json.containsKey('shift')) {
+      compare('shift', parsed.shift?.label, json['shift']);
+    }
     if (json.containsKey('projects')) {
       final expected = (json['projects'] as List<dynamic>).cast<String>();
       if (parsed.projects.join(',') != expected.join(',')) {

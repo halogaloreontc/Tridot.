@@ -1,4 +1,5 @@
 import '../personas/persona.dart';
+import 'bulk.dart';
 import 'task.dart';
 
 enum AssistantStatus { completed, needsClarification, failed, noAction }
@@ -14,6 +15,7 @@ final class AssistantResponse {
     this.personaId,
     this.settingsChange,
     this.addressedPersonaId,
+    this.checklist,
   });
 
   /// Готовый текст для пользователя. В истории чата хранится именно он:
@@ -44,6 +46,11 @@ final class AssistantResponse {
   /// «к кому обратились, тот и продолжает». `null` — по имени не обращались.
   final String? addressedPersonaId;
 
+  /// Вопрос массовой команды со списком задач: интерфейс показывает под
+  /// ответом карточку с галочками. Тот же объект ждёт ответа в сессии,
+  /// поэтому отметки в карточке видны ответу «да». `null` — без списка.
+  final BulkChecklist? checklist;
+
   /// Тот же ответ от помощника [personaId].
   AssistantResponse withPersona(String personaId) => AssistantResponse(
         message: message,
@@ -55,6 +62,7 @@ final class AssistantResponse {
         personaId: personaId,
         settingsChange: settingsChange,
         addressedPersonaId: addressedPersonaId,
+        checklist: checklist,
       );
 
   /// Тот же ответ, в котором пользователь обратился к [personaId] по имени.
@@ -68,5 +76,6 @@ final class AssistantResponse {
         personaId: this.personaId,
         settingsChange: settingsChange,
         addressedPersonaId: personaId,
+        checklist: checklist,
       );
 }

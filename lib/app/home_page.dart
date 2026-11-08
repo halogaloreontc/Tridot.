@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/app_info.dart';
 import '../core/formatting/due_format.dart';
 import '../core/models/assistant_types.dart';
+import '../core/models/bulk.dart';
 import '../core/models/task.dart';
 import '../core/scenario/assistant_controller.dart';
 import '../core/services/clock.dart';
@@ -18,6 +19,7 @@ import 'screens/planning_screen.dart';
 import 'screens/projects_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/storage_screen.dart';
+import 'widgets/bulk_checklist_card.dart';
 import 'widgets/command_composer.dart';
 import 'widgets/document_view.dart';
 import 'widgets/history_rail.dart';
@@ -251,6 +253,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         status: withStatus ? response.status : null,
         taskId: response.task?.id,
         personaId: response.personaId,
+        checklist: response.checklist,
       );
 
   bool get _duo => _settings.personas.mode == AssistantMode.duo;
@@ -527,6 +530,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _clearChat() {
+    // Вопрос со списком снимается, отменить прежние массовые изменения
+    // из чата больше нельзя.
+    widget.assistant.clearConversation();
     setState(() {
       _messages = <_ChatMessage>[_welcome()];
       _pristineWelcome = false;
@@ -536,6 +542,55 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _commandCursor = null;
       _highlightedCommand = null;
     });
+  }
+
+  // --------------------------------------------------- массовые команды
+
+  /// Ответ на карточку массовой команды готовится: кнопки не нажимаются
+  /// второй раз.
+  bool _bulkBusy = false;
+
+  /// Галочка в карточке — не сообщение: вопрос ждёт ответа дальше.
+  void _toggleBulkItem(BulkChecklist checklist, String taskId, bool value) {
+    setState(() {
+      widget.assistant.setBulkItemChecked(checklist, taskId, value);
+    });
+  }
+
+  void _setAllBulkItems(BulkChecklist checklist, bool value) {
+    setState(() => widget.assistant.setAllBulkItems(checklist, value));
+  }
+
+  /// «Перенести (N)» / «Отмена»: как «да» или «нет» в чате. Итог виден в
+  /// самой карточке.
+  Future<void> _answerBulk(BulkChecklist checklist, {required bool apply}) =>
+      _bulkAction(() => widget.assistant.answerBulk(checklist, apply: apply));
+
+  Future<void> _undoBulk(BulkChecklist checklist, String? personaId) =>
+      _bulkAction(
+        () => widget.assistant.undoBulk(checklist, personaId: personaId),
+      );
+
+  Future<void> _bulkAction(
+    Future<AssistantResponse?> Function() action,
+  ) async {
+    if (_bulkBusy || _sending) return;
+    setState(() => _bulkBusy = true);
+    AssistantResponse? response;
+    try {
+      response = await action();
+    } finally {
+      if (mounted) setState(() => _bulkBusy = false);
+    }
+    if (!mounted) return;
+    if (response != null) {
+      setState(() => _cube = cubeStateFor(response!.status));
+      _cubeTimer?.cancel();
+      _cubeTimer = Timer(const Duration(milliseconds: 1600), () {
+        if (mounted && !_sending) setState(() => _cube = CubeState.idle);
+      });
+    }
+    await _refresh();
   }
 
   // ------------------------------------------------------------- задачи
@@ -1135,14 +1190,19 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildDialogue() {
+  Widget _buildChat(double viewportHeight) {
     final rows = <Widget>[];
     DateTime? day;
     final latestAnswer = _messages.lastIndexWhere((m) => !m.fromUser);
     var commandIndex = -1;
     final commandIndexOf = <int, int>{};
+    // Карточка списка — под последним ответом с этим списком: после
+    // «кроме …» вопрос повторяется вместе с ней.
+    final lastWithChecklist = <String, int>{};
     for (var i = 0; i < _messages.length; i++) {
       if (_messages[i].fromUser) commandIndexOf[i] = ++commandIndex;
+      final checklist = _messages[i].checklist;
+      if (checklist != null) lastWithChecklist[checklist.id] = i;
     }
     for (var i = 0; i < _messages.length; i++) {
       final message = _messages[i];
@@ -1169,6 +1229,12 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           selectedId: _selectedTask?.id,
           onOpenTask: (Task task) => _selectTask(task, openDocument: true),
           onToggleDone: _toggleDone,
+          checklist: _checklistCard(
+            message,
+            i,
+            lastWithChecklist,
+            viewportHeight,
+          ),
         ),
       );
     }
@@ -1200,6 +1266,37 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           children: rows.reversed.toList(),
         ),
       ),
+    );
+  }
+
+  Widget _buildDialogue() {
+    // Карточке списка нужна высота видимой части чата, а не экрана.
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) =>
+          _buildChat(constraints.maxHeight),
+    );
+  }
+
+  Widget? _checklistCard(
+    _ChatMessage message,
+    int index,
+    Map<String, int> lastWithChecklist,
+    double viewportHeight,
+  ) {
+    final checklist = message.checklist;
+    if (checklist == null || lastWithChecklist[checklist.id] != index) {
+      return null;
+    }
+    return BulkChecklistCard(
+      checklist: checklist,
+      busy: _bulkBusy || _sending,
+      viewportHeight: viewportHeight,
+      onToggle: (String id, bool value) =>
+          _toggleBulkItem(checklist, id, value),
+      onSetAll: (bool value) => _setAllBulkItems(checklist, value),
+      onApply: () => unawaited(_answerBulk(checklist, apply: true)),
+      onCancel: () => unawaited(_answerBulk(checklist, apply: false)),
+      onUndo: () => unawaited(_undoBulk(checklist, message.personaId)),
     );
   }
 
@@ -1477,6 +1574,7 @@ final class _ChatMessage {
     this.status,
     this.taskId,
     this.personaId,
+    this.checklist,
   });
 
   final String text;
@@ -1488,6 +1586,10 @@ final class _ChatMessage {
   /// Кто из помощников написал: `rio`, `noda`. Хранится вместе с готовым
   /// текстом, поэтому смена помощника не переписывает историю.
   final String? personaId;
+
+  /// Список массовой команды под ответом — данные, а не текст: карточка
+  /// показывает его текущее состояние ([BulkChecklist.toJson] для истории).
+  final BulkChecklist? checklist;
 }
 
 final class _NavItem extends StatelessWidget {
@@ -1616,9 +1718,13 @@ final class _MessageRow extends StatelessWidget {
     this.cube,
     this.highlighted = false,
     this.selectedId,
+    this.checklist,
   });
 
   final _ChatMessage message;
+
+  /// Карточка массовой команды под текстом ответа.
+  final Widget? checklist;
   final Task? task;
   final DateTime now;
   final bool showTime;
@@ -1718,6 +1824,7 @@ final class _MessageRow extends StatelessWidget {
             ),
           ),
         ),
+        if (checklist != null) checklist!,
         if (current != null)
           Container(
             margin: const EdgeInsets.only(top: 8),

@@ -470,7 +470,7 @@ def check_with_app(
         if mismatches:
             row["check"] = "приложение: " + ", ".join(mismatches)
             continue
-        row["final"] = {k: label_[k] for k in prompts.LABEL_FIELDS}
+        row["final"] = {k: label_.get(k) for k in prompts.LABEL_FIELDS}
         row["final_by"] = [source.name, APP_CHECK_MARK]
         row["status"] = "agreed"
         counts[AGREED_BY_PARSER] += 1
@@ -569,6 +569,14 @@ def normalize_label(data: dict[str, Any], connector: ConnectorTopics | None = No
     else:
         due, precision = _normalize_due(due, precision)
 
+    scope, shift = None, None
+    if connector.id == DEFAULT_CONNECTOR and intent in prompts.BULK_INTENTS:
+        title = None
+        scope = _normalize_scope(data.get("scope"))
+        shift = _normalize_shift(data.get("shift")) if intent == "rescheduleMany" else None
+        if shift is not None:
+            due, precision = None, None
+
     return {
         "intent": intent,
         "title": title,
@@ -576,9 +584,63 @@ def normalize_label(data: dict[str, Any], connector: ConnectorTopics | None = No
         "precision": precision,
         "issue": issue,
         "titleIssue": title_issue,
+        "scope": scope,
+        "shift": shift,
         "confident": bool(data.get("confident", True)),
         "comment": str(data.get("comment") or ""),
     }
+
+
+_SCOPE_BASE = re.compile(r"^(all|overdue|noDue|date:(\d{4}-\d{2}-\d{2}))$")
+_SHIFT = re.compile(r"^([+-])\s*(\d{1,4})\s*([mhdw])$")
+
+
+def _normalize_scope(scope: Any) -> str:
+    """Выбор задач массовой команды в формате корпуса: «all», «overdue #работа», «date:2026-11-06».
+
+    Пусто — «all». Метки — в нижнем регистре, без повторов, после признака через пробел.
+    """
+    if scope is None or (isinstance(scope, str) and not scope.strip()):
+        return "all"
+    if not isinstance(scope, str):
+        raise ProviderError(f"недопустимый scope: {scope!r}")
+    parts = scope.split()
+    base, tags = parts[0], parts[1:]
+    if base.startswith("#"):
+        base, tags = "all", parts
+    match = _SCOPE_BASE.match(base)
+    if not match:
+        raise ProviderError(f"недопустимый scope: {scope!r}")
+    if match.group(2):
+        try:
+            datetime.strptime(match.group(2), "%Y-%m-%d")
+        except ValueError:
+            raise ProviderError(f"недопустимая дата в scope: {scope!r}") from None
+    clean: list[str] = []
+    for tag in tags:
+        name = tag.lstrip("#").lower()
+        if not tag.startswith("#") or not name:
+            raise ProviderError(f"недопустимая метка в scope: {scope!r}")
+        if name not in clean:
+            clean.append(name)
+    return " ".join([base, *(f"#{t}" for t in clean)])
+
+
+def _normalize_shift(shift: Any) -> str | None:
+    """Сдвиг каждой задачи: «+1h», «-2d», «+30m»; неделя «+1w» — «+7d». Пусто — None."""
+    if shift is None or (isinstance(shift, str) and not shift.strip()):
+        return None
+    if not isinstance(shift, str):
+        raise ProviderError(f"недопустимый shift: {shift!r}")
+    match = _SHIFT.match(shift.strip())
+    if not match:
+        raise ProviderError(f"недопустимый shift: {shift!r}")
+    sign, amount, unit = match.group(1), int(match.group(2)), match.group(3)
+    if amount == 0:
+        raise ProviderError(f"нулевой shift: {shift!r}")
+    if unit == "w":
+        amount, unit = amount * 7, "d"
+    return f"{sign}{amount}{unit}"
 
 
 def _normalize_due(due: str, precision: Any) -> tuple[str, str]:
@@ -626,7 +688,7 @@ def decide(row: dict[str, Any], labelers: list[Source]) -> str:
     if not all(l["confident"] for l in labels):
         return "disputed"
     if len({comparable(l) for l in labels}) == 1:
-        row["final"] = {k: labels[0][k] for k in prompts.LABEL_FIELDS}
+        row["final"] = {k: labels[0].get(k) for k in prompts.LABEL_FIELDS}
         row["final_by"] = sorted(names)
         return "agreed"
     return "disputed"
@@ -758,7 +820,8 @@ def parser_mismatches(line: dict[str, Any], final: dict[str, Any], parsed: dict[
         for field in prompts.LABEL_FIELDS
         if field in line or field in {"issue", "titleIssue"}
         for value in [parsed_field(parsed, field)]
-        if value != final.get(field)
+        # Значение строки корпуса: у старых разметок без scope оно уже приведено («all»).
+        if value != (line[field] if field in line else final.get(field))
     ]
 
 
@@ -777,7 +840,8 @@ def parsed_field(parsed: dict[str, Any], field: str) -> Any:
 def corpus_line(row: dict[str, Any], connector: ConnectorTopics | None = None) -> dict[str, Any]:
     """Строка корпуса; "connector" пишется, только если это не tasks (значение по умолчанию).
 
-    Поля разбора задач (title, due, precision, issue, titleIssue) пишутся только для tasks:
+    Поля разбора задач (title, due, precision, issue, titleIssue, а у массовых команд — scope
+    и shift) пишутся только для tasks:
     для других коннекторов scenario_corpus_test.dart их не проверяет и отвергает непустые.
     """
     connector = connector or _builtin_tasks()
@@ -798,6 +862,11 @@ def corpus_line(row: dict[str, Any], connector: ConnectorTopics | None = None) -
         line["due"] = final["due"]
         if final["precision"] is not None:
             line["precision"] = final["precision"]
+    if final["intent"] in prompts.BULK_INTENTS:
+        # Старые разметки без scope — все задачи, как и пустой scope модели.
+        line["scope"] = final.get("scope") or "all"
+        if final.get("shift") is not None:
+            line["shift"] = final["shift"]
     if final["issue"] != "none":
         line["issue"] = final["issue"]
     if final["titleIssue"] != "none":

@@ -1,0 +1,57 @@
+// Массовые команды над несколькими задачами (docs/CORPUS.md, «Массовые команды»).
+// «Сейчас» — понедельник 2026-11-02 16:30. scope — какие задачи выбраны, shift — сдвиг каждой.
+{"id":"bulk-001","text":"перенеси всё на выходные","intent":"rescheduleMany","title":null,"due":"2026-11-07","precision":"date","scope":"all","source":"manual"}
+{"id":"bulk-002","text":"отложи все задачи на завтра","intent":"rescheduleMany","title":null,"due":"2026-11-03","precision":"date","scope":"all","source":"manual"}
+{"id":"bulk-003","text":"перенеси все сегодняшние задачи на завтра","intent":"rescheduleMany","title":null,"due":"2026-11-03","precision":"date","scope":"date:2026-11-02","source":"manual"}
+{"id":"bulk-004","text":"Перенеси все сегодняшние дела на завтра","intent":"rescheduleMany","title":null,"due":"2026-11-03","precision":"date","scope":"date:2026-11-02","source":"manual"}
+{"id":"bulk-005","text":"перенеси просроченные на пятницу","intent":"rescheduleMany","title":null,"due":"2026-11-06","precision":"date","scope":"overdue","source":"manual"}
+{"id":"bulk-006","text":"все задачи на пятницу перенеси на понедельник","intent":"rescheduleMany","title":null,"due":"2026-11-09","precision":"date","scope":"date:2026-11-06","source":"manual","note":"срок до глагола — исходный день выбора, после — новый"}
+{"id":"bulk-007","text":"перенеси всё с #работа на понедельник","intent":"rescheduleMany","title":null,"due":"2026-11-09","precision":"date","scope":"all #работа","projects":["работа"],"source":"manual"}
+{"id":"bulk-008","text":"сдвинь всё на час позже","intent":"rescheduleMany","title":null,"due":null,"scope":"all","shift":"+1h","source":"manual","note":"сдвиг каждой задачи, а не «через час»"}
+{"id":"bulk-009","text":"отметь всё на сегодня выполненным","intent":"completeMany","title":null,"due":null,"scope":"date:2026-11-02","source":"manual","note":"у завершения срок — день выбора"}
+{"id":"bulk-010","text":"закрой все просроченные","intent":"completeMany","title":null,"due":null,"scope":"overdue","source":"manual"}
+{"id":"bulk-011","text":"заверши всё по #ремонт","intent":"completeMany","title":null,"due":null,"scope":"all #ремонт","projects":["ремонт"],"source":"manual"}
+{"id":"bulk-012","text":"перенеси все задачи с пятницы на понедельник","intent":"rescheduleMany","title":null,"due":"2026-11-09","precision":"date","scope":"date:2026-11-06","source":"manual"}
+{"id":"bulk-013","text":"перенеси все задачи без срока на пятницу","intent":"rescheduleMany","title":null,"due":"2026-11-06","precision":"date","scope":"noDue","source":"manual"}
+{"id":"bulk-014","text":"отложи всё на 2 дня","intent":"rescheduleMany","title":null,"due":null,"scope":"all","shift":"+2d","source":"manual","note":"после «отложи», «сдвинь» длительность без «позже» — тоже сдвиг каждой задачи"}
+{"id":"bulk-015","text":"сдвинь все задачи на неделю вперёд","intent":"rescheduleMany","title":null,"due":null,"scope":"all","shift":"+7d","source":"manual"}
+{"id":"bulk-016","text":"перенеси всё на день раньше","intent":"rescheduleMany","title":null,"due":null,"scope":"all","shift":"-1d","source":"manual"}
+{"id":"bulk-017","text":"сдвинь просроченные на 30 минут позже","intent":"rescheduleMany","title":null,"due":null,"scope":"overdue","shift":"+30m","source":"manual"}
+{"id":"bulk-018","text":"перенеси всё на 2 часа","intent":"rescheduleMany","title":null,"due":null,"scope":"all","source":"manual","note":"после «перенеси» длительность — не срок и не сдвиг: помощник спросит, на когда"}
+{"id":"bulk-019","text":"перенеси всё","intent":"rescheduleMany","title":null,"due":null,"scope":"all","source":"manual","note":"без срока — вопрос «На когда перенести задачи?»"}
+{"id":"bulk-020","text":"закрой всё","intent":"completeMany","title":null,"due":null,"scope":"all","source":"manual","note":"все активные задачи, но только после вопроса со списком"}
+{"id":"bulk-021","text":"заверши все","intent":"completeMany","title":null,"scope":"all","source":"manual"}
+{"id":"bulk-022","text":"перенеси вчерашние на сегодня","intent":"rescheduleMany","title":null,"due":"2026-11-02","precision":"date","scope":"date:2026-11-01","source":"manual"}
+{"id":"bulk-023","text":"перенеси всё со вчера на сегодня","intent":"rescheduleMany","title":null,"due":"2026-11-02","precision":"date","scope":"date:2026-11-01","source":"manual"}
+{"id":"bulk-024","text":"закрой все задачи по проекту #дача","intent":"completeMany","title":null,"scope":"all #дача","projects":["дача"],"source":"manual"}
+{"id":"bulk-025","text":"можешь перенести всё на завтра?","intent":"rescheduleMany","title":null,"due":"2026-11-03","precision":"date","scope":"all","source":"manual"}
+{"id":"bulk-026","text":"отметь все задачи как выполненные","intent":"completeMany","title":null,"scope":"all","source":"manual"}
+{"id":"bulk-027","text":"перенеси всё на вчера","intent":"rescheduleMany","title":null,"due":null,"issue":"inPast","scope":"all","source":"manual"}
+{"id":"bulk-028","text":"перенеси всё на завтра в 10","intent":"rescheduleMany","title":null,"due":"2026-11-03T10:00","precision":"dateTime","scope":"all","source":"manual"}
+{"id":"bulk-029","text":"пожалуйста, перенеси все просроченные задачи на завтра вечером","intent":"rescheduleMany","title":null,"due":"2026-11-03T19:00","precision":"partOfDay","scope":"overdue","source":"manual"}
+{"id":"bulk-030","text":"закрой все сегодняшние","intent":"completeMany","title":null,"scope":"date:2026-11-02","source":"manual"}
+{"id":"bulk-031","text":"всё с #работа перенеси на понедельник","intent":"rescheduleMany","title":null,"due":"2026-11-09","precision":"date","scope":"all #работа","projects":["работа"],"source":"manual"}
+{"id":"bulk-032","text":"перенеси просроченные с #работа на пятницу","intent":"rescheduleMany","title":null,"due":"2026-11-06","precision":"date","scope":"overdue #работа","projects":["работа"],"source":"manual"}
+{"id":"bulk-033","text":"заверши все задачи на 15 ноября","intent":"completeMany","title":null,"scope":"date:2026-11-15","source":"manual"}
+{"id":"bulk-034","text":"передвинь все дела на неделю","intent":"rescheduleMany","title":null,"due":null,"scope":"all","shift":"+7d","source":"manual"}
+{"id":"bulk-035","text":"перенеси все задачи на пятницу на понедельник","intent":"rescheduleMany","title":null,"due":null,"issue":"conflictingDays","scope":"all","source":"manual","note":"два «на» после глагола — непонятно, какой день исходный: помощник переспросит"}
+{"id":"bulk-036","text":"задачи на пятницу перенеси на понедельник","intent":"rescheduleMany","title":null,"due":"2026-11-09","precision":"date","scope":"date:2026-11-06","source":"manual","note":"«задачи» вместе с исходным днём — тоже несколько задач"}
+{"id":"bulk-037","text":"перенеси задачи на завтра","intent":"rescheduleMany","title":null,"due":"2026-11-03","precision":"date","scope":"all","source":"manual","note":"«задачи» во множественном числе — о многих задачах, переспросим со списком"}
+{"id":"bulk-038","text":"закрой дела","intent":"completeMany","title":null,"scope":"all","source":"manual"}
+{"id":"bulk-039","text":"закрой всё, кроме хлеба","intent":"completeMany","title":null,"scope":"all","source":"manual","note":"«кроме …» — задачи в списке без отметки"}
+{"id":"bulk-040","text":"перенеси все задачи кроме отчёта на завтра","intent":"rescheduleMany","title":null,"due":"2026-11-03","precision":"date","scope":"all","source":"manual","note":"исключение между выбором и сроком"}
+{"id":"bulk-041","text":"всё, перенеси все на пятницу","intent":"rescheduleMany","title":null,"due":"2026-11-06","precision":"date","scope":"all","source":"manual","note":"первое «всё,» — конец реплики, выбор — второе «все»"}
+// Не массовые команды: одна задача, разговор или другое намерение.
+{"id":"bulk-neg-001","text":"перенеси встречу на завтра","intent":"rescheduleTask","title":"Встреча","due":"2026-11-03","precision":"date","source":"manual","note":"одна задача по названию — обычный перенос"}
+{"id":"bulk-neg-002","text":"всё, задача закрыта","intent":"completeTask","title":null,"source":"manual","note":"«всё» — конец фразы, а не «все задачи»: завершение выбранной"}
+{"id":"bulk-neg-003","text":"перенеси на завтра","intent":"rescheduleTask","title":null,"due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"bulk-neg-004","text":"на завтра перенеси","intent":"rescheduleTask","title":null,"due":"2026-11-03","precision":"date","source":"manual","note":"срок до глагола без «все» — не выбор задач"}
+{"id":"bulk-neg-005","text":"покажи все задачи","intent":"listTasks","source":"manual"}
+{"id":"bulk-neg-006","text":"добавь задачу перенести все встречи на пятницу","intent":"createTask","title":"Перенести все встречи","due":"2026-11-06","precision":"date","source":"manual","note":"глагол переноса внутри названия новой задачи"}
+{"id":"bulk-neg-007","text":"заверши отчёт","intent":"completeTask","title":"Отчёт","source":"manual"}
+{"id":"bulk-neg-008","text":"закрой «Все задачи по ремонту»","intent":"completeTask","title":"Все задачи по ремонту","source":"manual","note":"«все» внутри кавычек — название"}
+{"id":"bulk-neg-009","text":"отменить","now":"2026-11-05T12:00","intent":"unknown","source":"manual","note":"отмена — «отмени», а инфинитив без предмета — не команда"}
+{"id":"bulk-neg-010","text":"перенеси задачу на завтра","intent":"rescheduleTask","title":null,"due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"bulk-neg-011","text":"всё, закрой задачу","intent":"completeTask","title":null,"source":"manual","note":"«всё,» перед глаголом — конец реплики: завершение задачи из разговора"}
+{"id":"bulk-neg-013","text":"всё, закрой","intent":"unknown","source":"manual","note":"как и «закрой» без предмета — не команда и тем более не «закрой все задачи»"}
+{"id":"bulk-neg-012","text":"всё, перенеси на пятницу","intent":"rescheduleTask","title":null,"due":"2026-11-06","precision":"date","source":"manual","note":"перенос задачи из разговора, не всех"}

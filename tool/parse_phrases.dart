@@ -2,8 +2,9 @@
 //
 // Вход (stdin): JSON Lines {"id": "...", "text": "...", "now": "2026-11-02T16:30"}.
 // Выход (stdout): JSON Lines {"id", "intent", "title", "targetQuery", "due",
-// "precision", "issue", "titleIssue", "projects"} в формате регрессионного
-// корпуса (docs/CORPUS.md).
+// "precision", "issue", "titleIssue", "projects", "scope", "shift"} в формате
+// регрессионного корпуса (docs/CORPUS.md). scope и shift — только у массовых
+// команд (rescheduleMany, completeMany), у остальных null.
 //
 // Запуск из корня проекта: dart run tool/parse_phrases.dart < phrases.jsonl
 import 'dart:convert';
@@ -58,6 +59,8 @@ Map<String, Object?> parsedFields(String text, DateTime now) {
     'issue': parsed.dueIssue.name,
     'titleIssue': parsed.titleIssue.name,
     'projects': parsed.projects,
+    'scope': parsed.selection?.label,
+    'shift': parsed.shift?.label,
   };
 }
 

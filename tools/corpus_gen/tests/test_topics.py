@@ -52,6 +52,7 @@ def test_builtin_tasks_topics_load() -> None:
     assert set(tasks.topics) == {
         "create",
         "reschedule",
+        "bulk",
         "complete",
         "implicit",
         "list",
@@ -59,11 +60,20 @@ def test_builtin_tasks_topics_load() -> None:
         "tricky",
         "gaps",
     }
-    assert tasks.intents == ("createTask", "listTasks", "completeTask", "rescheduleTask", "unknown")
+    assert tasks.intents == (
+        "createTask",
+        "listTasks",
+        "completeTask",
+        "rescheduleTask",
+        "rescheduleMany",
+        "completeMany",
+        "unknown",
+    )
+    assert tasks.topics["bulk"].intents == {"rescheduleMany", "completeMany", "rescheduleTask", "completeTask"}
     assert tasks.topics["create"].intents == {"createTask"}
     assert tasks.topics["tricky"].intents is None
-    assert tasks.title_intents == {"createTask", "rescheduleTask", "completeTask"}
-    assert tasks.due_intents == {"createTask", "rescheduleTask"}
+    assert tasks.title_intents == {"createTask", "rescheduleTask", "completeTask", "rescheduleMany", "completeMany"}
+    assert tasks.due_intents == {"createTask", "rescheduleTask", "rescheduleMany"}
     # Описания склеены в одну строку и просят фраз без кавычек.
     assert "\n" not in tasks.topics["create"].description
     assert "БЕЗ кавычек" in tasks.topics["create"].description

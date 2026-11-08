@@ -195,7 +195,7 @@ def test_promote_marks_parser_mismatch_as_known_gap(project: Path) -> None:
     pipeline.import_manual(config, store, ["Добавь задачу «Спорт» в понедельник"], "kimi-web")
     gap = store.rows[1]
     gap["status"] = "accepted"
-    gap["final"] = {**{k: LABEL_CREATE[k] for k in prompts.LABEL_FIELDS}, "title": "Спорт", "due": "2026-11-09"}
+    gap["final"] = {**{k: LABEL_CREATE.get(k) for k in prompts.LABEL_FIELDS}, "title": "Спорт", "due": "2026-11-09"}
     store.save()
 
     def fake_parser(_config: Any, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

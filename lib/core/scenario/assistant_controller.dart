@@ -1,6 +1,7 @@
 import '../connectors/connector.dart';
 import '../connectors/tasks_connector.dart';
 import '../extensions/extension_registry.dart';
+import '../models/bulk.dart';
 import '../models/task.dart';
 import '../personas/persona.dart';
 import '../personas/persona_address.dart';
@@ -102,8 +103,12 @@ final class AssistantController {
     final enabled = _connectors.any(
       (Connector c) => c.info.id == pending.connectorId,
     );
-    if (!enabled) session.takePendingConfirmation();
+    if (!enabled) session.takePendingConfirmation()?.onDropped?.call();
   }
+
+  /// Ожидание, на которое ответили в текущем сообщении: его не нужно
+  /// объявлять снятым ([PendingConfirmation.onDropped]).
+  PendingConfirmation? _answered;
 
   /// Задача, к которой относятся «её», «перенеси», «заверши».
   String? get selectedTaskId => session.selectedItemFor(TasksConnector.id);
@@ -152,7 +157,15 @@ final class AssistantController {
     // сообщения.
     final settings = personas;
     final (persona, text, addressed) = resolve(message, addressee: addressee);
+    final before = session.pendingConfirmation;
+    _answered = null;
     final response = await _handle(settings, persona, text, addressed);
+    // Вопрос сняли без ответа (другое сообщение): его карточка устарела.
+    if (before != null &&
+        !identical(session.pendingConfirmation, before) &&
+        !identical(_answered, before)) {
+      before.onDropped?.call();
+    }
     // Навык мог отметить адресата сам: «Нода, пусть отвечает Лио» — дальше
     // отвечает Liorio, а не та, к кому обратились в начале.
     if (!addressed || response.addressedPersonaId != null) return response;
@@ -172,9 +185,8 @@ final class AssistantController {
     if (addressed && text.isEmpty) {
       // «Нода» без команды: отклик, ожидание подтверждения снимается,
       // как любым другим сообщением.
-      session
-        ..takePendingConfirmation()
-        ..lastConnectorId = null;
+      session.lastConnectorId = null;
+      session.takePendingConfirmation();
       return session
           .reply(
             'common.addressed',
@@ -309,6 +321,18 @@ final class AssistantController {
         _speakAsAsker(asker, addressed: addressed, trailing: named);
         return _markTrailing(await _answer(owner, pending, reply), named);
       }
+      // «Кроме хлеба», «только отчёт»: уточнение ответа, которое понимает
+      // сам спросивший коннектор (ConfirmationFollowUp).
+      if (owner is ConfirmationFollowUp) {
+        final followUp = (owner as ConfirmationFollowUp).matchFollowUp(
+          answerUtterance,
+          pending,
+        );
+        if (followUp != null) {
+          _speakAsAsker(asker, addressed: addressed, trailing: named);
+          return _markTrailing(await _run(owner, followUp), named);
+        }
+      }
     }
     final candidates = <(Connector, ConnectorMatch)>[];
     for (final connector in connectors) {
@@ -332,6 +356,15 @@ final class AssistantController {
             ((Connector, ConnectorMatch) c) => c.$2.implicit || c.$2.fallback,
           )) {
         _speakAsAsker(asker, addressed: addressed, trailing: named);
+        // Владелец может не принять согласие с оговоркой («да, но хлеб не
+        // трогай» в ответ на список задач) и переспросить.
+        final instead = owner is ConfirmationFollowUp
+            ? (owner as ConfirmationFollowUp)
+                .matchLeadingAnswer(answerUtterance, pending, reply)
+            : null;
+        if (instead != null) {
+          return _markTrailing(await _run(owner, instead), named);
+        }
         return _markTrailing(await _answer(owner, pending, reply), named);
       }
       // «Хорошо», «спасибо» в ответ на вопрос: не согласие и не новая
@@ -406,16 +439,18 @@ final class AssistantController {
     Connector owner,
     PendingConfirmation pending,
     ConfirmationReply reply,
-  ) =>
-      _run(
-        owner,
-        ConnectorMatch(
-          connectorId: owner.info.id,
-          commandId: pending.commandId,
-          confidence: 1,
-          payload: ConfirmationAnswer(pending, reply),
-        ),
-      );
+  ) {
+    _answered = pending;
+    return _run(
+      owner,
+      ConnectorMatch(
+        connectorId: owner.info.id,
+        commandId: pending.commandId,
+        confidence: 1,
+        payload: ConfirmationAnswer(pending, reply),
+      ),
+    );
+  }
 
   Future<AssistantResponse> _run(
     Connector connector,
@@ -436,4 +471,87 @@ final class AssistantController {
   }
 
   AssistantResponse _unknown() => TasksConnector.unknown(session);
+
+  // ------------------------------------------------- массовые команды
+
+  /// Список массовой команды, который ждёт ответа, или `null`.
+  BulkChecklist? get pendingChecklist {
+    final payload = session.pendingConfirmation?.payload;
+    return payload is BulkChecklist ? payload : null;
+  }
+
+  /// Галочка в карточке: не сообщение, ожидание ответа не снимается.
+  /// Отметки меняются только у вопроса, который ещё ждёт ответа.
+  bool setBulkItemChecked(BulkChecklist checklist, String taskId, bool value) =>
+      identical(pendingChecklist, checklist) &&
+      checklist.setChecked(taskId, value);
+
+  /// «Выбрать все» / «Снять все» в карточке.
+  bool setAllBulkItems(BulkChecklist checklist, bool value) =>
+      identical(pendingChecklist, checklist) && checklist.setAll(value);
+
+  /// Кнопка «Перенести (N)» / «Отметить (N)» ([apply]) или «Отмена» в
+  /// карточке: то же, что ответ «да» или «нет» в чате, и отвечает тот, кто
+  /// спросил. `null` — вопрос уже не ждёт ответа (устарел или отвечен).
+  Future<AssistantResponse?> answerBulk(
+    BulkChecklist checklist, {
+    required bool apply,
+  }) async {
+    final pending = session.pendingConfirmation;
+    if (pending == null || !identical(pending.payload, checklist)) return null;
+    final owner = _connectors
+        .where((Connector c) => c.info.id == pending.connectorId)
+        .firstOrNull;
+    if (owner == null) return null;
+    final asker = session.pendingSpeaker ?? personas.responder;
+    session.takePendingConfirmation();
+    _voiceOf(asker);
+    final response = await _answer(
+      owner,
+      pending,
+      apply ? ConfirmationReply.yes : ConfirmationReply.no,
+    );
+    return response.withPersona(asker.id);
+  }
+
+  /// Кнопка «Отменить» под применённой карточкой: вернуть сроки и статусы
+  /// задач как было. Говорит помощник [personaId] (автор карточки).
+  /// `null` — отменять уже нечего.
+  Future<AssistantResponse?> undoBulk(
+    BulkChecklist checklist, {
+    String? personaId,
+  }) async {
+    if (!checklist.canUndo) return null;
+    final tasks = _connectors.whereType<TasksConnector>().firstOrNull;
+    if (tasks == null) return null;
+    final speaker = Personas.byId(personaId) ?? personas.responder;
+    _voiceOf(speaker);
+    final response = await _run(
+      tasks,
+      ConnectorMatch(
+        connectorId: TasksConnector.id,
+        commandId: TasksConnector.undoCommand,
+        confidence: 1,
+        payload: BulkUndoRequest(checklist),
+      ),
+    );
+    return response.withPersona(speaker.id);
+  }
+
+  /// Чат очищен: вопрос, который ждал ответа, снят, а отменить прежние
+  /// массовые изменения из чата больше нельзя.
+  void clearConversation() {
+    session.takePendingConfirmation()?.onDropped?.call();
+    for (final connector in _connectors.whereType<TasksConnector>()) {
+      connector.forgetUndo();
+    }
+  }
+
+  void _voiceOf(Persona speaker) {
+    final settings = personas;
+    session
+      ..personas = settings
+      ..speaker = speaker
+      ..voice = settings.voiceOf(speaker);
+  }
 }

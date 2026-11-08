@@ -1,6 +1,7 @@
 import '../app_info.dart';
 import '../extensions/extension_registry.dart';
 import '../models/assistant_types.dart';
+import '../models/bulk.dart';
 import '../models/task.dart';
 import '../personas/persona.dart';
 import '../replies/reply_library.dart';
@@ -323,7 +324,13 @@ final class PendingConfirmation {
     required this.commandId,
     this.itemId,
     this.payload,
+    this.onDropped,
   });
+
+  /// Вызывается, когда ожидание снято без ответа: другое сообщение, новый
+  /// вопрос, выключенный коннектор. Так карточка вопроса узнаёт, что он
+  /// устарел. Маршрутизатор вызывает его не больше одного раза.
+  final void Function()? onDropped;
 
   /// Коннектор, который задал вопрос и выполнит действие.
   final String connectorId;
@@ -337,6 +344,30 @@ final class PendingConfirmation {
 
   /// Всё остальное, что нужно для выполнения. Маршрутизатор его не читает.
   final Object? payload;
+}
+
+/// Коннектор, который понимает уточнение ответа на свой вопрос, кроме
+/// «да» и «нет»: «кроме хлеба», «только отчёт» на «Перенести эти 5
+/// задач…?». Маршрутизатор спрашивает владельца ожидания до обычного
+/// разбора; совпадение уходит в `run` владельца, а ожидание снимается,
+/// если `run` не попросит подтверждения снова.
+abstract interface class ConfirmationFollowUp {
+  /// Совпадение для [utterance] как уточнения ответа на [pending] или
+  /// `null`. Без ввода-вывода, как `match`.
+  ConnectorMatch? matchFollowUp(
+    Utterance utterance,
+    PendingConfirmation pending,
+  );
+
+  /// Ответ с пояснением («да, хлеб тоже», [ConfirmationReply.leading]),
+  /// в котором нет явной команды. `null` — принять [reply] как есть;
+  /// совпадение — выполнить его вместо ответа: например, переспросить,
+  /// если пояснение может менять смысл согласия. Без ввода-вывода.
+  ConnectorMatch? matchLeadingAnswer(
+    Utterance utterance,
+    PendingConfirmation pending,
+    ConfirmationReply reply,
+  );
 }
 
 /// Ответ пользователя на [PendingConfirmation]: так его получает `run`.
@@ -402,15 +433,19 @@ final class AssistantSession {
     required AssistantStatus status,
     Task? task,
     PersonaSettingsChange? settingsChange,
+    BulkChecklist? checklist,
+    String? prefix,
   }) =>
       AssistantResponse(
-        message: say(id, values),
+        message:
+            prefix == null ? say(id, values) : '$prefix ${say(id, values)}',
         intent: intent,
         status: status,
         task: task,
         replyId: id,
         values: values,
         settingsChange: settingsChange,
+        checklist: checklist,
       );
 
   SelectedItem? _selection;

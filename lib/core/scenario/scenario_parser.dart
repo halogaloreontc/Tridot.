@@ -3,8 +3,10 @@ import '../connectors/noun_forms.dart';
 import '../connectors/social_prefix.dart';
 import '../connectors/utterance.dart';
 import '../connectors/verb_forms.dart';
+import '../models/bulk.dart';
 import '../models/task.dart';
 import '../services/clock.dart';
+import 'bulk_parser.dart';
 
 export '../connectors/due_parser.dart' show CharSpan, DueIssue, DueParseResult;
 
@@ -13,6 +15,13 @@ enum CommandIntent {
   listTasks,
   completeTask,
   rescheduleTask,
+
+  /// Перенос нескольких задач сразу: «перенеси всё на выходные»,
+  /// «сдвинь всё на час позже» ([ParsedCommand.selection]).
+  rescheduleMany,
+
+  /// Завершение нескольких задач сразу: «закрой все просроченные».
+  completeMany,
   unknown,
 }
 
@@ -39,7 +48,27 @@ final class ParsedCommand {
     this.projects = const <String>[],
     this.implicit = false,
     this.pastTense = false,
+    this.selection,
+    this.shift,
+    this.exclude = const <String>[],
   });
+
+  /// Массовая команда ([CommandIntent.rescheduleMany],
+  /// [CommandIntent.completeMany]): какие задачи выбраны. Метки выбора
+  /// дублируются в [projects]. Для остальных намерений — `null`.
+  final BulkSelection? selection;
+
+  /// Сдвиг каждой задачи вместо нового срока: «сдвинь всё на час позже».
+  /// Только у [CommandIntent.rescheduleMany], и тогда [dueAt] пуст.
+  final DueShift? shift;
+
+  /// Массовая команда: части названий после «кроме» («закрой всё, кроме
+  /// хлеба»). Такие задачи в списке не отмечены.
+  final List<String> exclude;
+
+  bool get isBulk =>
+      intent == CommandIntent.rescheduleMany ||
+      intent == CommandIntent.completeMany;
 
   final CommandIntent intent;
 
@@ -105,6 +134,34 @@ final class ScenarioParser {
       return const ParsedCommand(intent: CommandIntent.unknown);
     }
 
+    final bulk = const BulkParser().parse(utterance, _clock.now());
+    // «Всё, закрой», «всё — перенеси на пятницу»: «всё» — конец реплики, а
+    // команда — о задаче из разговора. Разбираем фразу без него.
+    if (bulk == null) {
+      final rest = BulkParser.withoutDiscourse(utterance);
+      if (rest != null) {
+        final command =
+            parseUtterance(Utterance.analyze(rest, now: _clock.now()));
+        if (command.intent == CommandIntent.completeTask ||
+            command.intent == CommandIntent.rescheduleTask) {
+          return command;
+        }
+      }
+    }
+    if (bulk != null) {
+      return ParsedCommand(
+        intent: bulk.action == BulkAction.reschedule
+            ? CommandIntent.rescheduleMany
+            : CommandIntent.completeMany,
+        dueAt: bulk.dueAt,
+        duePrecision: bulk.dueAt == null ? null : bulk.precision,
+        dueIssue: bulk.issue,
+        projects: bulk.selection.tags,
+        selection: bulk.selection,
+        shift: bulk.shift,
+        exclude: bulk.exclude,
+      );
+    }
     if (_isListQuery(utterance)) {
       return const ParsedCommand(intent: CommandIntent.listTasks);
     }
@@ -179,6 +236,8 @@ final class ScenarioParser {
               isPastVerb(utterance.tokens[marker.index].text),
         );
       case CommandIntent.listTasks:
+      case CommandIntent.rescheduleMany:
+      case CommandIntent.completeMany:
       case CommandIntent.unknown:
         return ParsedCommand(intent: intent);
     }

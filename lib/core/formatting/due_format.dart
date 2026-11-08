@@ -44,6 +44,29 @@ String formatDay(DateTime due, DateTime now) {
   return '${due.day} $month ${due.year}';
 }
 
+const List<String> _weekdaysShort = <String>[
+  'пн',
+  'вт',
+  'ср',
+  'чт',
+  'пт',
+  'сб',
+  'вс',
+];
+
+/// Срок коротко, с днём недели и датой: «сб, 7 ноября», «пт, 6 ноября
+/// в 10:00», «вт, 3 ноября вечером»; год — только не текущий.
+String formatDueShort(DateTime due, DuePrecision precision, DateTime now) {
+  final month = _monthsGenitive[due.month - 1];
+  final year = due.year == now.year ? '' : ' ${due.year}';
+  final day = '${_weekdaysShort[due.weekday - 1]}, ${due.day} $month$year';
+  return switch (precision) {
+    DuePrecision.date => day,
+    DuePrecision.dateTime => '$day в ${formatTime(due)}',
+    DuePrecision.partOfDay => '$day ${PartOfDay.of(due).label}',
+  };
+}
+
 String formatTime(DateTime value) =>
     '${value.hour}:${value.minute.toString().padLeft(2, '0')}';
 

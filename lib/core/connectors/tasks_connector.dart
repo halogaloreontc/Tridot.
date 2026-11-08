@@ -1,4 +1,5 @@
 import '../formatting/due_format.dart';
+import '../models/bulk.dart';
 import '../models/task.dart';
 import '../replies/reply_library.dart';
 import '../scenario/scenario_parser.dart';
@@ -10,11 +11,15 @@ import 'connector.dart';
 ///
 /// Распознавание — [ScenarioParser], изменения — только через [TaskService].
 /// Работает локально, без сети. Изменения задач — собственные данные
-/// приложения, поэтому подтверждение ADR-004 к явным командам не
-/// применяется: каждое действие видно в ответе и обратимо в интерфейсе.
-/// Подтверждение нужно только завершению по сообщению о сделанном
-/// («я купил хлеб»): задача угадана по словам, а не названа командой.
-final class TasksConnector implements Connector, ConnectorHealth {
+/// приложения, поэтому подтверждение ADR-004 к явным командам над одной
+/// задачей не применяется: действие видно в ответе и обратимо в интерфейсе.
+/// Подтверждение нужно завершению по сообщению о сделанном («я купил
+/// хлеб»): задача угадана по словам, а не названа командой, — и массовым
+/// командам («перенеси всё на выходные»): они меняют сразу много задач,
+/// поэтому сначала вопрос со списком задач и галочками ([BulkChecklist]),
+/// а после применения — «Отменить» (ADR-004, docs/CONNECTORS.md).
+final class TasksConnector
+    implements Connector, ConnectorHealth, ConfirmationFollowUp {
   TasksConnector({
     required TaskService taskService,
     required ScenarioParser parser,
@@ -61,17 +66,35 @@ final class TasksConnector implements Connector, ConnectorHealth {
   final TaskService _tasks;
   final ScenarioParser _parser;
 
+  /// Команда отмены последнего массового изменения: «отмени», кнопка
+  /// «Отменить» в карточке.
+  static const String undoCommand = 'task.bulk.undo';
+
+  /// Последнее применённое массовое изменение и прежние задачи — для
+  /// отмены. Одно на открытый чат: новое массовое изменение и очистка чата
+  /// ([forgetUndo]) его заменяют.
+  _BulkUndo? _undo;
+  int _bulkSequence = 0;
+
+  /// Отменить прежние массовые изменения больше нельзя (чат очищен).
+  void forgetUndo() {
+    _undo?.checklist.canUndo = false;
+    _undo = null;
+  }
+
   @override
   ConnectorInfo get info => const ConnectorInfo(
         id: id,
         title: 'Задачи',
-        description: 'Создаёт, показывает, переносит и завершает задачи.',
+        description: 'Создаёт, показывает, переносит и завершает задачи — '
+            'по одной и сразу несколько.',
         examples: <String>[
           exampleCommand,
           'Добавь «Купить хлеб» на завтра',
           'Покажи задачи',
           'Перенеси отчёт на завтра в 15:00',
           'Заверши её',
+          'Перенеси все просроченные на завтра',
         ],
         access: ConnectorAccess.readWrite,
         kind: ExtensionKind.skill,
@@ -95,6 +118,14 @@ final class TasksConnector implements Connector, ConnectorHealth {
 
   @override
   ConnectorMatch? match(Utterance utterance) {
+    if (_isUndo(utterance)) {
+      return const ConnectorMatch(
+        connectorId: id,
+        commandId: undoCommand,
+        confidence: 0.85,
+        payload: BulkUndoRequest(),
+      );
+    }
     final command = _parser.parseUtterance(utterance);
     final (commandId, confidence) = switch (command.intent) {
       // Без маркера — ниже явных команд любого коннектора: «через 3 дня
@@ -111,6 +142,8 @@ final class TasksConnector implements Connector, ConnectorHealth {
           0.6,
         ),
       CommandIntent.completeTask => ('task.complete', 0.8),
+      CommandIntent.rescheduleMany => (rescheduleManyCommand, 0.9),
+      CommandIntent.completeMany => (completeManyCommand, 0.9),
       CommandIntent.unknown => ('', 0.0),
     };
     if (command.intent == CommandIntent.unknown) return null;
@@ -144,7 +177,14 @@ final class TasksConnector implements Connector, ConnectorHealth {
     AssistantSession session,
   ) async {
     final payload = match.payload;
-    if (payload is ConfirmationAnswer) return _answer(payload, session);
+    if (payload is ConfirmationAnswer) {
+      if (payload.pending.payload is BulkChecklist) {
+        return _answerBulk(payload, session);
+      }
+      return _answer(payload, session);
+    }
+    if (payload is BulkUndoRequest) return _undoBulk(payload, session);
+    if (payload is _BulkRefine) return _refineBulk(payload, session);
     final command = payload! as ParsedCommand;
     switch (command.intent) {
       case CommandIntent.createTask:
@@ -155,6 +195,9 @@ final class TasksConnector implements Connector, ConnectorHealth {
         return _complete(command, session);
       case CommandIntent.rescheduleTask:
         return _reschedule(command, session);
+      case CommandIntent.rescheduleMany:
+      case CommandIntent.completeMany:
+        return _askBulk(command, session);
       case CommandIntent.unknown:
         throw StateError('Коннектор задач не обрабатывает неизвестные команды');
     }
@@ -397,6 +440,694 @@ final class TasksConnector implements Connector, ConnectorHealth {
     );
   }
 
+  // ------------------------------------------------- массовые команды
+
+  /// commandId массового переноса: «перенеси всё на выходные».
+  static const String rescheduleManyCommand = 'task.rescheduleMany';
+
+  /// commandId массового завершения: «закрой все просроченные».
+  static const String completeManyCommand = 'task.completeMany';
+
+  static const Set<String> _undoVerbs = <String>{
+    'отмени',
+    'отмените',
+    'верни',
+    'верните',
+  };
+
+  static const Set<String> _undoWords = <String>{
+    'все',
+    'это',
+    'как',
+    'было',
+    'назад',
+    'обратно',
+    'последнее',
+    'последний',
+    'перенос',
+    'изменение',
+    'изменения',
+    'действие',
+    'отметки',
+    'отметку',
+    'массовое',
+    'пожалуйста',
+  };
+
+  /// «Отмени», «отмени перенос», «верни всё как было»: отмена последнего
+  /// массового изменения. «Верни» без «как было», «назад» или «обратно» —
+  /// не отмена. Отдельное «отменить» — тоже нет: это просьба без предмета.
+  static bool _isUndo(Utterance utterance) {
+    final words = utterance.words;
+    if (words.isEmpty || utterance.quotedTitles.isNotEmpty) return false;
+    if (utterance.hashtags.isNotEmpty || utterance.due.spans.isNotEmpty) {
+      return false;
+    }
+    final first = words.first;
+    if (!_undoVerbs.contains(first)) return false;
+    final rest = words.skip(1);
+    if (!rest.every(_undoWords.contains)) return false;
+    if (first.startsWith('верн')) {
+      return rest.contains('назад') ||
+          rest.contains('обратно') ||
+          (rest.contains('как') && rest.contains('было'));
+    }
+    return true;
+  }
+
+  static const Set<String> _exceptWords = <String>{
+    'кроме',
+    'без',
+    'исключи',
+    'исключая',
+    'убери',
+    'сними',
+  };
+
+  static const Set<String> _onlyWords = <String>{'только', 'лишь'};
+
+  static const Set<String> _leadingAnswers = <String>{
+    'да',
+    'ок',
+    'окей',
+    'хорошо',
+    'ладно',
+    'давай',
+    'но',
+    'а',
+    'все',
+    'нет',
+  };
+
+  /// Слова согласия, которые не меняют смысла «да»: «да, перенеси»,
+  /// «давай, закрывай все».
+  static const Set<String> _agreeWords = <String>{
+    'да',
+    'ага',
+    'угу',
+    'конечно',
+    'ок',
+    'окей',
+    'хорошо',
+    'ладно',
+    'давай',
+    'подтверждаю',
+    'верно',
+    'точно',
+    'так',
+    'можно',
+    'пожалуйста',
+    'спасибо',
+    'все',
+    'их',
+    'эти',
+    'это',
+    'задачи',
+    'перенеси',
+    'переноси',
+    'перенесите',
+    'переносите',
+    'сдвинь',
+    'сдвигай',
+    'двигай',
+    'закрой',
+    'закрывай',
+    'заверши',
+    'завершай',
+    'отметь',
+    'отмечай',
+    'применяй',
+    'применить',
+    'делай',
+    'действуй',
+  };
+
+  /// Глаголы после «не»: «не трогай хлеб», «хлеб не переноси».
+  static const Set<String> _keepVerbs = <String>{
+    'трогай',
+    'трогать',
+    'переноси',
+    'переносить',
+    'двигай',
+    'двигать',
+    'сдвигай',
+    'закрывай',
+    'закрывать',
+    'отмечай',
+    'отмечать',
+    'завершай',
+    'надо',
+    'нужно',
+  };
+
+  /// «Хлеб не трогай», «хлеб оставь», «отчёт пусть останется».
+  static final RegExp _keepTail = RegExp(
+    r'^(.+?)\s+(?:не\s+(?:трогай|трогать|переноси|переносить|двигай|'
+    r'двигать|сдвигай|закрывай|закрывать|отмечай|отмечать|завершай|надо|'
+    r'нужно)|оставь(?:\s+как\s+есть)?|пусть\s+останется|пусть\s+будет)'
+    r'[\s.!]*$',
+    caseSensitive: false,
+  );
+
+  /// «Кроме хлеба», «да, только отчёт», «убери «Счёт»», «да, но не хлеб»,
+  /// «хлеб не трогай» в ответ на вопрос массовой команды: снять или
+  /// оставить отметки и спросить снова. «Отмени перенос», «не переноси» —
+  /// отказ от этого вопроса, а не отмена прошлого изменения: пока вопрос
+  /// ждёт ответа, «отмени …» относится к нему. «Да, перенеси» — согласие.
+  @override
+  ConnectorMatch? matchFollowUp(
+    Utterance utterance,
+    PendingConfirmation pending,
+  ) {
+    final checklist = pending.payload;
+    if (checklist is! BulkChecklist || !checklist.isPending) return null;
+    ConnectorMatch answer(ConfirmationReply reply) => ConnectorMatch(
+          connectorId: id,
+          commandId: pending.commandId,
+          confidence: 1,
+          payload: ConfirmationAnswer(pending, reply),
+        );
+    ConnectorMatch refine(List<String> queries, {required bool only}) =>
+        ConnectorMatch(
+          connectorId: id,
+          commandId: pending.commandId,
+          confidence: 1,
+          payload: _BulkRefine(pending, queries, only: only),
+        );
+    final words = utterance.words;
+    if (words.isEmpty) return null;
+    if (_isUndo(utterance) ||
+        (words.first == 'отмена' &&
+            words.skip(1).every(
+                  (String w) =>
+                      _undoWords.contains(w) || _declineNouns.contains(w),
+                ))) {
+      return answer(ConfirmationReply.no);
+    }
+    final tokens = utterance.tokens;
+    var i = 0;
+    var agreed = false;
+    while (i < tokens.length && _leadingAnswers.contains(tokens[i].text)) {
+      if (_agreeWords.contains(tokens[i].text)) agreed = true;
+      i++;
+    }
+    final quoted = <String>[
+      for (final quote in utterance.quotedTitles) quote.text,
+    ];
+    if (quoted.isEmpty &&
+        !utterance.isQuestion &&
+        _yesFirst.contains(words.first) &&
+        words.every(_agreeWords.contains)) {
+      return answer(ConfirmationReply.yes);
+    }
+    // «Не переноси», «да, но не хлеб», «не трогай отчёт».
+    if (i < tokens.length && tokens[i].text == 'не') {
+      var j = i + 1;
+      while (j < tokens.length && _keepVerbs.contains(tokens[j].text)) {
+        j++;
+      }
+      final queries = j < tokens.length
+          ? _queries(utterance.original.substring(tokens[j].span.start))
+          : <String>[];
+      final all = queries.isNotEmpty &&
+          queries.every((String q) => _allWords.contains(q.toLowerCase()));
+      if (queries.isEmpty && quoted.isEmpty || all) {
+        // «Не переноси», «не трогай их»: отказ. «Да, но не надо» — непонятно.
+        return agreed
+            ? refine(const <String>[], only: false)
+            : answer(
+                ConfirmationReply.no,
+              );
+      }
+      return refine(<String>[...queries, ...quoted], only: false);
+    }
+    final int start;
+    final bool only;
+    if (i < tokens.length && _exceptWords.contains(tokens[i].text)) {
+      only = false;
+      start = tokens[i].span.end;
+    } else if (i < tokens.length && _onlyWords.contains(tokens[i].text)) {
+      only = true;
+      start = tokens[i].span.end;
+    } else {
+      // «Хлеб не трогай», «да, отчёт оставь».
+      final rest = i < tokens.length
+          ? utterance.original.substring(tokens[i].span.start)
+          : '';
+      final keep = _keepTail.firstMatch(rest.trim());
+      if (keep == null) return null;
+      final queries = <String>[..._queries(keep.group(1)!), ...quoted];
+      if (queries.isEmpty) return null;
+      return refine(queries, only: false);
+    }
+    // Всё после ключевого слова — части названий через запятую или «и».
+    final queries = <String>[
+      ..._queries(utterance.original.substring(start)),
+      ...quoted,
+    ];
+    if (queries.isEmpty) return null;
+    return refine(queries, only: only);
+  }
+
+  /// «Отмена переноса», «отмена всего»: отказ от вопроса.
+  static const Set<String> _declineNouns = <String>{
+    'переноса',
+    'завершения',
+    'всего',
+    'команды',
+  };
+
+  /// Первое слово, с которым весь ответ из [_agreeWords] — согласие.
+  /// «Хорошо», «ладно», «всё» в начале согласием не считаются.
+  static const Set<String> _yesFirst = <String>{
+    'да',
+    'ага',
+    'угу',
+    'конечно',
+    'ок',
+    'окей',
+    'давай',
+    'подтверждаю',
+  };
+
+  /// «Их», «все» вместо названия: «не трогай их» — отказ целиком.
+  static const Set<String> _allWords = <String>{
+    'их',
+    'все',
+    'всё',
+    'ничего',
+    'это',
+    'эти',
+  };
+
+  /// Части названий через запятую, «и», «или»; без кавычек и точек.
+  static List<String> _queries(String text) {
+    final rest = text.replaceAll(RegExp('[«»"“”„]'), ' ');
+    return <String>[
+      for (final part in rest.split(RegExp(r'[,;]|\s+и\s+|\s+или\s+')))
+        if (part.trim().replaceAll(RegExp(r'[.!?\s]+$'), '')
+            case final String text when text.isNotEmpty)
+          text,
+    ];
+  }
+
+  /// Согласие с пояснением, которое не распознано как «кроме …»: «да, хлеб
+  /// тоже», «да, но без спешки». Пояснение может исключать задачу, поэтому
+  /// по списку не применяем, а переспрашиваем. «Нет, …» — отказ как есть.
+  @override
+  ConnectorMatch? matchLeadingAnswer(
+    Utterance utterance,
+    PendingConfirmation pending,
+    ConfirmationReply reply,
+  ) {
+    final checklist = pending.payload;
+    if (checklist is! BulkChecklist || !checklist.isPending) return null;
+    if (reply != ConfirmationReply.yes) return null;
+    if (utterance.words.every(_agreeWords.contains)) return null;
+    return ConnectorMatch(
+      connectorId: id,
+      commandId: pending.commandId,
+      confidence: 1,
+      payload: _BulkRefine(pending, const <String>[], only: false),
+    );
+  }
+
+  /// Первый шаг массовой команды: ничего не меняет, а спрашивает со
+  /// списком подходящих задач, все отмечены.
+  Future<AssistantResponse> _askBulk(
+    ParsedCommand command,
+    AssistantSession session,
+  ) async {
+    final reschedule = command.intent == CommandIntent.rescheduleMany;
+    final intent = reschedule ? rescheduleManyCommand : completeManyCommand;
+    final dueQuestion = _dueClarification(command.dueIssue);
+    if (dueQuestion != null) return _ask(session, intent, dueQuestion);
+    final shift = command.shift;
+    final target = command.dueAt;
+    final precision = command.duePrecision ?? DuePrecision.dateTime;
+    if (reschedule && target == null && shift == null) {
+      return _ask(session, intent, 'task.bulk.ask.when');
+    }
+    final now = session.clock.now();
+    final selection = command.selection ?? const BulkSelection();
+    final tasks = <Task>[
+      for (final task in await _tasks.listActive())
+        if (selection.matches(task, now) &&
+            switch ((shift, target)) {
+              (final DueShift shift, _) =>
+                task.dueAt != null && shift.fits(task.duePrecision),
+              // Задача уже на этом сроке — переносить нечего.
+              (null, final DateTime target) =>
+                task.dueAt != target || task.duePrecision != precision,
+              _ => true,
+            })
+          task,
+    ];
+    if (tasks.isEmpty) {
+      final tags = selection.tags.map((String t) => '#$t').join(', ');
+      return session.reply(
+        shift != null
+            ? 'task.bulk.empty.shift'
+            : tags.isNotEmpty
+                ? 'task.bulk.empty.tag'
+                : switch (selection.kind) {
+                    BulkScopeKind.all => 'task.bulk.empty.all',
+                    BulkScopeKind.overdue => 'task.bulk.empty.overdue',
+                    BulkScopeKind.noDue => 'task.bulk.empty.noDue',
+                    BulkScopeKind.day => 'task.bulk.empty.day',
+                  },
+        values: <String, String>{
+          if (shift == null && tags.isNotEmpty) 'tags': tags,
+          if (shift == null &&
+              tags.isEmpty &&
+              selection.kind == BulkScopeKind.day)
+            'day': formatDay(selection.day!, now),
+        },
+        intent: intent,
+        status: AssistantStatus.noAction,
+      );
+    }
+    final checklist = BulkChecklist(
+      id: 'bulk_${now.microsecondsSinceEpoch}_${_bulkSequence++}',
+      action: reschedule ? BulkAction.reschedule : BulkAction.complete,
+      selection: selection,
+      items: <BulkItem>[
+        for (final task in tasks)
+          BulkItem(
+            taskId: task.id,
+            title: task.title,
+            dueLabel: _due(task, session),
+          ),
+      ],
+      targetDue: shift == null ? target : null,
+      targetPrecision: shift == null && target != null ? precision : null,
+      shift: shift,
+      targetLabel: shift?.describe() ??
+          (target == null ? null : formatDueShort(target, precision, now)),
+    );
+    session.requestConfirmation(
+      PendingConfirmation(
+        connectorId: id,
+        commandId: intent,
+        payload: checklist,
+        onDropped: () {
+          if (checklist.isPending) checklist.state = BulkChecklistState.expired;
+        },
+      ),
+    );
+    final exclude = command.exclude;
+    if (exclude.isEmpty) return _askChecklist(checklist, session, intent);
+    // «Закрой всё, кроме хлеба»: исключённые задачи — в списке, но без
+    // отметки, как после «кроме …» в ответ на вопрос.
+    return _uncheck(checklist, session, intent, exclude, only: false);
+  }
+
+  /// Вопрос по списку [checklist] с числом отмеченных задач.
+  AssistantResponse _askChecklist(
+    BulkChecklist checklist,
+    AssistantSession session,
+    String intent, {
+    String? prefix,
+  }) {
+    final count = checklist.checkedCount;
+    if (count == 0) {
+      return session.reply(
+        'task.bulk.ask.noneChecked',
+        intent: intent,
+        status: AssistantStatus.needsClarification,
+        checklist: checklist,
+        prefix: prefix,
+      );
+    }
+    final shift = checklist.shift;
+    final due = checklist.targetDue;
+    return session.reply(
+      switch (checklist.action) {
+        BulkAction.complete => 'task.bulk.ask.complete',
+        BulkAction.reschedule when shift != null => 'task.bulk.ask.shift',
+        BulkAction.reschedule => 'task.bulk.ask.reschedule',
+      },
+      values: <String, String>{
+        'count': '$count',
+        if (shift != null) 'shift': shift.describe(),
+        if (shift == null && due != null)
+          'due': formatDue(
+            due,
+            checklist.targetPrecision ?? DuePrecision.date,
+            session.clock.now(),
+          ),
+      },
+      intent: intent,
+      status: AssistantStatus.needsClarification,
+      checklist: checklist,
+      prefix: prefix,
+    );
+  }
+
+  /// «Кроме …», «только …»: поменять отметки и спросить снова. Вопрос
+  /// остаётся тем же, поэтому карточка и ожидание не пересоздаются.
+  Future<AssistantResponse> _refineBulk(
+    _BulkRefine refine,
+    AssistantSession session,
+  ) async {
+    final pending = refine.pending;
+    final checklist = pending.payload! as BulkChecklist;
+    final intent = pending.commandId;
+    session.requestConfirmation(pending);
+    final queries = refine.queries;
+    if (queries.isEmpty) {
+      // «Да, хлеб тоже»: согласие с оговоркой, которую мы не поняли.
+      // Применять как есть нельзя — вдруг это исключение. Спрашиваем снова.
+      return _askChecklist(
+        checklist,
+        session,
+        intent,
+        prefix: session.say('task.bulk.unclear'),
+      );
+    }
+    return _uncheck(checklist, session, intent, queries, only: refine.only);
+  }
+
+  /// Снять отметки с задач по частям названий [queries] (или, при [only],
+  /// оставить отмеченными только их) и спросить снова.
+  AssistantResponse _uncheck(
+    BulkChecklist checklist,
+    AssistantSession session,
+    String intent,
+    List<String> queries, {
+    required bool only,
+  }) {
+    final hits = <BulkItem>[
+      for (final item in checklist.items)
+        if (queries.any((String q) => _titleMatches(item.title, q))) item,
+    ];
+    if (hits.isEmpty) {
+      return _askChecklist(
+        checklist,
+        session,
+        intent,
+        prefix: session.say('task.bulk.notInList', <String, String>{
+          'query': queries.map((String q) => '«$q»').join(', '),
+        }),
+      );
+    }
+    for (final item in checklist.items) {
+      final hit = hits.contains(item);
+      if (only) {
+        item.checked = hit;
+      } else if (hit) {
+        item.checked = false;
+      }
+    }
+    final titles = hits.take(3).map((BulkItem i) => '«${i.title}»').join(', ') +
+        (hits.length > 3 ? ' и ещё ${hits.length - 3}' : '');
+    return _askChecklist(
+      checklist,
+      session,
+      intent,
+      prefix: session.say(
+        only ? 'task.bulk.onlyChecked' : 'task.bulk.unchecked',
+        <String, String>{'titles': titles},
+      ),
+    );
+  }
+
+  /// Подходит ли задача [title] к части названия [query]: подстрока или
+  /// каждое слово запроса — то же слово названия в другой форме («хлеба» —
+  /// «Купить хлеб», «воды» — «Купить воду»).
+  static bool _titleMatches(String title, String query) {
+    String norm(String text) => text.toLowerCase().replaceAll('ё', 'е');
+    final t = norm(title);
+    final q = norm(query).trim();
+    if (q.isEmpty) return false;
+    if (q.length >= 3 && t.contains(q)) return true;
+    final word = RegExp(r'[\p{L}\p{N}]+', unicode: true);
+    final titleWords = <String>[
+      for (final m in word.allMatches(t)) m.group(0)!,
+    ];
+    final queryWords = <String>[
+      for (final m in word.allMatches(q))
+        if (m.group(0)!.length >= 2) m.group(0)!,
+    ];
+    if (queryWords.isEmpty) return false;
+    return queryWords.every(
+      (String q) => titleWords.any((String w) => sameWord(w, q)),
+    );
+  }
+
+  /// Одно ли это слово в разных формах: общее начало не короче трёх букв
+  /// и отличается не больше чем двумя последними буквами каждого слова.
+  /// «Воду» — «воды», «хлеб» — «хлеба», но не «в» — «воды» и не «вода» —
+  /// «водитель». Короткие слова (предлоги) совпадают только целиком.
+  static bool sameWord(String a, String b) {
+    if (a == b) return true;
+    var prefix = 0;
+    while (prefix < a.length && prefix < b.length && a[prefix] == b[prefix]) {
+      prefix++;
+    }
+    if (prefix < 3) return false;
+    return a.length - prefix <= 2 && b.length - prefix <= 2;
+  }
+
+  /// Ответ на вопрос массовой команды: «да» — применить к отмеченным
+  /// задачам, «нет» — ничего не менять.
+  Future<AssistantResponse> _answerBulk(
+    ConfirmationAnswer answer,
+    AssistantSession session,
+  ) async {
+    final pending = answer.pending;
+    final checklist = pending.payload! as BulkChecklist;
+    final intent = pending.commandId;
+    if (!checklist.isPending) {
+      return session.reply(
+        'task.bulk.stale',
+        intent: intent,
+        status: AssistantStatus.noAction,
+      );
+    }
+    if (!answer.confirmed || checklist.checkedCount == 0) {
+      checklist.state = BulkChecklistState.cancelled;
+      return session.reply(
+        answer.confirmed ? 'task.bulk.noneChecked' : 'task.bulk.declined',
+        intent: intent,
+        status: AssistantStatus.noAction,
+      );
+    }
+    final active = <String, Task>{
+      for (final task in await _tasks.listActive()) task.id: task,
+    };
+    final changes = <(Task, DateTime)>[];
+    for (final taskId in checklist.checkedIds) {
+      final task = active[taskId];
+      // Задачу успели завершить или удалить, пока список ждал ответа.
+      if (task == null) continue;
+      final Task updated;
+      switch (checklist.action) {
+        case BulkAction.complete:
+          updated = await _tasks.complete(taskId);
+          session.forget(id, taskId);
+        case BulkAction.reschedule:
+          final shift = checklist.shift;
+          final due = task.dueAt;
+          if (shift != null) {
+            if (due == null) continue;
+            updated = await _tasks.reschedule(
+              taskId,
+              shift.apply(due),
+              task.duePrecision,
+            );
+          } else {
+            updated = await _tasks.reschedule(
+              taskId,
+              checklist.targetDue!,
+              checklist.targetPrecision ?? DuePrecision.date,
+            );
+          }
+      }
+      changes.add((task, updated.updatedAt));
+    }
+    checklist
+      ..state = BulkChecklistState.applied
+      ..applied = changes.length;
+    if (changes.isEmpty) {
+      return session.reply(
+        'task.bulk.stale',
+        intent: intent,
+        status: AssistantStatus.noAction,
+      );
+    }
+    // Отменить можно только последнее массовое изменение.
+    forgetUndo();
+    checklist.canUndo = true;
+    _undo = _BulkUndo(checklist, changes);
+    final count = changes.length;
+    final total = checklist.items.length;
+    final partial = count < total;
+    final shift = checklist.shift;
+    final String replyId;
+    switch (checklist.action) {
+      case BulkAction.complete:
+        replyId = 'task.bulk.completed';
+      case BulkAction.reschedule when shift != null:
+        replyId = 'task.bulk.shifted';
+      case BulkAction.reschedule:
+        replyId = 'task.bulk.rescheduled';
+    }
+    return session.reply(
+      partial ? '$replyId.partial' : replyId,
+      values: <String, String>{
+        'count': '$count',
+        if (partial) 'total': '$total',
+        if (checklist.action == BulkAction.reschedule && shift != null)
+          'shift': shift.describe(),
+        if (checklist.action == BulkAction.reschedule && shift == null)
+          'due': formatDue(
+            checklist.targetDue!,
+            checklist.targetPrecision ?? DuePrecision.date,
+            session.clock.now(),
+          ),
+      },
+      intent: intent,
+      status: AssistantStatus.completed,
+    );
+  }
+
+  /// «Отмени», кнопка «Отменить»: вернуть задачам прежние сроки и статусы.
+  /// Задачи, которые с тех пор меняли, не трогаются.
+  Future<AssistantResponse> _undoBulk(
+    BulkUndoRequest request,
+    AssistantSession session,
+  ) async {
+    final undo = _undo;
+    final wanted = request.checklist;
+    if (undo == null ||
+        !undo.checklist.canUndo ||
+        (wanted != null && !identical(wanted, undo.checklist))) {
+      return session.reply(
+        'task.bulk.undo.nothing',
+        intent: undoCommand,
+        status: AssistantStatus.noAction,
+      );
+    }
+    var restored = 0;
+    for (final (before, updatedAt) in undo.changes) {
+      final task = await _tasks.restore(before, ifUpdatedAt: updatedAt);
+      if (task != null) restored++;
+    }
+    forgetUndo();
+    undo.checklist.state = BulkChecklistState.undone;
+    final total = undo.changes.length;
+    return session.reply(
+      restored < total ? 'task.bulk.undone.partial' : 'task.bulk.undone',
+      values: <String, String>{
+        'count': '$restored',
+        if (restored < total) 'total': '$total',
+      },
+      intent: undoCommand,
+      status: AssistantStatus.completed,
+    );
+  }
+
   AssistantResponse _completed(Task task, AssistantSession session) =>
       session.reply(
         'task.completed',
@@ -526,4 +1257,29 @@ final class _Target {
 
   final String? id;
   final AssistantResponse? clarification;
+}
+
+/// Отменить массовое изменение: из карточки — именно [checklist], из чата
+/// («отмени») — последнее (`null`).
+final class BulkUndoRequest {
+  const BulkUndoRequest([this.checklist]);
+
+  final BulkChecklist? checklist;
+}
+
+/// «Кроме …» / «только …» в ответ на вопрос массовой команды.
+final class _BulkRefine {
+  const _BulkRefine(this.pending, this.queries, {required this.only});
+
+  final PendingConfirmation pending;
+  final List<String> queries;
+  final bool only;
+}
+
+/// Применённое массовое изменение: задачи до него и когда их изменили.
+final class _BulkUndo {
+  const _BulkUndo(this.checklist, this.changes);
+
+  final BulkChecklist checklist;
+  final List<(Task, DateTime)> changes;
 }

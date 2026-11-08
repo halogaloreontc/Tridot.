@@ -279,7 +279,7 @@ def _review(config: Config, store: CandidateStore, args: argparse.Namespace) -> 
         names = sorted(row["labels"])
         for number, name in enumerate(names, start=1):
             label = row["labels"][name]
-            fields = {k: label[k] for k in prompts.LABEL_FIELDS}
+            fields = {k: label.get(k) for k in prompts.LABEL_FIELDS}
             comment = f"  // {label['comment']}" if label.get("comment") else ""
             confident = "" if label.get("confident", True) else "  [не уверен]"
             print(f"  {number}. {name}: {json.dumps(fields, ensure_ascii=False)}{confident}{comment}")
@@ -321,7 +321,7 @@ def _review(config: Config, store: CandidateStore, args: argparse.Namespace) -> 
             if answer.isdigit() and 1 <= int(answer) <= len(names):
                 chosen = names[int(answer) - 1]
                 label = row["labels"][chosen]
-                row["final"] = {k: label[k] for k in prompts.LABEL_FIELDS}
+                row["final"] = {k: label.get(k) for k in prompts.LABEL_FIELDS}
                 row["status"] = "accepted"
                 row["final_by"] = [chosen, "manual"]
                 break

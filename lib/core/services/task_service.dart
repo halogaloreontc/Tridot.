@@ -280,6 +280,34 @@ final class TaskService {
     return updated;
   }
 
+  /// Возвращает задаче прежнее состояние [snapshot] (срок, точность,
+  /// статус, отметку о завершении) — отмена массового изменения. Только
+  /// если с тех пор задачу не меняли: её [Task.updatedAt] всё ещё
+  /// [ifUpdatedAt]. Иначе (правили, удалили) — `null`, задача не трогается.
+  Future<Task?> restore(Task snapshot, {required DateTime ifUpdatedAt}) async {
+    final current = await _repository.get(snapshot.id);
+    if (current == null ||
+        current.deletedAt != null ||
+        current.updatedAt != ifUpdatedAt) {
+      return null;
+    }
+    final restored = Task(
+      id: current.id,
+      title: current.title,
+      description: current.description,
+      status: snapshot.status,
+      priority: current.priority,
+      dueAt: snapshot.dueAt,
+      duePrecision: snapshot.duePrecision,
+      tags: current.tags,
+      createdAt: current.createdAt,
+      updatedAt: _clock.now(),
+      completedAt: snapshot.completedAt,
+    );
+    await _repository.save(restored);
+    return restored;
+  }
+
   /// Все задачи, кроме удалённых: и активные, и завершённые.
   Future<List<Task>> listAll() async => (await _repository.list())
       .where((Task task) => task.deletedAt == null)

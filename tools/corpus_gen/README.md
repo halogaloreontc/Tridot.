@@ -60,8 +60,9 @@ promote       принятые фразы прогоняются через те
 - intent не `unknown` — фразу должен забрать коннектор этой фразы;
 - у других коннекторов intent должен совпасть с `commandId` их совпадения, `unknown` — у
   коннектора совпадения нет;
-- у задач intent, название, срок, точность, `issue` и `titleIssue` сравниваются с
-  `ScenarioParser` так же, как в `promote`.
+- у задач intent, название, срок, точность, `issue` и `titleIssue` (а у массовых команд
+  `rescheduleMany`/`completeMany` — ещё `scope` и `shift`) сравниваются с `ScenarioParser` так
+  же, как в `promote`.
 
 Разметчик уверен и приложение поняло так же — `agreed`, `final_by = [разметчик, "parser"]`
 (в корпусе тег `labels:gemma,parser`). Не уверен или приложение поняло иначе — `disputed`, а
@@ -248,7 +249,14 @@ cd ../.. && flutter test test/scenario_corpus_test.dart
 поставьте строке `status: "known_gap"`.
 
 Для других коннекторов корпус проверяет только маршрутизацию и `intent`; поля разбора задач
-(`title`, `due`, `precision`, `issue`, `titleIssue`) в их строки не пишутся.
+(`title`, `due`, `precision`, `issue`, `titleIssue`, `scope`, `shift`) в их строки не пишутся.
+
+Массовые команды задач (`rescheduleMany`, `completeMany`, `prompts.BULK_INTENTS`) размечаются
+с двумя полями сверх обычных: `scope` — какие задачи выбраны (`all`, `overdue`, `noDue`,
+`date:ГГГГ-ММ-ДД`, затем метки `#тег`), и `shift` — сдвиг каждой задачи (`+1h`, `-2d`, `+30m`).
+У других намерений оба поля `null`. Разметки и кандидаты, сохранённые до этих полей, читаются
+без изменений: недостающее поле — `null`, а пустой `scope` массовой команды — `all`. Правила —
+`docs/CORPUS.md`, «Массовые команды».
 
 Поля файла:
 
