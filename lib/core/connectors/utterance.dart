@@ -365,6 +365,7 @@ final class Utterance {
     'покажи': 'покажи',
     'отметь': 'отметь',
     'отмети': 'отметь',
+    'закрой': 'закрой',
   };
 
   /// Настоящие слова в одной правке от слова команды: это не опечатки,
@@ -465,10 +466,16 @@ final class Utterance {
   static bool _isEdge(String char) =>
       _edgePunctuation.contains(char) || char.trim().isEmpty;
 
-  /// Первая буква заглавная, остальное как написал пользователь.
+  /// Первая буква заглавная, остальное как написал пользователь. Знаки
+  /// перед ней пропускаются: «'готовить презентацию'» → «'Готовить
+  /// презентацию'». Число в начале остаётся началом: «3 отчёта».
   static String capitalize(String text) {
-    if (text.isEmpty) return text;
-    return text[0].toUpperCase() + text.substring(1);
+    for (var i = 0; i < text.length; i++) {
+      final char = text[i];
+      if (!_hasLetterOrDigit.hasMatch(char)) continue;
+      return text.substring(0, i) + char.toUpperCase() + text.substring(i + 1);
+    }
+    return text;
   }
 
   /// Вырезает все названия в парных кавычках, заменяя их пробелами той же

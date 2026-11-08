@@ -620,6 +620,37 @@ void main() {
       expect((await assistant.handle('да')).task?.id, slides.id);
     });
 
+    test('глагол сделанного и название в кавычках — тоже вопрос', () async {
+      final book =
+          (await assistant.handle('Добавь задачу «Книгу в библиотеку»')).task!;
+
+      final response = await assistant.handle('Вернул «Книгу в библиотеку»');
+
+      expect(response.status, AssistantStatus.needsClarification);
+      expect(response.message, 'Отметить «Книгу в библиотеку» выполненной?');
+      expect(await isActive(book), isTrue);
+      expect((await assistant.handle('да')).task?.id, book.id);
+      expect(await isActive(book), isFalse);
+    });
+
+    for (final text in <String>[
+      'я забыл «Сдать отчёт»',
+      'я потерял «Сдать отчёт»',
+      'я любил «Сдать отчёт»',
+      'я смотрел «Сдать отчёт»',
+      'я забыл сдать отчёт',
+      'поел и поспал',
+      'я сдал и ушёл',
+    ]) {
+      test('«$text» — не сообщение о сделанном', () async {
+        final response = await assistant.handle(text);
+
+        expect(response.intent, 'unknown');
+        expect(await isActive(report), isTrue);
+        expect(assistant.session.pendingConfirmation, isNull);
+      });
+    }
+
     test('задачу завершили до ответа — ничего не делает', () async {
       await assistant.handle('я купил хлеб');
       await service.complete(bread.id);

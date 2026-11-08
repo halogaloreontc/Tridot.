@@ -138,3 +138,19 @@
 {"id": "talk-138", "text": "ну ты и юморист", "connector": "talk", "intent": "unknown", "note": "«юморист» — не просьба о шутке", "source": "manual"}
 {"id": "talk-139", "text": "что смешного", "connector": "talk", "intent": "unknown", "note": "обида, а не просьба", "source": "manual"}
 {"id": "talk-140", "text": "тупая шутка", "connector": "talk", "intent": "unknown", "note": "оценка без просьбы", "source": "manual"}
+{"id": "talk-141", "text": "я пошутил", "connector": "talk", "intent": "unknown", "note": "прошедшее время без спешки — рассказ, а не просьба", "source": "manual"}
+{"id": "talk-142", "text": "помощь по дому", "connector": "talk", "intent": "unknown", "note": "тема справки — не о помощнике", "source": "manual"}
+{"id": "talk-143", "text": "что ты можешь сказать про отчёт", "connector": "talk", "intent": "unknown", "note": "не вопрос о возможностях", "source": "manual"}
+{"id": "talk-144", "text": "говори короче, добавь задачу купить хлеб", "connector": "talk", "intent": "unknown", "note": "после просьбы о стиле — команда, а не замечание", "source": "manual"}
+{"id": "talk-145", "text": "пусть Нода отвечает, а ты добавь задачу", "connector": "talk", "intent": "unknown", "note": "хвост — команда, а не замечание", "source": "manual"}
+{"id": "talk-146", "text": "спс за инфу, добавь задачу позвонить", "connector": "talk", "intent": "unknown", "note": "команда после благодарности", "source": "manual"}
+{"id": "talk-147", "text": "расскажи шутку для выступления, добавь в задачи", "connector": "talk", "intent": "unknown", "note": "команда после просьбы о шутке", "source": "manual"}
+{"id": "talk-148", "text": "не люблю понедельники", "connector": "talk", "intent": "unknown", "note": "«не люблю» без обращения к помощнику — не грубость", "source": "manual"}
+{"id": "talk-149", "text": "Нодочка, я тебя люблю", "connector": "talk", "intent": "unknown", "note": "не грубость", "source": "manual"}
+{"id": "talk-150", "text": "Лео, позвони маме завтра", "connector": "talk", "intent": "unknown", "note": "имя с опечаткой не делает команду беседой", "source": "manual"}
+{"id": "talk-151", "text": "спасибо за подробный ответ", "connector": "talk", "intent": "talk.thanks", "source": "manual"}
+{"id": "talk-152", "text": "Сделай Ноду главной здесь", "connector": "talk", "intent": "talk.setting", "source": "manual"}
+{"id": "talk-153", "text": "не будь таким официальным", "connector": "talk", "intent": "talk.setting", "note": "стиль с отрицанием", "source": "manual"}
+{"id": "talk-154", "text": "что ты умеешь по части задач", "connector": "talk", "intent": "talk.capabilities", "source": "manual"}
+{"id": "talk-155", "text": "спасибо за анекдот, давай ещё", "connector": "talk", "intent": "talk.joke", "source": "manual"}
+{"id": "talk-156", "text": "Нод, привет", "connector": "talk", "intent": "talk.greet", "note": "имя с опечаткой в обращении", "source": "manual"}

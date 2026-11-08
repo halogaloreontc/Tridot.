@@ -51,8 +51,8 @@ final class ParsedCommand {
   final bool implicit;
 
   /// Завершение сообщением о сделанном: «я купил хлеб», «выполнил отчёт».
-  /// Задача по [targetQuery] не завершается сразу: сначала вопрос
-  /// «Отметить … выполненной?».
+  /// Задача по [targetQuery] (или по [title] из кавычек: «вернул «Книгу»»)
+  /// не завершается сразу: сначала вопрос «Отметить … выполненной?».
   final bool pastTense;
 
   /// Метки проектов из команды: «#работа» вне кавычек, без «#».
@@ -351,6 +351,19 @@ final class ScenarioParser {
           remove.add(tokens[i].span);
           i++;
         }
+        continue;
+      }
+      // «напомни не забудь купить хлеб»: «не забудь» после «напомни»
+      // повторяет просьбу. После «добавь» это часть названия: «добавь не
+      // забыть полить цветы» → «Не забыть полить цветы».
+      if (remind &&
+          word == 'не' &&
+          i + 1 < tokens.length &&
+          _dontForget.contains(tokens[i + 1].text)) {
+        remove
+          ..add(token.span)
+          ..add(tokens[i + 1].span);
+        i += 2;
         continue;
       }
       if (remind && !conjunctionTaken && _remindConjunctions.contains(word)) {
@@ -732,7 +745,9 @@ final class ScenarioParser {
   /// с инфинитива. «Купить хлеб?» — вопрос, не задача.
   ParsedCommand? _implicitCreate(Utterance utterance) {
     if (utterance.isQuestion || utterance.unbalancedQuotes) return null;
-    if (utterance.quotedTitles.isNotEmpty) return _implicitQuoted(utterance);
+    if (utterance.quotedTitles.isNotEmpty) {
+      return _implicitQuoted(utterance) ?? _infinitiveQuoted(utterance);
+    }
     final due = utterance.due;
     final tokens = utterance.tokens;
     final remove = <CharSpan>[...due.spans];
@@ -741,6 +756,7 @@ final class ScenarioParser {
     for (var k = 0; k < i; k++) {
       remove.add(tokens[k].span);
     }
+    var dontForget = false;
     while (i < tokens.length) {
       final token = tokens[i];
       if (Utterance.isCovered(token, due.spans)) {
@@ -758,12 +774,25 @@ final class ScenarioParser {
         remove
           ..add(token.span)
           ..add(tokens[i + 1].span);
+        dontForget = true;
         i += 2;
+        continue;
+      }
+      // «после работы зайти в аптеку», «ночью проверить …»: время, которое
+      // не срок, — часть названия, но не мешает инфинитиву после него.
+      final adverbial = _untimedAdverbialLength(tokens, i);
+      if (adverbial > 0) {
+        i += adverbial;
         continue;
       }
       break;
     }
     if (i >= tokens.length) return null;
+    // «не забыть про оплату подписки через пару дней» — как «напомни про
+    // оплату подписки»: название — предмет в именительном падеже.
+    if (dontForget && _aboutPrepositions.contains(tokens[i].text)) {
+      return _dontForgetAbout(utterance, remove);
+    }
     final verb = tokens[i].text;
     if (!DueParser.isInfinitive(verb) || _notImplicitVerbs.contains(verb)) {
       return null;
@@ -795,6 +824,185 @@ final class ScenarioParser {
     return ParsedCommand(
       intent: CommandIntent.createTask,
       title: Utterance.capitalize(text),
+      dueAt: due.dueAt,
+      duePrecision: due.precision,
+      dueIssue: due.issue,
+      projects: <String>[for (final tag in utterance.hashtags) tag.name],
+      implicit: true,
+    );
+  }
+
+  /// Обстоятельства времени, которые не сроки ([DueParser]): «ночью»,
+  /// «после работы», «перед сном». Перед инфинитивом без маркера они
+  /// остаются в названии: «после работы зайти в аптеку».
+  static const List<List<String>> _untimedAdverbials = <List<String>>[
+    <String>['ночью'],
+    <String>['после', 'работы'],
+    <String>['после', 'учебы'],
+    <String>['после', 'школы'],
+    <String>['после', 'занятий'],
+    <String>['после', 'пар'],
+    <String>['после', 'тренировки'],
+    <String>['перед', 'сном'],
+    <String>['перед', 'работой'],
+    <String>['перед', 'выходом'],
+    <String>['по', 'дороге', 'домой'],
+    <String>['по', 'дороге', 'на', 'работу'],
+  ];
+
+  /// Сколько слов с [index] занимает обстоятельство из
+  /// [_untimedAdverbials]; 0 — его нет.
+  static int _untimedAdverbialLength(List<UtteranceToken> tokens, int index) {
+    var best = 0;
+    for (final phrase in _untimedAdverbials) {
+      if (phrase.length <= best || index + phrase.length > tokens.length) {
+        continue;
+      }
+      var match = true;
+      for (var k = 0; k < phrase.length; k++) {
+        if (tokens[index + k].text != phrase[k]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) best = phrase.length;
+    }
+    return best;
+  }
+
+  /// «Не забыть про оплату подписки», «не забудь о встрече с юристом» —
+  /// задача, если предмет после предлога удалось привести к именительному
+  /// падежу ([NounForms]): «Оплата подписки». Иначе («не забудь про меня»,
+  /// «не забудь о себе») это реплика, а не задача.
+  ParsedCommand? _dontForgetAbout(Utterance utterance, List<CharSpan> remove) {
+    final due = utterance.due;
+    _trimEdgeWords(utterance, remove, _politeWords);
+    final rest = utterance.tokensOutside(remove);
+    if (rest.length < 2) return null;
+    if (rest.any(
+      (UtteranceToken t) =>
+          _notImplicitAfterVerb.contains(t.text) ||
+          _isAssistantNoun(t.text) ||
+          _aboutRetractions.contains(t.text),
+    )) {
+      return null;
+    }
+    // «Не забыть про него», «про это», «про всё»: местоимение — не дело.
+    if (rest
+        .skip(1)
+        .every((UtteranceToken t) => _aboutPronouns.contains(t.text))) {
+      return null;
+    }
+    final text = utterance.remainder(remove);
+    final title = NounForms.nominative(text);
+    final preposition = rest.first.original;
+    if (title.toLowerCase().startsWith('${preposition.toLowerCase()} ')) {
+      return null;
+    }
+    return ParsedCommand(
+      intent: CommandIntent.createTask,
+      title: Utterance.capitalize(title),
+      dueAt: due.dueAt,
+      duePrecision: due.precision,
+      dueIssue: due.issue,
+      projects: <String>[for (final tag in utterance.hashtags) tag.name],
+      implicit: true,
+    );
+  }
+
+  /// Местоимения после «не забыть про/о»: «про него», «о них», «про это»,
+  /// «про всё это». Предмета в них нет — фраза не задача.
+  static const Set<String> _aboutPronouns = <String>{
+    'меня',
+    'мне',
+    'тебя',
+    'тебе',
+    'себя',
+    'себе',
+    'него',
+    'нем',
+    'нее',
+    'ней',
+    'них',
+    'нас',
+    'вас',
+    'это',
+    'этом',
+    'то',
+    'том',
+    'все',
+    'всем',
+    'всех',
+    'всего',
+    'остальное',
+    'остальном',
+    'другое',
+    'другом',
+    'такое',
+    'таком',
+    'что',
+    'чем',
+    'кого',
+    'ком',
+    'нибудь',
+  };
+
+  /// Слова отказа или поворота внутри «не забыть про X, а вообще ладно»:
+  /// после них X — уже не просьба.
+  static const Set<String> _aboutRetractions = <String>{
+    'а',
+    'но',
+    'ладно',
+    'впрочем',
+    'хотя',
+    'однако',
+  };
+
+  /// Инфинитив перед названием в кавычках без команды: «хочу в субботу
+  /// испечь «яблочный пирог с карамелью»», «надо купить «хлеб» завтра».
+  /// Как и с маркером («добавь испечь «пирог»»), название — из кавычек как
+  /// есть. Других слов, кроме вступления, срока и вежливых, быть не должно.
+  ParsedCommand? _infinitiveQuoted(Utterance utterance) {
+    if (utterance.quotedTitles.length != 1) return null;
+    final due = utterance.due;
+    final quote = utterance.quotedTitles.single;
+    UtteranceToken? verb;
+    var i = SocialPrefix.length(utterance);
+    final tokens = utterance.tokens;
+    while (i < tokens.length) {
+      final token = tokens[i];
+      if (Utterance.isCovered(token, due.spans) ||
+          _politeWords.contains(token.text) ||
+          (verb == null && _implicitLeadIns.contains(token.text))) {
+        i++;
+        continue;
+      }
+      if (verb == null &&
+          token.text == 'не' &&
+          i + 1 < tokens.length &&
+          _dontForget.contains(tokens[i + 1].text)) {
+        i += 2;
+        continue;
+      }
+      if (verb != null) return null;
+      verb = token;
+      i++;
+    }
+    // «Нужно выполнить «Отчёт» завтра» — не новая задача «Отчёт»: глагол
+    // завершения перед названием говорит о самой задаче.
+    if (verb == null ||
+        !DueParser.isInfinitive(verb.text) ||
+        _notImplicitVerbs.contains(verb.text) ||
+        _completeInfinitives.contains(verb.text)) {
+      return null;
+    }
+    // Глагол прямо перед кавычками: «испечь «пирог»», а не «купить завтра
+    // «хлеб»» с чужим словом между ними.
+    final gap = utterance.original.substring(verb.span.end, quote.span.start);
+    if (gap.trim().isNotEmpty) return null;
+    return ParsedCommand(
+      intent: CommandIntent.createTask,
+      title: quote.text,
       dueAt: due.dueAt,
       duePrecision: due.precision,
       dueIssue: due.issue,
@@ -967,7 +1175,6 @@ final class ScenarioParser {
     'вот',
     'ну',
     'а',
-    'и',
     'так',
     'наконец',
     'сегодня',
@@ -1017,15 +1224,25 @@ final class ScenarioParser {
   /// прошедшего времени стоит первым или последним среди значимых слов.
   ParsedCommand? _implicitComplete(Utterance utterance) {
     if (utterance.isQuestion ||
-        utterance.quotedTitles.isNotEmpty ||
-        utterance.unbalancedQuotes) {
+        utterance.unbalancedQuotes ||
+        utterance.quotedTitles.length > 1) {
       return null;
     }
+    final tokens = utterance.tokens;
     final remove = <CharSpan>[
       ...utterance.due.spans,
-      for (final token in utterance.tokens)
+      for (final token in tokens)
         if (_pastFiller.contains(token.text)) token.span,
+      // «наконец-то сдал проект».
+      for (final token in tokens)
+        if (token.text == 'то' &&
+            token.index > 0 &&
+            tokens[token.index - 1].text == 'наконец')
+          token.span,
     ];
+    // «и» — часть перечисления («хлеб и молоко купил»), а не вступление,
+    // кроме как на краю: «и хлеб купил».
+    _trimEdgeWords(utterance, remove, const <String>{'и'});
     final rest = utterance.tokensOutside(remove);
     if (rest.isEmpty) return null;
     // «Не купил хлеб» — не сделано.
@@ -1050,8 +1267,26 @@ final class ScenarioParser {
         rest.any((UtteranceToken t) => _householdObjects.contains(t.text))) {
       return null;
     }
-    // «Я купил», «звонил» без предмета: по одному глаголу задачу не угадать.
-    if (rest.every((UtteranceToken t) => VerbForms.stem(t.text) != null)) {
+    // «Я забыл отчёт», «потерял ключи», «любил «Отчёт»», «смотрел «Друзей»»:
+    // глагол прошедшего времени, но не о сделанном деле.
+    if (rest.any((UtteranceToken t) => _isNotDonePast(t.text))) return null;
+    // «Вернул «Книгу в библиотеку»»: глагол сделанного и точное название.
+    // Задача ищется по точному названию, но, как и без кавычек, глагол
+    // угадан по форме — сначала вопрос «Отметить «…» выполненной?».
+    if (utterance.quotedTitles.isNotEmpty) {
+      if (rest.length != 1) return null;
+      return ParsedCommand(
+        intent: CommandIntent.completeTask,
+        title: utterance.quotedTitles.single.text,
+        implicit: true,
+        pastTense: true,
+      );
+    }
+    // «Я купил», «звонил», «поел и поспал» без предмета: по одним глаголам
+    // задачу не угадать. «И» между ними — не предмет.
+    if (rest.every(
+      (UtteranceToken t) => t.text == 'и' || VerbForms.stem(t.text) != null,
+    )) {
       return null;
     }
     final text = utterance.remainder(remove);
@@ -1063,6 +1298,42 @@ final class ScenarioParser {
       pastTense: true,
     );
   }
+
+  /// Начала глаголов прошедшего времени, которые не сообщают о сделанном
+  /// деле: забыть и потерять («забыл», «потеряла», «упустил»,
+  /// «пропустили», «проспал», «провалил»), чувства («любил», «обожала»,
+  /// «ненавидел», «хотел», «мечтал») и восприятие или ожидание без
+  /// приставки («смотрел», «видел», «слышал», «ждал», «помнил», «знал»,
+  /// «думал»). С приставкой сделанного дело закончено: «посмотрел
+  /// вебинар», «дождался курьера», «узнал цену».
+  static const List<String> _notDonePastStems = <String>[
+    'забыл',
+    'позабыл',
+    'потерял',
+    'упустил',
+    'пропустил',
+    'проспал',
+    'провалил',
+    'люби',
+    'полюбил',
+    'обожал',
+    'ненавидел',
+    'хотел',
+    'захотел',
+    'мечтал',
+    'смотрел',
+    'видел',
+    'увидел',
+    'слышал',
+    'услышал',
+    'ждал',
+    'помнил',
+    'знал',
+    'думал',
+  ];
+
+  static bool _isNotDonePast(String word) =>
+      isPastVerb(word) && _notDonePastStems.any(word.startsWith);
 
   /// Похоже на глагол прошедшего времени: «купил», «сдала», «позвонили».
   /// Правила — [VerbForms.isPastVerb].
@@ -1131,6 +1402,24 @@ final class ScenarioParser {
     'готовое',
     'галочкой',
     'все',
+  };
+
+  /// Слова о самой задаче сразу после команды переноса и завершения:
+  /// «отложи напоминание про полис», «выполни пункт про оплату счетов».
+  /// Дальше по фразе они — часть цели: «заверши поход в пункт выдачи».
+  static const Set<String> _targetObjectNouns = <String>{
+    'напоминание',
+    'пункт',
+  };
+
+  /// Союзы на краю цели: «перенеси на завтра и потом на послезавтра
+  /// звонить в страховую» → «Звонить в страховую».
+  static const Set<String> _targetEdgeConjunctions = <String>{
+    'и',
+    'а',
+    'или',
+    'потом',
+    'затем',
   };
 
   static const Set<String> _rescheduleFiller = <String>{
@@ -1232,6 +1521,18 @@ final class ScenarioParser {
         remove.add(rest.first.span);
       }
     }
+    // «отложи напоминание про полис», «выполни пункт про оплату»: слово
+    // о самой задаче сразу после команды — как «задачу».
+    final first = utterance
+        .tokensOutside(remove)
+        .where((UtteranceToken t) => t.index > markerIndex)
+        .firstOrNull;
+    if (first != null && _targetObjectNouns.contains(first.text)) {
+      remove.add(first.span);
+    }
+    // «перенеси на завтра и потом на послезавтра звонить»: союз между
+    // сроками и целью — не цель.
+    _trimEdgeWords(utterance, remove, _targetEdgeConjunctions);
     final text = utterance.remainder(remove);
     if (text.isEmpty) return null;
     // «Перенеси встречу» → «Встреча»: поиск сравнивает слова по основе,
@@ -1328,7 +1629,9 @@ final class ScenarioParser {
             ? const _Marker.unknown()
             : _Marker(CommandIntent.createTask, i, create);
       }
-      if (_isReschedule(word)) {
+      if (_isReschedule(word) ||
+          (_rescheduleImperfective.contains(word) &&
+              utterance.due.spans.isNotEmpty)) {
         return negated
             ? const _Marker.unknown()
             : _Marker(CommandIntent.rescheduleTask, i, 1);
@@ -1503,7 +1806,9 @@ final class ScenarioParser {
     int index,
     List<String> words,
   ) {
-    if (_createVerbs.contains(word)) return 1;
+    if (_createVerbs.contains(word)) {
+      return _signsUpOther(utterance, word, index) ? 0 : 1;
+    }
     if (_createWithNounVerbs.contains(word) && _nounFollows(index, words)) {
       return 1;
     }
@@ -1525,11 +1830,48 @@ final class ScenarioParser {
     return isNewTask ? 2 : 0;
   }
 
+  /// «не забыть записать ребёнка к стоматологу», «надо записать маму на
+  /// приём»: инфинитив «записать» с кем-то другим и «к/на» — само дело
+  /// (записать кого-то к врачу), а не просьба «запиши в задачи». Такая
+  /// фраза разбирается как задача по инфинитиву: «Записать ребёнка
+  /// к стоматологу». «Записать меня к врачу» — просьба записаться.
+  bool _signsUpOther(Utterance utterance, String word, int index) {
+    if (word != 'записать') return false;
+    final tokens = utterance.tokens;
+    if (index + 2 >= tokens.length) return false;
+    final object = tokens[index + 1];
+    if (_signUpObjects.contains(object.text) ||
+        _objectNouns.contains(object.text) ||
+        _politeWords.contains(object.text) ||
+        _addressees.contains(object.text) ||
+        object.isNumber ||
+        Utterance.isCovered(object, utterance.due.spans)) {
+      return false;
+    }
+    return _signUpPrepositions.contains(tokens[index + 2].text) &&
+        !Utterance.isCovered(tokens[index + 2], utterance.due.spans);
+  }
+
   bool _isReschedule(String word) =>
       word.startsWith('перенес') ||
       word.startsWith('передвин') ||
       word.startsWith('сдвин') ||
       word.startsWith('отлож');
+
+  /// Несовершенный вид в просьбе: «сдвигай тренировку на среду», «переноси
+  /// встречу на пятницу». Только повелительные формы («переносить» —
+  /// инфинитив, «перенос» — существительное) и только со сроком: «переноси
+  /// коробки аккуратно» — о вещах, а не о задаче.
+  static const Set<String> _rescheduleImperfective = <String>{
+    'переноси',
+    'переносите',
+    'сдвигай',
+    'сдвигайте',
+    'передвигай',
+    'передвигайте',
+    'откладывай',
+    'откладывайте',
+  };
 
   /// Повелительные, прошедшие и краткие формы. «Выполненные задачи»
   /// и «нужно выполнить» не считаются командой завершения.
@@ -1604,7 +1946,9 @@ final class ScenarioParser {
         _closedForms.contains(word);
     if (!close) return false;
     if (utterance.quotedTitles.isNotEmpty ||
-        words.any((String w) => w.startsWith('задач'))) {
+        words.any(
+          (String w) => w.startsWith('задач') || w.startsWith('напоминани'),
+        )) {
       return true;
     }
     if (_closedParticiples.contains(word)) return false;
@@ -1750,10 +2094,12 @@ bool _isListQuery(Utterance utterance) {
   if (words.isEmpty) return false;
   // Название списка в кавычках — только сразу после «список» или как
   // пример после «типа»: «покажи список "Дом"».
+  // Срок в кавычках — просто выделение: «список дел на «сегодня»».
   for (final quote in utterance.quotedTitles) {
     final before = utterance.tokens
         .where((UtteranceToken t) => t.span.end <= quote.span.start)
         .toList(growable: false);
+    if (_isQuotedDue(quote.text, utterance)) continue;
     if (before.isEmpty || !_listQuoteHeads.contains(before.last.text)) {
       return false;
     }
@@ -1762,9 +2108,19 @@ bool _isListQuery(Utterance utterance) {
     return utterance.quotedTitles.isEmpty && utterance.hashtags.isEmpty;
   }
   var subject = utterance.hashtags.isNotEmpty;
-  var ask = utterance.isQuestion;
+  // «Список дел на сегодня» — заголовок вместо просьбы: «список» в начале
+  // и ещё одно слово о задачах после него.
+  var ask = utterance.isQuestion ||
+      (words.first == 'список' &&
+          words.skip(1).any(
+                (String w) =>
+                    (_listSubjects.contains(w) && !w.startsWith('спис')) ||
+                    _listSubjectStem(w),
+              ));
   for (var i = 0; i < words.length; i++) {
     final word = words[i];
+    // «ааа покажи …», «эээ, что у меня на завтра?» — междометие.
+    if (_interjection.hasMatch(word)) continue;
     if (_listSubjects.contains(word) || _listSubjectStem(word)) {
       subject = true;
       continue;
@@ -1782,18 +2138,77 @@ bool _isListQuery(Utterance utterance) {
     }
     if (!_listVocabulary.contains(word)) return false;
   }
-  // «что мне нужно сделать?», «что там у меня осталось?», «что у меня на
-  // завтра?».
+  // «что мне нужно сделать?», «покажи всё, что нужно сделать», «что я
+  // должен сделать», «что там у меня осталось?», «что у меня на завтра?»,
+  // «что я записал на пятницу», «что я там планировал».
   if (!subject && words.contains('что')) {
     final mine = words.contains('у') && words.contains('меня');
-    subject = (words.contains('мне') &&
-            (words.contains('сделать') || words.contains('делать'))) ||
-        words.contains('осталось') ||
-        words.contains('остались') ||
-        (mine && utterance.due.spans.isNotEmpty);
+    subject =
+        (words.any(_listDuties.contains) && words.any(_listDoings.contains)) ||
+            words.contains('осталось') ||
+            words.contains('остались') ||
+            words.any(_listPlanned.contains) ||
+            (mine && utterance.due.spans.isNotEmpty);
   }
   return subject && ask;
 }
+
+/// Междометие из одной повторённой буквы: «ааа», «эээ», «ммм».
+final RegExp _interjection = RegExp(r'^(а{2,}|э+|м{2,}|о{2,}|у{2,})$');
+
+/// Кавычки вокруг одного срока: «на «сегодня»». Срок в кавычках не
+/// разбирается ([Utterance]), поэтому кавычки здесь — только выделение.
+bool _isQuotedDue(String text, Utterance utterance) {
+  final normalized = DueParser.normalizeChars(text);
+  final words = RegExp('[a-zа-я0-9]+').allMatches(normalized).toList();
+  if (words.isEmpty) return false;
+  final due = const DueParser().parse(normalized, DateTime(2000));
+  return words.every(
+    (RegExpMatch w) => due.spans.any(
+      (CharSpan s) => s.start <= w.start && w.end <= s.end,
+    ),
+  );
+}
+
+/// Кто должен: «что мне нужно сделать», «что я должен сделать».
+const Set<String> _listDuties = <String>{
+  'мне',
+  'нужно',
+  'надо',
+  'должен',
+  'должна',
+  'должны',
+};
+
+/// Что сделать: «сделать», «доделать», «что мне делать».
+const Set<String> _listDoings = <String>{
+  'сделать',
+  'делать',
+  'доделать',
+  'доработать',
+  'недоделать',
+  'недоработать',
+};
+
+/// Что я сам запланировал: «что я записал на пятницу», «что намечено на
+/// понедельник», «что я там планировал».
+const Set<String> _listPlanned = <String>{
+  'записал',
+  'записала',
+  'записали',
+  'записано',
+  'запланировал',
+  'запланировала',
+  'запланировали',
+  'планировал',
+  'планировала',
+  'планировали',
+  'наметил',
+  'наметила',
+  'наметили',
+  'намечено',
+  'назначено',
+};
 
 /// То, что показывает список: «задачи», «дела», «планы», «расписание».
 const Set<String> _listSubjects = <String>{
@@ -1821,6 +2236,9 @@ const Set<String> _listSubjects = <String>{
   'списки',
   'встречи',
   'встреч',
+  'график',
+  'графике',
+  'графика',
 };
 
 bool _listSubjectStem(String word) =>
@@ -1837,6 +2255,14 @@ const Set<String> _listAsks = <String>{
   'выведите',
   'глянь',
   'гляньте',
+  'посмотри',
+  'посмотрите',
+  'взгляни',
+  'дай',
+  'дайте',
+  // «напомни, что я там планировал» — вопрос о планах, а не новая задача.
+  'напомни',
+  'напомните',
   'скажи',
   'подскажи',
   'что',
@@ -1874,7 +2300,6 @@ const Set<String> _listVocabulary = <String>{
   'тут',
   'у',
   'меня',
-  'мне',
   'мой',
   'мои',
   'моя',
@@ -1904,15 +2329,15 @@ const Set<String> _listVocabulary = <String>{
   'то',
   'нибудь',
   'нужен',
-  'нужно',
-  'надо',
   'того',
   'я',
   'не',
   'сделал',
   'сделала',
-  'сделать',
-  'делать',
+  ..._listDoings,
+  ..._listDuties,
+  ..._listPlanned,
+  'день',
   'тегу',
   'тегом',
   'метке',

@@ -248,7 +248,10 @@ final class TasksConnector implements Connector, ConnectorHealth {
     ParsedCommand command,
     AssistantSession session,
   ) async {
-    final query = command.targetQuery;
+    // «Я купил хлеб», «вернул «Книгу»»: сообщение о сделанном без маркера —
+    // по запросу или точному названию, но сначала вопрос.
+    final query =
+        command.targetQuery ?? (command.pastTense ? command.title : null);
     if (command.pastTense && query != null) {
       return _askToComplete(command, query, session);
     }

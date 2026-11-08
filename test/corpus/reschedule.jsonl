@@ -6,3 +6,11 @@
 {"id":"move-006","text":"Передвинь её","intent":"rescheduleTask","due":null}
 {"id":"move-007","text":"Перенеси на сегодня в 08:00","intent":"rescheduleTask","issue":"inPast"}
 {"id":"move-008","text":"Перенесите на завтра в 9:15","intent":"rescheduleTask","due":"2026-11-03T09:15","precision":"dateTime"}
+{"id":"move-009","text":"переноси встречу на пятницу","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-06","precision":"date","note":"несовершенный вид со сроком"}
+{"id":"move-010","text":"переноси коробки аккуратно","intent":"unknown","note":"несовершенный вид без срока — о вещах, а не о задаче"}
+{"id":"move-011","text":"откладывай звонок на завтра","intent":"rescheduleTask","targetQuery":"Звонок","due":"2026-11-03","precision":"date"}
+{"id":"move-012","text":"отложи на неделю отчёт","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-11-09","precision":"date","note":"«отложи на неделю» — через неделю"}
+{"id":"move-013","text":"сдвинь встречу на час","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-02T17:30","precision":"dateTime","note":"«сдвинь на час» — через час"}
+{"id":"move-014","text":"перенеси на завтрашний день созвон","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-03","precision":"date"}
+{"id":"move-015","text":"с 5 на 7 декабря перенеси созвон","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-12-07","precision":"date","note":"исходное число без месяца — месяц нового срока"}
+{"id":"move-016","text":"отложи напоминание про полис на завтра","intent":"rescheduleTask","targetQuery":"Про полис","due":"2026-11-03","precision":"date","note":"«напоминание» сразу после команды — как «задачу»; «про» у цели переноса остаётся"}

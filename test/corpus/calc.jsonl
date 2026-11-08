@@ -84,3 +84,12 @@
 {"id": "calc-084", "text": "извлеки два урока", "connector": "calc", "intent": "unknown", "source": "manual"}
 {"id": "calc-085", "text": "5 рублей + 5 евро", "connector": "calc", "intent": "unknown", "note": "разные валюты — не пример", "source": "manual"}
 {"id": "calc-086", "text": "100 долларов минус 20 евро", "connector": "calc", "intent": "unknown", "source": "manual"}
+{"id": "calc-087", "text": "найди корень проблемы", "connector": "calc", "intent": "unknown", "note": "«найди» — маркер только перед корнем из числа", "source": "manual"}
+{"id": "calc-088", "text": "а 5", "connector": "calc", "intent": "unknown", "note": "частица — не маркер", "source": "manual"}
+{"id": "calc-089", "text": "купить 2 кг муки, дай ответ", "connector": "calc", "intent": "unknown", "note": "задача с числом", "source": "manual"}
+{"id": "calc-090", "text": "делить пирог на троих", "connector": "calc", "intent": "unknown", "source": "manual"}
+{"id": "calc-091", "text": "5 в кубе, какой ответ", "connector": "calc", "intent": "calc.evaluate", "answer": "125", "source": "manual"}
+{"id": "calc-092", "text": "найди корень из проблемы", "connector": "calc", "intent": "unknown", "note": "после «найди корень из» нет числа", "source": "manual"}
+{"id": "calc-093", "text": "найди квадратный корень проблемы", "connector": "calc", "intent": "unknown", "note": "после «найди квадратный корень» нет числа", "source": "manual"}
+{"id": "calc-094", "text": "найди корень из", "connector": "calc", "intent": "unknown", "note": "после «найди корень из» нет числа", "source": "manual"}
+{"id": "calc-095", "text": "найди квадратный корень из 144", "connector": "calc", "intent": "calc.evaluate", "answer": "12", "source": "manual"}

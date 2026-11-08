@@ -354,6 +354,29 @@ final class DueParser {
           ),
         );
       }
+      // «на завтрашний день», «к сегодняшнему дню»: день в прилагательном,
+      // точность — день. «Завтрашний день рождения» — событие, не срок.
+      for (var k = 2; k < words.length; k++) {
+        final offset = _dayNounAdjectives[words[k - 1].group(0)];
+        if (offset == null ||
+            !_dayNouns.contains(words[k].group(0)) ||
+            !_attachedPrepositions.contains(words[k - 2].group(0)) ||
+            !_onlySpaces(normalized, words[k - 2].end, words[k - 1].start) ||
+            !_onlySpaces(normalized, words[k - 1].end, words[k].start)) {
+          continue;
+        }
+        if (k + 1 < words.length &&
+            _partBlockersAfter.contains(words[k + 1].group(0))) {
+          continue;
+        }
+        consume(words[k - 1].start, words[k].end);
+        dates.add(
+          _Mention(
+            DateTime(today.year, today.month, today.day + offset),
+            _isSource(normalized, words[k - 1].start),
+          ),
+        );
+      }
       for (final word in words) {
         final offset = _dayWords[word.group(0)];
         if (offset == null) continue;
@@ -514,6 +537,7 @@ final class DueParser {
     // Исключение — час сразу после дня: «завтра в 10 созвон», «в следующий
     // понедельник в 9 планёрка». Здесь число уже не может быть количеством.
     final masked = _word.allMatches(dateText).toList(growable: false);
+    final postpone = _postpones(words);
     final dayEnds = <int>{
       for (final found in <_Found>[
         ..._relativeMentions(normalized, words, now),
@@ -581,7 +605,13 @@ final class DueParser {
       }
       final suffix = _suffixAfter(dateText, masked, token.end);
       final hasPreposition = i > 0 &&
-          _hourPrepositions.contains(masked[i - 1].group(0)) &&
+          (_hourPrepositions.contains(masked[i - 1].group(0)) ||
+              _clockAfterNa(
+                masked[i - 1].group(0)!,
+                value,
+                suffix,
+                postpone: postpone,
+              )) &&
           _onlySpaces(dateText, masked[i - 1].end, token.start);
       // «на завтра 9 утра», «в пятницу 7 вечера»: час без предлога сразу
       // после дня — только с «утра», «вечера», «ночи».
@@ -815,6 +845,22 @@ final class DueParser {
     'послезавтрашнее': 2,
     'послезавтрашний': 2,
   };
+
+  /// Прилагательные дня перед «день» с предлогом: «на завтрашний день»,
+  /// «к сегодняшнему дню», «до послезавтрашнего дня».
+  static const Map<String, int> _dayNounAdjectives = <String, int>{
+    'сегодняшний': 0,
+    'сегодняшнему': 0,
+    'сегодняшнего': 0,
+    'завтрашний': 1,
+    'завтрашнему': 1,
+    'завтрашнего': 1,
+    'послезавтрашний': 2,
+    'послезавтрашнему': 2,
+    'послезавтрашнего': 2,
+  };
+
+  static const Set<String> _dayNouns = <String>{'день', 'дню', 'дня'};
 
   /// Исходная часть суток перед «на вечер»: «с утра на вечер» — это
   /// откуда переносят, не срок.
@@ -1488,6 +1534,34 @@ final class DueParser {
       }
       final date = _resolveDate(day, month, yearText, today);
       final source = _isSource(text, words[i].start);
+      // «с 15 на 17 марта»: у исходного числа месяц общий с новым сроком.
+      if (!source &&
+          i >= 3 &&
+          words[i - 1].group(0) == 'на' &&
+          _sourcePrepositions.contains(words[i - 3].group(0)) &&
+          _onlySpaces(text, words[i - 3].end, words[i - 2].start) &&
+          _onlySpaces(text, words[i - 2].end, words[i - 1].start) &&
+          _onlySpaces(text, words[i - 1].end, words[i].start) &&
+          !_touchesNumberPunctuation(
+            text,
+            words[i - 2].start,
+            words[i - 2].end,
+          )) {
+        final sourceDay = _monthDay(words[i - 2].group(0)!);
+        final sourceDate = sourceDay == null
+            ? null
+            : _resolveDate(sourceDay, month, yearText, today);
+        if (sourceDate != null) {
+          result.add(
+            _Found(
+              words[i - 2].start,
+              words[i - 2].end,
+              date: sourceDate,
+              isSource: true,
+            ),
+          );
+        }
+      }
       result.add(
         date == null
             ? _Found(words[i].start, words[last].end, invalid: true)
@@ -1656,8 +1730,12 @@ final class DueParser {
   ) {
     final result = <_Found>[];
     final today = DateTime(now.year, now.month, now.day);
+    // «отложи на 3 дня», «сдвинь на час»: после глагола отсрочки «на N …»
+    // — то же, что «через N …».
+    final postpone = _postpones(words);
     for (var i = 0; i + 1 < words.length; i++) {
-      if (words[i].group(0) != 'через') continue;
+      final head = words[i].group(0);
+      if (head != 'через' && !(postpone && head == 'на')) continue;
       if (!_onlySpaces(text, words[i].end, words[i + 1].start)) continue;
       final first = _readComponent(text, words, i + 1);
       if (first == null) continue;
@@ -1758,6 +1836,86 @@ final class DueParser {
     }
     return result;
   }
+
+  /// «на 15 часов», «на 7 вечера», «на 2 часа дня» — время на часах, а не
+  /// длительность: час 13–23 со словом «час(а/ов)» или час с частью суток
+  /// («утра», «вечера», «ночи», «часа дня»). «На 3 дня», «на 2 часа» —
+  /// длительность, не время. После глагола отсрочки «на 15 часов» — сдвиг
+  /// ([_postpones]).
+  static bool _clockAfterNa(
+    String preposition,
+    String value,
+    List<RegExpMatch> suffix, {
+    required bool postpone,
+  }) {
+    if (preposition != 'на' || suffix.isEmpty) return false;
+    final first = suffix.first.group(0)!;
+    if (suffix.length == 2) return true;
+    // «бронь отеля на 2 ночи» — число ночей, а не 02:00; время — «на 2
+    // часа ночи» или «в 2 ночи».
+    if (first == 'ночи') return false;
+    if (_bareHourSuffixes.contains(first)) return true;
+    if (!_hourWords.contains(first) || postpone) return false;
+    final hour = int.tryParse(value);
+    return hour != null && hour >= 13 && hour <= 23;
+  }
+
+  /// Во фразе есть просьба отсрочить: «отложи», «откладывай», «сдвинь»,
+  /// «сдвигай», «передвинь» или инфинитив после «можешь/можно»
+  /// («можешь отложить встречу на 3 дня»). После неё «на 3 дня» — сдвиг от
+  /// текущего момента, как «через 3 дня». Глагол внутри названия задачи
+  /// («добавь задачу сдвинуть встречу на 2 часа», «отложить деньги на 3
+  /// дня», «отложенный платёж») — не просьба: там «на N …» — длительность.
+  /// «Перенеси на 2 часа» сюда не входит: это скорее «на 2 часа дня».
+  static bool _postpones(List<RegExpMatch> words) {
+    for (var i = 0; i < words.length; i++) {
+      final value = words[i].group(0)!;
+      if (_postponeImperatives.contains(value)) return true;
+      if (_postponeInfinitives.contains(value) &&
+          i > 0 &&
+          _postponeModals.contains(words[i - 1].group(0))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Повелительные формы отсрочки: «отложи», «сдвиньте», «давай сдвинем».
+  static const Set<String> _postponeImperatives = <String>{
+    'отложи',
+    'отложите',
+    'отложим',
+    'откладывай',
+    'откладывайте',
+    'сдвинь',
+    'сдвиньте',
+    'сдвинем',
+    'сдвигай',
+    'сдвигайте',
+    'передвинь',
+    'передвиньте',
+    'передвинем',
+    'передвигай',
+    'передвигайте',
+  };
+
+  static const Set<String> _postponeInfinitives = <String>{
+    'отложить',
+    'откладывать',
+    'сдвинуть',
+    'сдвигать',
+    'передвинуть',
+    'передвигать',
+  };
+
+  /// Просьба с инфинитивом: «можешь отложить», «можно сдвинуть».
+  static const Set<String> _postponeModals = <String>{
+    'можешь',
+    'можете',
+    'сможешь',
+    'сможете',
+    'можно',
+  };
 
   static final RegExp _allDigits = RegExp(r'^\d+$');
 

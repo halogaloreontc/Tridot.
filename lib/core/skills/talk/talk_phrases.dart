@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../../connectors/due_parser.dart';
 import '../../personas/persona.dart';
 import '../../replies/reply_catalog.dart';
@@ -166,6 +168,8 @@ abstract final class TalkPhrases {
     'нам',
     'слушай',
     'слушайте',
+    'слышь',
+    'слыш',
     'тогда',
     'теперь',
     'уже',
@@ -223,7 +227,17 @@ abstract final class TalkPhrases {
     'лох',
     'отстой',
     'фигня',
+    'бестолочь',
+    'тормоз',
+    'тормозишь',
+    'ненавижу',
   };
+
+  /// Грубость из двух слов: «я тебя не люблю», «ты мне не нравишься».
+  static const List<List<String>> _rudePairs = <List<String>>[
+    <String>['не', 'люблю'],
+    <String>['не', 'нравишься'],
+  ];
 
   /// Слова, которые бывают рядом с грубостью: «ты совсем тупой».
   static const Set<String> _rudeCompanions = <String>{
@@ -242,6 +256,10 @@ abstract final class TalkPhrases {
     'ну',
     'и',
     'меня',
+    'тебя',
+    'я',
+    'мне',
+    'же',
   };
 
   static const Map<String, TalkRequest> _phrases = <String, TalkRequest>{
@@ -347,6 +365,11 @@ abstract final class TalkPhrases {
     'представься': TalkRequest(TalkTopic.whoAreYou),
     'представьтесь': TalkRequest(TalkTopic.whoAreYou),
     'с кем я говорю': TalkRequest(TalkTopic.whoAreYou),
+    'что за бот': TalkRequest(TalkTopic.whoAreYou),
+    'ты что за бот': TalkRequest(TalkTopic.whoAreYou),
+    'что ты за бот': TalkRequest(TalkTopic.whoAreYou),
+    'ты бот': TalkRequest(TalkTopic.whoAreYou),
+    'что ты такое': TalkRequest(TalkTopic.whoAreYou),
     // «Ты основной?» — вопрос, а не просьба: ответ «кто ты» говорит, кто
     // из помощников основной.
     'ты основной': TalkRequest(TalkTopic.whoAreYou),
@@ -445,6 +468,19 @@ abstract final class TalkPhrases {
     'угу': TalkRequest(TalkTopic.reaction),
     'cool': TalkRequest(TalkTopic.reaction),
     'nice': TalkRequest(TalkTopic.reaction),
+    'все ок': TalkRequest(TalkTopic.reaction),
+    'все окей': TalkRequest(TalkTopic.reaction),
+    'все хорошо': TalkRequest(TalkTopic.reaction),
+    'все отлично': TalkRequest(TalkTopic.reaction),
+    'все норм': TalkRequest(TalkTopic.reaction),
+    'все понятно': TalkRequest(TalkTopic.reaction),
+    'все ясно': TalkRequest(TalkTopic.reaction),
+    'все супер': TalkRequest(TalkTopic.reaction),
+    // Похвала шутке: «жги ещё», «не останавливайся».
+    'жги': TalkRequest(TalkTopic.reaction),
+    'жги еще': TalkRequest(TalkTopic.reaction),
+    'не останавливайся': TalkRequest(TalkTopic.reaction),
+    'так держать': TalkRequest(TalkTopic.reaction),
 
     // Стиль общения.
     'говори короче': _brief,
@@ -650,9 +686,16 @@ abstract final class TalkPhrases {
   /// [TalkRequest.persona]: в дуэте отвечает названный.
   static TalkRequest? recognize(String text) {
     final normalized = DueParser.normalizeChars(text);
-    final words = <String>[
-      for (final match in _word.allMatches(normalized)) match.group(0)!,
-    ];
+    // Части сообщения между запятыми и знаками конца фразы: хвост-замечание
+    // («…, задолбал», «…, а ты подожди») отделяется только ими.
+    final clauses = <List<String>>[
+      for (final part in normalized.split(_clauseBreak))
+        <String>[
+          for (final match in _word.allMatches(part))
+            _canonical[match.group(0)!] ?? match.group(0)!,
+        ],
+    ]..removeWhere((List<String> c) => c.isEmpty);
+    final words = <String>[for (final clause in clauses) ...clause];
     if (words.isEmpty) {
       final symbols = text.replaceAll(_ignoredSymbols, '');
       final topic = _symbols[symbols];
@@ -661,6 +704,139 @@ abstract final class TalkPhrases {
     if (words.length > maxWords) return null;
     // Цифры — уже не беседа: «ок 15:00», «спасибо 2».
     if (words.any((String w) => RegExp(r'\d').hasMatch(w))) return null;
+    _fixMisspelledNames(clauses);
+    final fixed = <String>[for (final clause in clauses) ...clause];
+    return _recognizeAll(fixed) ??
+        _withoutRemarks(clauses) ??
+        _recognizeWords(fixed, loose: true);
+  }
+
+  /// Реплика без хвоста-замечания: «говори короче, задолбал», «пусть
+  /// отвечает Нода, а ты подожди», «давай ещё одну, не смешно». Хвост —
+  /// последние части после запятой, целиком из слов [_remarkWords],
+  /// грубостей и смеха; без него остаётся просьба о шутке, стиле или
+  /// «что умеешь». Замечание словарь закрытый: «говори короче, добавь
+  /// задачу» — не беседа.
+  static TalkRequest? _withoutRemarks(List<List<String>> clauses) {
+    var end = clauses.length;
+    while (end > 1 && _isRemark(clauses[end - 1])) {
+      end--;
+    }
+    if (end == clauses.length) return null;
+    final head = <String>[for (final clause in clauses.take(end)) ...clause];
+    final request = _recognizeAll(head);
+    if (request == null || !_remarkTopics.contains(request.topic)) return null;
+    return request;
+  }
+
+  /// Темы, к которым можно приписать хвост-замечание.
+  static const Set<TalkTopic> _remarkTopics = <TalkTopic>{
+    TalkTopic.joke,
+    TalkTopic.setting,
+    TalkTopic.capabilities,
+  };
+
+  static final RegExp _clauseBreak = RegExp('[,;!?.…—–]');
+
+  /// Слова хвоста-замечания: причина («а то ты сухой», «я не на работе»),
+  /// одобрение («мне нравится»), «не смешно», «а ты подожди».
+  static const Set<String> _remarkWords = <String>{
+    'а', 'то', 'чего', 'что', 'ты', 'я', 'мы', 'мне', 'не', 'на', 'же',
+    'так', 'очень', 'совсем', 'уже', 'какой', 'какая', 'сухой', 'сухая', //
+    'скучный', 'скучная', 'скучно', 'грустно', 'занудный', 'занудная',
+    'серьезный', 'серьезная', 'строгий', 'строгая', 'нравится', 'нравятся',
+    'понравилось', 'работе', 'дома', 'отпуске', 'подожди', 'помолчи',
+    'молчи', 'отдохни', 'отдыхай', 'ага', 'угу', 'ок', 'окей', 'ладно',
+  };
+
+  /// «Не смешно», «не смеюсь», «не улыбаюсь», «не усмехаюсь» (и с
+  /// опечаткой): основы слов о смехе в замечании.
+  static const List<String> _laughStems = <String>[
+    'смешн',
+    'смею',
+    'смеюс',
+    'улыба',
+    'усме',
+    'усми',
+    'ржу',
+    'ржет',
+  ];
+
+  static bool _isRemark(List<String> words) =>
+      words.length <= _maxRemarkWords &&
+      words.every(
+        (String w) =>
+            _remarkWords.contains(w) ||
+            _rudeWords.contains(w) ||
+            _names.containsKey(w) ||
+            _fillers.contains(w) ||
+            _laughter.hasMatch(w) ||
+            _laughStems.any(w.startsWith),
+      );
+
+  static const int _maxRemarkWords = 6;
+
+  /// Разговорные формы → обычные: «чё», «чо» — «что»; «главный» —
+  /// «основной» (в образцах просьб только «основной»); «будь основному» —
+  /// «будь основным».
+  static const Map<String, String> _canonical = <String, String>{
+    'че': 'что',
+    'чо': 'что',
+    'шо': 'что',
+    'што': 'что',
+    'главный': 'основной',
+    'главная': 'основная',
+    'главной': 'основной',
+    'главным': 'основным',
+    'главному': 'основным',
+    'основному': 'основным',
+  };
+
+  /// Имя с опечаткой в обращении в начале реплики: «Лео, что умеешь?»,
+  /// «Лииорио, анекдот», «Нод Нод, пошути». Одна буква лишняя,
+  /// пропущенная или другая, первая — та же, а слово не короче трёх букв.
+  /// Дальше в реплике имя — часть просьбы, и опечатку не отличить от
+  /// другого слова: «пусть отвечает Лион» — не Лио.
+  static void _fixMisspelledNames(List<List<String>> clauses) {
+    final positions = <(int, int)>[
+      for (var c = 0; c < clauses.length; c++)
+        for (var w = 0; w < clauses[c].length; w++) (c, w),
+    ];
+    String? fix(String word) {
+      if (_names.containsKey(word) || _inflectedNames.containsKey(word)) {
+        return word;
+      }
+      if (word.length < 3) return null;
+      for (final name in _names.keys) {
+        if (name[0] == word[0] && _oneEditApart(name, word)) return name;
+      }
+      return null;
+    }
+
+    for (final (c, w) in positions) {
+      final word = clauses[c][w];
+      if (_fillers.contains(word)) continue;
+      final name = fix(word);
+      if (name == null) break;
+      clauses[c][w] = name;
+    }
+  }
+
+  /// Слова отличаются ровно одной правкой: вставкой, удалением или заменой
+  /// буквы.
+  static bool _oneEditApart(String a, String b) {
+    if (a == b || (a.length - b.length).abs() > 1) return false;
+    var i = 0;
+    while (i < a.length && i < b.length && a[i] == b[i]) {
+      i++;
+    }
+    if (a.length == b.length) return a.substring(i + 1) == b.substring(i + 1);
+    if (a.length > b.length) return a.substring(i + 1) == b.substring(i);
+    return a.substring(i) == b.substring(i + 1);
+  }
+
+  /// Реплика целиком или вступление и за ним другая реплика.
+  static TalkRequest? _recognizeAll(List<String> words) {
     final whole = _recognizeWords(words);
     if (whole != null) return whole;
     // «Привет, говори короче», «спасибо, пока», «спасибо и пока»: после
@@ -670,6 +846,15 @@ abstract final class TalkPhrases {
       var start = _skipNames(words, 0);
       if (!_startsWith(words, prefixWords, start)) continue;
       start = _skipNames(words, start + prefixWords.length);
+      // «Спасибо за шутку, ещё», «спс за инфу, пока»: за что спасибо —
+      // одно слово.
+      String? thanksFor;
+      if (_thanksWords.contains(prefixWords.last) &&
+          start + 1 < words.length &&
+          words[start] == 'за') {
+        thanksFor = words[start + 1];
+        start = _skipNames(words, start + 2);
+      }
       while (start < words.length && _joiners.contains(words[start])) {
         start++;
       }
@@ -678,7 +863,16 @@ abstract final class TalkPhrases {
         for (final word in words.take(start))
           if (_names[word] case final String id) id,
       };
-      final rest = _recognizeWords(words.sublist(start));
+      final restWords = words.sublist(start);
+      // «Спасибо за шутку, ну ещё!»: одно «ещё» после спасибо за шутку —
+      // просьба о новой.
+      final more = thanksFor != null &&
+          _isJokeWord(thanksFor) &&
+          restWords.every((String w) => w == 'еще' || _fillers.contains(w)) &&
+          restWords.contains('еще');
+      final rest = more
+          ? TalkRequest(TalkTopic.joke, pun: thanksFor.contains('каламбур'))
+          : _recognizeWords(restWords);
       if (rest == null) continue;
       if (named.length > 1 ||
           (named.isNotEmpty &&
@@ -711,8 +905,14 @@ abstract final class TalkPhrases {
   }
 
   /// Реплика целиком: грубость, фраза из [_phrases] после слов-паразитов,
-  /// с именем помощника на месте `<имя>` или без него.
-  static TalkRequest? _recognizeWords(List<String> words) {
+  /// с именем помощника на месте `<имя>` или без него, просьба своими
+  /// словами. [loose] — последняя попытка: ещё и благодарность своими
+  /// словами («спс, реально выручил»), которая уступает вступлению
+  /// («спс, всё ок» — отклик).
+  static TalkRequest? _recognizeWords(
+    List<String> words, {
+    bool loose = false,
+  }) {
     String? persona;
     var inflected = false;
     for (final word in words) {
@@ -733,7 +933,7 @@ abstract final class TalkPhrases {
           word,
     ];
     if (kept.isEmpty) return null;
-    final withName = _phrases[kept.join(' ')];
+    final withName = _phrases[kept.join(' ')] ?? _settingWithPlace(kept);
     if (withName != null) return withName.withPersona(persona);
     // «Пусть теперь всё говорит Нода»: имя — часть просьбы, а не обращение.
     if (_isMainRequest(kept)) return _main.withPersona(persona);
@@ -746,9 +946,69 @@ abstract final class TalkPhrases {
     ];
     if (plain.isEmpty) return null;
     final request = (persona == null ? null : _phrases[plain.join(' ')]) ??
+        _chainRequest(plain) ??
         _settingRequest(plain) ??
-        _jokeRequest(plain);
+        _jokeRequest(plain) ??
+        _capabilitiesRequest(plain) ??
+        (loose ? _thanksRequest(plain) : null);
     return request?.withPersona(persona);
+  }
+
+  /// Где действует просьба: «сделай Ноду главной в чате», «будь основной
+  /// здесь». Место ничего не меняет — только в просьбах о стиле.
+  static const List<List<String>> _places = <List<String>>[
+    <String>['в', 'этом', 'чате'],
+    <String>['в', 'чате'],
+    <String>['в', 'разговоре'],
+    <String>['здесь'],
+    <String>['тут'],
+  ];
+
+  static TalkRequest? _settingWithPlace(List<String> kept) {
+    for (final place in _places) {
+      final at = kept.length - place.length;
+      if (at < 1 || !_startsWith(kept, place, at)) continue;
+      final request = _phrases[kept.take(at).join(' ')];
+      if (request?.topic == TalkTopic.setting) return request;
+    }
+    return null;
+  }
+
+  /// Темы, реплики которых можно сказать подряд: «пока, до завтра»,
+  /// «кто ты вообще, что за бот», «спасибо, спасибо большое».
+  static const Set<TalkTopic> _chainTopics = <TalkTopic>{
+    TalkTopic.greet,
+    TalkTopic.bye,
+    TalkTopic.thanks,
+    TalkTopic.howAreYou,
+    TalkTopic.whoAreYou,
+    TalkTopic.capabilities,
+    TalkTopic.reaction,
+  };
+
+  /// Несколько фраз [_phrases] одной темы подряд — реплика этой темы.
+  /// Разные темы — по правилу вступления ([_prefixes]), а не здесь.
+  static TalkRequest? _chainRequest(List<String> words) {
+    TalkRequest? first;
+    var at = 0;
+    while (at < words.length) {
+      TalkRequest? found;
+      var length = 0;
+      // Длинная фраза — раньше короткой: «до завтра», а не «до».
+      for (var end = words.length; end > at; end--) {
+        final request = _phrases[words.sublist(at, end).join(' ')];
+        if (request == null || !_chainTopics.contains(request.topic)) continue;
+        found = request;
+        length = end - at;
+        break;
+      }
+      if (found == null) return null;
+      if (first != null && found.topic != first.topic) return null;
+      first ??= found;
+      at += length;
+    }
+    // Одна фраза — не цепочка: её уже искали в [_phrases].
+    return at > 0 && first != null && words.length > 1 ? first : null;
   }
 
   // ------------------------------------------------ просьбы своими словами
@@ -841,6 +1101,10 @@ abstract final class TalkPhrases {
     'новую',
     'другую',
     'нормальную',
+    'следующую',
+    'дай',
+    'дайте',
+    'повтори',
   };
 
   /// «Что-нибудь смешное» в родительном падеже — только с «нибудь»:
@@ -886,6 +1150,50 @@ abstract final class TalkPhrases {
     'посмеяться',
     'похохмить',
     'похохми',
+    'шути',
+    'шутите',
+    'шутни',
+    'шутани',
+    'рассмей',
+    'рассмейте',
+  };
+
+  /// Прошедшее время как приказ — только со словом спешки: «быстро
+  /// пошутил!»; «я пошутил» — не просьба.
+  static const Set<String> _jokePastVerbs = <String>{
+    'пошутил',
+    'пошутила',
+    'пошутили',
+  };
+
+  static const Set<String> _hurryWords = <String>{
+    'быстро',
+    'живо',
+    'бегом',
+    'срочно',
+  };
+
+  /// Присказки «на бис», которые сами шутку не просят: «повтори успех,
+  /// ещё анекдот», «на бис».
+  static const List<List<String>> _encores = <List<String>>[
+    <String>['повтори', 'успех'],
+    <String>['на', 'бис'],
+  ];
+
+  /// Что любят или не любят — перед просьбой о шутке другого рода:
+  /// «каламбуры не люблю, дай анекдот».
+  static const Set<String> _preferenceWords = <String>{
+    'люблю',
+    'нравятся',
+    'нравится',
+    'надо',
+    'нужно',
+    'эти',
+    'этих',
+    'твои',
+    'твоих',
+    'свои',
+    'своих',
   };
 
   /// После «ещё» — ещё одна шутка: «ещё один», «а можно ещё одну?»,
@@ -920,7 +1228,9 @@ abstract final class TalkPhrases {
     'мою', 'свой', 'свою', 'у', 'тебя', 'вас', 'меня', 'для', 'на',
     'сегодня', 'и', 'или', 'ок', 'окей', 'ладно', 'но', 'только',
     'короче', 'покороче', 'коротко', 'без', 'матов', 'мата', 'пошлостей',
-    'два', 'три', 'предложения', 'слова',
+    'два', 'три', 'предложения', 'слова', 'следующую', 'следующий',
+    'следующая', 'дай', 'дайте', 'повтори', 'быстро', 'живо', 'бегом',
+    'срочно', 'ага', 'угу',
     // Причины, оценки, вызов.
     'ты', 'смешной', 'смешная', 'тупая', 'тупой', 'дурацкая',
     'несмешная', 'скучно', 'скучаю', 'заскучал', 'заскучала', 'грустно',
@@ -944,9 +1254,36 @@ abstract final class TalkPhrases {
   };
 
   /// «Про кошку», «о программистах»: тема шутки — не больше двух слов.
-  static const Set<String> _about = <String>{'про', 'о', 'об'};
+  static const Set<String> _about = <String>{'про', 'о', 'об', 'тема', 'тему'};
 
   static const int _maxTopicWords = 2;
+
+  /// «Для выступления на мите», «для тоста»: для чего шутка — до трёх
+  /// слов. «Расскажи шутку на корпоративе» — не цель, а дело: не беседа.
+  static const String _purpose = 'для';
+
+  static const int _maxPurposeWords = 3;
+
+  /// «Пошути, что ты умный»: о чём шутка после глагола — до трёх слов.
+  static const int _maxClauseWords = 3;
+
+  /// Слова без присказок [_encores].
+  static List<String> _withoutEncores(List<String> words) {
+    final result = <String>[];
+    var i = 0;
+    outer:
+    while (i < words.length) {
+      for (final encore in _encores) {
+        if (_startsWith(words, encore, i)) {
+          i += encore.length;
+          continue outer;
+        }
+      }
+      result.add(words[i]);
+      i++;
+    }
+    return result;
+  }
 
   static bool _isJokeWord(String word) {
     for (final MapEntry(key: stem, value: endings) in _jokeStems.entries) {
@@ -959,8 +1296,30 @@ abstract final class TalkPhrases {
   }
 
   /// Просьба о шутке своими словами или `null`.
-  static TalkRequest? _jokeRequest(List<String> words) {
-    if (words.any(_jokeRefusal.contains)) return null;
+  static TalkRequest? _jokeRequest(List<String> original) {
+    var words = _withoutEncores(original);
+    if (words.isEmpty) return null;
+    final refusal = words.lastIndexWhere(_jokeRefusal.contains);
+    if (refusal >= 0) {
+      // «Каламбуры не люблю, дай анекдот»: отказ от одного рода шуток и
+      // просьба о другом. Просьба — после отказа, а до неё — только что
+      // не любят.
+      final ask = words.indexWhere(
+        (String w) => _jokeAsks.contains(w) || _jokeVerbs.contains(w),
+        refusal + 1,
+      );
+      if (ask < 0) return null;
+      final before = words.take(ask);
+      if (!before.every(
+        (String w) =>
+            _jokeRefusal.contains(w) ||
+            _isJokeWord(w) ||
+            _preferenceWords.contains(w),
+      )) {
+        return null;
+      }
+      words = words.sublist(ask);
+    }
     // «Шутки шутками, а …» — присказка, а не просьба.
     if (words.contains('шутки') && words.contains('шутками')) return null;
     for (var i = 0; i + 1 < words.length; i++) {
@@ -986,9 +1345,33 @@ abstract final class TalkPhrases {
       }
       if (_isJokeWord(word) ||
           _funnyWords.contains(word) ||
-          _jokeVerbs.contains(word)) {
+          _jokeVerbs.contains(word) ||
+          (_jokePastVerbs.contains(word) &&
+              words.any(_hurryWords.contains) &&
+              !words.contains('я'))) {
         core = true;
         if (word.contains('каламбур')) pun = true;
+        if (i + 1 < words.length &&
+            words[i + 1] == 'что' &&
+            _jokeVerbs.contains(word)) {
+          // «Пошути, что ты умный»: дальше — о чём шутка.
+          i = math.min(i + 1 + _maxClauseWords, words.length - 1);
+        }
+        continue;
+      }
+      if (word == _purpose) {
+        // «Для выступления на мите»: цель — до трёх слов, пока не
+        // начнётся сама просьба.
+        var purpose = 0;
+        while (i + 1 < words.length &&
+            purpose < _maxPurposeWords &&
+            !_jokeAsks.contains(words[i + 1]) &&
+            !_isJokeWord(words[i + 1]) &&
+            !_jokeVerbs.contains(words[i + 1])) {
+          i++;
+          purpose++;
+        }
+        if (purpose == 0) return null;
         continue;
       }
       if (word == 'еще' &&
@@ -1011,7 +1394,12 @@ abstract final class TalkPhrases {
         }
         continue;
       }
-      if (_jokeContext.contains(word) || _laughter.hasMatch(word)) continue;
+      if (_jokeContext.contains(word) ||
+          _laughter.hasMatch(word) ||
+          // «Ну и где анекдоты, бестолочь?»: обращение-грубость.
+          _rudeWords.contains(word)) {
+        continue;
+      }
       return null;
     }
     if (!core) return null;
@@ -1045,16 +1433,35 @@ abstract final class TalkPhrases {
     'выключи',
   };
 
+  /// «Шути больше», «давай с юмором».
   static const Set<String> _jokesMoreCues = <String>{
     'больше',
     'побольше',
     'чаще',
     'почаще',
+    'с',
+    'со',
   };
 
-  /// Слова о шутках в просьбе о частоте: «шути», «шутить», «пошути».
+  /// Слова о шутках в просьбе о частоте: «шути», «шутить», «пошути»,
+  /// «паясничать», «прикалываться».
   static bool _isJokingWord(String word) =>
-      word.startsWith('шут') || word == 'пошути' || _isJokeWord(word);
+      word.startsWith('шут') ||
+      word == 'пошути' ||
+      _isJokeWord(word) ||
+      _clowningStems.any(word.startsWith);
+
+  /// Шутовство другими словами: «хватит паясничать», «не прикалывайся»,
+  /// «меньше дурачься».
+  static const List<String> _clowningStems = <String>[
+    'паяснича',
+    'прикалыва',
+    'дурачит',
+    'дурачься',
+    'кривля',
+    'балагур',
+    'юморит',
+  ];
 
   static const Set<String> _jokesContext = <String>{
     'надо',
@@ -1072,6 +1479,8 @@ abstract final class TalkPhrases {
     'свои',
     'твои',
     'твоих',
+    'нравится',
+    'нравятся',
   };
 
   /// Смайлики: «смайлик», «смайлы», «эмодзи».
@@ -1116,6 +1525,9 @@ abstract final class TalkPhrases {
   static const Set<String> _emojiContext = <String>{
     'этих',
     'эти',
+    'всех',
+    'всяких',
+    'этого',
     'в',
     'из',
     'ответы',
@@ -1157,6 +1569,38 @@ abstract final class TalkPhrases {
     'лучше',
     'и',
     'сразу',
+    'переходи',
+    'переходим',
+    'переходите',
+    'перейти',
+    'общаться',
+    'говорить',
+    'разговаривать',
+    'будем',
+    'ты',
+    'вы',
+    'с',
+    'тобой',
+    'вами',
+  };
+
+  /// Слова стиля рядом с «на ты»: «давай без официоза, на ты».
+  static const Set<String> _informalCompanions = <String>{
+    'без',
+    'официоза',
+    'формальностей',
+    'церемоний',
+    'попроще',
+    'по',
+    'простому',
+    'дружески',
+  };
+
+  /// Слова стиля рядом с «на вы»: «давай на вы, официально».
+  static const Set<String> _formalCompanions = <String>{
+    'официально',
+    'вежливо',
+    'вежливее',
   };
 
   /// Слова, по которым ясен стиль: «короче», «подробнее», «помягче»,
@@ -1205,6 +1649,11 @@ abstract final class TalkPhrases {
     'формальнее': ReplyStyles.business,
     'деловой': ReplyStyles.business,
     'деловым': ReplyStyles.business,
+    'вежливее': ReplyStyles.business,
+    'повежливее': ReplyStyles.business,
+    'вежливо': ReplyStyles.business,
+    'вежливой': ReplyStyles.business,
+    'вежливым': ReplyStyles.business,
   };
 
   /// Стиль парой-тройкой слов: «по сути», «без воды», «без лишних слов»,
@@ -1221,6 +1670,18 @@ abstract final class TalkPhrases {
     'поменьше ласкового': ReplyStyles.neutral,
     'меньше ласки': ReplyStyles.neutral,
     'по деловому': ReplyStyles.business,
+    'без пафоса': ReplyStyles.brief,
+    'не юли': ReplyStyles.brief,
+    'не юлить': ReplyStyles.brief,
+    'не тяни': ReplyStyles.brief,
+    'не лей воду': ReplyStyles.brief,
+    'без официоза': ReplyStyles.friendly,
+    'без формальностей': ReplyStyles.friendly,
+    'как с другом': ReplyStyles.friendly,
+    'как с подругой': ReplyStyles.friendly,
+    'как другу': ReplyStyles.friendly,
+    'по дружески': ReplyStyles.friendly,
+    'по простому': ReplyStyles.friendly,
   };
 
   static const Set<String> _styleContext = <String>{
@@ -1254,6 +1715,37 @@ abstract final class TalkPhrases {
     'чуть',
     'немного',
     'бы',
+    'нужен',
+    'нужна',
+    'нужно',
+    'надо',
+    'хочу',
+    'постарайся',
+    'постарайтесь',
+    'в',
+    'ответах',
+    'ответе',
+    'ответы',
+    'сообщениях',
+  };
+
+  /// Указательные слова ничего не меняют в стиле: «без этого пафоса».
+  static const Set<String> _demonstratives = <String>{
+    'этого',
+    'этой',
+    'этих',
+    'всех',
+    'всего',
+    'всяких',
+    'такого',
+  };
+
+  /// «Официально не надо», «не будь таким официальным»: стиль наоборот.
+  static const Map<String, String> _oppositeStyles = <String, String>{
+    ReplyStyles.business: ReplyStyles.friendly,
+    ReplyStyles.friendly: ReplyStyles.neutral,
+    ReplyStyles.brief: ReplyStyles.neutral,
+    ReplyStyles.neutral: ReplyStyles.brief,
   };
 
   /// «Слишком официально» — жалоба на нынешний стиль, а не просьба о нём:
@@ -1280,7 +1772,7 @@ abstract final class TalkPhrases {
       return null;
     }
     if (words.any(_isEmojiWord)) {
-      final rest = words.where((String w) => !_isEmojiWord(w));
+      final rest = _withoutPurpose(words).where((String w) => !_isEmojiWord(w));
       if (!rest.every(
         (String w) =>
             _emojiOffCues.contains(w) ||
@@ -1308,13 +1800,24 @@ abstract final class TalkPhrases {
       };
       if (request == null) continue;
       final rest = <String>[...words.take(i), ...words.skip(i + 2)];
-      return rest.every(_addressContext.contains) ? request : null;
+      final companions =
+          request == _informal ? _informalCompanions : _formalCompanions;
+      return rest.every(
+        (String w) => _addressContext.contains(w) || companions.contains(w),
+      )
+          ? request
+          : null;
     }
     return null;
   }
 
-  static TalkRequest? _styleRequest(List<String> words) {
+  static TalkRequest? _styleRequest(List<String> all) {
+    final words = <String>[
+      for (final word in all)
+        if (!_demonstratives.contains(word)) word,
+    ];
     final styles = <String>{};
+    var negated = false;
     var i = 0;
     while (i < words.length) {
       if (words[i] == _tooMuch) {
@@ -1331,18 +1834,46 @@ abstract final class TalkPhrases {
       final cue = _styleCues[words[i]];
       if (cue != null) {
         styles.add(cue);
-      } else if (!_styleContext.contains(words[i])) {
+      } else if (words[i] == 'не') {
+        negated = true;
+      } else if (!_styleContext.contains(words[i]) &&
+          !(negated && _negatedContext.contains(words[i]))) {
         return null;
       }
       i++;
     }
     if (styles.length != 1) return null;
-    return switch (styles.single) {
+    final style = negated ? _oppositeStyles[styles.single] : styles.single;
+    return switch (style) {
       ReplyStyles.brief => _brief,
       ReplyStyles.friendly => _friendly,
       ReplyStyles.business => _business,
       _ => _neutral,
     };
+  }
+
+  /// Слова при отрицании стиля: «не будь таким официальным», «официально
+  /// не стоит».
+  static const Set<String> _negatedContext = <String>{
+    'таким',
+    'такой',
+    'стоит',
+    'нужно',
+    'надо',
+  };
+
+  /// Слова без цели «для …» из одного слова: «добавь смайликов для
+  /// настроения».
+  static List<String> _withoutPurpose(List<String> words) {
+    final result = <String>[];
+    for (var i = 0; i < words.length; i++) {
+      if (words[i] == _purpose && i + 1 < words.length) {
+        i++;
+        continue;
+      }
+      result.add(words[i]);
+    }
+    return result;
   }
 
   /// Стиль из [_stylePhrases], который начинается словом [at], и число
@@ -1391,13 +1922,227 @@ abstract final class TalkPhrases {
     );
   }
 
-  static bool _isRude(List<String> words) =>
-      words.length <= 5 &&
-      words.any(_rudeWords.contains) &&
-      words.every(
-        (String w) =>
-            _rudeWords.contains(w) ||
-            _rudeCompanions.contains(w) ||
-            _names.containsKey(w),
-      );
+  // ------------------------------------------------ «что умеешь» и спасибо
+
+  /// Глаголы вопроса о возможностях: «что ты умеешь», «чем можешь».
+  static const Set<String> _abilityVerbs = <String>{
+    'умеешь',
+    'умеете',
+    'можешь',
+    'можете',
+  };
+
+  static const Set<String> _abilityQuestions = <String>{'что', 'чем'};
+
+  /// Слова, которые сами просят справку: «помощь по командам», «какие у
+  /// тебя возможности».
+  static const Set<String> _helpWords = <String>{
+    'помощь',
+    'справка',
+    'справку',
+    'help',
+    'команды',
+    'команд',
+    'возможности',
+    'функции',
+    'умения',
+  };
+
+  /// Слова вокруг вопроса о возможностях: «ты вообще что умеешь-то»,
+  /// «что ты умеешь делать», «какие есть команды».
+  static const Set<String> _abilityContext = <String>{
+    'ты',
+    'вы',
+    'что',
+    'чем',
+    'делать',
+    'сделать',
+    'еще',
+    'то',
+    'и',
+    'какие',
+    'какая',
+    'есть',
+    'у',
+    'тебя',
+    'вас',
+    'твои',
+    'ваши',
+    'мне',
+    'помочь',
+    'список',
+    'покажи',
+    'нужна',
+    'нужен',
+    'дай',
+    'все',
+    'вообще',
+  };
+
+  /// «Кроме шуток», «в плане анализа данных», «по командам»: о чём
+  /// вопрос — до двух слов после этих слов.
+  static const List<List<String>> _abilityTopics = <List<String>>[
+    <String>['в', 'плане'],
+    <String>['по', 'части'],
+    <String>['в', 'области'],
+    <String>['в', 'сфере'],
+    <String>['кроме'],
+    <String>['насчет'],
+    <String>['касательно'],
+    <String>['по'],
+  ];
+
+  /// Основы слов о самом приложении: «по командам», «по задачам», «по
+  /// навыкам», «по Связному».
+  static const List<String> _appTopics = <String>[
+    'команд', 'задач', 'функци', 'навык', 'возможност', 'приложени', //
+    'связн', 'калькулятор', 'бесед', 'настройк', 'коннектор', 'помощник',
+  ];
+
+  /// «Что ты умеешь» своими словами или `null`: вопрос «что/чем» с
+  /// «умеешь/можешь» или слово справки, вокруг — только слова вопроса и
+  /// одна тема. «Что ты можешь сказать про отчёт», «чем помочь с
+  /// задачей» — не вопрос о возможностях.
+  static TalkRequest? _capabilitiesRequest(List<String> words) {
+    final question = words.any(_abilityVerbs.contains) &&
+        words.any(_abilityQuestions.contains);
+    if (!question && !words.any(_helpWords.contains)) return null;
+    var topics = 0;
+    var i = 0;
+    outer:
+    while (i < words.length) {
+      final word = words[i];
+      if (_abilityVerbs.contains(word) ||
+          _helpWords.contains(word) ||
+          _abilityContext.contains(word)) {
+        i++;
+        continue;
+      }
+      for (final lead in _abilityTopics) {
+        if (!_startsWith(words, lead, i)) continue;
+        final start = i + lead.length;
+        if (start >= words.length || ++topics > 1) return null;
+        // Без вопроса «что умеешь» тема — только о самом помощнике:
+        // «помощь по командам»; «помощь по дому» — не справка.
+        if (!question && !_appTopics.any(words[start].startsWith)) {
+          return null;
+        }
+        i = math.min(start + _maxTopicWords, words.length);
+        continue outer;
+      }
+      return null;
+    }
+    return const TalkRequest(TalkTopic.capabilities);
+  }
+
+  /// Слова благодарности: «спасибо», «спс», «благодарю».
+  static const Set<String> _thanksWords = <String>{
+    'спасибо',
+    'спс',
+    'спасибочки',
+    'спасибки',
+    'благодарю',
+    'мерси',
+    'сенкс',
+    'пасиб',
+    'пасиба',
+    'thanks',
+    'thx',
+  };
+
+  /// Слова вокруг благодарности: «ок, понял, спасибо», «спс, выручил»,
+  /// «спс, реально спасло».
+  static const Set<String> _thanksContext = <String>{
+    'большое',
+    'огромное',
+    'тебе',
+    'вам',
+    'очень',
+    'реально',
+    'правда',
+    'ок',
+    'окей',
+    'ok',
+    'понял',
+    'поняла',
+    'ясно',
+    'понятно',
+    'все',
+    'и',
+    'так',
+    'ты',
+    'вы',
+    'лучший',
+    'лучшая',
+    'супер',
+    'круто',
+    'отлично',
+    'хорошо',
+    'ладно',
+    'ага',
+    'угу',
+    'заранее',
+    'выручил',
+    'выручила',
+    'выручили',
+    'выручаешь',
+    'выручаете',
+    'спас',
+    'спасла',
+    'спасло',
+    'спасли',
+    'помог',
+    'помогла',
+    'помогло',
+    'помогли',
+    'помогаешь',
+  };
+
+  /// «Спасибо» своими словами или `null`: слово благодарности, за что
+  /// спасибо («за инфу», «за быстрый ответ» — одно-два слова) и слова
+  /// [_thanksContext]. «Спасибо, перенеси отчёт» — не беседа.
+  static TalkRequest? _thanksRequest(List<String> words) {
+    if (!words.any(_thanksWords.contains)) return null;
+    for (var i = 0; i < words.length; i++) {
+      final word = words[i];
+      if (_thanksWords.contains(word) || _thanksContext.contains(word)) {
+        continue;
+      }
+      if (word == 'за' && i + 1 < words.length) {
+        // За что: одно слово и ещё одно, если перед ним прилагательное
+        // («за быстрый ответ»).
+        i++;
+        if (i + 1 < words.length && _adjective.hasMatch(words[i])) i++;
+        continue;
+      }
+      return null;
+    }
+    return const TalkRequest(TalkTopic.thanks);
+  }
+
+  static final RegExp _adjective = RegExp(r'(?:ый|ий|ой|ую|ое|ее|ые|ие)$');
+
+  static bool _isRude(List<String> all) {
+    final words = <String>[];
+    var rude = false;
+    outer:
+    for (var i = 0; i < all.length; i++) {
+      for (final pair in _rudePairs) {
+        if (_startsWith(all, pair, i)) {
+          rude = true;
+          i += pair.length - 1;
+          continue outer;
+        }
+      }
+      words.add(all[i]);
+    }
+    return all.length <= 5 &&
+        (rude || words.any(_rudeWords.contains)) &&
+        words.every(
+          (String w) =>
+              _rudeWords.contains(w) ||
+              _rudeCompanions.contains(w) ||
+              _names.containsKey(w),
+        );
+  }
 }
