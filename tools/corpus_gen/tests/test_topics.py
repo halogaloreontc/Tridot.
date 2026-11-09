@@ -79,6 +79,15 @@ def test_builtin_tasks_topics_load() -> None:
     assert "БЕЗ кавычек" in tasks.topics["create"].description
 
 
+def test_builtin_warehouse_topics_match_connector_commands() -> None:
+    warehouse = load_catalog().connector("warehouse")
+    # Ровно commandId ManifestConnector склада: warehouse.<id команды описания>.
+    commands = ["where", "count", "price", "cell", "today", "yesterday", "week", "nophoto", "help"]
+    assert warehouse.intents == tuple(f"warehouse.{c}" for c in commands) + ("unknown",)
+    assert set(warehouse.topics) == {"stock", "cell", "arrivals", "tricky"}
+    assert "одно слово без поля" in warehouse.label_rules
+
+
 def test_topic_refs_accept_plain_and_connector_names(project: Path) -> None:
     catalog = load_catalog(_topics_dir(project))
     assert split_ref("create") == ("tasks", "create")
@@ -279,23 +288,10 @@ def test_cli_topics_and_bad_topic(project: Path, capsys: pytest.CaptureFixture[s
     assert "нет темы" in capsys.readouterr().err
 
 
-def test_readme_warehouse_example_is_valid_and_not_active() -> None:
-    import re
-    import tomllib
-
+def test_readme_describes_active_warehouse_topics() -> None:
     readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
-    block = re.search(r'```toml\n(connector = "warehouse".*?)```', readme, re.S)
-    assert block is not None
-    connector = parse_connector(tomllib.loads(block.group(1)))
-    assert connector.intents == (
-        "warehouse.whereIs",
-        "warehouse.stockQty",
-        "warehouse.arrivals",
-        "warehouse.noPhoto",
-        "unknown",
-    )
-    assert not connector.title_intents and not connector.due_intents
-    assert "warehouse" not in load_catalog().connectors
+    assert "topics/warehouse.toml" in readme and "warehouse.where" in readme
+    assert "warehouse" in load_catalog().connectors
 
 
 def test_connector_intents_may_be_dotted_command_ids() -> None:

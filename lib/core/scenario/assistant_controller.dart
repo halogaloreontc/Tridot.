@@ -1,4 +1,5 @@
 import '../connectors/connector.dart';
+import '../connectors/login_link.dart';
 import '../connectors/tasks_connector.dart';
 import '../extensions/extension_registry.dart';
 import '../models/bulk.dart';
@@ -371,6 +372,17 @@ final class AssistantController {
     String message, {
     required bool addressed,
   }) async {
+    // Ссылку входа вставили в чат, а не в настройки: подсказать, куда
+    // её нести. Ни один коннектор её не получает; вопрос, если ждал
+    // ответа, остаётся.
+    if (LoginLinks.contains(message)) {
+      session.lastConnectorId = null;
+      return session.reply(
+        'common.loginLink',
+        intent: 'loginLink',
+        status: AssistantStatus.noAction,
+      );
+    }
     final connectors = _connectors;
     final utterance = Utterance.analyze(message, now: session.clock.now())
         .withChat(session.chatTaskId);

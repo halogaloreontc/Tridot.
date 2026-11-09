@@ -46,16 +46,18 @@ void main() {
     expect((result['parse']! as Map<String, Object?>)['intent'], 'unknown');
   });
 
-  test('склад из корпусного теста забирает «где лежит {код}» у задач', () {
-    // Иначе неявная задача прошла бы проверку, а корпусный тест отдал бы
-    // фразу складу и упал на активной строке.
-    final result = routed('забрать коробку 64115 где лежит завтра');
-    expect(result['connector'], 'warehouse_example');
-    final matches = result['matches']! as List<Map<String, Object?>>;
-    expect(
-      matches.map((Map<String, Object?> m) => m['connector']),
-      containsAll(<String>['tasks', 'warehouse_example']),
-    );
+  test('склад из корпусного теста забирает «узнать где лежит {код}»', () {
+    // Иначе фраза прошла бы проверку как задача, а корпусный тест отдал
+    // бы её складу и упал на активной строке.
+    final result = routed('узнать где лежит 64115');
+    expect(result['connector'], 'warehouse');
+    expect(result['command'], 'warehouse.where');
+  });
+
+  test('«привет» из справки склада не перехватывает беседу', () {
+    expect(routed('привет')['connector'], 'talk');
+    expect(routed('что пришло сегодня')['command'], 'warehouse.today');
+    expect(routed('сегодня')['connector'], isNull);
   });
 
   test('фраза из одних кавычек не роняет разбор', () {

@@ -406,16 +406,16 @@ def test_tasks_label_claimed_by_corpus_warehouse_is_disputed(project: Path) -> N
     add_rows(config, store, [TASK_TEXT])
     routed = {
         **ROUTED_CREATE,
-        "connector": "warehouse_example",
-        "command": "warehouse.locate",
+        "connector": "warehouse",
+        "command": "warehouse.where",
         "matches": [
             {"connector": "tasks", "command": "task.create", "confidence": 0.75, "implicit": True, "fallback": False},
-            {"connector": "warehouse_example", "command": "warehouse.locate", "confidence": 0.6, "implicit": False, "fallback": False},
+            {"connector": "warehouse", "command": "warehouse.where", "confidence": 0.6, "implicit": False, "fallback": False},
         ],
     }
     run(config, store, LABEL_CREATE, FakeRouter({TASK_TEXT: routed}))
     assert store.rows[0]["status"] == "disputed"
-    assert store.rows[0]["check"] == "приложение: коннектор=warehouse_example"
+    assert store.rows[0]["check"] == "приложение: коннектор=warehouse"
 
 
 def test_app_error_for_one_phrase_fails_only_that_phrase(project: Path) -> None:

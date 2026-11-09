@@ -16,7 +16,7 @@
 {"id":"imp-015","text":"Не забудь забрать посылку","now":"2026-11-05T12:00","intent":"createTask","title":"Забрать посылку","due":null}
 {"id":"imp-020","text":"купить хлеб?","now":"2026-11-05T12:00","intent":"unknown","note":"вопрос — не задача"}
 {"id":"imp-021","text":"привет","now":"2026-11-05T12:00","intent":"unknown"}
-{"id":"imp-022","text":"где лежит 64115","now":"2026-11-05T12:00","connector":"warehouse_example","intent":"warehouse.locate","note":"складской вопрос задачи не перехватывают"}
+{"id":"imp-022","text":"где лежит 64115","now":"2026-11-05T12:00","connector":"warehouse","intent":"warehouse.where","note":"складской вопрос задачи не перехватывают"}
 {"id":"imp-023","text":"сколько венских стульев","now":"2026-11-05T12:00","intent":"unknown"}
 {"id":"imp-024","text":"тетрадь купить","now":"2026-11-05T12:00","intent":"unknown","note":"начинается с существительного"}
 {"id":"imp-025","text":"новость обсудить","now":"2026-11-05T12:00","intent":"unknown","note":"«новость» — не инфинитив"}
@@ -43,9 +43,9 @@
 {"id":"imp-056","text":"я не купил хлеб","now":"2026-11-05T12:00","intent":"unknown","note":"не сделано"}
 {"id":"imp-057","text":"купил хлеб?","now":"2026-11-05T12:00","intent":"unknown","note":"вопрос"}
 {"id":"imp-058","text":"школа","now":"2026-11-05T12:00","intent":"unknown"}
-{"id":"imp-060","text":"узнать где лежит 64115","now":"2026-11-05T12:00","connector":"warehouse_example","intent":"warehouse.locate","note":"совпадение без маркера уступает явному вопросу склада"}
-{"id":"imp-061","text":"проверить, где лежит 64115","now":"2026-11-05T12:00","connector":"warehouse_example","intent":"warehouse.locate"}
-{"id":"imp-062","text":"кстати, где лежит 64115","now":"2026-11-05T12:00","connector":"warehouse_example","intent":"warehouse.locate","note":"«кстати» — не инфинитив"}
+{"id":"imp-060","text":"узнать где лежит 64115","now":"2026-11-05T12:00","connector":"warehouse","intent":"warehouse.where","note":"совпадение без маркера уступает явному вопросу склада"}
+{"id":"imp-061","text":"проверить, где лежит 64115","now":"2026-11-05T12:00","connector":"warehouse","intent":"warehouse.where"}
+{"id":"imp-062","text":"кстати, где лежит 64115","now":"2026-11-05T12:00","connector":"warehouse","intent":"warehouse.where","note":"«кстати» — не инфинитив"}
 {"id":"imp-063","text":"посмотреть сколько венских стульев","now":"2026-11-05T12:00","intent":"unknown","note":"«посмотреть, сколько» — вопрос к помощнику"}
 {"id":"imp-064","text":"кстати","now":"2026-11-05T12:00","intent":"unknown"}
 {"id":"imp-065","text":"кстати, завтра собрание","now":"2026-11-05T12:00","intent":"unknown"}

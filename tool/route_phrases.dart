@@ -2,10 +2,11 @@
 // кто и какой командой их забрал бы, и разбор ScenarioParser.
 //
 // Коннекторы — как в test/scenario_corpus_test.dart (_connectorFactories):
-// приложения из lib/main.dart (задачи, калькулятор, беседа) и учебный склад
-// test/connectors/example_warehouse_connector.dart. Склад в приложении не
-// подключён, но корпусный тест с ним спорит: фраза, которую он перехватит,
-// упадёт в тесте, поэтому и проверка должна его видеть. Правила
+// приложения из lib/main.dart (задачи, калькулятор, беседа) и склад по
+// описанию assistant/1 из test/fixtures/assistant/halowarekeep.json. В
+// приложении склад выключен, пока его не подключат, но корпусный тест с
+// ним спорит: фраза, которую он перехватит, упадёт в тесте, поэтому и
+// проверка должна его видеть. Правила
 // выбора — как в AssistantController: «на крайний случай» (fallback) уступает
 // любому совпадению, без маркера (implicit) — явному, при близкой уверенности
 // двух коннекторов помощник переспрашивает (`ambiguous`).
@@ -20,8 +21,6 @@
 // Запуск из корня проекта: dart run tool/route_phrases.dart < phrases.jsonl
 // Использует tools/corpus_gen (проверка фраз с одним разметчиком).
 import 'package:local_assistant/core/connectors/connector.dart';
-import 'package:local_assistant/core/connectors/http_transport.dart';
-import 'package:local_assistant/core/connectors/secret_store.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
@@ -31,7 +30,7 @@ import 'package:local_assistant/core/skills/calculator/calculator_connector.dart
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
-import '../test/connectors/example_warehouse_connector.dart';
+import '../test/connectors/manifest/fixtures.dart';
 import 'parse_phrases.dart';
 
 Future<void> main() => processLines(
@@ -48,11 +47,7 @@ List<Connector> appConnectors(DateTime now) {
   final tasks = TaskService(repository: InMemoryTaskRepository(), clock: clock);
   return <Connector>[
     TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
-    ExampleWarehouseConnector(
-      transport: const _OfflineTransport(),
-      secrets: InMemorySecretStore(),
-      baseUri: Uri.parse('https://warehouse.example/api/'),
-    ),
+    warehouseConnector(),
     const CalculatorConnector(),
     TalkConnector(taskService: tasks),
   ];
@@ -125,13 +120,4 @@ const String ambiguous = 'ambiguous';
     break;
   }
   return (best.connectorId, best.commandId);
-}
-
-/// Транспорт без сети: `match` в сеть не ходит, `run` здесь не вызывается.
-final class _OfflineTransport implements HttpTransport {
-  const _OfflineTransport();
-
-  @override
-  Future<HttpResponseData> send(HttpRequestData request) =>
-      throw StateError('проверка фраз не ходит в сеть');
 }

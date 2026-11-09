@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "cell": "215-1-1-1",
+  "exact": true,
+  "cells": 1,
+  "count": 1,
+  "qty": 5,
+  "items": [
+    {
+      "cell": "215-1-1-1",
+      "sku": "64115",
+      "name": "Стул венский",
+      "qty": 5,
+      "cls": "ok",
+      "clsLabel": "годен"
+    }
+  ],
+  "more": false
+}

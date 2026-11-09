@@ -3,8 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
-import 'package:local_assistant/core/connectors/http_transport.dart';
-import 'package:local_assistant/core/connectors/secret_store.dart';
+import 'package:local_assistant/core/connectors/manifest/connection_slots.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/models/bulk.dart';
 import 'package:local_assistant/core/models/task.dart';
@@ -17,8 +16,7 @@ import 'package:local_assistant/core/skills/calculator/calculator_connector.dart
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
-import 'connectors/example_warehouse_connector.dart';
-import 'connectors/fakes.dart';
+import 'connectors/manifest/fixtures.dart';
 
 /// Регрессионный корпус фраз: test/corpus/*.jsonl, формат — docs/CORPUS.md.
 ///
@@ -125,15 +123,10 @@ final Map<String, Connector Function(DateTime now)> _connectorFactories =
         ),
         parser: ScenarioParser(clock: FixedClock(now)),
       ),
-  // Учебный коннектор из docs/CONNECTORS.md: его фразы проверяют, что
-  // задачи и склад не перехватывают команды друг друга.
-  ExampleWarehouseConnector.id: (DateTime now) => ExampleWarehouseConnector(
-        transport: FakeHttpTransport(
-          (HttpRequestData r) => throw StateError('match не ходит в сеть'),
-        ),
-        secrets: InMemorySecretStore(),
-        baseUri: Uri.parse('https://warehouse.example/api/'),
-      ),
+  // Склад по описанию assistant/1 (test/fixtures/assistant): его фразы
+  // проверяют, что задачи, калькулятор, беседа и склад не перехватывают
+  // команды друг друга.
+  ConnectionSlots.warehouse.id: (DateTime now) => warehouseConnector(),
   CalculatorConnector.id: (DateTime now) => const CalculatorConnector(),
   // Беседа уступает любой команде (fallback): её фразы проверяют, что
   // «привет, добавь задачу …» остаётся задачей.

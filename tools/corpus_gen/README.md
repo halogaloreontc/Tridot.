@@ -50,9 +50,10 @@ promote       принятые фразы прогоняются через те
 Такую фразу (`settings.single_labeler_check = true`, по умолчанию) `label` сверяет с тем,
 как её понимает текущее приложение, — `tool/route_phrases.dart`: маршрутизатор с теми же
 коннекторами, что в корпусном тесте (`_connectorFactories` в `test/scenario_corpus_test.dart`:
-задачи, калькулятор, беседа из `lib/main.dart` и учебный склад
-`test/connectors/example_warehouse_connector.dart` — в приложении его нет, но корпусный тест
-отдаёт ему фразы вроде «… 64115 где лежит», и такая строка задач упала бы), и правилами
+задачи, калькулятор, беседа из `lib/main.dart` и склад по описанию `assistant/1`
+из `test/fixtures/assistant/halowarekeep.json` — в приложении он выключен, пока его не
+подключат, но корпусный тест отдаёт ему фразы вроде «64115 где лежит», и такая строка задач
+упала бы), и правилами
 `AssistantController` (беседа уступает любой команде, совпадение без маркера — явному, близкие
 по уверенности коннекторы — переспрос `ambiguous`), плюс разбор `ScenarioParser`. Сравнение —
 как в `test/scenario_corpus_test.dart`:
@@ -180,7 +181,7 @@ cd ../.. && flutter test test/scenario_corpus_test.dart
 
 Темы задач: `create`, `reschedule`, `complete`, `implicit` (команды без слова-команды: «надо купить хлеб», «я купил хлеб»), `list`, `unknown`, `tricky` (ловушки),
 `gaps` (естественные формулировки, которых парсер может ещё не знать). Темы других
-коннекторов указываются как `коннектор:тема`, например `--topic warehouse:where` или
+коннекторов указываются как `коннектор:тема`, например `--topic warehouse:stock` или
 `--topic calc:evaluate` (калькулятор, `topics/calc.toml`) или `--topic talk:style`
 (беседа, `topics/talk.toml`); список всех
 тем — `corpus-gen topics`. `--count` — фраз от каждого генератора; `--source` можно указать
@@ -264,7 +265,7 @@ cd ../.. && flutter test test/scenario_corpus_test.dart
 |---|---|---|
 | `connector` | да | id коннектора: строчные латинские буквы, цифры, `-`, `_`; совпадает с `ConnectorInfo.id` |
 | `title`, `description` | нет | название раздела и что он умеет — подставляются в промпты |
-| `intents` | да | допустимые намерения разметки; обязательно с `unknown`. Для коннектора, кроме `tasks`, это **ровно** `commandId` его команд (`warehouse.locate`): тест корпуса сравнивает `intent` с `ConnectorMatch.commandId` |
+| `intents` | да | допустимые намерения разметки; обязательно с `unknown`. Для коннектора, кроме `tasks`, это **ровно** `commandId` его команд (`warehouse.where`): тест корпуса сравнивает `intent` с `ConnectorMatch.commandId` |
 | `title_intents` | только `tasks` | намерения, у которых в корпусе есть `title` (у остальных — `null`) |
 | `due_intents` | только `tasks` | намерения, у которых в корпусе есть срок `due` |
 | `generation_rules` | нет | дополнительные правила для генераторов фраз |
@@ -274,48 +275,13 @@ cd ../.. && flutter test test/scenario_corpus_test.dart
 Правила генерации и разметки задач встроены в `corpus_gen/prompts.py`, поэтому в
 `topics/tasks.toml` нет `generation_rules` и `label_rules`.
 
-### Пример: файл тем для нового коннектора
+### Пример: темы склада
 
-Иллюстрация для будущего коннектора склада — это **не** активный файл, в `topics/` его нет.
-Чтобы начать генерировать фразы для коннектора, сохраните подобный файл как
-`topics/warehouse.toml`:
-
-```toml
-connector = "warehouse"
-title = "Склад"
-description = "поиск товара по артикулу, остатки, поступления, товары без фото"
-# Ровно commandId из ConnectorMatch коннектора склада.
-intents = ["warehouse.whereIs", "warehouse.stockQty", "warehouse.arrivals", "warehouse.noPhoto", "unknown"]
-# title_intents и due_intents у других коннекторов не задаются: корпус их не проверяет.
-
-generation_rules = """Артикул — число из 5–6 цифр (64115, 120734); его никогда не читают как дату
-или время. Пиши как кладовщик в чате: коротко, иногда с опечатками."""
-
-label_rules = """- warehouse.whereIs — где лежит товар: «где лежит 64115», «64115 где?».
-- warehouse.stockQty — сколько товара осталось: «сколько осталось 120734».
-- warehouse.arrivals — что пришло или придёт: «что пришло сегодня», «поступления на завтра».
-- warehouse.noPhoto — товары без фотографий: «какие товары без фото».
-- unknown — всё остальное, в том числе задачи («добавь задачу…»)."""
-
-[topics.where]
-description = "где лежит товар по артикулу, разные формулировки и порядок слов"
-intents = ["warehouse.whereIs"]
-
-[topics.stock]
-description = "сколько товара осталось на складе"
-intents = ["warehouse.stockQty"]
-
-[topics.arrivals]
-description = "поступления товара за день или на дату"
-intents = ["warehouse.arrivals"]
-
-[topics.nophoto]
-description = "товары без фотографий"
-intents = ["warehouse.noPhoto"]
-
-[topics.tricky]
-description = "артикулы, похожие на даты и время (0911, 1230), фразы про задачи вперемешку со складом"
-```
+Активный файл `topics/warehouse.toml` — темы склада halowarekeep (`ManifestConnector`,
+ADR-011). Намерения — ровно `commandId` коннектора: `warehouse.<id команды описания>`
+(`warehouse.where`, `warehouse.count`, `warehouse.cell`, `warehouse.today`, …). В
+`label_rules` записаны правила разбора «Связного»: однословные фразы без поля, приветствия,
+примеры и задачи — `unknown`. Новый коннектор по описанию — такой же файл со своим `connector`.
 
 Проверка файла:
 
@@ -324,7 +290,7 @@ description = "артикулы, похожие на даты и время (091
 ```
 
 ```bash
-.venv/bin/corpus-gen generate --topic warehouse:where --count 20
+.venv/bin/corpus-gen generate --topic warehouse:stock --count 20
 ```
 
 ## Сколько ещё ждать

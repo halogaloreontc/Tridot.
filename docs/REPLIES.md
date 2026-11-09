@@ -93,6 +93,8 @@ return session.reply(
 
 Свои записи коннектор объявляет в `ConnectorInfo.replies` — нейтральный текст с той же разметкой (пример — «Пример склада» в `docs/CONNECTORS.md`). Реестр расширений добавляет их в каталог; id не должен совпадать со встроенной записью или записью другого коннектора. Остальные стили говорят их нейтральным текстом, паки ответов могут дать свои варианты.
 
+Записи склада (`ConnectionSlots.warehouse`, ADR-011): описание приложения даёт нейтральный факт, каталог — голос. `warehouse.answer`, `warehouse.empty`, `warehouse.reply` — `{text}` (текст описания как есть), `warehouse.more` — «Показаны не все — {вы:уточните|ты:уточни} запрос.», `warehouse.fallbackEmpty` — факт и примеры вопросов (`examples`), `warehouse.help` — «Склад понимает: {list}.». Предупреждения (`protected`): `warehouse.notConnected`, `warehouse.auth.token`, `.auth.expired`, `.auth.staff`, `.auth.role`, `warehouse.offline`, `.timeout`, `.serverError`, `.busy`, `warehouse.serverSaid` («Склад ответил: {error}»). Пак ответов может переписать обёртку ответа, но не предупреждения.
+
 ## Пак ответов: свой стиль
 
 Пак `assistant-pack/1` вида `replies` (`docs/EXTENSIONS.md`) — именованный стиль: id пака становится id стиля, `title` — названием в настройках.

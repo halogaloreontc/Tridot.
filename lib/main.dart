@@ -9,6 +9,11 @@ import 'app/home_page.dart';
 import 'core/app_info.dart';
 import 'core/chats/chat_store.dart';
 import 'core/connectors/connector.dart';
+import 'core/connectors/file_secret_store.dart';
+import 'core/connectors/io_http_transport.dart';
+import 'core/connectors/manifest/connection.dart';
+import 'core/connectors/manifest/connection_service.dart';
+import 'core/connectors/manifest/connection_slots.dart';
 import 'core/connectors/tasks_connector.dart';
 import 'core/extensions/extension_registry.dart';
 import 'core/scenario/assistant_controller.dart';
@@ -45,12 +50,34 @@ Future<void> main() async {
     loadBuiltIn: _builtInPacks,
     userDirectory: p.join(folder, 'packs'),
   );
+  // Подключения к приложениям assistant/1 (ADR-011): секреты — в служебной
+  // папке приложения, отдельно от задач и settings.json; состояние и кэш
+  // описаний — в <документы>/assistant/connections. Выключены, пока их не
+  // подключат в «Настройки → Подключения».
+  final support = await getApplicationSupportDirectory();
+  final secrets = FileSecretStore(
+    p.join(support.path, 'assistant', 'secrets.json'),
+  );
+  final transport = IoHttpTransport();
+  final connectionStore = JsonConnectionStore(p.join(folder, 'connections'));
+  final connections = <ConnectionService>[
+    for (final slot in ConnectionSlots.all)
+      await ConnectionService.restore(
+        slot: slot,
+        transport: transport,
+        secrets: secrets,
+        store: connectionStore,
+        builtIn: await _builtInManifest(slot.builtInAsset),
+        clock: clock,
+      ),
+  ];
   // Навыки и подключения регистрируются здесь; порядок важен только при
   // равной уверенности (тогда маршрутизатор всё равно переспросит). Что
   // включено — выбор пользователя в «Настройки → Расширения».
   final extensions = ExtensionRegistry(
     connectors: <Connector>[
       TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
+      for (final connection in connections) connection.connector,
       const CalculatorConnector(),
       TalkConnector(taskService: tasks),
     ],
@@ -66,8 +93,19 @@ Future<void> main() async {
       storage: JsonStorageInfo(tasksPath, chatsDirectory: chatsPath),
       settingsStore: JsonSettingsStore(p.join(folder, 'settings.json')),
       chatStore: JsonChatStore(chatsPath),
+      connections: connections,
     ),
   );
+}
+
+/// Встроенная копия описания из assets или `null`.
+Future<String?> _builtInManifest(String? asset) async {
+  if (asset == null) return null;
+  try {
+    return await rootBundle.loadString(asset);
+  } on Object {
+    return null;
+  }
 }
 
 /// Тексты встроенных паков: все `assets/packs/*.json` из манифеста.
@@ -93,6 +131,7 @@ final class AssistantApp extends StatelessWidget {
     this.storage = const MemoryStorageInfo(),
     this.settingsStore,
     this.chatStore,
+    this.connections = const <ConnectionService>[],
   });
 
   final AssistantController assistant;
@@ -101,6 +140,9 @@ final class AssistantApp extends StatelessWidget {
   final StorageInfo storage;
   final SettingsStore? settingsStore;
   final ChatStore? chatStore;
+
+  /// Подключения к приложениям: экран «Настройки → Подключения».
+  final List<ConnectionService> connections;
 
   @override
   Widget build(BuildContext context) {
@@ -117,6 +159,7 @@ final class AssistantApp extends StatelessWidget {
         storage: storage,
         settingsStore: settingsStore,
         chatStore: chatStore,
+        connections: connections,
       ),
     );
   }

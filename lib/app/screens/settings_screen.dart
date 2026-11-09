@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_info.dart';
+import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
@@ -18,6 +19,7 @@ class SettingsScreen extends StatelessWidget {
     required this.onClearChat,
     required this.messageCount,
     this.extensions,
+    this.connections = const <ConnectionService>[],
   });
 
   final AppSettings settings;
@@ -29,6 +31,10 @@ class SettingsScreen extends StatelessWidget {
 
   /// Навыки, подключения и паки; `null` — раздел «Расширения» не показан.
   final ExtensionRegistry? extensions;
+
+  /// Подключения к приложениям: у их строк в «Подключениях» — статус и
+  /// «Настроить».
+  final List<ConnectionService> connections;
 
   static const applicationName = AppInfo.name;
 
@@ -113,6 +119,7 @@ class SettingsScreen extends StatelessWidget {
                   registry: registry,
                   settings: settings,
                   onChanged: onChanged,
+                  connections: connections,
                 ),
               const SectionLabel('Чат'),
               Padding(

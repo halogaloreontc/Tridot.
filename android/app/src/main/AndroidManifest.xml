@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Подключения (склад) ходят в сеть: без этого release-сборка останется
+         без интернета. Только https, кроме адресов локальной сети (ADR-011). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Связной"
         android:name="${applicationName}"

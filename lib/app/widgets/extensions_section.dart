@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_info.dart';
+import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
+import 'connection_screen.dart';
 import 'task_tile.dart';
 
 /// Раздел «Расширения» в настройках: навыки, подключения и паки.
@@ -11,17 +13,23 @@ import 'task_tile.dart';
 /// Выбор пользователя живёт в [AppSettings] (`disabledExtensions`,
 /// `enabledExtensions`); переключатель сообщает новые настройки через
 /// [onChanged], а применяет их владелец экрана — сразу, без перезапуска.
+///
+/// У подключения к приложению ([connections], ADR-011) в строке — статус и
+/// «Настроить»: экран входа. Пока подключения нет, переключатель неактивен;
+/// вход включает подключение сам, выход — выключает.
 class ExtensionsSection extends StatefulWidget {
   const ExtensionsSection({
     super.key,
     required this.registry,
     required this.settings,
     required this.onChanged,
+    this.connections = const <ConnectionService>[],
   });
 
   final ExtensionRegistry registry;
   final AppSettings settings;
   final ValueChanged<AppSettings> onChanged;
+  final List<ConnectionService> connections;
 
   @override
   State<ExtensionsSection> createState() => _ExtensionsSectionState();
@@ -32,6 +40,9 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
   void initState() {
     super.initState();
     widget.registry.addListener(_changed);
+    for (final connection in widget.connections) {
+      connection.addListener(_changed);
+    }
   }
 
   @override
@@ -41,13 +52,38 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
       oldWidget.registry.removeListener(_changed);
       widget.registry.addListener(_changed);
     }
+    for (final connection in oldWidget.connections) {
+      connection.removeListener(_changed);
+    }
+    for (final connection in widget.connections) {
+      connection.addListener(_changed);
+    }
   }
 
   @override
   void dispose() {
     widget.registry.removeListener(_changed);
+    for (final connection in widget.connections) {
+      connection.removeListener(_changed);
+    }
     super.dispose();
   }
+
+  ConnectionService? _connection(String id) => widget.connections
+      .where((ConnectionService c) => c.slot.id == id)
+      .firstOrNull;
+
+  Future<void> _configure(ExtensionInfo info, ConnectionService service) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => ConnectionScreen(
+            service: service,
+            onEnabledChanged: (bool value) {
+              if (mounted) _toggle(info, value);
+            },
+          ),
+        ),
+      );
 
   void _changed() {
     if (mounted) setState(() {});
@@ -173,14 +209,27 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
               child: Text(empty, style: technicalTextStyle),
             ),
           for (final info in items)
-            _ExtensionTile(
-              info: info,
-              enabled: choice.isEnabled(info),
-              onChanged: info.required ? null : (v) => _toggle(info, v),
-              onRemove: info.kind == ExtensionKind.pack && !info.builtIn
-                  ? () => _removePack(info)
-                  : null,
-            ),
+            if (_connection(info.id) case final ConnectionService service)
+              _ExtensionTile(
+                info: info,
+                // Без подключения коннектору нечего делать: переключатель
+                // выключен и неактивен до входа.
+                enabled: service.connected && choice.isEnabled(info),
+                onChanged: service.connected ? (v) => _toggle(info, v) : null,
+                status: service.connected
+                    ? connectionStatus(service)
+                    : 'Не подключён — сначала подключите',
+                onConfigure: () => _configure(info, service),
+              )
+            else
+              _ExtensionTile(
+                info: info,
+                enabled: choice.isEnabled(info),
+                onChanged: info.required ? null : (v) => _toggle(info, v),
+                onRemove: info.kind == ExtensionKind.pack && !info.builtIn
+                    ? () => _removePack(info)
+                    : null,
+              ),
         ],
       );
     }
@@ -229,12 +278,20 @@ class _ExtensionTile extends StatelessWidget {
     required this.enabled,
     required this.onChanged,
     this.onRemove,
+    this.status,
+    this.onConfigure,
   });
 
   final ExtensionInfo info;
   final bool enabled;
   final ValueChanged<bool>? onChanged;
   final VoidCallback? onRemove;
+
+  /// Статус подключения: «Подключён: ivanov · под своим логином».
+  final String? status;
+
+  /// «Настроить» — экран подключения.
+  final VoidCallback? onConfigure;
 
   @override
   Widget build(BuildContext context) {
@@ -258,6 +315,15 @@ class _ExtensionTile extends StatelessWidget {
                 style: const TextStyle(color: AssistantColors.muted),
               ),
             ),
+          if (status case final String text)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                text,
+                key: ValueKey<String>('extension-status-${info.id}'),
+                style: const TextStyle(color: AssistantColors.text),
+              ),
+            ),
           const SizedBox(height: 4),
           Wrap(
             spacing: 8,
@@ -270,6 +336,16 @@ class _ExtensionTile extends StatelessWidget {
               ),
               if (info.builtIn) const _Badge('встроено'),
               if (info.required) const _Badge('всегда включено'),
+              if (onConfigure != null)
+                TextButton(
+                  key: ValueKey<String>('extension-configure-${info.id}'),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(40, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  onPressed: onConfigure,
+                  child: const Text('Настроить'),
+                ),
               if (onRemove != null)
                 TextButton(
                   key: ValueKey<String>('extension-remove-${info.id}'),

@@ -11,6 +11,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
   "description": "Спокойно и по делу. Основа каталога: каждая запись есть здесь.",
   "protected": [
     "common.confirm.unclear",
+    "common.loginLink",
     "router.failed",
     "task.ask.confirmComplete",
     "task.confirm.inactive",
@@ -40,6 +41,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "common.welcome": "{м:Я готов|ж:Я готова} к работе. {вы:Создайте|ты:Создай} задачу, например: {example}",
     "common.unknown": "Пока понимаю создание, список, перенос и завершение задач. Например: {example}",
     "common.addressed": "Слушаю. {вы:Напишите|ты:Напиши} команду, например: {example}",
+    "common.loginLink": "Это ссылка входа в приложение — её вставляют не в чат, а в Настройки → Подключения → Склад, поле «Ссылка входа». Код в ней одноразовый: если не сработает, {вы:сделайте|ты:сделай} новый в окне «Войти на телефоне».",
     "common.working": "Команда обрабатывается локально…",
     "router.ambiguous": "Не {м:понял|ж:поняла}, к чему относится команда: «{first}» или «{second}»? {вы:Уточните|ты:Уточни}, пожалуйста.",
     "router.failed": "Не удалось выполнить действие: {error}",

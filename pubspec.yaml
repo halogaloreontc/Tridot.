@@ -27,6 +27,9 @@ flutter:
     # Каталоги ответов по стилям (docs/REPLIES.md). Ядро читает их копию
     # lib/core/replies/builtin_replies.g.dart (tool/gen_replies.dart).
     - assets/replies/
+    # Встроенные копии описаний assistant/1 подключений (ADR-011): по ним
+    # коннектор понимает фразы до подключения.
+    - assets/connectors/
   fonts:
     - family: Inter
       fonts:

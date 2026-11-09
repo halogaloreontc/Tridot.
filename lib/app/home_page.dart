@@ -7,6 +7,8 @@ import '../core/app_info.dart';
 import '../core/chats/chat_book.dart';
 import '../core/chats/chat_models.dart';
 import '../core/chats/chat_store.dart';
+import '../core/connectors/login_link.dart';
+import '../core/connectors/manifest/connection_service.dart';
 import '../core/formatting/due_format.dart';
 import '../core/models/assistant_types.dart';
 import '../core/models/bulk.dart';
@@ -103,6 +105,7 @@ final class HomePage extends StatefulWidget {
     this.storage = const MemoryStorageInfo(),
     this.settingsStore,
     this.chatStore,
+    this.connections = const <ConnectionService>[],
   });
 
   final AssistantController assistant;
@@ -114,6 +117,9 @@ final class HomePage extends StatefulWidget {
   /// Где хранятся чаты (ADR-010). По умолчанию — в памяти, как задачи и
   /// настройки в тестах и режиме «Только в памяти».
   final ChatStore? chatStore;
+
+  /// Подключения к приложениям (склад): «Настройки → Подключения».
+  final List<ConnectionService> connections;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -506,10 +512,12 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final chatId = _book.currentId;
     final chatTaskId = _book.current.taskId;
     final addressee = _duo ? _addressee : null;
+    // Код входа из ссылки («#qr=…») в историю чата и команд не пишем.
+    final shown = LoginLinks.redact(text);
     final command = ChatMessage(
       id: _book.newMessageId(),
       author: ChatAuthor.user,
-      text: text,
+      text: shown,
       timestamp: _now,
     );
     setState(() {
@@ -522,7 +530,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
       _workingChatId = chatId;
       _book.append(chatId, command);
-      _commands.add(text);
+      _commands.add(shown);
       _commandCursor = null;
       if (preset == null) _input.clear();
     });
@@ -1424,6 +1432,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onClearChat: _clearChat,
           messageCount: _book.totalMessages,
           extensions: widget.assistant.extensions,
+          connections: widget.connections,
         );
       case AppSection.tasks:
         return _buildTasksWorkspace(wide: wide);
