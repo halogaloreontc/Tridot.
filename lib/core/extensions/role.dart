@@ -2,7 +2,7 @@
 /// (docs/EXTENSIONS.md, «Роли»; ADR-012).
 ///
 /// Подключение — канал к сервису (склад halowarekeep). Навык — что умеет
-/// помощник (задачи, калькулятор, беседа, складские вопросы через
+/// помощник (задачи, калькулятор, беседа, склад — вопросы через
 /// подключение склада). Роль — набор навыков, кнопок быстрых действий и
 /// подсказок маршрутизации, который включается одним переключателем:
 /// «Личное», «Кладовщик». Роль — данные в составе приложения, она ничего
@@ -26,6 +26,7 @@ final class RoleChip {
     required this.text,
     this.action = RoleChipAction.send,
     this.icon = 'chat',
+    this.needs,
   });
 
   /// Подпись: «Где лежит…». Ключ кнопки в интерфейсе — `quick-<label>`.
@@ -39,6 +40,11 @@ final class RoleChip {
   /// Имя значка для интерфейса (`search`, `inbox`, `photo`): ядро не знает
   /// о Flutter, значок по имени выбирает интерфейс.
   final String icon;
+
+  /// Id расширения, без которого кнопка ничего не сделает (`warehouse`):
+  /// выключили его в «Расширениях» — кнопка прячется, хотя роль включена.
+  /// `null` — кнопка нужна всегда, пока включена роль.
+  final String? needs;
 }
 
 /// Подключение, без которого роль неполна: статус и кнопка «Подключить»
@@ -76,7 +82,7 @@ final class RoleInfo {
     this.chips = const <RoleChip>[],
     this.hints = const <String>{},
     this.connection,
-    this.skillTitles = const <String, String>{},
+    this.helpsThrough,
   });
 
   /// Постоянный id латиницей: `personal`, `storekeeper`. Хранится в
@@ -114,9 +120,11 @@ final class RoleInfo {
   /// не подключён» вместо «не понял».
   final RoleConnection? connection;
 
-  /// Как роль называет навык поверх подключения: `warehouse` →
-  /// «Складские вопросы». Без записи — название расширения.
-  final Map<String, String> skillTitles;
+  /// Id расширения, которым роль на деле помогает ([helpsWith]):
+  /// `warehouse` у «Кладовщика». Пока оно выключено в «Расширениях»,
+  /// помощник о роли не говорит. `null` — говорит всегда, пока роль
+  /// включена.
+  final String? helpsThrough;
 }
 
 /// Встроенные роли. Порядок важен: общий навык (беседа) ведёт владелец
@@ -136,12 +144,14 @@ abstract final class Roles {
     defaultEnabled: true,
   );
 
-  /// «Кладовщик»: складские вопросы через подключение к складу
-  /// halowarekeep. Выключен по умолчанию.
+  /// «Кладовщик»: вопросы складу через подключение к складу halowarekeep.
+  /// Выключен по умолчанию. Навык называется так же, как подключение в
+  /// «Расширениях», — «Склад»: одно имя в карточке роли, в «Расширениях»
+  /// и в «что умеешь».
   static const RoleInfo storekeeper = RoleInfo(
     id: storekeeperId,
     title: 'Кладовщик',
-    description: 'Складские вопросы: где лежит артикул, что пришло, '
+    description: 'Вопросы складу: где лежит артикул, что пришло, '
         'приходы без фото. Через подключение к складу halowarekeep, только '
         'чтение.',
     // Беседа — и здесь: без «Личного» помощник всё равно отвечает на
@@ -154,18 +164,25 @@ abstract final class Roles {
         text: 'Где лежит |',
         action: RoleChipAction.insert,
         icon: 'search',
+        needs: 'warehouse',
       ),
       RoleChip(
         label: 'Что пришло сегодня',
         text: 'Что пришло сегодня',
         icon: 'inbox',
+        needs: 'warehouse',
       ),
-      RoleChip(label: 'Без фото', text: 'Без фото', icon: 'photo'),
+      RoleChip(
+        label: 'Без фото',
+        text: 'Без фото',
+        icon: 'photo',
+        needs: 'warehouse',
+      ),
     ],
     // С подключённым складом голый артикул — «где лежит», а «сегодня» и
     // «вчера» — приходы, без «склад, …».
     hints: <String>{'warehouse.bareCodes', 'warehouse.bareWords'},
-    skillTitles: <String, String>{'warehouse': 'Складские вопросы'},
+    helpsThrough: 'warehouse',
     connection: RoleConnection(
       extensionId: 'warehouse',
       appTitle: 'Склад',

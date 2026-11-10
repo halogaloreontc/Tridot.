@@ -80,6 +80,18 @@ final class AssistantController {
   /// уточнение.
   static const double ambiguityMargin = 0.15;
 
+  /// Адресат «основной помощник», выбранный в поле ввода явно. Это не то
+  /// же, что «никого не выбрали» (`null`): явный выбор важнее ведущего
+  /// роли (ADR-012), а без выбора фразу навыка роли забирает её ведущий.
+  /// Основной здесь — тот, кто основной сейчас: после смены основного в
+  /// настройках отвечает новый.
+  static const String mainAddressee = 'main';
+
+  /// В поле ввода выбрали помощника явно: по имени или основного
+  /// ([mainAddressee]).
+  static bool isExplicitAddressee(String? addressee) =>
+      addressee == mainAddressee || Personas.byId(addressee) != null;
+
   /// Навыки, подключения, паки и выбор пользователя.
   final ExtensionRegistry extensions;
 
@@ -155,6 +167,7 @@ final class AssistantController {
   /// сообщения не меняется посреди ответа.
   void enterChat({String? taskId}) {
     _viewChatTaskId = taskId;
+    _awaitingAnswer = false;
     session.takePendingConfirmation()?.onDropped?.call();
     if (_inFlight > 0) {
       _chatChangePending = true;
@@ -177,8 +190,9 @@ final class AssistantController {
   }
 
   /// Кто ответит на [message]: в дуэте обращение по имени («Noda, …»)
-  /// важнее адресата [addressee] из поля ввода, а без них отвечает
-  /// основной. В соло — всегда выбранный помощник, имя — просто текст.
+  /// важнее адресата [addressee] из поля ввода ([mainAddressee] —
+  /// основной), а без них отвечает основной — или ведущий роли, чей навык
+  /// заберёт фразу ([_leadByRole]). В соло — всегда выбранный помощник, имя — просто текст.
   /// Возвращает помощника и текст без обращения.
   (Persona, String, bool) resolve(String message, {String? addressee}) {
     final settings = personas;
@@ -191,18 +205,37 @@ final class AssistantController {
   }
 
   /// Адресат чата после ответа [response]; [current] — адресат до
-  /// сообщения (`null` — основной). В дуэте обращение по имени делает
-  /// названного адресатом, как выбор в поле ввода: следующие сообщения без
-  /// имени получает он. Основной — снова `null`. Просьба сменить основного
-  /// («пусть отвечает Лиорио») тоже возвращает `null`: дальше отвечает новый
-  /// основной. В соло адресат не используется и не меняется.
+  /// сообщения (`null` — никого не выбирали). В дуэте обращение по имени
+  /// делает названного адресатом, как выбор в поле ввода: следующие
+  /// сообщения без имени получает он. Основной — снова `null`, пока все
+  /// роли ведёт он сам (тогда он и так отвечает на всё); если какую-то
+  /// роль ведёт второй помощник — [mainAddressee], иначе следующую фразу
+  /// этой роли забрал бы её ведущий, а не тот, к кому обратились. Просьба
+  /// сменить основного («пусть отвечает Лиорио») возвращает `null`: дальше
+  /// отвечает новый основной. В соло адресат не используется и не
+  /// меняется.
   String? addresseeAfter(AssistantResponse response, {String? current}) {
     final settings = personas;
     if (settings.mode == AssistantMode.solo) return current;
     if (response.settingsChange?.mainPersona != null) return null;
     final addressed = Personas.byId(response.addressedPersonaId);
     if (addressed == null) return current;
-    return addressed.id == settings.main.id ? null : addressed.id;
+    if (addressed.id != settings.main.id) return addressed.id;
+    return extensions.mainLeadsAll(settings) ? null : mainAddressee;
+  }
+
+  /// Кто показан выбранным в «Кому:» при адресате [addressee]: тот, кто
+  /// ответит на следующее сообщение без имени. `null` — никого не выбрали,
+  /// а какую-то роль ведёт не основной: отвечает ведущий роли, чей навык
+  /// заберёт фразу, и заранее его не назвать. Переключатель не показывает
+  /// выбранным того, кто может не ответить. [settings] — настройки
+  /// интерфейса, если они новее, чем у маршрутизатора.
+  Persona? shownAddressee(String? addressee, {PersonaSettings? settings}) {
+    settings ??= personas;
+    final chosen = Personas.byId(addressee);
+    if (chosen != null) return chosen;
+    if (addressee == mainAddressee) return settings.main;
+    return extensions.mainLeadsAll(settings) ? settings.main : null;
   }
 
   /// Отвечает на сообщение пользователя. [addressee] — помощник,
@@ -221,9 +254,9 @@ final class AssistantController {
     // сообщения.
     final settings = personas;
     final (persona, text, addressed) = resolve(message, addressee: addressee);
-    // Явное обращение (имя в сообщении или адресат в поле ввода) важнее
-    // владельца роли (ADR-012).
-    _explicit = addressed || Personas.byId(addressee) != null;
+    // Явное обращение (имя в сообщении или адресат в поле ввода, в том
+    // числе явно выбранный основной) важнее владельца роли (ADR-012).
+    _explicit = addressed || isExplicitAddressee(addressee);
     _inFlight++;
     session.chatTaskId = chatTaskId;
     if (chatTaskId != null) selectTask(chatTaskId);
@@ -247,6 +280,7 @@ final class AssistantController {
         !identical(_answered, before)) {
       before.onDropped?.call();
     }
+    _awaitingAnswer = response.status == AssistantStatus.needsClarification;
     // Навык мог отметить адресата сам: «Нода, пусть отвечает Лио» — дальше
     // отвечает Liorio, а не та, к кому обратились в начале.
     if (!addressed || response.addressedPersonaId != null) return response;
@@ -306,7 +340,7 @@ final class AssistantController {
     final (persona, text, addressed) = resolve(message, addressee: addressee);
     var speaker = persona;
     if (!addressed &&
-        Personas.byId(addressee) == null &&
+        !isExplicitAddressee(addressee) &&
         session.pendingConfirmation == null &&
         personas.mode == AssistantMode.duo) {
       final likely = _likely(text);
@@ -326,12 +360,15 @@ final class AssistantController {
   /// выбором в поле ввода.
   bool _explicit = false;
 
+  /// Предыдущий ответ был вопросом ([Utterance.awaitingAnswer]).
+  bool _awaitingAnswer = false;
+
   /// Кто, скорее всего, заберёт [text] — по тем же правилам, что
   /// [_route], без подтверждений и без запуска. Только для голоса
   /// «обрабатывается…».
   Connector? _likely(String text) {
     final utterance = Utterance.analyze(text, now: session.clock.now())
-        .withChat(session.chatTaskId);
+        .withChat(session.chatTaskId, awaitingAnswer: _awaitingAnswer);
     final found = <(Connector, ConnectorMatch)>[];
     for (final connector in _connectors) {
       try {
@@ -449,8 +486,11 @@ final class AssistantController {
       );
     }
     final connectors = _connectors;
-    final utterance = Utterance.analyze(message, now: session.clock.now())
-        .withChat(session.chatTaskId);
+    final utterance =
+        Utterance.analyze(message, now: session.clock.now()).withChat(
+      session.chatTaskId,
+      awaitingAnswer: _awaitingAnswer || session.pendingConfirmation != null,
+    );
     final asker = session.pendingSpeaker;
     final pending = session.takePendingConfirmation();
     final owner = pending == null

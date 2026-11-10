@@ -144,7 +144,7 @@ void main() {
       find.text('Входит: Задачи, Калькулятор, Беседа'),
       findsOneWidget,
     );
-    expect(find.text('Входит: Складские вопросы, Беседа'), findsOneWidget);
+    expect(find.text('Входит: Склад, Беседа'), findsOneWidget);
     expect(
       find.text('Кнопки: «Где лежит…», «Что пришло сегодня», «Без фото»'),
       findsOneWidget,
@@ -230,6 +230,69 @@ void main() {
     expect(_switch(tester, 'role-storekeeper').value, isTrue);
     expect(find.text('Склад не подключён'), findsNothing);
     expect(find.text('Настроить'), findsWidgets);
+  });
+
+  testWidgets('навык выключен в «Расширениях»: карточка роли говорит прямо',
+      (tester) async {
+    final h = _Harness(
+      settings: const AppSettings(
+        enabledRoles: <String>{Roles.storekeeperId},
+        disabledExtensions: <String>{'warehouse'},
+      ),
+    );
+    await h.secrets.write('warehouse.token', fakeToken);
+    h.service.connector.record = connectedRecord();
+    await tester.pumpWidget(h.build());
+    await tester.pumpAndSettle();
+    expect(_switch(tester, 'role-storekeeper').value, isTrue);
+    final note = _key('role-off-${Roles.storekeeperId}');
+    expect(note, findsOneWidget);
+    expect(
+      tester.widget<Text>(note).data,
+      startsWith('Навык «Склад» выключен в «Расширениях»'),
+    );
+    expect(_key('role-off-${Roles.personalId}'), findsNothing);
+    expect(h.registry.activeChips, isEmpty);
+
+    // Включили навык в «Расширениях» — пометка пропала, кнопки вернулись.
+    await _tap(tester, 'extension-warehouse');
+    expect(h.settings.disabledExtensions, isEmpty);
+    expect(note, findsNothing);
+    expect(h.registry.activeChips, hasLength(3));
+
+    // И обратно: выключили там же — пометка появилась сразу.
+    await _tap(tester, 'extension-warehouse');
+    expect(h.settings.disabledExtensions, <String>{'warehouse'});
+    expect(note, findsOneWidget);
+
+    // Роль выключена — пометки нет: неактивной роли она ни к чему.
+    await _tap(tester, 'role-storekeeper');
+    expect(note, findsNothing);
+  });
+
+  testWidgets('навык склада называется одинаково в «Ролях» и «Расширениях»',
+      (tester) async {
+    final h = _Harness(
+      settings: const AppSettings(
+        enabledRoles: <String>{Roles.storekeeperId},
+      ),
+    );
+    await tester.pumpWidget(h.build());
+    await tester.pumpAndSettle();
+    final title = h.registry.info('warehouse')!.title;
+    final includes =
+        tester.widget<Text>(_key('role-includes-${Roles.storekeeperId}')).data!;
+    expect(includes, 'Входит: $title, Беседа');
+    // Строка подключения в «Расширениях» — с тем же названием.
+    expect(
+      find.descendant(
+        of: _key('extension-warehouse'),
+        matching: find.text(title),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Складские вопросы'), findsNothing);
+    expect(h.registry.skillTitle('warehouse'), title);
   });
 
   for (final (name, size, scale) in <(String, Size, double)>[

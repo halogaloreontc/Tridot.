@@ -75,7 +75,9 @@ void main() {
         'Без фото',
       ]);
       expect(warehouse.roleHints, <String>{'bareCodes', 'bareWords'});
-      expect(registry.skillTitle('warehouse'), 'Складские вопросы');
+      // Одно название навыка везде: в карточке роли, в «Расширениях» и в
+      // «что умеешь».
+      expect(registry.skillTitle('warehouse'), 'Склад');
 
       registry.apply(registry.roleChoiceWith(Roles.storekeeperId, false));
       expect(registry.isEnabled('warehouse'), isFalse);

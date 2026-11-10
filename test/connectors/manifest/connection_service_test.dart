@@ -528,7 +528,7 @@ void main() {
       expect(await secrets.read('warehouse.token'), isNull);
       expect(await secrets.read('warehouse.sid'), isNull);
       final health = await service.connector.health();
-      expect(health.status, HealthStatus.down);
+      expect(health.status, HealthStatus.notConnected);
     });
   });
 
@@ -564,7 +564,14 @@ void main() {
 
     test('восстановление: кэш, иначе встроенная копия', () async {
       store.manifests['halowarekeep'] = manifestSource(patchedManifestPath);
-      await store.save(connectedRecord());
+      // Кэш годится только серверу, с которого взят (`cached_from`).
+      await store.save(
+        connectedRecord().copyWith(
+          manifest: ManifestMeta(
+            cachedFrom: warehouseBase.resolve('assistant.json').toString(),
+          ),
+        ),
+      );
       final restored = await ConnectionService.restore(
         slot: ConnectionSlots.warehouse,
         transport: server.transport,

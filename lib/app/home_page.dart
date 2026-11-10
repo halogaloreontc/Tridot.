@@ -32,6 +32,7 @@ import 'widgets/command_composer.dart';
 import 'widgets/document_view.dart';
 import 'widgets/history_rail.dart';
 import 'widgets/personas_section.dart';
+import 'widgets/quick_dock.dart';
 import 'widgets/status_cube.dart';
 import 'widgets/task_chat_header.dart';
 import 'widgets/task_tile.dart';
@@ -172,9 +173,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// День, за который уже проверены просроченные задачи.
   String? _noticeChecked;
 
-  /// Кому писать в дуэте, выбор в поле ввода: `null` — основному. У
-  /// каждого чата свой и сохраняется вместе с чатом
-  /// ([ChatThread.addressee]). Обращение по имени («Нода, …») меняет его
+  /// Кому писать в дуэте, выбор в поле ввода: `null` — никого не
+  /// выбирали (отвечает основной или ведущий роли, чей навык заберёт
+  /// фразу), [AssistantController.mainAddressee] — явно основному, id —
+  /// явно этому помощнику. У каждого чата свой и сохраняется вместе с
+  /// чатом ([ChatThread.addressee]). Обращение по имени («Нода, …») меняет его
   /// так же, как нажатие на переключатель
   /// ([AssistantController.addresseeAfter]): к кому обратились, тот и
   /// продолжает. Смена настроек его не трогает.
@@ -1691,33 +1694,39 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Нижняя часть: строка выбранной задачи, быстрые действия, поле ввода.
-  /// Занимает не больше половины доступной высоты и прокручивается, чтобы
-  /// лента сообщений не схлопнулась (клавиатура, горизонтальная ориентация).
+  /// Нижняя часть: быстрые действия и поле ввода. Занимает не больше
+  /// половины доступной высоты, чтобы лента сообщений не схлопнулась
+  /// (клавиатура, горизонтальная ориентация); поле ввода, если не
+  /// уместилось, прокручивается. Быстрым действиям достаётся то, что
+  /// осталось от поля ввода ([QuickDock]): на обычном экране они
+  /// переносятся по строкам и видны все, на узком с крупным шрифтом — одна
+  /// строка с горизонтальной прокруткой, всегда на виду над полем ввода.
   Widget _buildBottomArea(double available) {
     final selected = _selectedTask;
     final compact = available < 420;
+    const padding = EdgeInsets.fromLTRB(chatInset, 4, chatInset, 12);
+    final maxHeight = available * .55;
     return _chatColumn(
       alignment: Alignment.bottomCenter,
-      maxHeight: available * .55,
-      child: SingleChildScrollView(
-        reverse: true,
-        padding: const EdgeInsets.fromLTRB(chatInset, 4, chatInset, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            if (!compact)
-              _QuickActions(
-                hasSelection: selected != null && selected.isActive,
-                // Кнопки включённых ролей («Кладовщик»): пропадают, как
-                // только роль выключили.
-                roleChips: widget.assistant.extensions.activeChips,
-                sending: _sending,
-                onSend: _send,
-                onTemplate: _applyTemplate,
-              ),
-            CommandComposer(
+      maxHeight: maxHeight,
+      child: Padding(
+        padding: padding,
+        child: QuickDock(
+          budget: maxHeight - padding.vertical,
+          actions: compact
+              ? const SizedBox.shrink()
+              : _QuickActions(
+                  hasSelection: selected != null && selected.isActive,
+                  // Кнопки включённых ролей («Кладовщик»): пропадают, как
+                  // только роль или её навык выключили.
+                  roleChips: widget.assistant.extensions.activeChips,
+                  sending: _sending,
+                  onSend: _send,
+                  onTemplate: _applyTemplate,
+                ),
+          composer: SingleChildScrollView(
+            reverse: true,
+            child: CommandComposer(
               controller: _input,
               focusNode: _inputFocus,
               sending: _sending,
@@ -1730,12 +1739,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 'документы будут создаваться и правиться через помощника.',
               ),
               onVoice: () => _announce(
-                'Голосовой режим в разработке. Пока напишите команду текстом.',
+                'Голосовой режим в разработке. Пока напишите команду '
+                'текстом.',
               ),
               previousCommand: _previousCommand,
               nextCommand: _nextCommand,
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1743,10 +1753,24 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// «Кому: Liorio | Noda» над нижней частью, вне её прокрутки: при узком
   /// экране и крупном тексте поле ввода прокручивается, а переключатель
-  /// остаётся на виду и нажимается. Выбор основного — `null`: тогда
-  /// после смены основного в настройках отвечает новый основной.
+  /// остаётся на виду и нажимается.
+  ///
+  /// Выбор в переключателе всегда важнее ведущего роли — и выбор
+  /// основного тоже: он запоминается как «основной»
+  /// ([AssistantController.mainAddressee]), а не по имени, поэтому после
+  /// смены основного в настройках отвечает новый основной. Выбранным
+  /// показан только тот, кто на самом деле ответит: если никого не
+  /// выбирали, а какую-то роль ведёт второй помощник, не выбран никто
+  /// («по роли»). Нажатие на уже выбранного тогда снимает выбор.
   Widget _buildAddresseeSwitch() {
     final main = _settings.personas.main;
+    final byRole = !widget.assistant.extensions.mainLeadsAll(
+      _settings.personas,
+    );
+    final shown = widget.assistant.shownAddressee(
+      _addressee,
+      settings: _settings.personas,
+    );
     return _chatColumn(
       alignment: Alignment.bottomCenter,
       child: Padding(
@@ -1755,10 +1779,19 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           alignment: Alignment.centerLeft,
           child: _AddresseeSwitch(
             main: main,
-            selected: Personas.byId(_addressee) ?? main,
-            onChanged: (Persona persona) => setState(
-              () => _addressee = persona.id == main.id ? null : persona.id,
-            ),
+            selected: shown,
+            onChanged: (Persona persona) => setState(() {
+              final explicit =
+                  AssistantController.isExplicitAddressee(_addressee);
+              if (byRole && explicit && shown?.id == persona.id) {
+                // Снять выбор: дальше отвечает ведущий роли.
+                _addressee = null;
+              } else {
+                _addressee = persona.id == main.id
+                    ? AssistantController.mainAddressee
+                    : persona.id;
+              }
+            }),
           ),
         ),
       ),
@@ -2429,7 +2462,7 @@ final class _TaskCrumb extends StatelessWidget {
   }
 }
 
-final class _QuickActions extends StatelessWidget {
+final class _QuickActions extends StatefulWidget {
   const _QuickActions({
     required this.hasSelection,
     required this.sending,
@@ -2443,19 +2476,58 @@ final class _QuickActions extends StatelessWidget {
   /// Кнопки включённых ролей: отправить сразу или вставить шаблон.
   final List<RoleChip> roleChips;
 
+  final bool sending;
+  final Future<void> Function([String? preset]) onSend;
+  final ValueChanged<String> onTemplate;
+
+  @override
+  State<_QuickActions> createState() => _QuickActionsState();
+}
+
+final class _QuickActionsState extends State<_QuickActions> {
+  final ScrollController _rows = ScrollController();
+  final ScrollController _strip = ScrollController();
+
+  @override
+  void dispose() {
+    _rows.dispose();
+    _strip.dispose();
+    super.dispose();
+  }
+
   static IconData _icon(String name) => switch (name) {
         'search' => Icons.search,
         'inbox' => Icons.move_to_inbox_outlined,
         'photo' => Icons.no_photography_outlined,
         _ => Icons.chat_bubble_outline,
       };
-  final bool sending;
-  final Future<void> Function([String? preset]) onSend;
-  final ValueChanged<String> onTemplate;
+
+  Widget _button((String, IconData, VoidCallback?) item) {
+    final (label, icon, action) = item;
+    return OutlinedButton.icon(
+      key: Key('quick-$label'),
+      onPressed: action,
+      icon: Icon(icon, size: 16),
+      label: Text(label, style: const TextStyle(fontSize: 12), maxLines: 1),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AssistantColors.text,
+        side: const BorderSide(color: AssistantColors.border),
+        // Та же высота и форма, что у «Кому:» над ними: на
+        // настольной плотности кнопки иначе становятся ниже.
+        minimumSize: const Size(0, 32),
+        visualDensity: VisualDensity.standard,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        shape: const StadiumBorder(),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final actions = <(String, IconData, VoidCallback?)>[
+    final sending = widget.sending;
+    final onSend = widget.onSend;
+    final onTemplate = widget.onTemplate;
+    final tasks = <(String, IconData, VoidCallback?)>[
       (
         'Покажи задачи',
         Icons.checklist,
@@ -2466,7 +2538,7 @@ final class _QuickActions extends StatelessWidget {
         Icons.add,
         () => onTemplate('Добавь задачу «|» на завтра'),
       ),
-      if (hasSelection) ...<(String, IconData, VoidCallback?)>[
+      if (widget.hasSelection) ...<(String, IconData, VoidCallback?)>[
         (
           'Перенести',
           Icons.update,
@@ -2478,7 +2550,9 @@ final class _QuickActions extends StatelessWidget {
           sending ? null : () => onSend('Заверши её'),
         ),
       ],
-      for (final chip in roleChips)
+    ];
+    final roles = <(String, IconData, VoidCallback?)>[
+      for (final chip in widget.roleChips)
         (
           chip.label,
           _icon(chip.icon),
@@ -2488,32 +2562,65 @@ final class _QuickActions extends StatelessWidget {
           },
         ),
     ];
-    // Перенос строк вместо горизонтальной прокрутки: все действия видны.
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: <Widget>[
-          for (final (label, icon, action) in actions)
-            OutlinedButton.icon(
-              key: Key('quick-$label'),
-              onPressed: action,
-              icon: Icon(icon, size: 16),
-              label: Text(label, style: const TextStyle(fontSize: 12)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AssistantColors.text,
-                side: const BorderSide(color: AssistantColors.border),
-                // Та же высота и форма, что у «Кому:» над ними: на
-                // настольной плотности кнопки иначе становятся ниже.
-                minimumSize: const Size(0, 32),
-                visualDensity: VisualDensity.standard,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                shape: const StadiumBorder(),
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        if (QuickDock.isTight(constraints)) {
+          // Узкий экран и крупный шрифт: строк не уместить. Одна строка с
+          // горизонтальной прокруткой и видимой полосой; кнопки ролей —
+          // первыми, они нужнее всего тому, кто роль включил.
+          final items = <(String, IconData, VoidCallback?)>[...roles, ...tasks];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Scrollbar(
+              controller: _strip,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                key: const Key('quick-strip'),
+                controller: _strip,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: <Widget>[
+                    for (final (index, item) in items.indexed)
+                      Padding(
+                        padding: EdgeInsets.only(left: index == 0 ? 0 : 8),
+                        child: _button(item),
+                      ),
+                  ],
+                ),
               ),
             ),
-        ],
-      ),
+          );
+        }
+        // Перенос строк вместо горизонтальной прокрутки: все действия
+        // видны. Не уместились в отведённую высоту — прокручиваются в
+        // ней, полоса прокрутки видна.
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Scrollbar(
+            controller: _rows,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _rows,
+              child: SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  key: const Key('quick-rows'),
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    for (final item in <(String, IconData, VoidCallback?)>[
+                      ...tasks,
+                      ...roles,
+                    ])
+                      _button(item),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -2719,12 +2826,16 @@ final class _AddresseeSwitch extends StatelessWidget {
   });
 
   final Persona main;
-  final Persona selected;
+
+  /// Кто ответит на сообщение без имени; `null` — ведущий роли, чей навык
+  /// заберёт фразу: тогда не выбран никто и рядом подпись «по роли».
+  final Persona? selected;
   final ValueChanged<Persona> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final order = <Persona>[main, Personas.other(main)];
+    final selected = this.selected;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Wrap(
@@ -2737,7 +2848,7 @@ final class _AddresseeSwitch extends StatelessWidget {
           for (final persona in order)
             Semantics(
               button: true,
-              selected: persona.id == selected.id,
+              selected: persona.id == selected?.id,
               label: 'Писать ${persona.name}',
               excludeSemantics: true,
               child: InkWell(
@@ -2748,11 +2859,11 @@ final class _AddresseeSwitch extends StatelessWidget {
                   constraints: const BoxConstraints(minHeight: 32),
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    color: persona.id == selected.id
+                    color: persona.id == selected?.id
                         ? AssistantColors.bubble
                         : Colors.transparent,
                     border: Border.all(
-                      color: persona.id == selected.id
+                      color: persona.id == selected?.id
                           ? Color(persona.accentColor)
                           : AssistantColors.borderSoft,
                     ),
@@ -2766,7 +2877,7 @@ final class _AddresseeSwitch extends StatelessWidget {
                       Text(
                         persona.name,
                         style: technicalTextStyle.copyWith(
-                          color: persona.id == selected.id
+                          color: persona.id == selected?.id
                               ? AssistantColors.textStrong
                               : AssistantColors.muted,
                         ),
@@ -2774,6 +2885,16 @@ final class _AddresseeSwitch extends StatelessWidget {
                     ],
                   ),
                 ),
+              ),
+            ),
+          if (selected == null)
+            const Tooltip(
+              message: 'Никто не выбран: отвечает тот, кто ведёт роль. '
+                  'Нажмите на помощника, чтобы писать ему.',
+              child: Text(
+                'по роли',
+                key: Key('addressee-by-role'),
+                style: technicalTextStyle,
               ),
             ),
         ],

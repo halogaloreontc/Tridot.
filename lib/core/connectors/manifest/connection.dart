@@ -112,6 +112,7 @@ final class ManifestMeta {
     this.lastModified,
     this.fetchedAt,
     this.commands = 0,
+    this.cachedFrom,
   });
 
   factory ManifestMeta.fromJson(Object? json) {
@@ -124,6 +125,7 @@ final class ManifestMeta {
       lastModified: text('last_modified'),
       fetchedAt: DateTime.tryParse(text('fetched_at') ?? ''),
       commands: map['commands'] is int ? map['commands'] as int : 0,
+      cachedFrom: text('cached_from'),
     );
   }
 
@@ -132,6 +134,7 @@ final class ManifestMeta {
     String? etag,
     String? lastModified,
     DateTime? fetchedAt,
+    Uri? cachedFrom,
   }) =>
       ManifestMeta(
         version: description.version,
@@ -140,6 +143,19 @@ final class ManifestMeta {
         lastModified: lastModified,
         fetchedAt: fetchedAt,
         commands: description.commands.length,
+        cachedFrom: cachedFrom?.toString(),
+      );
+
+  /// То же описание, проверенное заново в [moment]: версия, `etag` и
+  /// привязка кэша не меняются.
+  ManifestMeta checkedAt(DateTime moment) => ManifestMeta(
+        version: version,
+        fingerprint: fingerprint,
+        etag: etag,
+        lastModified: lastModified,
+        fetchedAt: moment,
+        commands: commands,
+        cachedFrom: cachedFrom,
       );
 
   final String? version;
@@ -148,6 +164,17 @@ final class ManifestMeta {
   final String? lastModified;
   final DateTime? fetchedAt;
   final int commands;
+
+  /// Адрес `assistant.json`, с которого взят кэш описания сервера
+  /// (`connections/<appId>.assistant.json`), а с ним `etag` и
+  /// `last_modified`. `null` — кэша сервера нет: запись о встроенном
+  /// описании. Кэш годится только серверу, с которого взят: описание
+  /// одного склада не управляет другим (ADR-012).
+  final String? cachedFrom;
+
+  /// Кэш описания взят с [manifestUri].
+  bool isCachedFrom(Uri? manifestUri) =>
+      manifestUri != null && cachedFrom == manifestUri.toString();
 
   /// Для экрана: «1.4.56» или «a1b2c3d4» (начало отпечатка).
   String get label =>
@@ -160,6 +187,7 @@ final class ManifestMeta {
         if (lastModified != null) 'last_modified': lastModified,
         if (fetchedAt != null) 'fetched_at': fetchedAt!.toIso8601String(),
         'commands': commands,
+        if (cachedFrom != null) 'cached_from': cachedFrom,
       };
 }
 

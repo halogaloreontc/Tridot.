@@ -129,14 +129,32 @@ final class ConnectionService {
     }
 
     final ours = parse(builtIn, null);
-    final server = parse(cached, record?.manifestUri);
+    // Кэш годится только серверу, с которого взят (`cached_from`): после
+    // входа на другой склад чужое описание в работу не идёт.
+    final from = record?.manifestUri;
+    final bound =
+        cached != null && (record?.manifest.isCachedFrom(from) ?? false);
+    final server = bound ? parse(cached, from) : null;
     final pick = DescriptionAuthority.choose(
       builtIn: ours,
       server: server,
-      serverError: cached != null && server == null
+      serverError: bound && server == null
           ? 'сохранённая копия не прошла проверку'
           : null,
     );
+    if (record != null && (server == null || pick.refused != null)) {
+      // Кэша этого сервера нет или он больше не годится: запись — о
+      // встроенном описании, без `etag`, чтобы следующая проверка скачала
+      // описание заново, а не получила «не изменилось».
+      final meta = record.manifest;
+      if (meta.etag != null ||
+          meta.lastModified != null ||
+          meta.cachedFrom != null) {
+        record = record.copyWith(
+          manifest: ours == null ? const ManifestMeta() : ManifestMeta.of(ours),
+        );
+      }
+    }
     final connector = ManifestConnector(
       slot: slot,
       transport: transport,
@@ -175,22 +193,92 @@ final class ConnectionService {
   /// Почему в работе именно оно — для экрана подключения.
   late String descriptionReason;
 
-  /// Выбирает описание между встроенным и [fetched] и загружает его в
-  /// коннектор. `null` — описания нет совсем.
-  ManifestDescription? _apply(_Fetched fetched) {
-    final pick = _pick(fetched);
-    descriptionOrigin = pick.origin;
-    descriptionReason = pick.reason;
-    final description = pick.description;
-    if (description != null) connector.load(description);
-    return description;
+  /// Причина выбора принятого описания — без приписки о не принятом
+  /// новом.
+  late String _acceptedReason = descriptionReason;
+
+  /// Что делать с ответом сервера [fetched] с адреса [manifestUri]
+  /// (ADR-012). Ничего не меняет: решение применяет [_commit].
+  ///
+  /// Описание сервера принято (разобралось и не расширяет права) — выбор
+  /// между ним и встроенным, оно идёт в кэш. Не принято — в кэш не идёт и
+  /// ничего не заменяет: если кэш описания взят с этого же адреса, всё
+  /// остаётся как было (описание в работе, кэш, запись с её `etag`), иначе
+  /// в работе встроенное. Так состояние сейчас и после перезапуска
+  /// одинаково.
+  _Decision _decide(Uri manifestUri, _Fetched fetched) {
+    final server = fetched.description;
+    if (server != null) {
+      final pick =
+          DescriptionAuthority.choose(builtIn: builtIn, server: server);
+      final refused = pick.refused;
+      if (refused == null) {
+        return _Decision(
+          pick,
+          ManifestMeta.of(
+            server,
+            etag: fetched.etag,
+            lastModified: fetched.lastModified,
+            fetchedAt: _clock.now(),
+            cachedFrom: manifestUri,
+          ),
+          cache: server.source,
+        );
+      }
+      return _keep(manifestUri, refused);
+    }
+    return _keep(manifestUri, fetched.rejected ?? 'описание не получено');
   }
 
-  DescriptionPick _pick(_Fetched fetched) => DescriptionAuthority.choose(
-        builtIn: builtIn,
-        server: fetched.description,
-        serverError: fetched.rejected,
+  /// Описание сервера не принято ([why]): прежнее остаётся.
+  _Decision _keep(Uri manifestUri, String why) {
+    final now = _clock.now();
+    final current = connector.description;
+    if (current != null && record.manifest.isCachedFrom(manifestUri)) {
+      final reason = _acceptedReason.replaceFirst(RegExp(r'\.$'), '');
+      return _Decision(
+        DescriptionPick(
+          current,
+          descriptionOrigin,
+          '$reason; новое описание сервера не принято ($why).',
+        ),
+        record.manifest.checkedAt(now),
+        error: why,
+        kept: true,
       );
+    }
+    final pick = DescriptionAuthority.choose(
+      builtIn: builtIn,
+      serverError: why,
+    );
+    final description = pick.description;
+    return _Decision(
+      pick,
+      description == null
+          ? ManifestMeta(fetchedAt: now)
+          : ManifestMeta.of(description, fetchedAt: now),
+      error: why,
+    );
+  }
+
+  /// Применяет решение: кэш, описание в коннекторе, текст для экрана.
+  /// Запись подключения ([_Decision.meta]) сохраняет вызывающий.
+  Future<void> _commit(_Decision decision) async {
+    if (decision.cache case final String source) {
+      await _store.saveManifest(slot.appId, source);
+    }
+    final pick = decision.pick;
+    descriptionOrigin = pick.origin;
+    descriptionReason = pick.reason;
+    if (!decision.kept) _acceptedReason = pick.reason;
+    final description = pick.description;
+    if (description != null && !identical(description, connector.description)) {
+      connector.load(description);
+    }
+    manifestError = decision.error == null
+        ? null
+        : 'Описание сервера не принято: ${decision.error}.';
+  }
 
   ConnectionSlot get slot => connector.slot;
   ConnectionRecord get record => connector.record;
@@ -379,26 +467,14 @@ final class ConnectionService {
       );
       return _Fetched(
         description,
-        ManifestMeta.of(
-          description,
-          etag: response.headers['etag'],
-          lastModified: response.headers['last-modified'],
-          fetchedAt: _clock.now(),
-        ),
+        etag: response.headers['etag'],
+        lastModified: response.headers['last-modified'],
       );
     } on ManifestException catch (error) {
       // Это то приложение, но описание сервера не прошло проверку: если
       // есть встроенное, работаем по нему (ADR-012).
       if (builtIn != null && _sameApp(response.body)) {
-        return _Fetched.rejected(
-          error.message,
-          ManifestMeta.of(
-            builtIn!,
-            etag: response.headers['etag'],
-            lastModified: response.headers['last-modified'],
-            fetchedAt: _clock.now(),
-          ),
-        );
+        return _Fetched.rejected(error.message);
       }
       return _Fetched.failed('Описание не принято: ${error.message}.');
     }
@@ -416,27 +492,27 @@ final class ConnectionService {
   }
 
   /// Проверяет описание на сервере заново: «Обновить описание» и раз в
-  /// сутки в фоне. Битое описание не заменяет прежнее.
+  /// сутки в фоне. Не принятое описание (не прошло проверку, расширяет
+  /// права) ничего не заменяет: ни описание в работе, ни кэш, ни запись с
+  /// `etag` — после перезапуска в работе то же самое ([_decide]).
   Future<ConnectionResult> refreshManifest() async {
     final base = record.baseUri;
     if (base == null) {
       return const ConnectionResult.failed('Склад ещё не подключён.');
     }
+    final manifestUri = base.resolve('assistant.json');
     _refreshing = true;
     try {
-      final fetched = await _fetchManifest(base, known: record.manifest);
+      // «Не изменилось» спрашиваем, только если кэш взят с этого адреса:
+      // иначе сравнивать не с чем.
+      final fetched = await _fetchManifest(
+        base,
+        known:
+            record.manifest.isCachedFrom(manifestUri) ? record.manifest : null,
+      );
       if (fetched.unchanged) {
         await _save(
-          record.copyWith(
-            manifest: ManifestMeta(
-              version: record.manifest.version,
-              fingerprint: record.manifest.fingerprint,
-              etag: record.manifest.etag,
-              lastModified: record.manifest.lastModified,
-              fetchedAt: _clock.now(),
-              commands: record.manifest.commands,
-            ),
-          ),
+          record.copyWith(manifest: record.manifest.checkedAt(_clock.now())),
         );
         manifestError = null;
         _notify();
@@ -447,23 +523,16 @@ final class ConnectionService {
         _notify();
         return ConnectionResult.failed(fetched.error!);
       }
-      // Принятое сервером — в кэш (выбор повторится после перезапуска);
-      // не прошедшее проверку кэш не заменяет.
-      if (fetched.description case final ManifestDescription server) {
-        await _store.saveManifest(slot.appId, server.source);
-      }
-      final description = _apply(fetched);
-      manifestError = fetched.rejected == null
-          ? null
-          : 'Описание сервера не принято: ${fetched.rejected}.';
-      await _save(record.copyWith(manifest: fetched.meta));
+      final decision = _decide(manifestUri, fetched);
+      await _commit(decision);
+      await _save(record.copyWith(manifest: decision.meta));
       _notify();
-      if (description == null) {
+      if (decision.pick.description == null) {
         return const ConnectionResult.failed('Описание не получено.');
       }
       return ConnectionResult.ok(
-        descriptionOrigin == DescriptionOrigin.server
-            ? 'Описание обновлено: версия ${fetched.meta!.label}.'
+        decision.error == null && descriptionOrigin == DescriptionOrigin.server
+            ? 'Описание обновлено: версия ${decision.meta.label}.'
             : 'Описание проверено. В работе: $descriptionReason',
       );
     } finally {
@@ -485,7 +554,9 @@ final class ConnectionService {
     }
     final fetched = await _fetchManifest(parsed.base);
     if (fetched.error != null) return ConnectionResult.failed(fetched.error!);
-    final description = _pick(fetched).description;
+    final manifestUri = parsed.base.resolve('assistant.json');
+    final decision = _decide(manifestUri, fetched);
+    final description = decision.pick.description;
     if (description == null) {
       return const ConnectionResult.failed('Описание не получено.');
     }
@@ -505,7 +576,6 @@ final class ConnectionService {
         'Описание просит войти незнакомым действием — подключите вручную.',
       );
     }
-    final manifestUri = parsed.base.resolve('assistant.json');
     final response = await _post(
       description,
       ManifestConnector.actionUri(description, manifestUri, qr.action),
@@ -540,8 +610,7 @@ final class ConnectionService {
     try {
       await _saveConnection(
         base: parsed.base,
-        fetched: fetched,
-        meta: fetched.meta!,
+        decision: decision,
         token: token,
         sid: sid,
         login: login,
@@ -575,7 +644,8 @@ final class ConnectionService {
     }
     final fetched = await _fetchManifest(base);
     if (fetched.error != null) return ConnectionResult.failed(fetched.error!);
-    final description = _pick(fetched).description;
+    final decision = _decide(base.resolve('assistant.json'), fetched);
+    final description = decision.pick.description;
     if (description == null) {
       return const ConnectionResult.failed('Описание не получено.');
     }
@@ -591,8 +661,7 @@ final class ConnectionService {
     try {
       await _saveConnection(
         base: base,
-        fetched: fetched,
-        meta: fetched.meta!,
+        decision: decision,
         token: password,
         sid: sid,
         login: sid.isEmpty ? '' : user.toLowerCase(),
@@ -859,8 +928,7 @@ final class ConnectionService {
 
   Future<void> _saveConnection({
     required Uri base,
-    required _Fetched fetched,
-    required ManifestMeta meta,
+    required _Decision decision,
     required String token,
     required String sid,
     required String login,
@@ -871,20 +939,14 @@ final class ConnectionService {
     } else {
       await _secrets.write(slot.sidKey, sid);
     }
-    if (fetched.description case final ManifestDescription server) {
-      await _store.saveManifest(slot.appId, server.source);
-    }
-    _apply(fetched);
-    manifestError = fetched.rejected == null
-        ? null
-        : 'Описание сервера не принято: ${fetched.rejected}.';
+    await _commit(decision);
     await _save(
       ConnectionRecord(
         appId: slot.appId,
         baseUri: base,
         login: login.isEmpty ? null : login,
         level: sid.isEmpty ? ConnectionLevel.shared : ConnectionLevel.staff,
-        manifest: meta,
+        manifest: decision.meta,
         lastOk: _clock.now(),
       ),
     );
@@ -912,41 +974,74 @@ final class ConnectionService {
   static String _text(Object? value) => value is String ? value.trim() : '';
 }
 
+/// Ответ сервера на запрос описания.
 final class _Fetched {
-  const _Fetched(this.description, this.meta)
+  const _Fetched(this.description, {this.etag, this.lastModified})
       : error = null,
         rejected = null,
         unchanged = false;
 
   const _Fetched.failed(this.error)
       : description = null,
-        meta = null,
+        etag = null,
+        lastModified = null,
         rejected = null,
         unchanged = false;
 
-  /// Описание того же приложения пришло, но проверку не прошло: работаем
-  /// по встроенному ([meta] — по нему, с `etag` ответа сервера).
-  const _Fetched.rejected(this.rejected, this.meta)
+  /// Описание того же приложения пришло, но проверку не прошло: вход не
+  /// останавливается, работаем по прежнему или встроенному.
+  const _Fetched.rejected(this.rejected)
       : description = null,
+        etag = null,
+        lastModified = null,
         error = null,
         unchanged = false;
 
   const _Fetched.unchanged()
       : description = null,
-        meta = null,
+        etag = null,
+        lastModified = null,
         error = null,
         rejected = null,
         unchanged = true;
 
-  /// Описание сервера, прошедшее проверку (выбор — [DescriptionAuthority]).
+  /// Описание сервера, прошедшее проверку формата (выбор —
+  /// [DescriptionAuthority]).
   final ManifestDescription? description;
-  final ManifestMeta? meta;
+  final String? etag;
+  final String? lastModified;
 
   /// Сервер недоступен или ответил не описанием этого приложения: войти
   /// нельзя.
   final String? error;
 
-  /// Почему описание сервера не принято.
+  /// Почему описание сервера не прошло проверку.
   final String? rejected;
   final bool unchanged;
+}
+
+/// Что делать с ответом сервера: какое описание в работе, что записать о
+/// нём в подключение и что положить в кэш.
+final class _Decision {
+  const _Decision(
+    this.pick,
+    this.meta, {
+    this.cache,
+    this.error,
+    this.kept = false,
+  });
+
+  final DescriptionPick pick;
+
+  /// Запись об описании для [ConnectionRecord.manifest].
+  final ManifestMeta meta;
+
+  /// Текст принятого описания сервера — в кэш; `null` — кэш не трогать.
+  final String? cache;
+
+  /// Почему описание сервера не принято; `null` — принято.
+  final String? error;
+
+  /// Прежнее описание осталось как было.
+  final bool kept;
 }

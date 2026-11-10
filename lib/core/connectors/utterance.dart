@@ -73,6 +73,7 @@ final class Utterance {
     required this.hashtags,
     required this.due,
     this.chatTaskId,
+    this.awaitingAnswer = false,
   });
 
   /// Разбирает [text]; [now] нужен для сроков «завтра», «в 10:00».
@@ -123,20 +124,29 @@ final class Utterance {
   }
 
   /// То же сообщение, отправленное в чате задачи [chatTaskId] (`null` —
-  /// в главном чате). Ставит маршрутизатор.
-  Utterance withChat(String? chatTaskId) => chatTaskId == this.chatTaskId
-      ? this
-      : Utterance._(
-          original: original,
-          normalized: normalized,
-          analysisText: analysisText,
-          tokens: tokens,
-          quotedTitles: quotedTitles,
-          unbalancedQuotes: unbalancedQuotes,
-          hashtags: hashtags,
-          due: due,
-          chatTaskId: chatTaskId,
-        );
+  /// в главном чате); [awaitingAnswer] — помощник перед этим задал вопрос.
+  /// Ставит маршрутизатор.
+  Utterance withChat(String? chatTaskId, {bool awaitingAnswer = false}) =>
+      chatTaskId == this.chatTaskId && awaitingAnswer == this.awaitingAnswer
+          ? this
+          : Utterance._(
+              original: original,
+              normalized: normalized,
+              analysisText: analysisText,
+              tokens: tokens,
+              quotedTitles: quotedTitles,
+              unbalancedQuotes: unbalancedQuotes,
+              hashtags: hashtags,
+              due: due,
+              chatTaskId: chatTaskId,
+              awaitingAnswer: awaitingAnswer,
+            );
+
+  /// Предыдущий ответ помощника был вопросом («На когда перенести
+  /// задачу?», «да или нет?»): короткое слово сейчас — скорее ответ на
+  /// него, чем новая команда другому навыку. Подсказки ролей для голых
+  /// слов («сегодня» — приходы склада) тогда молчат.
+  final bool awaitingAnswer;
 
   /// Задача чата, в котором написано сообщение (docs/CONNECTORS.md, «Чат
   /// задачи»); `null` — главный чат. В чате задачи коннектор задач понимает

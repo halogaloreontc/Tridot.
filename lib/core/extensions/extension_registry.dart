@@ -172,37 +172,56 @@ final class ExtensionRegistry {
     return role == null ? null : ownerOf(role.id, personas);
   }
 
-  /// Название навыка для пользователя: как его зовёт включённая роль
-  /// («Складские вопросы») или название расширения.
-  String skillTitle(String id) {
-    for (final role in rolesOf(id)) {
-      final title = role.skillTitles[id];
-      if (title != null && _choice.isRoleEnabled(role)) return title;
-    }
-    final found = info(id);
-    return found?.title ?? id;
-  }
+  /// Название навыка для пользователя — одно и то же в карточке роли, в
+  /// «Расширениях» и в «что умеешь»: название расширения («Склад»).
+  String skillTitle(String id) => info(id)?.title ?? id;
+
+  /// Расширения роли [role], которые пользователь выключил явно в
+  /// «Расширениях», пока роль включена: карточка роли говорит о них прямо.
+  /// [choice] — выбор с экрана настроек, если он новее применённого.
+  List<ExtensionInfo> switchedOff(RoleInfo role, [ExtensionChoice? choice]) =>
+      <ExtensionInfo>[
+        for (final id in role.extensions)
+          if (info(id) case final ExtensionInfo found)
+            if (!found.required && (choice ?? _choice).disabled.contains(id))
+              found,
+      ];
 
   /// Кнопки быстрых действий включённых ролей, без повторов по подписи.
+  /// Кнопка, которой нужно выключенное расширение ([RoleChip.needs]), не
+  /// показывается: она бы ничего не сделала.
   List<RoleChip> get activeChips {
     final seen = <String>{};
     return <RoleChip>[
       for (final role in activeRoles)
         for (final chip in role.chips)
-          if (seen.add(chip.label)) chip,
+          if (chip.needs == null || isEnabled(chip.needs!))
+            if (seen.add(chip.label)) chip,
     ];
   }
 
   /// С чем помогает помощник — для «кто ты» и «что умеешь»: «с задачами
-  /// и со складом». Пусто, если ролей нет.
+  /// и со складом». Роль, чьё расширение ([RoleInfo.helpsThrough])
+  /// выключено в «Расширениях», не упоминается. Пусто, если ролей нет.
   String get helpsWith {
     final parts = <String>[
       for (final role in activeRoles)
-        if (role.helpsWith.isNotEmpty) role.helpsWith,
+        if (role.helpsWith.isNotEmpty &&
+            (role.helpsThrough == null || isEnabled(role.helpsThrough!)))
+          role.helpsWith,
     ];
     if (parts.length <= 1) return parts.join();
     return '${parts.sublist(0, parts.length - 1).join(', ')} и ${parts.last}';
   }
+
+  /// Все включённые роли в дуэте ведёт основной помощник [personas]:
+  /// тогда без явного адресата на любую фразу отвечает он. Иначе фразу
+  /// навыка роли забирает её ведущий, и заранее не сказать, кто ответит.
+  bool mainLeadsAll(PersonaSettings personas) =>
+      personas.mode != AssistantMode.duo ||
+      activeRoles.every(
+        (RoleInfo role) => ownerOf(role.id, personas).id == personas.main.id,
+      );
 
   /// Выбор, в котором роль [id] включена или выключена.
   ExtensionChoice roleChoiceWith(String id, bool enabled) {

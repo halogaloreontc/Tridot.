@@ -452,6 +452,25 @@ final class ManifestDescription {
       }
     }
 
+    // И обратно: действие входа или выхода — не команда. Иначе фраза из
+    // чата звала бы `sess_end` или `auth_check` с ключами пользователя.
+    final authNames = <String>{
+      for (final names in authActions.values) ...names,
+    };
+    for (final name in only is List ? only : const <Object?>[]) {
+      if (authNames.contains(name)) {
+        bad('api.only: «$name» — действие входа, командой оно не бывает');
+      }
+    }
+    for (var i = 0; i < cmds.length; i++) {
+      final c = cmds[i];
+      if (c is! Map) continue;
+      final name = _map(c['call'])['action'];
+      if (authNames.contains(name)) {
+        bad('commands[$i]: действие входа «$name» команда не зовёт');
+      }
+    }
+
     authAction('auth.qr.action', 'qr', qr['action']);
     authAction('auth.logout.action', 'logout', logout['action']);
     final qrParam = qr['param'];

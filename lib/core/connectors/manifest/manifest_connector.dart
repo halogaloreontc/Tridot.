@@ -25,7 +25,9 @@ final class ManifestPayload {
   final String command;
   final Map<String, String> slots;
 
-  /// `say`, `fallback` или `help` (своя фраза справки «Связного»).
+  /// `say`, `fallback`, `help` (своя фраза справки «Связного») или `ask`
+  /// — начало фразы с полем без самого поля («где лежит»): спросить, что
+  /// искать.
   final String how;
 
   /// Фраза начиналась с обращения к приложению: «на складе …».
@@ -320,7 +322,21 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
     final lead = _withoutLead(text);
     // «покажи мне, где лежит …»: запятая после связок мешает их снять.
     final plain = text.replaceAll(RegExp(r'\s*,\s*'), ' ');
-    for (final candidate in <String>{text, if (lead != null) lead, plain}) {
+    final candidates = <String>{text, if (lead != null) lead, plain};
+    // «Где лежит» без артикула (кнопка «Где лежит…» и сразу «Отправить»):
+    // иначе правило «где {q}» искало бы на складе слово «лежит». Смотрим
+    // во всех вариантах текста раньше обычных правил: «подскажи, где
+    // лежит» правило «{q} где лежит» приняло бы за поиск «подскажи».
+    for (final candidate in candidates) {
+      final asked = _asked(matcher, candidate, aliased: false);
+      if (asked != null) return asked.match;
+      final rest = _withoutAlias(candidate);
+      if (rest != null) {
+        final aliased = _asked(matcher, rest, aliased: true);
+        if (aliased != null) return aliased.match;
+      }
+    }
+    for (final candidate in candidates) {
       final found = _matchText(matcher, utterance, candidate, aliased: false);
       if (found != null) return found.match;
       final rest = _withoutAlias(candidate);
@@ -420,6 +436,54 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
     );
   }
 
+  static final RegExp _blank = RegExp(r'\s+');
+
+  /// Совпадение «спросить, что искать» для [text] или `null`.
+  _Found? _asked(
+    ManifestMatcher matcher,
+    String text, {
+    required bool aliased,
+  }) {
+    final bare = matcher.strip(text);
+    for (final pass in <String>{text, if (bare.isNotEmpty) bare}) {
+      final command = _unfinished(matcher, pass, aliased: aliased);
+      if (command != null) {
+        return _found(
+          command.id,
+          const <String, String>{},
+          'ask',
+          0.9,
+          aliased: aliased,
+        );
+      }
+    }
+    return null;
+  }
+
+  /// Команда, чью фразу с полем начали и не договорили: [text] — слова
+  /// фразы без поля («где лежит» из «где лежит {q}»). Одно слово («где»,
+  /// «найди») слишком общее — только после обращения «склад, …». Фраза,
+  /// которая целиком есть в описании («сколько пришло»), — не начало.
+  static ManifestCommand? _unfinished(
+    ManifestMatcher matcher,
+    String text, {
+    required bool aliased,
+  }) {
+    ManifestCommand? found;
+    for (final rule in matcher.rules) {
+      if (rule.command.help) continue;
+      if (rule.names.isEmpty) {
+        if (rule.phrase == text) return null;
+        continue;
+      }
+      if (found != null || rule.literalWords < (aliased ? 1 : 2)) continue;
+      final literal =
+          rule.phrase.replaceAll(askSlotPattern, ' ').replaceAll(_blank, ' ');
+      if (literal.trim() == text) found = rule.command;
+    }
+    return found;
+  }
+
   _Found _found(
     String command,
     Map<String, String> slots,
@@ -457,9 +521,14 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
     if (rule.names.isEmpty) {
       // «сегодня», «вчера», «помощь» — слишком общие без обращения.
       if (rule.literalWords <= 1 && !aliased) {
-        // Роль «Кладовщик» и подключённый склад: «сегодня» — приходы.
+        // Роль «Кладовщик» и подключённый склад: «сегодня» — приходы. Но
+        // не в чате задачи («сегодня» там — новый срок задачи) и не в
+        // ответ на вопрос помощника («На когда перенести задачу?»): там
+        // слово — ответ, а не вопрос складу.
         return rule.literalWords == 1 &&
                 command.call != null &&
+                utterance.chatTaskId == null &&
+                !utterance.awaitingAnswer &&
                 _hint('bareWords')
             ? 0.85
             : null;
@@ -566,6 +635,15 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
         );
       }
       return say('notConnected', AssistantStatus.noAction);
+    }
+    if (payload.how == 'ask') {
+      final field = command.slots.values.firstOrNull;
+      return say('ask', AssistantStatus.needsClarification, <String, String>{
+        'label': field == null || field.label.isEmpty
+            ? 'артикул или название'
+            : field.label,
+        'example': command.examples.firstOrNull ?? '',
+      });
     }
     final needs =
         description.access[command.access]?.needs ?? const <String>['token'];
@@ -784,7 +862,12 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
   Future<HealthReport> health() async {
     final token = await _secrets.read(slot.tokenKey);
     if (token == null || token.isEmpty || !record.connected) {
-      return const HealthReport(HealthStatus.down, detail: 'не подключён');
+      // Роль включена, а входа ещё нет (или из склада вышли) — задуманное
+      // состояние, а не сбой (ADR-012).
+      return const HealthReport(
+        HealthStatus.notConnected,
+        detail: 'не подключён',
+      );
     }
     final since = record.failureSince;
     return switch (record.failure) {

@@ -529,10 +529,11 @@ void main() {
       expect(transport.requests, hasLength(1));
     });
 
-    test('не подключён — down', () async {
+    test('не подключён — не сбой, а «ещё не подключено»', () async {
       final c = warehouseConnector();
       final report = await c.health();
-      expect(report.status, HealthStatus.down);
+      expect(report.status, HealthStatus.notConnected);
+      expect(report.isNotConnected, isTrue);
       expect(report.detail, 'не подключён');
     });
   });

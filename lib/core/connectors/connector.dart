@@ -148,6 +148,11 @@ enum HealthStatus {
 
   /// Не работает: нет связи, вход не принят.
   down,
+
+  /// Ещё не подключено: входа не было или из приложения вышли. Это не
+  /// неисправность — «Как дела?» не жалуется и не предлагает жалобу, а
+  /// коротко подсказывает, где подключить.
+  notConnected,
 }
 
 /// Отчёт о здоровье коннектора: состояние, пояснение по-русски и с какого
@@ -168,6 +173,9 @@ final class HealthReport {
   final DateTime? since;
 
   bool get isOk => status == HealthStatus.ok;
+
+  /// Подключения ещё нет: не сбой ([HealthStatus.notConnected]).
+  bool get isNotConnected => status == HealthStatus.notConnected;
 }
 
 /// Необязательная проверка здоровья коннектора (docs/CONNECTORS.md,

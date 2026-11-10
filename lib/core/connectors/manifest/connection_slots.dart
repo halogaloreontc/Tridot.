@@ -45,6 +45,8 @@ abstract final class ConnectionSlots {
       'warehouse.price': 'Цены я пока не называю — {вы:посмотрите|ты:'
           'посмотри} цену в карточке артикула в самом складе.',
       'warehouse.help': 'Склад понимает: {list}.',
+      'warehouse.ask': '{вы:Уточните|ты:Уточни}, что искать: {label}. '
+          'Например: «{example}».',
       'warehouse.serverSaid': 'Склад ответил: {error}',
       'warehouse.notConnected': 'Склад не подключён. {вы:Подключите|ты:'
           'Подключи} его: Настройки → Подключения → Склад.',

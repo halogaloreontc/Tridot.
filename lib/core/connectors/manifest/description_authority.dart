@@ -14,7 +14,17 @@ enum DescriptionOrigin {
 
 /// Итог выбора: описание, откуда оно и почему (текст для экрана).
 final class DescriptionPick {
-  const DescriptionPick(this.description, this.origin, this.reason);
+  const DescriptionPick(
+    this.description,
+    this.origin,
+    this.reason, {
+    this.refused,
+  });
+
+  /// Описание сервера прошло разбор, но отвергнуто как расширяющее права:
+  /// чем именно. Такое описание не заменяет принятое раньше и не попадает
+  /// в кэш ([ConnectionService]). `null` — не отвергнуто.
+  final String? refused;
 
   final ManifestDescription? description;
   final DescriptionOrigin origin;
@@ -29,8 +39,15 @@ final class DescriptionPick {
 /// Описание с сервера заменяет её, только если оно разобралось и прошло
 /// полную проверку (`ManifestDescription.parse`, в том числе список
 /// действий входа), его `version` новее встроенной и оно не расширяет
-/// права: все его действия — из `api.only` встроенного описания или из
-/// [ManifestDescription.authActions].
+/// права ([widening]):
+///
+/// - команды и `api.only` — только из `api.only` встроенного описания;
+///   действия входа и выхода ([ManifestDescription.authActions]) — только
+///   в разделе `auth`, командой они не бывают;
+/// - `api.url`, `api.action` (`in`, `name`) и `auth.headers` — те же, что
+///   во встроенном: иначе тот же список действий звал бы другой адрес
+///   («api.php?action=…» с переименованным параметром) или слал бы ключи
+///   в других заголовках.
 abstract final class DescriptionAuthority {
   /// Выбор между встроенным [builtIn] и описанием сервера [server];
   /// [serverError] — почему описание сервера не принято (тогда [server] —
@@ -85,8 +102,9 @@ abstract final class DescriptionAuthority {
       return DescriptionPick(
         builtIn,
         DescriptionOrigin.builtIn,
-        'встроенное описание $ours: описание сервера $theirs просит '
-        'действия, которых нет во встроенном (${extra.join(', ')}).',
+        'встроенное описание $ours: описание сервера $theirs расширяет '
+        'права (${extra.join('; ')}).',
+        refused: 'расширяет права (${extra.join('; ')})',
       );
     }
     return DescriptionPick(
@@ -96,28 +114,58 @@ abstract final class DescriptionAuthority {
     );
   }
 
-  /// Действия описания [server], которых нет ни в `api.only` встроенного
-  /// [builtIn], ни среди безвредных действий входа и выхода. Пусто — прав
-  /// не больше, чем у встроенного.
+  /// Чем описание [server] шире встроенного [builtIn] — по пунктам, для
+  /// экрана; пусто — прав не больше:
+  ///
+  /// - действие в `api.only` или у команды, которого нет в `api.only`
+  ///   встроенного (в том числе действие входа: командой оно не бывает);
+  /// - действие входа, выхода или получения ключа не из
+  ///   [ManifestDescription.authActions] своей роли;
+  /// - другие `api.url`, `api.action.in`, `api.action.name` или
+  ///   `auth.headers`.
   static List<String> widening(
     ManifestDescription builtIn,
     ManifestDescription server,
   ) {
-    final allowed = <String>{
-      ...builtIn.only,
-      for (final actions in ManifestDescription.authActions.values) ...actions,
-    };
-    final used = <String>{
+    final found = <String>[];
+    final commands = <String>{
       ...server.only,
       for (final command in server.commands)
         if (command.call case final ManifestCall call) call.action,
-      if (server.qr case final ManifestQr qr) qr.action,
-      if (server.logout case final ManifestLogout logout) logout.action,
+    }.difference(builtIn.only.toSet()).toList()
+      ..sort();
+    if (commands.isNotEmpty) {
+      found.add('действия, которых нет во встроенном: ${commands.join(', ')}');
+    }
+    final auth = <String>[
+      if (server.qr case final ManifestQr qr)
+        if (!_auth('qr', qr.action)) qr.action,
+      if (server.logout case final ManifestLogout logout)
+        if (!_auth('logout', logout.action)) logout.action,
       for (final credential in server.credentials.values)
-        if (credential.get case final ManifestCredentialGet get) get.action,
-    };
-    return (used.difference(allowed).toList()..sort());
+        if (credential.get case final ManifestCredentialGet get)
+          if (!_auth('login', get.action)) get.action,
+    ]..sort();
+    if (auth.isNotEmpty) {
+      found.add('незнакомые действия входа: ${auth.join(', ')}');
+    }
+    if (server.apiUrl != builtIn.apiUrl) found.add('другой адрес api.url');
+    if (server.actionIn != builtIn.actionIn ||
+        server.actionName != builtIn.actionName) {
+      found.add('другой параметр действия api.action');
+    }
+    if (!_sameMap(server.headers, builtIn.headers)) {
+      found.add('другие заголовки auth.headers');
+    }
+    return found;
   }
+
+  static bool _auth(String role, String action) =>
+      ManifestDescription.authActions[role]?.contains(action) ?? false;
+
+  static bool _sameMap(Map<String, String> a, Map<String, String> b) =>
+      a.length == b.length &&
+      a.entries.every((MapEntry<String, String> e) => b[e.key] == e.value);
 
   /// Сравнение версий вида `1.4.56`: больше нуля — [a] новее [b]. Нет
   /// версии — самая старая; часть не из цифр («1.5.0-beta») — версия не

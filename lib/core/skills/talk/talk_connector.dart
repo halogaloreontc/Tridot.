@@ -292,18 +292,23 @@ final class TalkConnector implements Connector, ConnectorHealth {
         // Задачи не прочитались: об этом скажет их проверка здоровья.
       }
     }
-    final (problems, unchecked) = await _problems(session);
+    final (problems, unchecked, pending) = await _problems(session);
     if (problems.isEmpty) {
       // Без проверки здоровья коннектор не проверен: «все работают» про
-      // него не говорим, а называем его.
-      final okId =
-          unchecked.isEmpty ? 'talk.status.ok' : 'talk.status.okUnchecked';
+      // него не говорим, а называем его. Подключение, в которое ещё не
+      // вошли, — не сбой: «все подключения работают» про него тоже не
+      // говорим, а коротко подсказываем, где подключить.
+      final okId = unchecked.isNotEmpty
+          ? 'talk.status.okUnchecked'
+          : pending.isEmpty
+              ? 'talk.status.ok'
+              : 'talk.status.okPending';
       final okValues = unchecked.isEmpty
           ? const <String, String>{}
           : <String, String>{'unchecked': unchecked.join(', ')};
       final ok = session.say(okId, okValues);
       return AssistantResponse(
-        message: sentences(<String>[ok, ...parts]),
+        message: sentences(<String>[ok, ...parts, ...pending]),
         intent: command,
         status: AssistantStatus.completed,
         replyId: okId,
@@ -332,30 +337,52 @@ final class TalkConnector implements Connector, ConnectorHealth {
   /// Что не так у включённых коннекторов: ««Склад» не работает: нет
   /// связи с сервером (с 14:05)». Проверка, которая не ответила вовремя
   /// или упала, — тоже проблема. Второе — названия включённых
-  /// коннекторов без [ConnectorHealth]: их проверить нельзя.
-  Future<(List<String>, List<String>)> _problems(
+  /// коннекторов без [ConnectorHealth]: их проверить нельзя. Третье —
+  /// подсказки для подключений роли, в которые ещё не вошли
+  /// ([HealthStatus.notConnected]): «Склад ещё не подключён — Настройки →
+  /// Роли → Кладовщик → Подключить склад.» Это не проблема и не повод для
+  /// жалобы.
+  Future<(List<String>, List<String>, List<String>)> _problems(
     AssistantSession session,
   ) async {
     final connectors =
         session.extensions?.enabledConnectors ?? const <Connector>[];
     final now = session.clock.now();
-    final checks = <Future<String?>>[
+    final checked = <Connector>[
       for (final connector in connectors)
-        if (connector case final ConnectorHealth health)
-          _check(health, connector.info.title, now),
+        if (connector is ConnectorHealth) connector,
+    ];
+    final checks = <Future<HealthReport>>[
+      for (final connector in checked) _check(connector as ConnectorHealth),
     ];
     final unchecked = <String>[
       for (final connector in connectors)
         if (connector is! ConnectorHealth) '«${connector.info.title}»',
     ];
     final results = await Future.wait(checks);
-    return (
-      <String>[
-        for (final result in results)
-          if (result != null) result,
-      ],
-      unchecked,
-    );
+    final problems = <String>[];
+    final pending = <String>[];
+    for (var i = 0; i < results.length; i++) {
+      final report = results[i];
+      if (report.isOk) continue;
+      final info = checked[i].info;
+      if (!report.isNotConnected) {
+        problems.add(describe(info.title, report, now));
+        continue;
+      }
+      final role = session.extensions?.activeRoleOf(info.id);
+      final link = role?.connection;
+      if (role != null && link != null && link.extensionId == info.id) {
+        pending.add(
+          session.say('role.notConnected', <String, String>{
+            'app': link.appTitle,
+            'role': role.title,
+            'button': link.connectLabel,
+          }),
+        );
+      }
+    }
+    return (problems, unchecked, pending);
   }
 
   /// Фразы одной репликой через пробел. Фраза без знака конца
@@ -376,27 +403,20 @@ final class TalkConnector implements Connector, ConnectorHealth {
     return ReplyTemplate.pictographs.hasMatch(last);
   }
 
-  static Future<String?> _check(
-    ConnectorHealth health,
-    String title,
-    DateTime now,
-  ) async {
-    HealthReport report;
+  static Future<HealthReport> _check(ConnectorHealth health) async {
     try {
-      report = await health.health().timeout(ConnectorHealth.timeout);
+      return await health.health().timeout(ConnectorHealth.timeout);
     } on TimeoutException {
-      report = const HealthReport(
+      return const HealthReport(
         HealthStatus.degraded,
         detail: 'не ответил на проверку вовремя',
       );
     } on Object catch (error) {
-      report = HealthReport(
+      return HealthReport(
         HealthStatus.down,
         detail: 'проверка не удалась: $error',
       );
     }
-    if (report.isOk) return null;
-    return describe(title, report, now);
   }
 
   /// Проблема одной строкой: «Склад» работает с перебоями: медленно
@@ -483,22 +503,32 @@ final class TalkConnector implements Connector, ConnectorHealth {
     );
   }
 
-  /// «Сейчас помогаю с задачами и со складом.» после «кто ты» и «что
-  /// умеешь» (ADR-012): только если включена роль сверх «Личного» или
-  /// «Личное» выключено — о задачах и счёте помощник и так рассказывает.
+  /// С чем помощник помогает сейчас («с задачами и со складом») — для
+  /// «кто ты» и «что умеешь» (ADR-012); `null` — говорить не о чем:
+  /// включено только «Личное» (о задачах и счёте помощник и так
+  /// рассказывает). Роль, чей навык выключен в «Расширениях», не
+  /// упоминается ([ExtensionRegistry.helpsWith]).
+  static String? _roles(AssistantSession session) {
+    final registry = session.extensions;
+    if (registry == null) return null;
+    final active = registry.activeRoles;
+    if (active.isEmpty ||
+        (active.length == 1 && active.single.id == Roles.personalId)) {
+      return null;
+    }
+    final helps = registry.helpsWith;
+    if (helps.isEmpty || helps == Roles.personal.helpsWith) return null;
+    return helps;
+  }
+
+  /// «Сейчас помогаю с задачами и со складом.» после «кто ты»
+  /// (`talk.roles`).
   AssistantResponse _withRoles(
     AssistantSession session,
     AssistantResponse response,
   ) {
-    final registry = session.extensions;
-    if (registry == null) return response;
-    final active = registry.activeRoles;
-    if (active.isEmpty ||
-        (active.length == 1 && active.single.id == Roles.personalId)) {
-      return response;
-    }
-    final helps = registry.helpsWith;
-    if (helps.isEmpty) return response;
+    final helps = _roles(session);
+    if (helps == null) return response;
     final tail = session.say('talk.roles', <String, String>{'roles': helps});
     return AssistantResponse(
       message: '${response.message} $tail',
@@ -514,8 +544,7 @@ final class TalkConnector implements Connector, ConnectorHealth {
   AssistantResponse _capabilities(AssistantSession session, String command) {
     final connectors =
         session.extensions?.enabledConnectors ?? const <Connector>[];
-    String title(Connector c) =>
-        session.extensions?.skillTitle(c.info.id) ?? c.info.title;
+    String title(Connector c) => c.info.title;
     final items = <String>[
       for (final connector in connectors)
         connector.info.examples.isEmpty
@@ -524,14 +553,17 @@ final class TalkConnector implements Connector, ConnectorHealth {
                 '«${connector.info.examples.first}»',
     ];
     if (items.isEmpty) items.add('«$_selfTitle»');
-    return _withRoles(
+    // С ролью сверх «Личного» — одна запись с обоими фактами, а не две
+    // склеенные: так фраза читается целиком в каждом стиле.
+    final helps = _roles(session);
+    return _say(
       session,
-      _say(
-        session,
-        'talk.capabilities',
-        command: command,
-        values: <String, String>{'skills': items.join('; ')},
-      ),
+      helps == null ? 'talk.capabilities' : 'talk.capabilities.roles',
+      command: command,
+      values: <String, String>{
+        'skills': items.join('; '),
+        if (helps != null) 'roles': helps,
+      },
     );
   }
 

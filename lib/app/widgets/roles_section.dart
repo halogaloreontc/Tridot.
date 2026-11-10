@@ -101,12 +101,25 @@ class _RolesSectionState extends State<RolesSection> {
         ),
       );
 
-  /// «Задачи, Калькулятор, Беседа»: только расширения этой сборки.
+  /// «Задачи, Калькулятор, Беседа»: только расширения этой сборки, под
+  /// теми же названиями, что в «Расширениях» и в «что умеешь».
   String _includes(RoleInfo role) => <String>[
         for (final id in role.extensions)
-          if (widget.registry.info(id) case final ExtensionInfo info)
-            role.skillTitles[id] ?? info.title,
+          if (widget.registry.info(id) != null) widget.registry.skillTitle(id),
       ].join(', ');
+
+  /// Роль включена, а её навык выключен в «Расширениях»: сказать прямо,
+  /// иначе карточка выглядит рабочей, а кнопки и ответы пропали.
+  String? _switchedOff(RoleInfo role) {
+    final off = widget.registry.switchedOff(role, _choice);
+    if (off.isEmpty) return null;
+    final names = off.map((ExtensionInfo e) => '«${e.title}»').join(', ');
+    return off.length == 1
+        ? 'Навык $names выключен в «Расширениях» — роль им не пользуется: '
+            'его кнопок и ответов нет. Включите его там.'
+        : 'Навыки $names выключены в «Расширениях» — роль ими не '
+            'пользуется: их кнопок и ответов нет. Включите их там.';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -186,6 +199,16 @@ class _RolesSectionState extends State<RolesSection> {
                     'Кнопки: ${role.chips.map((RoleChip c) => '«${c.label}»').join(', ')}',
                     style: technicalTextStyle,
                   ),
+                if (on)
+                  if (_switchedOff(role) case final String note)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        note,
+                        key: ValueKey<String>('role-off-${role.id}'),
+                        style: const TextStyle(color: AssistantColors.warning),
+                      ),
+                    ),
                 if (link != null && service != null) ...<Widget>[
                   const SizedBox(height: 6),
                   Text(
