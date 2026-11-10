@@ -125,6 +125,7 @@ void main() {
       final server = _parse(widening);
       expect(DescriptionAuthority.widening(builtIn, server), <String>[
         'действия, которых нет во встроенном: item_delete',
+        'новые поля в теле запроса: item_delete',
       ]);
       final pick =
           DescriptionAuthority.choose(builtIn: builtIn, server: server);
@@ -680,6 +681,144 @@ void main() {
       expect(refreshed.message, 'Описание обновлено: версия 1.4.60.');
       expect(service.descriptionOrigin, DescriptionOrigin.server);
       expect((await restore()).descriptionOrigin, DescriptionOrigin.server);
+    });
+  });
+
+  group('действия с записью: только из встроенной копии (ADR-013)', () {
+    final ours = builtInManifest();
+
+    /// Описание 1.4.57 с правками [edit] — как будто его отдал сервер.
+    ManifestDescription server(void Function(Map<String, Object?> j) edit) {
+      final json = jsonDecode(manifestSource(actionsManifestPath))
+          as Map<String, Object?>;
+      json['version'] = '1.4.60';
+      edit(json);
+      return _parse(jsonEncode(json));
+    }
+
+    Map<String, Object?> api(Map<String, Object?> j) =>
+        j['api']! as Map<String, Object?>;
+    Map<String, Object?> auth(Map<String, Object?> j) =>
+        j['auth']! as Map<String, Object?>;
+
+    test('расчёты в api.only сервера — принято, действий у него нет', () {
+      final theirs = server((_) {});
+      expect(theirs.only, contains('act_move_check'));
+      expect(DescriptionAuthority.widening(ours, theirs), isEmpty);
+      final pick = DescriptionAuthority.choose(builtIn: ours, server: theirs);
+      expect(pick.origin, DescriptionOrigin.server);
+      expect(theirs.actions, isEmpty);
+    });
+
+    test('запись или act_settle в api.only или у команды — отвергнуто', () {
+      for (final edit in <void Function(Map<String, Object?>)>[
+        (j) {
+          api(j)['act'] = <String>['act_post', 'act_settle'];
+          j.remove('actions');
+          (api(j)['only']! as List<Object?>).add('act_move');
+        },
+        (j) {
+          api(j)['act'] = <String>['act_post', 'act_move'];
+          j.remove('actions');
+          (api(j)['only']! as List<Object?>).add('act_settle');
+        },
+        (j) {
+          api(j).remove('act');
+          j.remove('actions');
+          (api(j)['only']! as List<Object?>).add('act_move');
+          _command(j, 'cell')['call'] = <String, Object?>{
+            'action': 'act_move',
+            'body': <String, Object?>{'cell': '{cell}'},
+          };
+        },
+      ]) {
+        final theirs = server(edit);
+        final extra = DescriptionAuthority.widening(ours, theirs);
+        expect(
+          extra.join('; '),
+          contains('ссылается на действия с записью'),
+        );
+        final pick = DescriptionAuthority.choose(builtIn: ours, server: theirs);
+        expect(pick.origin, DescriptionOrigin.builtIn);
+        expect(pick.refused, isNotNull);
+      }
+    });
+
+    test('закреплённые поля: метод, ошибки, доступ, вход, выход, тело', () {
+      final edits = <String, void Function(Map<String, Object?>)>{
+        'другой метод api.method': (j) => api(j)['method'] = 'GET',
+        'другие поля ошибок api.errors': (j) =>
+            (api(j)['errors']! as Map<String, Object?>)['code'] = 'kind',
+        'другие уровни доступа auth.access': (j) =>
+            ((auth(j)['access']! as Map<String, Object?>)['shared']!
+                as Map<String, Object?>)['needs'] = <String>['token', 'sid'],
+        'другой вход по логину auth.credentials.sid.get': (j) =>
+            ((((auth(j)['credentials']! as Map<String, Object?>)['sid']!
+                    as Map<String, Object?>)['get']!
+                as Map<String, Object?>))['take'] = 'token',
+        'другой вход по ссылке auth.qr': (j) =>
+            (auth(j)['qr']! as Map<String, Object?>)['param'] = 'qr',
+        'другой выход auth.logout': (j) =>
+            (auth(j)['logout']! as Map<String, Object?>)['needs'] = <String>[
+              'token',
+            ],
+        'новые поля в теле запроса: ask_cell': (j) =>
+            ((_command(j, 'cell')['call']! as Map<String, Object?>)['body']!
+                as Map<String, Object?>)['all'] = true,
+      };
+      for (final MapEntry(key: reason, value: edit) in edits.entries) {
+        final extra = DescriptionAuthority.widening(ours, server(edit));
+        expect(extra, contains(reason), reason: reason);
+      }
+    });
+
+    test('старая встроенная 1.4.56 отвергает описание 1.4.57 — без записи', () {
+      final old = _parse(manifestSource(patchedManifestPath));
+      final pick = DescriptionAuthority.choose(
+        builtIn: old,
+        server: _parse(manifestSource(actionsManifestPath)),
+      );
+      expect(pick.origin, DescriptionOrigin.builtIn);
+      expect(pick.refused, contains('act_move_check'));
+    });
+
+    test('сервер в работе для чтения — действия всё равно встроенные',
+        () async {
+      final served = jsonEncode(
+        (jsonDecode(manifestSource(actionsManifestPath))
+            as Map<String, Object?>)
+          ..['version'] = '1.4.60',
+      );
+      final transport = FakeHttpTransport((HttpRequestData r) {
+        if (r.uri.path.endsWith('assistant.json')) {
+          return HttpResponseData(statusCode: 200, body: served);
+        }
+        return _json(200, <String, Object?>{
+          'ok': true,
+          'token': fakeToken,
+          'sid': fakeSid,
+          'login': 'ivanov',
+        });
+      });
+      final service = await ConnectionService.restore(
+        slot: ConnectionSlots.warehouse,
+        transport: transport,
+        secrets: InMemorySecretStore(),
+        store: InMemoryConnectionStore(),
+        builtIn: manifestSource(actionsManifestPath),
+        clock: FixedClock(now),
+      );
+      final result =
+          await service.connectByLink('https://warehouse.example/#qr=$code');
+      expect(result.ok, isTrue, reason: result.message);
+      expect(service.descriptionOrigin, DescriptionOrigin.server);
+      expect(service.description!.actions, isEmpty);
+      expect(service.connector.builtIn!.actions, hasLength(2));
+      expect(service.connector.builtIn!.version, '1.4.57');
+      final match = service.connector.match(
+        Utterance.analyze('проведи приход 318 в 1с', now: now),
+      );
+      expect(match?.commandId, 'warehouse.act.post');
     });
   });
 }

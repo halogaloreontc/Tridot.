@@ -72,6 +72,7 @@ final class ExtensionChoice {
     this.disabledRoles = const <String>{},
     this.enabledRoles = const <String>{},
     this.roleOwners = const <String, String>{},
+    this.roleActions = const <String, String>{},
   });
 
   /// Выключенные id расширений, включённых по умолчанию. Для расширения,
@@ -93,6 +94,11 @@ final class ExtensionChoice {
   /// ведёт основной.
   final Map<String, String> roleOwners;
 
+  /// «Разрешить действия» (ADR-013): id роли → логин подключения, для
+  /// которого разрешены действия с записью. Нет записи — выключено (по
+  /// умолчанию). Любая смена входа запись снимает.
+  final Map<String, String> roleActions;
+
   bool isEnabled(ExtensionInfo info) {
     if (info.required) return true;
     return info.defaultEnabled
@@ -110,6 +116,7 @@ final class ExtensionChoice {
     Set<String>? disabledRoles,
     Set<String>? enabledRoles,
     Map<String, String>? roleOwners,
+    Map<String, String>? roleActions,
   }) =>
       ExtensionChoice(
         disabled: disabled ?? this.disabled,
@@ -117,6 +124,7 @@ final class ExtensionChoice {
         disabledRoles: disabledRoles ?? this.disabledRoles,
         enabledRoles: enabledRoles ?? this.enabledRoles,
         roleOwners: roleOwners ?? this.roleOwners,
+        roleActions: roleActions ?? this.roleActions,
       );
 
   /// Новый выбор, где [info] включено или выключено.
@@ -162,6 +170,14 @@ final class ExtensionChoice {
     return _copy(roleOwners: owners);
   }
 
+  /// Новый выбор, где у роли [roleId] действия разрешены для логина
+  /// [login]; `null` — выключены.
+  ExtensionChoice withActions(String roleId, String? login) {
+    final actions = Map<String, String>.of(roleActions)..remove(roleId);
+    if (login != null && login.isNotEmpty) actions[roleId] = login;
+    return _copy(roleActions: actions);
+  }
+
   /// Выбор без следов [id]: расширение снова в состоянии по умолчанию.
   ExtensionChoice without(String id) =>
       !disabled.contains(id) && !enabled.contains(id)
@@ -179,8 +195,10 @@ final class ExtensionChoice {
       _sameSet(enabled, other.enabled) &&
       _sameSet(disabledRoles, other.disabledRoles) &&
       _sameSet(enabledRoles, other.enabledRoles) &&
-      roleOwners.length == other.roleOwners.length &&
-      roleOwners.entries.every(
-        (MapEntry<String, String> e) => other.roleOwners[e.key] == e.value,
-      );
+      _sameMap(roleOwners, other.roleOwners) &&
+      _sameMap(roleActions, other.roleActions);
+
+  static bool _sameMap(Map<String, String> a, Map<String, String> b) =>
+      a.length == b.length &&
+      a.entries.every((MapEntry<String, String> e) => b[e.key] == e.value);
 }

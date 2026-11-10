@@ -47,7 +47,13 @@ final class DescriptionPick {
 /// - `api.url`, `api.action` (`in`, `name`) и `auth.headers` — те же, что
 ///   во встроенном: иначе тот же список действий звал бы другой адрес
 ///   («api.php?action=…» с переименованным параметром) или слал бы ключи
-///   в других заголовках.
+///   в других заголовках;
+/// - `api.method`, `api.errors`, уровни `auth.access`, вход по логину,
+///   по ссылке и выход — те же; у знакомого действия в теле запроса
+///   только знакомые поля;
+/// - действия с записью ([ManifestDescription.writeNames]) и расчёты
+///   действий описание сервера не называет вовсе: их берут только из
+///   встроенной копии (ADR-013).
 abstract final class DescriptionAuthority {
   /// Выбор между встроенным [builtIn] и описанием сервера [server];
   /// [serverError] — почему описание сервера не принято (тогда [server] —
@@ -157,7 +163,110 @@ abstract final class DescriptionAuthority {
     if (!_sameMap(server.headers, builtIn.headers)) {
       found.add('другие заголовки auth.headers');
     }
+    // Действия с записью — только из встроенной копии (ADR-013): описание
+    // сервера, которое называет их в `api.only` или у команды, отвергнуто
+    // целиком.
+    final writes = <String>{
+      ...server.only,
+      for (final command in server.commands)
+        if (command.call case final ManifestCall call) call.action,
+    }.intersection(<String>{
+      ...ManifestDescription.writeNames,
+      ...builtIn.act,
+      for (final action in builtIn.actions) action.write,
+    }).toList()
+      ..sort();
+    if (writes.isNotEmpty) {
+      found.add('описание сервера ссылается на действия с записью: '
+          '${writes.join(', ')}');
+    }
+    final checks = <String>{
+      for (final command in server.commands)
+        if (command.call case final ManifestCall call) call.action,
+    }.intersection(<String>{
+      ...ManifestDescription.checkNames,
+      for (final action in builtIn.actions) action.check,
+    }).toList()
+      ..sort();
+    if (checks.isNotEmpty) {
+      found.add('команды зовут расчёты действий: ${checks.join(', ')}');
+    }
+    if (server.method != builtIn.method) found.add('другой метод api.method');
+    if (server.errorField != builtIn.errorField ||
+        server.needField != builtIn.needField ||
+        server.codeField != builtIn.codeField) {
+      found.add('другие поля ошибок api.errors');
+    }
+    // Тело запроса: у знакомого действия — только знакомые поля. Иначе
+    // новое описание дописало бы в запрос чтения поле, которого встроенное
+    // не шлёт.
+    final keys = <String, Set<String>>{};
+    for (final command in builtIn.commands) {
+      if (command.call case final ManifestCall call) {
+        (keys[call.action] ??= <String>{}).addAll(call.body.keys);
+      }
+    }
+    final bodies = <String>{
+      for (final command in server.commands)
+        if (command.call case final ManifestCall call)
+          if (!(keys[call.action] ?? const <String>{})
+              .containsAll(call.body.keys))
+            call.action,
+    }.toList()
+      ..sort();
+    if (bodies.isNotEmpty) {
+      found.add('новые поля в теле запроса: ${bodies.join(', ')}');
+    }
+    if (!_sameAccess(server.access, builtIn.access)) {
+      found.add('другие уровни доступа auth.access');
+    }
+    if (!_sameGet(
+      server.credentials['sid']?.get,
+      builtIn.credentials['sid']?.get,
+    )) {
+      found.add('другой вход по логину auth.credentials.sid.get');
+    }
+    if (builtIn.qr case final ManifestQr ours) {
+      final theirs = server.qr;
+      if (theirs != null &&
+          (theirs.action != ours.action ||
+              theirs.param != ours.param ||
+              !_sameMap(theirs.take, ours.take))) {
+        found.add('другой вход по ссылке auth.qr');
+      }
+    }
+    if (builtIn.logout case final ManifestLogout ours) {
+      final theirs = server.logout;
+      if (theirs != null &&
+          (theirs.action != ours.action ||
+              !_sameList(theirs.needs, ours.needs))) {
+        found.add('другой выход auth.logout');
+      }
+    }
     return found;
+  }
+
+  static bool _sameList(List<String> a, List<String> b) =>
+      a.length == b.length && a.toSet().containsAll(b);
+
+  static bool _sameAccess(
+    Map<String, ManifestAccess> a,
+    Map<String, ManifestAccess> b,
+  ) =>
+      a.length == b.length &&
+      a.entries.every(
+        (MapEntry<String, ManifestAccess> e) =>
+            b[e.key] != null && _sameList(e.value.needs, b[e.key]!.needs),
+      );
+
+  static bool _sameGet(ManifestCredentialGet? a, ManifestCredentialGet? b) {
+    if (a == null || b == null) return a == null && b == null;
+    return a.action == b.action &&
+        a.take == b.take &&
+        a.body.length == b.body.length &&
+        a.body.entries.every(
+          (MapEntry<String, Object?> e) => b.body[e.key] == e.value,
+        );
   }
 
   static bool _auth(String role, String action) =>

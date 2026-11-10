@@ -238,9 +238,22 @@ final class ExtensionRegistry {
     final all = <String>{
       for (final role in activeRoles) ...role.hints,
     };
+    // «Разрешить действия» (ADR-013): логин — только расширению из
+    // подсказки действий включённой роли.
+    final actions = <String, String>{};
+    for (final role in activeRoles) {
+      final hint = role.actionHint;
+      final login = _choice.roleActions[role.id];
+      if (hint == null || login == null) continue;
+      final dot = hint.indexOf('.');
+      if (dot > 0) actions[hint.substring(0, dot)] = login;
+    }
     for (final connector in _connectors) {
       if (connector case final RoleHints hinted) {
         hinted.applyRoleHints(RoleRules.hintsFor(connector.info.id, all));
+      }
+      if (connector case final RoleActions acting) {
+        acting.applyRoleActions(actions[connector.info.id]);
       }
     }
   }

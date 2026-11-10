@@ -2,6 +2,7 @@ import '../connectors/connector.dart';
 import '../connectors/login_link.dart';
 import '../connectors/tasks_connector.dart';
 import '../extensions/extension_registry.dart';
+import '../models/action_card.dart';
 import '../models/bulk.dart';
 import '../models/task.dart';
 import '../personas/persona.dart';
@@ -634,8 +635,9 @@ final class AssistantController {
   Future<AssistantResponse> _answer(
     Connector owner,
     PendingConfirmation pending,
-    ConfirmationReply reply,
-  ) {
+    ConfirmationReply reply, {
+    bool viaButton = false,
+  }) {
     _answered = pending;
     return _run(
       owner,
@@ -643,7 +645,7 @@ final class AssistantController {
         connectorId: owner.info.id,
         commandId: pending.commandId,
         confidence: 1,
-        payload: ConfirmationAnswer(pending, reply),
+        payload: ConfirmationAnswer(pending, reply, viaButton: viaButton),
       ),
     );
   }
@@ -708,6 +710,68 @@ final class AssistantController {
       apply ? ConfirmationReply.yes : ConfirmationReply.no,
     );
     return response.withPersona(asker.id);
+  }
+
+  // ------------------------------------------- действия с записью
+
+  /// Карточка действия, которая ждёт «Подтвердить», или `null`.
+  ActionCard? get pendingCard {
+    final payload = session.pendingConfirmation?.payload;
+    return payload is ActionCard ? payload : null;
+  }
+
+  /// Кнопка «Подтвердить» ([apply]) или «Отмена» на карточке действия
+  /// (ADR-013). Только так действие с записью и выполняется: ответ «да»
+  /// текстом лишь просит нажать кнопку. Отвечает тот, кто спросил.
+  /// `null` — карточка уже не ждёт ответа (устарела, отвечена, нажата
+  /// второй раз): ни одного запроса.
+  Future<AssistantResponse?> answerCard(
+    ActionCard card, {
+    required bool apply,
+  }) async {
+    final pending = session.pendingConfirmation;
+    if (pending == null || !identical(pending.payload, card)) return null;
+    if (!card.isPending) return null;
+    final owner = _connectors
+        .where((Connector c) => c.info.id == pending.connectorId)
+        .firstOrNull;
+    if (owner == null) return null;
+    final asker = session.pendingSpeaker ?? personas.responder;
+    // Ожидание снимается до запроса: второе нажатие не найдёт карточку.
+    session.takePendingConfirmation();
+    _voiceOf(asker);
+    final response = await _answer(
+      owner,
+      pending,
+      apply ? ConfirmationReply.yes : ConfirmationReply.no,
+      viaButton: true,
+    );
+    return response.withPersona(asker.id);
+  }
+
+  /// «Проверить» под карточкой с неизвестным итогом: спросить склад, чем
+  /// кончилось. Запись не повторяется. `null` — проверять нечего.
+  Future<AssistantResponse?> settleCard(
+    ActionCard card, {
+    String? personaId,
+  }) async {
+    if (!card.canSettle) return null;
+    final owner = _connectors
+        .where((Connector c) => c.info.id == card.connectorId)
+        .firstOrNull;
+    if (owner == null) return null;
+    final speaker = Personas.byId(personaId) ?? personas.responder;
+    _voiceOf(speaker);
+    final response = await _run(
+      owner,
+      ConnectorMatch(
+        connectorId: owner.info.id,
+        commandId: '${owner.info.id}.act.settle',
+        confidence: 1,
+        payload: ActionCardSettle(card),
+      ),
+    );
+    return response.withPersona(speaker.id);
   }
 
   /// Кнопка «Отменить» под применённой карточкой: вернуть сроки и статусы

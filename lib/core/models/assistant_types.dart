@@ -1,4 +1,5 @@
 import '../personas/persona.dart';
+import 'action_card.dart';
 import 'bulk.dart';
 import 'task.dart';
 
@@ -16,6 +17,7 @@ final class AssistantResponse {
     this.settingsChange,
     this.addressedPersonaId,
     this.checklist,
+    this.card,
   });
 
   /// Готовый текст для пользователя. В истории чата хранится именно он:
@@ -51,6 +53,11 @@ final class AssistantResponse {
   /// поэтому отметки в карточке видны ответу «да». `null` — без списка.
   final BulkChecklist? checklist;
 
+  /// Карточка действия с записью (ADR-013): что изменится, кнопки
+  /// «Подтвердить» и «Отмена». Тот же объект ждёт ответа в сессии.
+  /// `null` — без карточки.
+  final ActionCard? card;
+
   /// Тот же ответ от помощника [personaId].
   AssistantResponse withPersona(String personaId) => AssistantResponse(
         message: message,
@@ -63,6 +70,7 @@ final class AssistantResponse {
         settingsChange: settingsChange,
         addressedPersonaId: addressedPersonaId,
         checklist: checklist,
+        card: card,
       );
 
   /// Тот же ответ, в котором пользователь обратился к [personaId] по имени.
@@ -77,5 +85,6 @@ final class AssistantResponse {
         settingsChange: settingsChange,
         addressedPersonaId: personaId,
         checklist: checklist,
+        card: card,
       );
 }

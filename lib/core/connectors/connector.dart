@@ -1,5 +1,6 @@
 import '../app_info.dart';
 import '../extensions/extension_registry.dart';
+import '../models/action_card.dart';
 import '../models/assistant_types.dart';
 import '../models/bulk.dart';
 import '../models/task.dart';
@@ -380,10 +381,15 @@ abstract interface class ConfirmationFollowUp {
 
 /// Ответ пользователя на [PendingConfirmation]: так его получает `run`.
 final class ConfirmationAnswer {
-  const ConfirmationAnswer(this.pending, this.reply);
+  const ConfirmationAnswer(this.pending, this.reply, {this.viaButton = false});
 
   final PendingConfirmation pending;
   final ConfirmationReply reply;
+
+  /// Ответ — кнопкой карточки, а не текстом. Действие с записью во
+  /// внешнем приложении выполняется только по кнопке «Подтвердить»
+  /// (ADR-013): текстовое «да» лишь просит нажать её, «нет» отменяет.
+  final bool viaButton;
 
   bool get confirmed => reply == ConfirmationReply.yes;
 }
@@ -442,6 +448,7 @@ final class AssistantSession {
     Task? task,
     PersonaSettingsChange? settingsChange,
     BulkChecklist? checklist,
+    ActionCard? card,
     String? prefix,
   }) =>
       AssistantResponse(
@@ -454,6 +461,7 @@ final class AssistantSession {
         values: values,
         settingsChange: settingsChange,
         checklist: checklist,
+        card: card,
       );
 
   SelectedItem? _selection;

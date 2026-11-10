@@ -73,6 +73,50 @@ final class ManifestCommand {
   final int order;
 }
 
+/// Действие с записью из раздела `actions[]` (склад 1.4.57, ADR-013).
+///
+/// Читается только у встроенной копии описания: у описания сервера раздел
+/// не разбирается вовсе. Тела запросов, карточку и ответы задаёт код
+/// «Связного» по [kind]; у записи нет `call`, `answer`, `reply`.
+final class ManifestAction {
+  const ManifestAction({
+    required this.id,
+    required this.kind,
+    required this.title,
+    required this.say,
+    required this.order,
+    required this.check,
+    required this.write,
+    this.examples = const <String>[],
+    this.slots = const <String, ManifestSlot>{},
+    this.access,
+    this.right = '',
+  });
+
+  final String id;
+
+  /// `move` — перемещение между ячейками, `post` — отметка проведения.
+  final String kind;
+  final String title;
+  final List<String> say;
+  final List<String> examples;
+  final Map<String, ManifestSlot> slots;
+
+  /// Уровень доступа из `auth.access`: только с личным ключом (`sid`).
+  final String? access;
+
+  /// Расчёт (только чтение): `act_move_check`.
+  final String check;
+
+  /// Запись по кнопке «Подтвердить»: `act_move`.
+  final String write;
+
+  /// Право склада: `moves`, `post`.
+  final String right;
+
+  final int order;
+}
+
 /// Уровень доступа: подпись и нужные ключи.
 final class ManifestAccess {
   const ManifestAccess({required this.label, required this.needs});
@@ -167,8 +211,10 @@ final class ManifestDescription {
     required this.actionIn,
     required this.actionName,
     required this.only,
+    required this.act,
     required this.errorField,
     required this.needField,
+    required this.codeField,
     required this.headers,
     required this.credentials,
     required this.access,
@@ -177,6 +223,8 @@ final class ManifestDescription {
     required this.fallback,
     required this.filler,
     required this.commands,
+    required this.actions,
+    required this.builtIn,
   });
 
   /// Формат, который понимает коннектор.
@@ -188,6 +236,7 @@ final class ManifestDescription {
   static const int maxPhrases = 50;
   static const int maxPhraseLength = 120;
   static const int maxShapeLength = 200;
+  static const int maxActions = 10;
 
   final Map<String, Object?> json;
 
@@ -204,8 +253,17 @@ final class ManifestDescription {
   final String actionIn;
   final String actionName;
   final List<String> only;
+
+  /// `api.act` — действия с записью по описанию. «Связной» его не
+  /// использует: что писать, знает код ([writeActions]); признак «сервер
+  /// умеет» — сам ответ расчёта.
+  final List<String> act;
   final String errorField;
   final String needField;
+
+  /// Поле кода отказа (`api.errors.code`, склад 1.4.57): `no_right`,
+  /// `stale`.
+  final String codeField;
 
   /// Заголовок → шаблон: `X-Wh-Token: {$token}`.
   final Map<String, String> headers;
@@ -220,6 +278,41 @@ final class ManifestDescription {
   final String? fallback;
   final List<String> filler;
   final List<ManifestCommand> commands;
+
+  /// Действия с записью — только у встроенной копии ([builtIn]); у
+  /// описания сервера всегда пусто, что бы в нём ни было (ADR-013).
+  final List<ManifestAction> actions;
+
+  /// Разобрано как встроенная копия из `assets/connectors/`.
+  final bool builtIn;
+
+  /// Действия с записью, которые знает код «Связного», по виду: расчёт и
+  /// запись. Встроенное описание с другой парой проверку не проходит.
+  /// Новое действие — сюда, после чтения кода сервера.
+  static const Map<String, (String, String)> writeActions =
+      <String, (String, String)>{
+    'move': ('act_move_check', 'act_move'),
+    'post': ('act_post_check', 'act_post'),
+  };
+
+  /// «Чем кончилось» по одноразовому ключу записи: только служебная книга
+  /// сервера, право склада не нужно.
+  static const String settleAction = 'act_settle';
+
+  /// Все действия записи и [settleAction]: обычный путь команд их не зовёт
+  /// никогда.
+  static Set<String> get writeNames => <String>{
+        for (final pair in writeActions.values) pair.$2,
+        settleAction,
+      };
+
+  /// Расчёты действий: читающие, но зовутся только из потока действий.
+  static Set<String> get checkNames => <String>{
+        for (final pair in writeActions.values) pair.$1,
+      };
+
+  ManifestAction? action(String id) =>
+      actions.where((ManifestAction a) => a.id == id).firstOrNull;
 
   ManifestCommand? command(String id) =>
       commands.where((ManifestCommand c) => c.id == id).firstOrNull;
@@ -242,10 +335,14 @@ final class ManifestDescription {
   /// слот; [manifestUri] — откуда описание пришло: `api.url` обязан быть
   /// того же источника (схема, хост, порт), иначе пароль ушёл бы на чужой
   /// хост. Любая ошибка — [ManifestException] со всеми найденными.
+  ///
+  /// [builtIn] — встроенная копия: только у неё разбирается раздел
+  /// `actions[]` (действия с записью, ADR-013).
   static ManifestDescription parse(
     String source, {
     String? appId,
     Uri? manifestUri,
+    bool builtIn = false,
   }) {
     if (utf8.encode(source).length > maxBytes) {
       throw const ManifestException(<String>['файл больше 256 КБ']);
@@ -261,7 +358,7 @@ final class ManifestDescription {
     }
     final errors = check(decoded, appId: appId, manifestUri: manifestUri);
     if (errors.isNotEmpty) throw ManifestException(errors);
-    return _build(decoded, source);
+    return _build(decoded, source, builtIn: builtIn);
   }
 
   /// Проверка как `askCheck` из core.mjs плюс пределы «Связного». Пустой
@@ -517,7 +614,183 @@ final class ManifestDescription {
         bad('$at.body: логин или пароль повторяется');
       }
     }
+    _checkActions(
+      desc,
+      bad,
+      only: only is List ? only : const <Object?>[],
+      commands: cmds,
+      ids: ids,
+      access: access,
+      authNames: <Object?>[
+        qr['action'],
+        logout['action'],
+        for (final credential in _map(auth['credentials']).values)
+          _map(_map(credential)['get'])['action'],
+      ],
+    );
     return errs;
+  }
+
+  /// Правила действий с записью (склад 1.4.57, ADR-013) — те же, что в
+  /// `core.mjs` склада: `api.act` не пересекается с `api.only`; каждое
+  /// действие — известного вида, с расчётом из `api.only` и записью из
+  /// `api.act`, только под личным ключом, без `call`/`answer`/`reply`/
+  /// `help`, не `fallback`, у ячеек есть `shape`, в каждой фразе не меньше
+  /// двух слов. Команды не зовут ни записи, ни расчёты; вход и выход — тоже.
+  /// Описание сервера, которое называет действия записи в `api.only` или
+  /// у команды без `api.act`, отвергает [DescriptionAuthority.widening].
+  static void _checkActions(
+    Map<Object?, Object?> desc,
+    void Function(String) bad, {
+    required List<Object?> only,
+    required List<Object?> commands,
+    required Set<String> ids,
+    required Map<Object?, Object?> access,
+    required List<Object?> authNames,
+  }) {
+    final api = _map(desc['api']);
+    final rawAct = api['act'];
+    if (rawAct != null &&
+        (rawAct is! List || rawAct.any((x) => x is! String))) {
+      bad('api.act: нужен список действий с записью');
+    }
+    final act = <Object?>{if (rawAct is List) ...rawAct};
+    for (final name in only) {
+      if (act.contains(name)) {
+        bad('api.only: «$name» есть и в api.act — чтение и запись не '
+            'пересекаются');
+      }
+    }
+    final rawActions = desc['actions'];
+    if (rawActions != null && rawActions is! List) {
+      bad('actions: нужен список');
+    }
+    final actions = rawActions is List ? rawActions : const <Object?>[];
+    if (actions.length > maxActions) {
+      bad('actions: действий больше $maxActions');
+    }
+    final checks = <Object?>{};
+    final actionIds = <String>{};
+    for (var i = 0; i < actions.length; i++) {
+      final a = actions[i];
+      final id = a is Map ? a['id'] : null;
+      final at = 'actions[$i]${id is String && id.isNotEmpty ? ' ($id)' : ''}';
+      if (a is! Map) {
+        bad('$at: не объект');
+        continue;
+      }
+      if (id is! String || !RegExp(r'^[a-z][a-z0-9_-]*$').hasMatch(id)) {
+        bad('$at: id — латиница, цифры, «-» и «_»');
+      } else if (ids.contains(id) || !actionIds.add(id)) {
+        bad('$at: id повторяется (среди команд и действий)');
+      }
+      if (id != null && id == desc['fallback']) {
+        bad('$at: действие не бывает fallback');
+      }
+      final kind = a['kind'];
+      final pair = writeActions[kind];
+      if (pair == null) {
+        bad('$at: kind — только ${writeActions.keys.join(', ')}');
+      }
+      final check = a['check'];
+      final write = a['write'];
+      checks.add(check);
+      if (!only.contains(check)) {
+        bad('$at: check «$check» не входит в api.only');
+      }
+      if (!act.contains(write)) bad('$at: write «$write» не входит в api.act');
+      if (pair != null && (check != pair.$1 || write != pair.$2)) {
+        bad('$at: для «$kind» помощник знает только ${pair.$1} и ${pair.$2}');
+      }
+      final level = a['access'];
+      final needs = _map(access[level])['needs'];
+      if (!_truthyString(level) || needs is! List || !needs.contains('sid')) {
+        bad('$at: access — только уровень с личным ключом (sid)');
+      }
+      for (final field in <String>['call', 'answer', 'help', 'reply']) {
+        if (a.containsKey(field)) bad('$at: у действия нет поля $field');
+      }
+      final right = a['right'];
+      if (right != null && !_truthyString(right)) {
+        bad('$at: right — имя права склада');
+      }
+      final slots = _map(a['slots']);
+      for (final MapEntry(key: name, value: def) in slots.entries) {
+        if (name is! String || !_fieldName.hasMatch(name)) {
+          bad('$at: имя поля «$name» — строчная латиница, цифры и «_»');
+        }
+        final type = _map(def)['type'];
+        final shape = _map(def)['shape'];
+        if (type == 'cell' && !_truthyString(shape)) {
+          bad('$at: у ячейки slots.$name нужен shape');
+        }
+        if (shape is String && shape.isNotEmpty) {
+          if (shape.length > maxShapeLength) {
+            bad('$at: slots.$name.shape длиннее $maxShapeLength знаков');
+          }
+          try {
+            RegExp(shape, caseSensitive: false);
+          } on FormatException {
+            bad('$at: slots.$name.shape — не регулярное выражение');
+          }
+        }
+      }
+      final say = a['say'];
+      if (say is! List || say.isEmpty) {
+        bad('$at: say — нужна хотя бы одна фраза');
+      }
+      if (say is List && say.length > maxPhrases) {
+        bad('$at: фраз больше $maxPhrases');
+      }
+      for (final p in say is List ? say : const <Object?>[]) {
+        if (p is! String || askText(p).isEmpty) {
+          bad('$at: пустая фраза');
+          continue;
+        }
+        final used = <String>[
+          for (final m in askSlotPattern.allMatches(p)) m[1]!,
+        ];
+        for (final s in used) {
+          if (!slots.containsKey(s)) {
+            bad('$at: в фразе «$p» поле {$s}, которого нет в slots');
+          }
+        }
+        if (used.toSet().length != used.length) {
+          bad('$at: в фразе «$p» поле повторяется');
+        }
+        if (RegExp(r'\}\s*\{').hasMatch(p)) {
+          bad('$at: в фразе «$p» два поля подряд — их не разделить');
+        }
+        if (p.length > maxPhraseLength) {
+          bad('$at: фраза длиннее $maxPhraseLength знаков');
+        }
+        final literal = askText(p)
+            .replaceAll(askSlotPattern, ' ')
+            .split(' ')
+            .where((String w) => w.trim().isNotEmpty)
+            .length;
+        if (literal < 2) {
+          bad('$at: в фразе «$p» меньше двух слов вокруг полей');
+        }
+      }
+    }
+    // Команды не зовут ни записи, ни расчёты действий: расчёт строит
+    // карточку только в потоке действий «Связного».
+    final forbidden = <Object?>{...act, ...checks};
+    for (var i = 0; i < commands.length; i++) {
+      final c = commands[i];
+      if (c is! Map) continue;
+      final name = _map(c['call'])['action'];
+      if (name != null && forbidden.contains(name)) {
+        bad('commands[$i]: команда не зовёт действие записи или расчёт '
+            '«$name»');
+      }
+    }
+    for (final name in authNames) {
+      if (name != null && (act.contains(name) || writeNames.contains(name))) {
+        bad('auth: действие входа «$name» — запись, так нельзя');
+      }
+    }
   }
 
   /// Действия входа, которые помощник зовёт сам, по роли: `qr` — вход по
@@ -539,7 +812,11 @@ final class ManifestDescription {
       a.host.toLowerCase() == b.host.toLowerCase() &&
       a.port == b.port;
 
-  static ManifestDescription _build(Map<String, Object?> d, String source) {
+  static ManifestDescription _build(
+    Map<String, Object?> d,
+    String source, {
+    required bool builtIn,
+  }) {
     final app = _map(d['app']);
     final api = _map(d['api']);
     final auth = _map(d['auth']);
@@ -582,6 +859,30 @@ final class ManifestDescription {
         ),
       );
     }
+    final actions = <ManifestAction>[];
+    // Раздел действий — только у встроенной копии: описание сервера для
+    // записи не значит ничего (ADR-013).
+    final rawActions = builtIn ? d['actions'] : null;
+    if (rawActions is List) {
+      for (var i = 0; i < rawActions.length; i++) {
+        final a = rawActions[i] as Map;
+        actions.add(
+          ManifestAction(
+            id: a['id'] as String,
+            kind: a['kind'] as String,
+            title: _string(a['title']),
+            say: <String>[for (final p in a['say'] as List) p as String],
+            examples: _strings(a['examples']),
+            slots: _slots(a['slots']),
+            access: a['access'] is String ? a['access'] as String : null,
+            check: a['check'] as String,
+            write: a['write'] as String,
+            right: _string(a['right']),
+            order: i,
+          ),
+        );
+      }
+    }
     final qr = _map(auth['qr']);
     final logout = _map(auth['logout']);
     return ManifestDescription._(
@@ -598,8 +899,10 @@ final class ManifestDescription {
       actionIn: _string(action['in'], 'query'),
       actionName: _string(action['name'], 'action'),
       only: _strings(api['only']),
+      act: _strings(api['act']),
       errorField: _string(errors['message'], 'error'),
       needField: _string(errors['need'], 'need'),
+      codeField: _string(errors['code'], 'code'),
       headers: <String, String>{
         for (final MapEntry(:key, :value) in _map(auth['headers']).entries)
           if (key is String && value is String) key: value,
@@ -651,8 +954,23 @@ final class ManifestDescription {
       fallback: _truthyString(d['fallback']) ? d['fallback'] as String : null,
       filler: _strings(d['filler']),
       commands: List<ManifestCommand>.unmodifiable(commands),
+      actions: List<ManifestAction>.unmodifiable(actions),
+      builtIn: builtIn,
     );
   }
+
+  static Map<String, ManifestSlot> _slots(Object? raw) =>
+      <String, ManifestSlot>{
+        for (final MapEntry(:key, :value) in _map(raw).entries)
+          key as String: ManifestSlot(
+            type: _string(_map(value)['type'], 'text'),
+            label: _string(_map(value)['label']),
+            shape: _map(value)['shape'] is String &&
+                    (_map(value)['shape'] as String).isNotEmpty
+                ? _map(value)['shape'] as String
+                : null,
+          ),
+      };
 
   static ManifestCredential _credential(Map<Object?, Object?> c) {
     final get = _map(c['get']);

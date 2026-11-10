@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/connectors/manifest/connection.dart';
 import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
@@ -121,6 +122,95 @@ class _RolesSectionState extends State<RolesSection> {
             'пользуется: их кнопок и ответов нет. Включите их там.';
   }
 
+  /// «Разрешить действия» (ADR-013): перемещение и отметка проведения от
+  /// имени логина подключения. Выключено по умолчанию; включается
+  /// диалогом, только под своим логином и при включённой роли; любая
+  /// смена входа снимает разрешение.
+  Widget _actionsSwitch(
+    RoleInfo role,
+    ConnectionService service, {
+    required bool on,
+  }) {
+    final record = service.record;
+    final login = record.login;
+    final staff = service.connected &&
+        record.level == ConnectionLevel.staff &&
+        login != null &&
+        login.isNotEmpty;
+    final allowed = _choice.roleActions[role.id];
+    final value = staff &&
+        allowed != null &&
+        allowed.toLowerCase() == login.toLowerCase();
+    final String subtitle;
+    if (value) {
+      subtitle = 'Действия от имени $login. Каждое — только после '
+          '«Подтвердить» на карточке.';
+    } else if (!on) {
+      subtitle = 'Сначала включите роль.';
+    } else if (!staff) {
+      subtitle = 'Нужен вход под своим логином: «Настроить» → войти по '
+          'ссылке или логином.';
+    } else {
+      subtitle = 'Перемещать товар между ячейками и отмечать проведение '
+          'прихода — после «Подтвердить» на каждой карточке.';
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: SwitchListTile(
+        key: ValueKey<String>('role-actions-${role.id}'),
+        contentPadding: EdgeInsets.zero,
+        value: value,
+        onChanged: on && staff
+            ? (bool next) async {
+                if (!next) {
+                  _set(_choice.withActions(role.id, null));
+                  return;
+                }
+                final yes = await _confirmActions(login);
+                if (yes && mounted) _set(_choice.withActions(role.id, login));
+              }
+            : null,
+        title: const Text(
+          'Разрешить действия',
+          style: TextStyle(color: AssistantColors.textStrong),
+        ),
+        subtitle: Text(
+          subtitle,
+          key: ValueKey<String>('role-actions-note-${role.id}'),
+          style: const TextStyle(color: AssistantColors.muted),
+        ),
+      ),
+    );
+  }
+
+  Future<bool> _confirmActions(String login) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        key: const Key('role-actions-dialog'),
+        title: const Text('Разрешить действия?'),
+        content: Text(
+          'Помощник сможет перемещать товар и отмечать проведение от имени '
+          '$login, с правами этой учётной записи. Каждое действие — только '
+          'после «Подтвердить».',
+        ),
+        actions: <Widget>[
+          TextButton(
+            key: const Key('role-actions-no'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            key: const Key('role-actions-yes'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Разрешить'),
+          ),
+        ],
+      ),
+    );
+    return yes ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final roles = widget.registry.roles;
@@ -239,6 +329,8 @@ class _RolesSectionState extends State<RolesSection> {
                       service.connected ? 'Настроить' : link.connectLabel,
                     ),
                   ),
+                  if (role.actionHint != null)
+                    _actionsSwitch(role, service, on: on),
                 ],
                 if (duo) ...<Widget>[
                   const SizedBox(height: 8),

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/manifest/connection_slots.dart';
+import 'package:local_assistant/core/connectors/manifest/manifest_format.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/extensions/extension_registry.dart';
 import 'package:local_assistant/core/models/bulk.dart';
@@ -125,6 +126,9 @@ final List<String> _defaultRoles = <String>[
 
 final DateTime _defaultNow = DateTime(2026, 11, 2, 16, 30);
 
+/// Встроенная копия описания склада с действиями — разбирается один раз.
+final ManifestDescription _builtIn = builtInManifest();
+
 /// Коннекторы, чьи фразы живут в корпусе. Новый коннектор добавляется сюда
 /// фабрикой с подделками вместо сети и хранилищ (docs/CONNECTORS.md):
 /// `match` не делает ввода-вывода, поэтому подделкам нечего отвечать.
@@ -141,8 +145,13 @@ final Map<String, Connector Function(DateTime now, bool connected)>
   // Склад по описанию assistant/1 (test/fixtures/assistant): его фразы
   // проверяют, что задачи, калькулятор, беседа и склад не перехватывают
   // команды друг друга.
+  // Действия с записью (ADR-013) — из встроенной копии 1.4.57: их фразы
+  // тоже спорят за каждую строку корпуса.
   ConnectionSlots.warehouse.id: (DateTime now, bool connected) =>
-      warehouseConnector(record: connected ? connectedRecord() : null),
+      warehouseConnector(
+        record: connected ? connectedRecord() : null,
+        builtIn: _builtIn,
+      ),
   CalculatorConnector.id: (DateTime now, bool connected) =>
       const CalculatorConnector(),
   // Беседа уступает любой команде (fallback): её фразы проверяют, что

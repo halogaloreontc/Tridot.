@@ -83,6 +83,7 @@ final class RoleInfo {
     this.hints = const <String>{},
     this.connection,
     this.helpsThrough,
+    this.actionHint,
   });
 
   /// Постоянный id латиницей: `personal`, `storekeeper`. Хранится в
@@ -125,6 +126,13 @@ final class RoleInfo {
   /// помощник о роли не говорит. `null` — говорит всегда, пока роль
   /// включена.
   final String? helpsThrough;
+
+  /// Подсказка `<id расширения>.<подсказка>`, которая разрешает действия с
+  /// записью (ADR-013): `warehouse.actions`. Не входит в [hints]: те
+  /// включаются вместе с ролью, а эта — только отдельным переключателем
+  /// «Разрешить действия» для одного логина подключения
+  /// (`ExtensionChoice.roleActions`). `null` — у роли действий нет.
+  final String? actionHint;
 }
 
 /// Встроенные роли. Порядок важен: общий навык (беседа) ведёт владелец
@@ -152,8 +160,9 @@ abstract final class Roles {
     id: storekeeperId,
     title: 'Кладовщик',
     description: 'Вопросы складу: где лежит артикул, что пришло, '
-        'приходы без фото. Через подключение к складу halowarekeep, только '
-        'чтение.',
+        'приходы без фото. Через подключение к складу halowarekeep: чтение, '
+        'а перемещение и отметка проведения — только если разрешить '
+        'действия.',
     // Беседа — и здесь: без «Личного» помощник всё равно отвечает на
     // «привет» и «кто ты».
     extensions: <String>['warehouse', 'talk'],
@@ -183,6 +192,9 @@ abstract final class Roles {
     // «вчера» — приходы, без «склад, …».
     hints: <String>{'warehouse.bareCodes', 'warehouse.bareWords'},
     helpsThrough: 'warehouse',
+    // Перемещение и отметка проведения — отдельным переключателем, для
+    // одного логина, после «Подтвердить» на каждой карточке.
+    actionHint: 'warehouse.actions',
     connection: RoleConnection(
       extensionId: 'warehouse',
       appTitle: 'Склад',
@@ -222,6 +234,15 @@ abstract final class Roles {
 abstract interface class RoleHints {
   /// [hints] — подсказки этого расширения без префикса id: `bareCodes`.
   void applyRoleHints(Set<String> hints);
+}
+
+/// Расширение с действиями с записью (ADR-013). Реестр зовёт
+/// [applyRoleActions] при каждом изменении выбора: [login] — логин
+/// подключения, для которого включена роль и «Разрешить действия»;
+/// `null` — действия не разрешены. Коннектор сам сверяет его с логином
+/// входа.
+abstract interface class RoleActions {
+  void applyRoleActions(String? login);
 }
 
 /// Правило старшинства выбора (docs/EXTENSIONS.md, «Роли и расширения»).

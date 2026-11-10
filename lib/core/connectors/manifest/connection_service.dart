@@ -83,8 +83,16 @@ final class ConnectionService {
     descriptionOrigin = initial.origin;
     descriptionReason = initial.reason;
     connector
+      // Действия с записью — только из встроенной копии (ADR-013), какое
+      // бы описание ни было в работе для чтения.
+      ..builtIn = builtIn
       ..onRecordChanged = (ConnectionRecord record) {
+        final expired = record.failure == ConnectionFailure.expired &&
+            _lastFailure != ConnectionFailure.expired;
+        _lastFailure = record.failure;
         unawaited(_store.save(record).catchError((Object _) {}));
+        // Ключ устарел — вход сменился: разрешение действий снимается.
+        if (expired) _sessionChanged();
         _notify();
       }
       ..onStale = () {
@@ -115,20 +123,25 @@ final class ConnectionService {
       record = null;
       cached = null;
     }
-    ManifestDescription? parse(String? source, Uri? origin) {
+    ManifestDescription? parse(
+      String? source,
+      Uri? origin, {
+      bool builtIn = false,
+    }) {
       if (source == null) return null;
       try {
         return ManifestDescription.parse(
           source,
           appId: slot.appId,
           manifestUri: origin,
+          builtIn: builtIn,
         );
       } on ManifestException {
         return null;
       }
     }
 
-    final ours = parse(builtIn, null);
+    final ours = parse(builtIn, null, builtIn: true);
     // Кэш годится только серверу, с которого взят (`cached_from`): после
     // входа на другой склад чужое описание в работу не идёт.
     final from = record?.manifestUri;
@@ -180,6 +193,26 @@ final class ConnectionService {
   final Clock _clock;
 
   bool _refreshing = false;
+
+  ConnectionFailure? _lastFailure;
+
+  final List<void Function()> _sessionListeners = <void Function()>[];
+
+  /// Вход сменился: новый вход по ссылке или вручную, «Войти под
+  /// логином», выход, устаревший личный ключ. Владелец снимает разрешение
+  /// действий с записью («Разрешить действия», ADR-013): оно привязано к
+  /// входу, а не только к логину.
+  void addSessionListener(void Function() listener) =>
+      _sessionListeners.add(listener);
+
+  void removeSessionListener(void Function() listener) =>
+      _sessionListeners.remove(listener);
+
+  void _sessionChanged() {
+    for (final listener in List<void Function()>.of(_sessionListeners)) {
+      listener();
+    }
+  }
 
   /// Почему последнее описание не принято; `null` — принято.
   String? manifestError;
@@ -704,6 +737,7 @@ final class ConnectionService {
         clearFailure: true,
       ),
     );
+    _sessionChanged();
     _notify();
     return ConnectionResult.ok('Вход выполнен: ${user.toLowerCase()}.');
   }
@@ -763,6 +797,7 @@ final class ConnectionService {
         clearHealth: true,
       ),
     );
+    _sessionChanged();
     _notify();
   }
 
@@ -784,9 +819,18 @@ final class ConnectionService {
     Uri base,
     String token,
   ) async {
+    // Ни запись, ни расчёт действия пробой не бывают (ADR-013): правило
+    // проверки описания это и так запрещает, здесь — ещё раз.
+    final forbidden = <String>{
+      ...ManifestDescription.writeNames,
+      ...ManifestDescription.checkNames,
+      ...d.act,
+    };
     final probe = d.commands.where((ManifestCommand c) {
       final needs = d.access[c.access]?.needs ?? const <String>['token'];
-      return c.call != null && needs.every((String n) => n == 'token');
+      return c.call != null &&
+          !forbidden.contains(c.call!.action) &&
+          needs.every((String n) => n == 'token');
     }).firstOrNull;
     if (probe == null) {
       return 'Пароль не проверить: в описании нет команды по паролю склада.';
@@ -950,6 +994,7 @@ final class ConnectionService {
         lastOk: _clock.now(),
       ),
     );
+    _sessionChanged();
     _notify();
   }
 

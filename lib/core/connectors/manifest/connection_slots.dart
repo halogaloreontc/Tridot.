@@ -9,8 +9,9 @@ abstract final class ConnectionSlots {
     id: 'warehouse',
     title: 'Склад',
     appId: 'halowarekeep',
-    description: 'Остатки, ячейки и приходы склада halowarekeep. '
-        'Только чтение.',
+    description: 'Остатки, ячейки и приходы склада halowarekeep. Чтение; '
+        'перемещение и отметка проведения — только если разрешить действия '
+        'в роли «Кладовщик».',
     aliases: <String>['на складе', 'в складе', 'склад'],
     helpPhrases: <String>[
       'что умеет склад',

@@ -633,6 +633,63 @@ void main() {
     expect(await json.load('expeora'), isNull);
     expect(() => json.load('../evil'), throwsArgumentError);
   });
+
+  group('действия с записью (ADR-013)', () {
+    test('проба пароля и вход не трогают действия; вход сменился — сигнал',
+        () async {
+      server.manifestPath = actionsManifestPath;
+      service = ConnectionService(
+        connector: warehouseConnector(
+          path: actionsManifestPath,
+          transport: server.transport,
+          secrets: secrets,
+        ),
+        transport: server.transport,
+        secrets: secrets,
+        store: store,
+        clock: FixedClock(now),
+        builtIn: builtInManifest(),
+      );
+      var changes = 0;
+      service.addSessionListener(() => changes++);
+      server.actions['ask_stock'] =
+          (_) => json(200, <String, Object?>{'ok': true, 'items': <Object?>[]});
+      server.actions['auth_check'] = (_) => json(200, <String, Object?>{
+            'ok': true,
+            'sid': fakeSid,
+          });
+      server.actions['sess_end'] = (_) => json(200, <String, Object?>{
+            'ok': true,
+          });
+      final result = await service.connectManual(
+        address: 'warehouse.example',
+        password: fakeToken,
+        login: 'ivanov',
+        pass: 'fake-pass',
+      );
+      expect(result.ok, isTrue, reason: result.message);
+      expect(changes, 1);
+      expect(service.connector.builtIn!.actions, hasLength(2));
+      await service.logout();
+      expect(changes, 2);
+      for (final action in server.calledActions) {
+        expect(action ?? '', isNot(startsWith('act_')));
+      }
+    });
+
+    test('ключ устарел в ответе склада — тоже смена входа', () async {
+      service = make(path: actionsManifestPath);
+      var changes = 0;
+      service.addSessionListener(() => changes++);
+      service.connector.onRecordChanged!(
+        connectedRecord().copyWith(failure: ConnectionFailure.expired),
+      );
+      service.connector.onRecordChanged!(
+        connectedRecord().copyWith(failure: ConnectionFailure.expired),
+      );
+      expect(changes, 1);
+    });
+  });
 }
 
 extension on AssistantSession {

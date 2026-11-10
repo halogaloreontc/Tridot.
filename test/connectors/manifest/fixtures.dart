@@ -14,6 +14,11 @@ const String currentManifestPath = 'test/fixtures/assistant/halowarekeep.json';
 const String patchedManifestPath =
     'test/fixtures/assistant/halowarekeep-1.4.56.json';
 
+/// Описание склада 1.4.57: действия с записью (`actions[]`, ADR-013).
+/// Встроенная копия `assets/connectors/halowarekeep.assistant.json`.
+const String actionsManifestPath =
+    'test/fixtures/assistant/halowarekeep-1.4.57.json';
+
 String manifestSource([String path = currentManifestPath]) =>
     File(path).readAsStringSync();
 
@@ -21,6 +26,14 @@ ManifestDescription manifest([String path = currentManifestPath]) =>
     ManifestDescription.parse(
       manifestSource(path),
       appId: ConnectionSlots.warehouse.appId,
+    );
+
+/// Встроенная копия 1.4.57 с действиями.
+ManifestDescription builtInManifest([String path = actionsManifestPath]) =>
+    ManifestDescription.parse(
+      manifestSource(path),
+      appId: ConnectionSlots.warehouse.appId,
+      builtIn: true,
     );
 
 /// Адрес тестового склада. Только `.example`: сеть в тестах не нужна.
@@ -45,6 +58,7 @@ ManifestConnector warehouseConnector({
   HttpTransport? transport,
   SecretStore? secrets,
   ConnectionRecord? record,
+  ManifestDescription? builtIn,
 }) =>
     ManifestConnector(
       slot: ConnectionSlots.warehouse,
@@ -52,6 +66,7 @@ ManifestConnector warehouseConnector({
       transport: transport ?? const OfflineTransport(),
       secrets: secrets ?? InMemorySecretStore(),
       record: record,
+      builtIn: builtIn,
     );
 
 /// Транспорт без сети: `match` в сеть не ходит, `run` с ним падает.

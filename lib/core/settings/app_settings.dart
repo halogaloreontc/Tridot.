@@ -17,6 +17,7 @@ final class AppSettings {
     this.disabledRoles = const <String>{},
     this.enabledRoles = const <String>{},
     this.roleOwners = const <String, String>{},
+    this.roleActions = const <String, String>{},
     this.personas = const PersonaSettings(),
     this.noticeDay,
   });
@@ -41,6 +42,7 @@ final class AppSettings {
           ? Roles.migratedFrom(enabledExtensions)
           : _ids(json['enabled_roles']),
       roleOwners: _owners(json['role_owners']),
+      roleActions: _actions(json['role_actions']),
       personas: PersonaSettings.fromJson(json),
       noticeDay: _day(json['notice_day']),
     );
@@ -58,6 +60,23 @@ final class AppSettings {
             value is String &&
             Personas.byId(value) != null)
           key.trim(): value,
+    };
+  }
+
+  /// «Разрешить действия»: не объект — пусто; ключ — id роли, значение —
+  /// логин (до 64 знаков, без управляющих знаков). Не секрет.
+  static Map<String, String> _actions(Object? value) {
+    if (value is! Map) return const <String, String>{};
+    return <String, String>{
+      for (final MapEntry(:key, :value) in value.entries)
+        if (key is String &&
+            key.trim().isNotEmpty &&
+            key.length <= 64 &&
+            value is String &&
+            value.trim().isNotEmpty &&
+            value.length <= 64 &&
+            !RegExp(r'[\x00-\x1f\x7f]').hasMatch(value))
+          key.trim(): value.trim(),
     };
   }
 
@@ -106,6 +125,10 @@ final class AppSettings {
   /// Кто ведёт роль в дуэте: id роли → id помощника. Нет записи — основной.
   final Map<String, String> roleOwners;
 
+  /// «Разрешить действия» (ADR-013): id роли → логин подключения. По
+  /// умолчанию пусто — действия выключены; любая смена входа запись снимает.
+  final Map<String, String> roleActions;
+
   /// Помощники: дуэт или соло, кто основной, стили, «вы»/«ты», эмодзи.
   final PersonaSettings personas;
 
@@ -116,6 +139,7 @@ final class AppSettings {
         disabledRoles: disabledRoles,
         enabledRoles: enabledRoles,
         roleOwners: roleOwners,
+        roleActions: roleActions,
       );
 
   /// Настройки с выбором расширений и ролей [choice]; остальное — как было.
@@ -125,6 +149,7 @@ final class AppSettings {
         disabledRoles: choice.disabledRoles,
         enabledRoles: choice.enabledRoles,
         roleOwners: choice.roleOwners,
+        roleActions: choice.roleActions,
       );
 
   /// Служебное: день, когда второй помощник уже написал о просроченных
@@ -140,6 +165,7 @@ final class AppSettings {
     Set<String>? disabledRoles,
     Set<String>? enabledRoles,
     Map<String, String>? roleOwners,
+    Map<String, String>? roleActions,
     PersonaSettings? personas,
     String? noticeDay,
   }) =>
@@ -151,6 +177,7 @@ final class AppSettings {
         disabledRoles: disabledRoles ?? this.disabledRoles,
         enabledRoles: enabledRoles ?? this.enabledRoles,
         roleOwners: roleOwners ?? this.roleOwners,
+        roleActions: roleActions ?? this.roleActions,
         personas: personas ?? this.personas,
         noticeDay: noticeDay ?? this.noticeDay,
       );
@@ -168,6 +195,11 @@ final class AppSettings {
           'role_owners': <String, String>{
             for (final id in roleOwners.keys.toList()..sort())
               id: roleOwners[id]!,
+          },
+        if (roleActions.isNotEmpty)
+          'role_actions': <String, String>{
+            for (final id in roleActions.keys.toList()..sort())
+              id: roleActions[id]!,
           },
         ...personas.toJson(),
         if (noticeDay != null) 'notice_day': noticeDay,

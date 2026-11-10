@@ -84,10 +84,10 @@ void main() {
       }
     });
 
-    test('встроенная копия в assets — описание 1.4.56 (ADR-012)', () {
+    test('встроенная копия в assets — описание 1.4.57 (ADR-012, ADR-013)', () {
       expect(
         File(ConnectionSlots.warehouse.builtInAsset!).readAsStringSync(),
-        manifestSource(patchedManifestPath),
+        manifestSource(actionsManifestPath),
       );
     });
   });
@@ -324,6 +324,132 @@ void main() {
       expect(fallback.how, 'fallback');
       expect(fallback.command.id, 'where');
       expect(fallback.slots['q'], 'стул венский');
+    });
+  });
+
+  group('действия с записью 1.4.57 (ADR-013)', () {
+    List<String> errors(void Function(Map<String, Object?> json) patch) {
+      final json = _json(actionsManifestPath);
+      patch(json);
+      return ManifestDescription.check(json, appId: 'halowarekeep');
+    }
+
+    Map<String, Object?> action(Map<String, Object?> json, String id) =>
+        (json['actions']! as List<Object?>)
+            .cast<Map<String, Object?>>()
+            .firstWhere((Map<String, Object?> a) => a['id'] == id);
+
+    Map<String, Object?> api(Map<String, Object?> json) =>
+        json['api']! as Map<String, Object?>;
+
+    test('встроенная копия: два действия; описание сервера — ни одного', () {
+      final ours = builtInManifest();
+      expect(ours.builtIn, isTrue);
+      expect(ours.actions.map((ManifestAction a) => a.kind), <String>[
+        'move',
+        'post',
+      ]);
+      expect(ours.actions.first.check, 'act_move_check');
+      expect(ours.actions.first.write, 'act_move');
+      expect(ours.actions.first.slots['from']!.shape, isNotNull);
+      expect(ours.act, <String>['act_post', 'act_move', 'act_settle']);
+      expect(ours.codeField, 'code');
+      final theirs = manifest(actionsManifestPath);
+      expect(theirs.builtIn, isFalse);
+      expect(theirs.actions, isEmpty);
+      // Пара «расчёт — запись» встроенного описания — та, что знает код.
+      for (final a in ours.actions) {
+        expect(ManifestDescription.writeActions[a.kind], (a.check, a.write));
+      }
+      expect(errors((_) {}), isEmpty);
+    });
+
+    final rules = <String, (void Function(Map<String, Object?>), String)>{
+      'api.only ∩ api.act': (
+        (j) => (api(j)['only']! as List<Object?>).add('act_move'),
+        'чтение и запись не пересекаются',
+      ),
+      'неизвестный kind': (
+        (j) => action(j, 'move')['kind'] = 'delete',
+        'kind — только',
+      ),
+      'check не из api.only': (
+        (j) => action(j, 'move')['check'] = 'ask_stock_x',
+        'не входит в api.only',
+      ),
+      'write не из api.act': (
+        (j) => action(j, 'move')['write'] = 'item_delete',
+        'не входит в api.act',
+      ),
+      'другая пара для вида': (
+        (j) => action(j, 'move')['check'] = 'act_post_check',
+        'помощник знает только',
+      ),
+      'доступ без личного ключа': (
+        (j) => action(j, 'post')['access'] = 'shared',
+        'только уровень с личным ключом',
+      ),
+      'у действия есть call': (
+        (j) => action(j, 'post')['call'] = <String, Object?>{
+              'action': 'act_post',
+            },
+        'нет поля call',
+      ),
+      'у действия есть answer': (
+        (j) => action(j, 'post')['answer'] = <String, Object?>{'say': 'x'},
+        'нет поля answer',
+      ),
+      'действие — fallback': (
+        (j) => j['fallback'] = 'move',
+        'не бывает fallback',
+      ),
+      'ячейка без shape': (
+        (j) => ((action(j, 'move')['slots']! as Map<String, Object?>)['to']!
+                as Map<String, Object?>)
+            .remove('shape'),
+        'нужен shape',
+      ),
+      'фраза из одного слова': (
+        (j) => (action(j, 'post')['say']! as List<Object?>).add('проведи {no}'),
+        'меньше двух слов',
+      ),
+      'id совпадает с командой': (
+        (j) => action(j, 'post')['id'] = 'where',
+        'id повторяется',
+      ),
+      'команда зовёт запись': (
+        (j) => _command(j, 'where')['call'] = <String, Object?>{
+              'action': 'act_move',
+              'body': <String, Object?>{},
+            },
+        'не зовёт действие записи или расчёт',
+      ),
+      'команда зовёт расчёт': (
+        (j) => _command(j, 'where')['call'] = <String, Object?>{
+              'action': 'act_move_check',
+              'body': <String, Object?>{},
+            },
+        'не зовёт действие записи или расчёт',
+      ),
+      'вход через запись': (
+        (j) => (api(j)['act']! as List<Object?>).add('sess_end'),
+        'действие входа «sess_end» — запись',
+      ),
+    };
+    for (final MapEntry(key: name, value: (patch, message)) in rules.entries) {
+      test('отказ: $name', () {
+        expect(errors(patch).join('\n'), contains(message));
+      });
+    }
+
+    test('описание сервера с действиями проходит формат, но их не видно', () {
+      final json = _json(actionsManifestPath);
+      action(json, 'move')['say'] = <String>['удали всё из {from} в {to}'];
+      final d = ManifestDescription.parse(
+        jsonEncode(json),
+        appId: 'halowarekeep',
+      );
+      expect(d.actions, isEmpty);
     });
   });
 }

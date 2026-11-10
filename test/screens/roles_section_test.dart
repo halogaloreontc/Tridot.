@@ -326,4 +326,77 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('«Разрешить действия»: под логином, диалог, сброс при выходе',
+      (tester) async {
+    final h = _Harness(
+      settings: const AppSettings(enabledRoles: <String>{Roles.storekeeperId}),
+    );
+    await h.secrets.write('warehouse.token', fakeToken);
+    h.service.connector.record = connectedRecord(
+      level: ConnectionLevel.shared,
+      login: null,
+    );
+    await tester.pumpWidget(h.build());
+    await tester.pumpAndSettle();
+    // Только паролем склада — выключено и не включается.
+    await tester.ensureVisible(_key('role-actions-storekeeper'));
+    expect(_switch(tester, 'role-actions-storekeeper').value, isFalse);
+    expect(_switch(tester, 'role-actions-storekeeper').onChanged, isNull);
+    expect(find.textContaining('Нужен вход под своим логином'), findsOneWidget);
+
+    await h.secrets.write('warehouse.sid', fakeSid);
+    h.service.connector.record = connectedRecord();
+    await tester.pumpWidget(h.build());
+    await tester.pumpAndSettle();
+    expect(_switch(tester, 'role-actions-storekeeper').onChanged, isNotNull);
+    // Включение — через диалог; «Отмена» ничего не меняет.
+    await _tap(tester, 'role-actions-storekeeper');
+    expect(find.byKey(const Key('role-actions-dialog')), findsOneWidget);
+    expect(find.textContaining('от имени ivanov'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('role-actions-no')));
+    await tester.pumpAndSettle();
+    expect(h.settings.roleActions, isEmpty);
+    await _tap(tester, 'role-actions-storekeeper');
+    await tester.tap(find.byKey(const Key('role-actions-yes')));
+    await tester.pumpAndSettle();
+    expect(
+      h.settings.roleActions,
+      <String, String>{Roles.storekeeperId: 'ivanov'},
+    );
+    expect(_switch(tester, 'role-actions-storekeeper').value, isTrue);
+    expect(
+      find.text('Действия от имени ivanov. Каждое — только после '
+          '«Подтвердить» на карточке.'),
+      findsOneWidget,
+    );
+    expect(h.service.connector.info.access, ConnectorAccess.readWrite);
+    // В settings.json — логин, не секрет.
+    final json = jsonEncode(h.settings.toJson());
+    expect(json, contains('"role_actions":{"storekeeper":"ivanov"}'));
+    expect(json, isNot(contains(fakeSid)));
+    expect(json, isNot(contains(fakeToken)));
+
+    // Выключение — сразу, без диалога.
+    await _tap(tester, 'role-actions-storekeeper');
+    expect(h.settings.roleActions, isEmpty);
+    expect(h.service.connector.info.access, ConnectorAccess.readOnly);
+  });
+
+  testWidgets('роль выключена — переключатель неактивен', (tester) async {
+    final h = _Harness(
+      settings: const AppSettings(
+        roleActions: <String, String>{Roles.storekeeperId: 'ivanov'},
+      ),
+    );
+    await h.secrets.write('warehouse.token', fakeToken);
+    await h.secrets.write('warehouse.sid', fakeSid);
+    h.service.connector.record = connectedRecord();
+    await tester.pumpWidget(h.build());
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(_key('role-actions-storekeeper'));
+    expect(_switch(tester, 'role-actions-storekeeper').onChanged, isNull);
+    // Роль выключена — расширению логин не передан.
+    expect(h.service.connector.info.access, ConnectorAccess.readOnly);
+  });
 }

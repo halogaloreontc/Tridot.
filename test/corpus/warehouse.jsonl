@@ -72,3 +72,31 @@
 {"id":"wh-072","text":"сколько будет 2+2","connector":"calc","intent":"calc.evaluate","connected":true,"note":"калькулятор с подключённым складом не меняется","source":"manual"}
 {"id":"wh-073","text":"привет","connector":"talk","intent":"talk.greet","connected":true,"note":"беседа с подключённым складом: «привет» из справки описания не перехватывает","source":"manual"}
 {"id":"wh-074","text":"сегодня","connector":"warehouse","intent":"unknown","roles":["personal","storekeeper"],"note":"без подключения «сегодня» — не приходы","source":"manual"}
+{"id":"wh-075","text":"перемести 3 венских стула из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","note":"пример действия перемещения (1.4.57)","source":"manual"}
+{"id":"wh-076","text":"переложи 64115 из 215-1-1-1","connector":"warehouse","intent":"warehouse.act.move","note":"куда — вопрос по ходу","source":"manual"}
+{"id":"wh-077","text":"перемести 3 стула в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","note":"без «откуда»: поиск по всем ячейкам (К16)","source":"manual"}
+{"id":"wh-078","text":"Перемести все стулья уценка из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","note":"«все» и класс завершающим словом","source":"manual"}
+{"id":"wh-079","text":"перемести стул из бука из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","note":"shape ячейки вшит в фразу: режем по той « из », после которой ячейка","source":"manual"}
+{"id":"wh-080","text":"склад, переложи 2 шт 64115 из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","note":"с обращением","source":"manual"}
+{"id":"wh-081","text":"проведи приход 318 в 1с","connector":"warehouse","intent":"warehouse.act.post","note":"только 1С","source":"manual"}
+{"id":"wh-082","text":"проведи приход 318 в 1c","connector":"warehouse","intent":"warehouse.act.post","note":"«1c» латиницей","source":"manual"}
+{"id":"wh-083","text":"проведи приход 318 в св","connector":"warehouse","intent":"warehouse.act.post","note":"только SV","source":"manual"}
+{"id":"wh-084","text":"проведи приход 318 в sv","connector":"warehouse","intent":"warehouse.act.post","note":"только SV латиницей","source":"manual"}
+{"id":"wh-085","text":"проведи приход 318-26","connector":"warehouse","intent":"warehouse.act.post","note":"обе отметки, номер с годом","source":"manual"}
+{"id":"wh-086","text":"отметь проведение прихода 318","connector":"warehouse","intent":"warehouse.act.post","note":"«отметь» — не завершение задачи","source":"manual"}
+{"id":"wh-087","text":"приход 318 проведён в 1с","connector":"warehouse","intent":"warehouse.act.post","note":"сообщение о сделанном","source":"manual"}
+{"id":"wh-089","text":"перенеси отчёт на завтра","intent":"rescheduleTask","note":"«перенеси» — глагол задач, не действие склада","source":"manual"}
+{"id":"wh-090","text":"закрой задачу отчёт","intent":"completeTask","note":"«закрой» — задачи","source":"manual"}
+{"id":"wh-091","text":"перемести задачу из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"unknown","note":"слово задач в {what} — не товар","source":"manual"}
+{"id":"wh-092","text":"закрой приход 318","connector":"warehouse","intent":"warehouse.act.post","status":"known_gap","note":"«закрой» — слово задач; правка маршрутизатора отложена (ADR-013)","source":"manual"}
+{"id":"wh-093","text":"перенеси 3 стула из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","status":"known_gap","note":"«перенеси» — слово задач; правка маршрутизатора отложена (ADR-013)","source":"manual"}
+{"id":"wh-094","text":"отметь проведение прихода утром","intent":"createTask","title":"Отметь проведение прихода","due":"2026-11-03T09:00","precision":"partOfDay","note":"слово срока — не номер прихода: в {no} нужна цифра (ревью 1.4.57)","source":"manual"}
+{"id":"wh-095","text":"проведи приход завтра","intent":"unknown","note":"«завтра» — не номер прихода, действие склада не берёт (ревью 1.4.57)","source":"manual"}
+{"id":"wh-096","text":"проведи приход ВЗ12","connector":"warehouse","intent":"warehouse.act.post","note":"номер с буквами и цифрой","source":"manual"}
+{"id":"wh-097","text":"перемести 3 стула в 303-зона приёмки","connector":"warehouse","intent":"warehouse.act.move","note":"зона с пробелом в имени — ячейка «куда»","source":"manual"}
+{"id":"wh-098","text":"переложи пуф из 303-зона приемки в 101-1-1","connector":"warehouse","intent":"warehouse.act.move","note":"зона с пробелом — ячейка «откуда»","source":"manual"}
+{"id":"wh-099","text":"перемести коробки из 101-1-1 в 101-приемка завтра","intent":"createTask","title":"Перемести коробки из 101-1-1 в 101-приемка","due":"2026-11-03","precision":"date","note":"слово срока после зоны — не часть ячейки (ревью 1.4.57)","source":"manual"}
+{"id":"wh-100","text":"перемести коробки из 101-1-1 в 303-брак утром","intent":"createTask","title":"Перемести коробки из 101-1-1 в 303-брак","due":"2026-11-03T09:00","precision":"partOfDay","note":"часть суток после зоны — не часть ячейки (ревью 1.4.57)","source":"manual"}
+{"id":"wh-101","text":"перемести коробки из 303-брак сегодня в 101-1-1","intent":"createTask","title":"Перемести коробки из 303-брак в 101-1-1","due":"2026-11-02","precision":"date","note":"слово срока после зоны «откуда» — не часть ячейки (ревью 1.4.57)","source":"manual"}
+{"id":"wh-102","text":"перемести коробки из 101-1-1 в 101-ок срочно","intent":"createTask","title":"Перемести коробки из 101-1-1 в 101-ок срочно","note":"«срочно» после зоны — не часть ячейки (ревью 1.4.57)","source":"manual"}
+{"id":"wh-103","text":"перемести 3 пуфа из 303-1-1 в 303-зона приёмки","connector":"warehouse","intent":"warehouse.act.move","note":"зона из двух слов — по-прежнему ячейка (ревью 1.4.57)","source":"manual"}

@@ -3,7 +3,8 @@
 //
 // Коннекторы — как в test/scenario_corpus_test.dart (_connectorFactories):
 // приложения из lib/main.dart (задачи, калькулятор, беседа) и склад по
-// описанию assistant/1 из test/fixtures/assistant/halowarekeep.json. В
+// описанию assistant/1 из test/fixtures/assistant/halowarekeep.json (действия
+// с записью — из встроенной копии 1.4.57, ADR-013). В
 // приложении склад выключен, пока его не подключат, но корпусный тест с
 // ним спорит: фраза, которую он перехватит, упадёт в тесте, поэтому и
 // проверка должна его видеть. Правила
@@ -47,7 +48,7 @@ List<Connector> appConnectors(DateTime now) {
   final tasks = TaskService(repository: InMemoryTaskRepository(), clock: clock);
   return <Connector>[
     TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
-    warehouseConnector(),
+    warehouseConnector(builtIn: builtInManifest()),
     const CalculatorConnector(),
     TalkConnector(taskService: tasks),
   ];

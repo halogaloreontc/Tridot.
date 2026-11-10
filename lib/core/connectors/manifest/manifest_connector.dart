@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import '../../extensions/role.dart';
+import '../../models/action_card.dart';
 import '../connector.dart';
 import '../http_transport.dart';
 import '../secret_store.dart';
@@ -11,6 +13,8 @@ import 'manifest_format.dart';
 import 'manifest_matcher.dart';
 import 'manifest_text.dart';
 import 'manifest_view.dart';
+
+part 'manifest_actions.dart';
 
 /// Что `match` разобрал и передаёт в `run`: `run` фразу заново не разбирает.
 final class ManifestPayload {
@@ -38,20 +42,34 @@ final class ManifestPayload {
 /// склад halowarekeep, потом expeora. Фразы, запрос и ответ — из
 /// описания; голос, защиты маршрутизации и тексты ошибок — «Связного».
 ///
-/// Только чтение: действия — из `api.only`, других коннектор не зовёт.
+/// Команды — только чтение: действия из `api.only`, других обычный путь
+/// не зовёт. Действия с записью (перемещение, отметка проведения,
+/// ADR-013) — только из встроенной копии описания ([builtIn]), только при
+/// «Разрешить действия» для логина входа и только по кнопке
+/// «Подтвердить» на карточке (`manifest_actions.dart`).
 /// Секреты (пароль приложения, личный ключ) — только в [SecretStore];
 /// в ответах, логах и настройках их нет.
-final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
+final class ManifestConnector
+    implements
+        Connector,
+        ConnectorHealth,
+        RoleHints,
+        RoleActions,
+        ConfirmationFollowUp {
   ManifestConnector({
     required this.slot,
     required HttpTransport transport,
     required SecretStore secrets,
     ManifestDescription? description,
     ConnectionRecord? record,
+    ManifestDescription? builtIn,
+    Random? random,
   })  : _transport = transport,
         _secrets = secrets,
+        _random = random ?? Random.secure(),
         record = record ?? ConnectionRecord(appId: slot.appId) {
     if (description != null) load(description);
+    this.builtIn = builtIn;
   }
 
   final ConnectionSlot slot;
@@ -60,6 +78,40 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
 
   ManifestDescription? _description;
   ManifestMatcher? _matcher;
+
+  /// Источник одноразовых ключей записи (`rid`).
+  final Random _random;
+
+  ManifestDescription? _builtIn;
+  List<_ActRule> _actRules = const <_ActRule>[];
+
+  /// Встроенная копия описания: только из неё — действия с записью
+  /// (ADR-013), что бы ни было в работе для чтения.
+  ManifestDescription? get builtIn => _builtIn;
+
+  set builtIn(ManifestDescription? value) {
+    _builtIn = value != null && value.builtIn ? value : null;
+    _actRules = _Actions.compile(_builtIn);
+  }
+
+  /// Логин, для которого роль разрешила действия; `null` — не разрешены.
+  String? _actionsLogin;
+
+  @override
+  void applyRoleActions(String? login) {
+    _actionsLogin = login;
+  }
+
+  /// Сколько ждать перед проверкой `act_settle`, если ответ на запись не
+  /// пришёл.
+  Duration settleDelay = const Duration(seconds: 3);
+
+  /// Сколько ждать ответа на запись.
+  static const Duration writeTimeout = Duration(seconds: 30);
+
+  /// Сколько ждать сохранения карточки перед записью
+  /// ([ActionCard.onSending]); дольше — запись уходит без него.
+  static const Duration persistLimit = Duration(seconds: 2);
 
   /// Состояние подключения изменилось (успех, сбой): владелец сохраняет
   /// его без секретов.
@@ -114,7 +166,10 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
         description: slot.description,
         examples: examples,
         requiresNetwork: true,
-        access: ConnectorAccess.readOnly,
+        // Запись — только пока разрешены действия для этого входа.
+        access: actionsActive
+            ? ConnectorAccess.readWrite
+            : ConnectorAccess.readOnly,
         kind: ExtensionKind.connector,
         defaultEnabled: false,
         replies: slot.replies,
@@ -315,10 +370,13 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
 
   @override
   ConnectorMatch? match(Utterance utterance) {
-    final matcher = _matcher;
-    if (matcher == null) return null;
     final text = askText(SocialPrefix.rest(utterance) ?? utterance.original);
     if (text.isEmpty || text.length > maxLength) return null;
+    // Действия с записью — только по встроенной копии; раньше команд.
+    final action = matchAction(text, utterance);
+    if (action != null) return action;
+    final matcher = _matcher;
+    if (matcher == null) return null;
     final lead = _withoutLead(text);
     // «покажи мне, где лежит …»: запятая после связок мешает их снять.
     final plain = text.replaceAll(RegExp(r'\s*,\s*'), ' ');
@@ -581,8 +639,32 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
     ConnectorMatch match,
     AssistantSession session,
   ) async {
-    final payload = match.payload! as ManifestPayload;
     final intent = match.commandId;
+    switch (match.payload) {
+      case final ActRequest request:
+        return startAction(request, session, intent);
+      case final ActFollow follow:
+        return followAction(follow, session, intent);
+      case final ActionCardSettle settle:
+        return settleCard(settle.card, session, intent);
+      case ConfirmationAnswer(pending: PendingConfirmation(:final payload))
+          when payload is ActionCard:
+        return answerCard(
+          match.payload! as ConfirmationAnswer,
+          payload,
+          session,
+          intent,
+        );
+      case ConfirmationAnswer(pending: PendingConfirmation(:final payload))
+          when payload is ActDraft:
+        return answerDraft(
+          match.payload! as ConfirmationAnswer,
+          payload,
+          session,
+          intent,
+        );
+    }
+    final payload = match.payload! as ManifestPayload;
     AssistantResponse say(
       String name,
       AssistantStatus status, [
@@ -618,23 +700,7 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
     final base = record.manifestUri;
     final token = await _secrets.read(slot.tokenKey);
     if (call == null || base == null || token == null || token.isEmpty) {
-      // Подключение включила роль, а входа ещё нет: подсказать путь через
-      // карточку роли (ADR-012), а не «не понял».
-      final role = session.extensions?.activeRoleOf(slot.id);
-      final link = role?.connection;
-      if (role != null && link != null && link.extensionId == slot.id) {
-        return session.reply(
-          'role.notConnected',
-          values: <String, String>{
-            'app': link.appTitle,
-            'role': role.title,
-            'button': link.connectLabel,
-          },
-          intent: intent,
-          status: AssistantStatus.noAction,
-        );
-      }
-      return say('notConnected', AssistantStatus.noAction);
+      return _notConnected(session, intent);
     }
     if (payload.how == 'ask') {
       final field = command.slots.values.firstOrNull;
@@ -714,6 +780,50 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
     return say('serverError', AssistantStatus.failed);
   }
 
+  /// Подключение включила роль, а входа ещё нет: подсказать путь через
+  /// карточку роли (ADR-012), а не «не понял».
+  AssistantResponse _notConnected(AssistantSession session, String intent) {
+    final role = session.extensions?.activeRoleOf(slot.id);
+    final link = role?.connection;
+    if (role != null && link != null && link.extensionId == slot.id) {
+      return session.reply(
+        'role.notConnected',
+        values: <String, String>{
+          'app': link.appTitle,
+          'role': role.title,
+          'button': link.connectLabel,
+        },
+        intent: intent,
+        status: AssistantStatus.noAction,
+      );
+    }
+    return session.reply(
+      '${slot.id}.notConnected',
+      intent: intent,
+      status: AssistantStatus.noAction,
+    );
+  }
+
+  // ------------------------------------------------- уточнение ответа
+
+  @override
+  ConnectorMatch? matchFollowUp(
+    Utterance utterance,
+    PendingConfirmation pending,
+  ) {
+    final payload = pending.payload;
+    if (payload is! ActDraft) return null;
+    return followUpAction(utterance, payload);
+  }
+
+  @override
+  ConnectorMatch? matchLeadingAnswer(
+    Utterance utterance,
+    PendingConfirmation pending,
+    ConfirmationReply reply,
+  ) =>
+      null;
+
   AssistantResponse _answer(
     ManifestCommand command,
     ManifestPayload payload,
@@ -765,6 +875,11 @@ final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
             in _description?.commands ?? const <ManifestCommand>[])
           if (!command.help && command.examples.isNotEmpty)
             '${_lowerFirst(command.title)} — «${command.examples.first}»',
+        // Действия — только когда они разрешены для этого входа.
+        if (actionsActive)
+          for (final action in builtIn?.actions ?? const <ManifestAction>[])
+            if (action.examples.isNotEmpty)
+              '${_lowerFirst(action.title)} — «${action.examples.first}»',
       ].join('; ');
 
   String _fallbackExamples() => <String>[

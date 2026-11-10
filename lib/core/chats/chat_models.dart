@@ -1,3 +1,4 @@
+import '../models/action_card.dart';
 import '../models/assistant_types.dart';
 import '../models/bulk.dart';
 
@@ -74,6 +75,7 @@ final class ChatMessage {
     this.status,
     this.taskId,
     this.checklist,
+    this.card,
     this.link,
   });
 
@@ -101,6 +103,11 @@ final class ChatMessage {
   /// ([BulkChecklist.fromJson]).
   final BulkChecklist? checklist;
 
+  /// Карточка действия с записью под ответом (ADR-013) — данные без полей
+  /// записи. После перезапуска ждущая — устаревшая, отправленная без
+  /// ответа — «итог неизвестен» ([ActionCard.fromJson]).
+  final ActionCard? card;
+
   /// Ссылка на другой чат под сообщением.
   final ChatLink? link;
 
@@ -116,6 +123,7 @@ final class ChatMessage {
         status: status,
         taskId: taskId,
         checklist: checklist,
+        card: card,
         link: link,
       );
 
@@ -129,6 +137,7 @@ final class ChatMessage {
         status: status,
         taskId: taskId,
         checklist: checklist,
+        card: card,
         link: link,
       );
 
@@ -142,6 +151,7 @@ final class ChatMessage {
         if (status != null) 'status': status!.name,
         if (taskId != null) 'task_id': taskId,
         if (checklist != null) 'checklist': checklist!.toJson(),
+        if (card != null) 'card': card!.toJson(),
         if (link != null) 'link': link!.toJson(),
       };
 
@@ -178,6 +188,7 @@ final class ChatMessage {
       checklist: json.containsKey('checklist')
           ? BulkChecklist.fromJson(json['checklist'])
           : null,
+      card: json.containsKey('card') ? ActionCard.fromJson(json['card']) : null,
       link: ChatLink.fromJson(json['link']),
     );
   }

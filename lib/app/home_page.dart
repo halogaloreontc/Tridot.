@@ -9,6 +9,7 @@ import '../core/chats/chat_models.dart';
 import '../core/chats/chat_store.dart';
 import '../core/connectors/login_link.dart';
 import '../core/connectors/manifest/connection_service.dart';
+import '../core/connectors/manifest/connection.dart';
 import '../core/formatting/due_format.dart';
 import '../core/models/assistant_types.dart';
 import '../core/models/bulk.dart';
@@ -26,6 +27,7 @@ import 'screens/planning_screen.dart';
 import 'screens/projects_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/storage_screen.dart';
+import 'widgets/action_card_view.dart';
 import 'widgets/bulk_checklist_card.dart';
 import 'widgets/chat_list.dart';
 import 'widgets/command_composer.dart';
@@ -242,6 +244,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       controller.addListener(_onDocumentEdited);
     }
     _book.resetMain(<ChatMessage>[_welcome()]);
+    for (final connection in widget.connections) {
+      connection.addSessionListener(_onSessionChanged);
+    }
     _settingsReady = _loadSettings();
     _chatsReady = _loadChats();
     _refresh();
@@ -250,6 +255,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    for (final connection in widget.connections) {
+      connection.removeSessionListener(_onSessionChanged);
+    }
     _cubeTimer?.cancel();
     _docTimer?.cancel();
     _tick?.cancel();
@@ -324,6 +332,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         taskId: response.task?.id,
         personaId: response.personaId,
         checklist: response.checklist,
+        card: response.card,
       );
 
   bool get _duo => _settings.personas.mode == AssistantMode.duo;
@@ -331,8 +340,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // ------------------------------------------------------------- данные
 
   Future<void> _loadSettings() async {
-    final settings = await _settingsStore.load();
+    final loaded = await _settingsStore.load();
     if (!mounted) return;
+    // Разрешение действий для входа, которого больше нет, не переживает
+    // перезапуск.
+    final pruned = _prunedActions(loaded);
+    final settings = pruned ?? loaded;
+    if (pruned != null) unawaited(_settingsStore.save(pruned));
     _applyExtensions(settings);
     widget.assistant.personas = settings.personas;
     setState(() {
@@ -355,6 +369,46 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _messageKeys.clear();
     });
     _maybeNotice();
+  }
+
+  /// Вход в подключение сменился (новый вход, выход, ключ устарел):
+  /// «Разрешить действия» снимается сразу у ролей этого подключения
+  /// (ADR-013) — разрешение привязано к входу.
+  void _onSessionChanged() {
+    if (!mounted || !_settingsLoaded) return;
+    final pruned = _prunedActions(_settings, drop: true);
+    if (pruned != null) _changeSettings(pruned);
+  }
+
+  /// Настройки без разрешений действий, которые больше не годятся:
+  /// [drop] — снять у всех ролей с подключением (вход сменился), иначе —
+  /// только если подключение не под тем логином или не под своим ключом.
+  /// `null` — менять нечего.
+  AppSettings? _prunedActions(AppSettings settings, {bool drop = false}) {
+    var choice = settings.extensionChoice;
+    var changed = false;
+    for (final MapEntry(key: roleId, value: login)
+        in choice.roleActions.entries.toList()) {
+      final role = widget.assistant.extensions.role(roleId);
+      final link = role?.connection;
+      final service = link == null
+          ? null
+          : widget.connections
+              .where((ConnectionService c) => c.slot.id == link.extensionId)
+              .firstOrNull;
+      final record = service?.record;
+      final valid = !drop &&
+          role?.actionHint != null &&
+          record != null &&
+          record.level == ConnectionLevel.staff &&
+          record.failure != ConnectionFailure.expired &&
+          (record.login ?? '').toLowerCase() == login.toLowerCase();
+      if (!valid) {
+        choice = choice.withActions(roleId, null);
+        changed = true;
+      }
+    }
+    return changed ? settings.withChoice(choice) : null;
   }
 
   /// Включает и выключает расширения сразу, без перезапуска: история
@@ -740,6 +794,38 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       });
     }
     await _refresh();
+  }
+
+  /// Кнопки карточки действия (ADR-013): ответ склада — сообщением в
+  /// чат, где карточка; итог виден и в самой карточке. Пока ответ
+  /// готовится, кнопки не нажимаются второй раз.
+  Future<void> _cardAction(
+    Future<AssistantResponse?> Function() action,
+  ) async {
+    if (_bulkBusy || _sending) return;
+    final chatId = _book.currentId;
+    setState(() => _bulkBusy = true);
+    AssistantResponse? response;
+    try {
+      response = await action();
+    } finally {
+      if (mounted) setState(() => _bulkBusy = false);
+    }
+    if (!mounted) return;
+    if (response != null) {
+      final reply = _answer(response);
+      setState(() {
+        _cube = cubeStateFor(response!.status);
+        _book.append(chatId, reply);
+      });
+      _cubeTimer?.cancel();
+      _cubeTimer = Timer(const Duration(milliseconds: 1600), () {
+        if (mounted && !_sending) setState(() => _cube = CubeState.idle);
+      });
+      _scrollToLatest();
+    } else {
+      setState(() {});
+    }
   }
 
   // ------------------------------------------------------------- задачи
@@ -1493,10 +1579,15 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // Карточка списка — под последним ответом с этим списком: после
     // «кроме …» вопрос повторяется вместе с ней.
     final lastWithChecklist = <String, int>{};
+    // Карточка действия — тоже под последним ответом с ней: «да» текстом
+    // повторяет просьбу нажать кнопку вместе с карточкой.
+    final lastWithCard = <String, int>{};
     for (var i = 0; i < _messages.length; i++) {
       if (_messages[i].fromUser) commandIndexOf[i] = ++commandIndex;
       final checklist = _messages[i].checklist;
       if (checklist != null) lastWithChecklist[checklist.id] = i;
+      final card = _messages[i].card;
+      if (card != null) lastWithCard[card.id] = i;
     }
     for (var i = 0; i < _messages.length; i++) {
       final message = _messages[i];
@@ -1534,11 +1625,12 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onOpenLink:
               linkLabel == null ? null : () => _followLink(message.link!),
           checklist: _checklistCard(
-            message,
-            i,
-            lastWithChecklist,
-            viewportHeight,
-          ),
+                message,
+                i,
+                lastWithChecklist,
+                viewportHeight,
+              ) ??
+              _actionCard(message, i, lastWithCard),
         ),
       );
     }
@@ -1629,6 +1721,41 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onApply: () => unawaited(_answerBulk(checklist, apply: true)),
       onCancel: () => unawaited(_answerBulk(checklist, apply: false)),
       onUndo: () => unawaited(_undoBulk(checklist, message.personaId)),
+    );
+  }
+
+  Widget? _actionCard(
+    ChatMessage message,
+    int index,
+    Map<String, int> lastWithCard,
+  ) {
+    final card = message.card;
+    if (card == null || lastWithCard[card.id] != index) return null;
+    return ActionCardView(
+      card: card,
+      busy: _bulkBusy || _sending,
+      now: () => _now,
+      onConfirm: () {
+        // Карточка «ушла на запись» — в историю до запроса: закрыли
+        // приложение посреди записи — после перезапуска «Проверить».
+        final chatId = _book.currentId;
+        card.onSending = () {
+          _book.touch(chatId);
+          return _book.flush();
+        };
+        unawaited(
+          _cardAction(() => widget.assistant.answerCard(card, apply: true))
+              .whenComplete(() => card.onSending = null),
+        );
+      },
+      onCancel: () => unawaited(
+        _cardAction(() => widget.assistant.answerCard(card, apply: false)),
+      ),
+      onSettle: () => unawaited(
+        _cardAction(
+          () => widget.assistant.settleCard(card, personaId: message.personaId),
+        ),
+      ),
     );
   }
 
