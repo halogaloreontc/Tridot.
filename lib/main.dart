@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +18,10 @@ import 'core/connectors/manifest/connection_service.dart';
 import 'core/connectors/manifest/connection_slots.dart';
 import 'core/connectors/tasks_connector.dart';
 import 'core/extensions/extension_registry.dart';
+import 'core/passwords/vault.dart';
+import 'core/passwords/vault_crypto.dart';
+import 'core/passwords/vault_facade.dart';
+import 'core/passwords/vault_store.dart';
 import 'core/scenario/assistant_controller.dart';
 import 'core/scenario/scenario_parser.dart';
 import 'core/services/clock.dart';
@@ -84,7 +90,18 @@ Future<void> main() async {
     packs: packs,
   );
   await packs.load();
-  final assistant = AssistantController(extensions: extensions, clock: clock);
+  // Хранилище паролей (ADR-014): <поддержка>/assistant/vault, отдельно от
+  // secrets.json склада (D19) и исключено из облачной копии Android
+  // (D20). Транспорт ему не передаётся. Пока навыка нет (этап 1), оно
+  // нужно SecretGuard: при открытом хранилище пароль в чате узнаётся по
+  // отпечатку. Если libsodium не загрузилась — приложение работает без
+  // хранилища.
+  final vault = await _openVault(p.join(support.path, 'assistant', 'vault'));
+  final assistant = AssistantController(
+    extensions: extensions,
+    clock: clock,
+    knownSecret: vault == null ? null : VaultFacade(vault).knownSecret,
+  );
   runApp(
     AssistantApp(
       assistant: assistant,
@@ -96,6 +113,23 @@ Future<void> main() async {
       connections: connections,
     ),
   );
+}
+
+/// Хранилище паролей или `null`, если libsodium недоступна.
+Future<Vault?> _openVault(String directory) async {
+  try {
+    final vault = Vault(
+      store: FileVaultStore(directory),
+      crypto: await SodiumVaultCrypto.load(),
+      device: Platform.isAndroid || Platform.isIOS
+          ? VaultDevice.mobile
+          : VaultDevice.desktop,
+    );
+    await vault.load();
+    return vault;
+  } on Object {
+    return null;
+  }
 }
 
 /// Встроенная копия описания из assets или `null`.

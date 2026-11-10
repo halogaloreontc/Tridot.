@@ -89,6 +89,8 @@ Platform runners для Android, Windows, Linux и macOS уже находятс
 - Linux: Clang, CMake, Ninja, pkg-config и заголовки GTK 3;
 - macOS: полный Xcode и CocoaPods для нативного плагина `path_provider`.
 
+Хранилище паролей (ADR-014) использует libsodium через пакет `sodium` 4.x. Системная libsodium не нужна: build-хук пакета собирает её из исходников, вложенных в пакет, при первом `flutter test`, `flutter run`, `flutter build` или `dart run` (около полуминуты, дальше из кэша `.dart_tool`). Для этого нужен компилятор C и `make`: на Linux и macOS они уже есть вместе с инструментами выше (на чистом Ubuntu — `sudo apt-get install -y build-essential`, на раннере GitHub Actions `ubuntu-latest` есть из коробки), на Windows — Visual Studio с C++; сборка Android на Windows дополнительно требует bash (не из WSL), см. README пакета `sodium`.
+
 ## Первый запуск
 
 Клонирование и запуск из корня проекта:

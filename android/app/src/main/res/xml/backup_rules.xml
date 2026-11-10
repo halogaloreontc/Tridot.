@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Резервная копия Android 11 и ниже и `adb backup` (ADR-014, D20): без
+     хранилища паролей и секретов подключений. -->
+<full-backup-content>
+    <exclude domain="file" path="assistant/vault/" />
+    <exclude domain="file" path="assistant/secrets.json" />
+</full-backup-content>

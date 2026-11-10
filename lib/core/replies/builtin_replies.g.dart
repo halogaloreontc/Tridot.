@@ -51,6 +51,8 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "warehouse.act.failed",
     "warehouse.act.settled",
     "router.failed",
+    "router.failed.quiet",
+    "secret.redacted",
     "task.ask.confirmComplete",
     "task.confirm.inactive",
     "task.bulk.ask.reschedule",
@@ -83,6 +85,8 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "common.working": "Команда обрабатывается локально…",
     "router.ambiguous": "Не {м:понял|ж:поняла}, к чему относится команда: «{first}» или «{second}»? {вы:Уточните|ты:Уточни}, пожалуйста.",
     "router.failed": "Не удалось выполнить действие: {error}",
+    "router.failed.quiet": "Не получилось выполнить действие.",
+    "secret.redacted": "Похоже, в сообщении был пароль. Я {м:скрыл|ж:скрыла} его и в историю не {м:записал|ж:записала}. Пароли в чат лучше не {вы:пишите|ты:пиши}.",
     "common.confirm.unclear": "Пока ничего не {м:сделал|ж:сделала}. {вы:Ответьте|ты:Ответь}, пожалуйста: «да» или «нет»?",
     "role.notConnected": "{app} ещё не подключён — Настройки → Роли → {role} → {button}.",
 

@@ -5,6 +5,7 @@ import '../extensions/extension_registry.dart';
 import '../models/action_card.dart';
 import '../models/bulk.dart';
 import '../models/task.dart';
+import '../passwords/secret_guard.dart';
 import '../personas/persona.dart';
 import '../personas/persona_address.dart';
 import '../replies/reply_library.dart';
@@ -52,6 +53,7 @@ final class AssistantController {
     ExtensionRegistry? extensions,
     Clock clock = const SystemClock(),
     this.personas = const PersonaSettings(),
+    this.knownSecret,
   })  : assert(
           connectors == null || extensions == null,
           'Передайте либо connectors, либо extensions',
@@ -102,6 +104,16 @@ final class AssistantController {
   /// Настройки помощников. Новые применяются со следующего сообщения:
   /// ответ, который уже готовится, договаривается прежним голосом.
   PersonaSettings personas;
+
+  /// Совпадает ли токен по отпечатку с паролем записи открытого хранилища
+  /// (`VaultFacade.knownSecret`). По нему [SecretGuard] ловит пароль без
+  /// слова «пароль», а выходной фильтр — пароль в тексте ответа.
+  FingerprintMatcher? knownSecret;
+
+  /// Сколько раз выходной фильтр скрыл пароль в ответе. Это ошибка
+  /// навыка (пароль оказался в названии или логине): тест канарейки
+  /// требует ноль.
+  int outboundLeaks = 0;
 
   /// Каталоги ответов вместе со стилями включённых паков.
   ReplyLibrary get replies => session.replies;
@@ -246,10 +258,15 @@ final class AssistantController {
   /// [chatTaskId] — задача чата, в котором отправлено сообщение (`null` —
   /// главный чат): в чате задачи она — цель «готово», «закрой», «перенеси
   /// на завтра» без вопроса «какую?» (docs/CONNECTORS.md, «Чат задачи»).
+  ///
+  /// [secretRedacted] — интерфейс уже скрыл в [message] пароль
+  /// ([SecretGuard]): фразу не получает ни один коннектор, ответ —
+  /// `secret.redacted`.
   Future<AssistantResponse> handle(
     String message, {
     String? addressee,
     String? chatTaskId,
+    bool secretRedacted = false,
   }) async {
     // Кто ответит и обратились ли по имени — по настройкам на начало
     // сообщения.
@@ -265,7 +282,13 @@ final class AssistantController {
     _answered = null;
     final AssistantResponse response;
     try {
-      response = await _handle(settings, persona, text, addressed);
+      response = await _handle(
+        settings,
+        persona,
+        text,
+        addressed,
+        secretRedacted: secretRedacted,
+      );
     } finally {
       _inFlight--;
       if (_inFlight == 0 && _chatChangePending) {
@@ -292,8 +315,9 @@ final class AssistantController {
     PersonaSettings settings,
     Persona persona,
     String text,
-    bool addressed,
-  ) async {
+    bool addressed, {
+    bool secretRedacted = false,
+  }) async {
     session
       ..voice = settings.voiceOf(persona)
       ..speaker = persona
@@ -314,7 +338,11 @@ final class AssistantController {
           )
           .withPersona(persona.id);
     }
-    final response = await _route(text, addressed: addressed);
+    final response = await _route(
+      text,
+      addressed: addressed,
+      secretRedacted: secretRedacted,
+    );
     final change = response.settingsChange;
     // Просьба из беседы («говори короче») — к настройкам на сейчас: если
     // их поменяли во время ответа, эти перемены не теряются. Интерфейс
@@ -337,10 +365,18 @@ final class AssistantController {
   /// «Команда обрабатывается…» голосом того, кто ответит на [message]: в
   /// дуэте без явного обращения — владелец роли, чей навык, скорее всего,
   /// заберёт фразу.
-  AssistantResponse working(String message, {String? addressee}) {
+  AssistantResponse working(
+    String message, {
+    String? addressee,
+    bool secretRedacted = false,
+  }) {
     final (persona, text, addressed) = resolve(message, addressee: addressee);
     var speaker = persona;
-    if (!addressed &&
+    // Фразу с паролем не получает ни один коннектор, даже для голоса.
+    final guarded =
+        secretRedacted || SecretGuard.redact(text, known: knownSecret).guarded;
+    if (!guarded &&
+        !addressed &&
         !isExplicitAddressee(addressee) &&
         session.pendingConfirmation == null &&
         personas.mode == AssistantMode.duo) {
@@ -474,7 +510,19 @@ final class AssistantController {
   Future<AssistantResponse> _route(
     String message, {
     required bool addressed,
+    bool secretRedacted = false,
   }) async {
+    // Пароль, вставленный в чат (D12): ни один коннектор фразу не
+    // получает, задача не создаётся. Вопрос, если ждал ответа, остаётся.
+    if (secretRedacted ||
+        SecretGuard.redact(message, known: knownSecret).guarded) {
+      session.lastConnectorId = null;
+      return session.reply(
+        'secret.redacted',
+        intent: 'secret.redacted',
+        status: AssistantStatus.noAction,
+      );
+    }
     // Ссылку входа вставили в чат, а не в настройки: подсказать, куда
     // её нести. Ни один коннектор её не получает; вопрос, если ждал
     // ответа, остаётся.
@@ -655,8 +703,16 @@ final class AssistantController {
     ConnectorMatch match,
   ) async {
     try {
-      return await connector.run(match, session);
+      return _filterOutbound(await connector.run(match, session));
     } catch (error) {
+      // Навык с секретами: текст исключения мог нести пароль (D13).
+      if (connector.info.sensitive) {
+        return session.reply(
+          'router.failed.quiet',
+          intent: match.commandId,
+          status: AssistantStatus.failed,
+        );
+      }
       return session.reply(
         'router.failed',
         values: <String, String>{'error': '$error'},
@@ -669,6 +725,29 @@ final class AssistantController {
   }
 
   AssistantResponse _unknown() => TasksConnector.unknown(session);
+
+  /// Выходной фильтр (раздел 5.9): при открытом хранилище текст ответа и
+  /// подставленные факты проверяются по отпечаткам паролей. Совпадение
+  /// заменяется на `•••` и считается ошибкой ([outboundLeaks]).
+  AssistantResponse _filterOutbound(AssistantResponse response) {
+    final known = knownSecret;
+    if (known == null) return response;
+    var leaked = false;
+    var message = response.message;
+    final values = <String, String>{};
+    for (final MapEntry(:key, :value) in response.values.entries) {
+      final checked = SecretGuard.redactKnown(value, known);
+      if (checked.guarded) {
+        leaked = true;
+        message = message.replaceAll(value, checked.text);
+      }
+      values[key] = checked.text;
+    }
+    final text = SecretGuard.redactKnown(message, known);
+    if (!leaked && !text.guarded) return response;
+    outboundLeaks++;
+    return response.withText(text.text, values);
+  }
 
   // ------------------------------------------------- массовые команды
 

@@ -1,6 +1,7 @@
 import '../personas/persona.dart';
 import 'action_card.dart';
 import 'bulk.dart';
+import 'secure_card.dart';
 import 'task.dart';
 
 enum AssistantStatus { completed, needsClarification, failed, noAction }
@@ -18,6 +19,7 @@ final class AssistantResponse {
     this.addressedPersonaId,
     this.checklist,
     this.card,
+    this.secureCard,
   });
 
   /// Готовый текст для пользователя. В истории чата хранится именно он:
@@ -58,6 +60,10 @@ final class AssistantResponse {
   /// `null` — без карточки.
   final ActionCard? card;
 
+  /// Временная карточка навыка «Пароли» (D10): только id записей. В
+  /// историю чата она не попадает (`ChatMessage.toJson` её не пишет).
+  final SecureCardRequest? secureCard;
+
   /// Тот же ответ от помощника [personaId].
   AssistantResponse withPersona(String personaId) => AssistantResponse(
         message: message,
@@ -71,6 +77,7 @@ final class AssistantResponse {
         addressedPersonaId: addressedPersonaId,
         checklist: checklist,
         card: card,
+        secureCard: secureCard,
       );
 
   /// Тот же ответ, в котором пользователь обратился к [personaId] по имени.
@@ -86,5 +93,23 @@ final class AssistantResponse {
         addressedPersonaId: personaId,
         checklist: checklist,
         card: card,
+        secureCard: secureCard,
+      );
+
+  /// Тот же ответ с другим текстом и фактами (выходной фильтр паролей).
+  AssistantResponse withText(String message, Map<String, String> values) =>
+      AssistantResponse(
+        message: message,
+        intent: intent,
+        status: status,
+        task: task,
+        replyId: replyId,
+        values: values,
+        personaId: personaId,
+        settingsChange: settingsChange,
+        addressedPersonaId: addressedPersonaId,
+        checklist: checklist,
+        card: card,
+        secureCard: secureCard,
       );
 }

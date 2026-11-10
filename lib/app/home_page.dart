@@ -14,6 +14,7 @@ import '../core/formatting/due_format.dart';
 import '../core/models/assistant_types.dart';
 import '../core/models/bulk.dart';
 import '../core/models/task.dart';
+import '../core/passwords/secret_guard.dart';
 import '../core/replies/reply_library.dart';
 import '../core/scenario/assistant_controller.dart';
 import '../core/services/clock.dart';
@@ -333,6 +334,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         personaId: response.personaId,
         checklist: response.checklist,
         card: response.card,
+        secureCard: response.secureCard,
       );
 
   bool get _duo => _settings.personas.mode == AssistantMode.duo;
@@ -565,7 +567,14 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final chatTaskId = _book.current.taskId;
     final addressee = _duo ? _addressee : null;
     // Код входа из ссылки («#qr=…») в историю чата и команд не пишем.
-    final shown = LoginLinks.redact(text);
+    // Пароль, вставленный в чат (D12), — тоже: он скрыт до истории, списка
+    // команд, «обрабатывается…» и маршрутизатора, а сам токен выброшен.
+    final guard = SecretGuard.redact(
+      LoginLinks.redact(text),
+      known: widget.assistant.knownSecret,
+    );
+    final shown = guard.text;
+    final secret = guard.guarded;
     final command = ChatMessage(
       id: _book.newMessageId(),
       author: ChatAuthor.user,
@@ -577,7 +586,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _pristineWelcome = false;
       _cube = CubeState.working;
       _working = _answer(
-        widget.assistant.working(text, addressee: addressee),
+        widget.assistant.working(
+          secret ? shown : text,
+          addressee: addressee,
+          secretRedacted: secret,
+        ),
         withStatus: false,
       );
       _workingChatId = chatId;
@@ -589,9 +602,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _scrollToLatest();
     await _saveDocument();
     final response = await widget.assistant.handle(
-      text,
+      secret ? shown : text,
       addressee: addressee,
       chatTaskId: chatTaskId,
+      secretRedacted: secret,
     );
     if (!mounted) return;
     // «Говори короче», «давай на ты»: тот же путь, что у экрана настроек,

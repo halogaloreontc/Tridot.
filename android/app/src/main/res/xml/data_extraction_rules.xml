@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Резервная копия Android 12+ (ADR-014, D20). Хранилище паролей
+     (files/assistant/vault/) и секреты подключений (files/assistant/secrets.json)
+     не уходят ни в облачную копию Google, ни при переносе «телефон → телефон».
+     Задачи и чаты (app_flutter/assistant/) копируются как раньше. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="assistant/vault/" />
+        <exclude domain="file" path="assistant/secrets.json" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="assistant/vault/" />
+        <exclude domain="file" path="assistant/secrets.json" />
+    </device-transfer>
+</data-extraction-rules>

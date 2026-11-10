@@ -3,6 +3,7 @@ import '../extensions/extension_registry.dart';
 import '../models/action_card.dart';
 import '../models/assistant_types.dart';
 import '../models/bulk.dart';
+import '../models/secure_card.dart';
 import '../models/task.dart';
 import '../personas/persona.dart';
 import '../replies/reply_library.dart';
@@ -39,6 +40,7 @@ final class ConnectorInfo {
     this.required = false,
     this.replies = const <String, String>{},
     this.protectedReplies = const <String>{},
+    this.sensitive = false,
   }) : assert(kind != ExtensionKind.pack, 'Пак — данные, а не коннектор');
 
   /// Автор встроенных расширений.
@@ -89,6 +91,11 @@ final class ConnectorInfo {
   /// не найден», «Списать 3 шт.?»): паки ответов их не переопределяют, и
   /// звучит нейтральный текст коннектора (docs/REPLIES.md).
   final Set<String> protectedReplies;
+
+  /// Коннектор работает с секретами (навык «Пароли»): если его `run`
+  /// упал, маршрутизатор отвечает `router.failed.quiet` без текста ошибки
+  /// — в исключении мог оказаться пароль (D13).
+  final bool sensitive;
 }
 
 /// Ответ коннектора на вопрос «это твоя фраза?».
@@ -449,6 +456,7 @@ final class AssistantSession {
     PersonaSettingsChange? settingsChange,
     BulkChecklist? checklist,
     ActionCard? card,
+    SecureCardRequest? secureCard,
     String? prefix,
   }) =>
       AssistantResponse(
@@ -462,6 +470,7 @@ final class AssistantSession {
         settingsChange: settingsChange,
         checklist: checklist,
         card: card,
+        secureCard: secureCard,
       );
 
   SelectedItem? _selection;

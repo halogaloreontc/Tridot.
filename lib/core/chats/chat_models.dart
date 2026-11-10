@@ -1,6 +1,7 @@
 import '../models/action_card.dart';
 import '../models/assistant_types.dart';
 import '../models/bulk.dart';
+import '../models/secure_card.dart';
 
 /// Какой это чат: главный или чат одной задачи.
 enum ChatKind { main, task }
@@ -77,6 +78,7 @@ final class ChatMessage {
     this.checklist,
     this.card,
     this.link,
+    this.secureCard,
   });
 
   /// `m_<микросекунды>_<номер>`: уникален в пределах устройства.
@@ -111,6 +113,11 @@ final class ChatMessage {
   /// Ссылка на другой чат под сообщением.
   final ChatLink? link;
 
+  /// Временная карточка навыка «Пароли» (D10): живёт только в памяти. Её
+  /// нет в [toJson] и [fromJson], и [copyAs] её не копирует — после
+  /// перезапуска остаётся только текст.
+  final SecureCardRequest? secureCard;
+
   bool get fromUser => author == ChatAuthor.user;
 
   /// То же сообщение с другим [id] и ссылкой [link] (копия в чат задачи).
@@ -139,6 +146,7 @@ final class ChatMessage {
         checklist: checklist,
         card: card,
         link: link,
+        secureCard: secureCard,
       );
 
   /// Пустые поля не пишутся.
