@@ -535,6 +535,12 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                     : 'Встроенная копия — до подключения',
                 style: technicalTextStyle,
               ),
+              // «Наше описание главное» (ADR-012): какое в работе и почему.
+              Text(
+                'В работе: ${_service.descriptionReason}',
+                key: const ValueKey<String>('connection-manifest-origin'),
+                style: technicalTextStyle,
+              ),
               if (_service.manifestError case final String error)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),

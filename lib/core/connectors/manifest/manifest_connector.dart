@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../../extensions/role.dart';
 import '../connector.dart';
 import '../http_transport.dart';
 import '../secret_store.dart';
@@ -38,7 +39,7 @@ final class ManifestPayload {
 /// Только чтение: действия — из `api.only`, других коннектор не зовёт.
 /// Секреты (пароль приложения, личный ключ) — только в [SecretStore];
 /// в ответах, логах и настройках их нет.
-final class ManifestConnector implements Connector, ConnectorHealth {
+final class ManifestConnector implements Connector, ConnectorHealth, RoleHints {
   ManifestConnector({
     required this.slot,
     required HttpTransport transport,
@@ -82,6 +83,21 @@ final class ManifestConnector implements Connector, ConnectorHealth {
   /// Состояние подключения: меняют его вход и выход ([ConnectionService])
   /// и ответы сервера.
   ConnectionRecord record;
+
+  /// Подсказки маршрутизации включённых ролей (ADR-012): `bareCodes` —
+  /// голый артикул уверенно «где лежит», `bareWords` — однословные фразы
+  /// команд без поля («сегодня», «вчера») без обращения «склад, …». Обе
+  /// действуют, только пока приложение подключено.
+  Set<String> _hints = const <String>{};
+
+  Set<String> get roleHints => _hints;
+
+  @override
+  void applyRoleHints(Set<String> hints) {
+    _hints = Set<String>.unmodifiable(hints);
+  }
+
+  bool _hint(String name) => record.connected && _hints.contains(name);
 
   /// Заменяет описание сразу целиком: `match` читает текущий снимок.
   void load(ManifestDescription description) {
@@ -397,7 +413,9 @@ final class ManifestConnector implements Connector, ConnectorHealth {
       fallback.id,
       <String, String>{name: slotValue},
       'fallback',
-      codeOnly ? 0.7 : 0.75,
+      // Роль «Кладовщик» и подключённый склад: голый артикул — уверенно
+      // «где лежит».
+      codeOnly ? (_hint('bareCodes') ? 0.9 : 0.7) : 0.75,
       aliased: aliased,
     );
   }
@@ -438,7 +456,14 @@ final class ManifestConnector implements Connector, ConnectorHealth {
     if (command.help) return aliased ? 0.9 : null;
     if (rule.names.isEmpty) {
       // «сегодня», «вчера», «помощь» — слишком общие без обращения.
-      if (rule.literalWords <= 1 && !aliased) return null;
+      if (rule.literalWords <= 1 && !aliased) {
+        // Роль «Кладовщик» и подключённый склад: «сегодня» — приходы.
+        return rule.literalWords == 1 &&
+                command.call != null &&
+                _hint('bareWords')
+            ? 0.85
+            : null;
+      }
       return 0.9;
     }
     for (final name in rule.names) {
@@ -524,6 +549,22 @@ final class ManifestConnector implements Connector, ConnectorHealth {
     final base = record.manifestUri;
     final token = await _secrets.read(slot.tokenKey);
     if (call == null || base == null || token == null || token.isEmpty) {
+      // Подключение включила роль, а входа ещё нет: подсказать путь через
+      // карточку роли (ADR-012), а не «не понял».
+      final role = session.extensions?.activeRoleOf(slot.id);
+      final link = role?.connection;
+      if (role != null && link != null && link.extensionId == slot.id) {
+        return session.reply(
+          'role.notConnected',
+          values: <String, String>{
+            'app': link.appTitle,
+            'role': role.title,
+            'button': link.connectLabel,
+          },
+          intent: intent,
+          status: AssistantStatus.noAction,
+        );
+      }
       return say('notConnected', AssistantStatus.noAction);
     }
     final needs =

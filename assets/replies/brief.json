@@ -11,6 +11,7 @@
     "router.ambiguous": "«{first}» или «{second}»?",
     "router.failed": "Ошибка: {error}",
     "common.confirm.unclear": "Ничего не сделано. «Да» или «нет»?",
+    "role.notConnected": "{app} не подключён: Настройки → Роли → {role} → {button}.",
 
     "task.created": ["Создано: «{title}».", "Добавлено: «{title}»."],
     "task.created.withDue": ["Создано: «{title}», {due}.", "Добавлено: «{title}» — {due}."],
@@ -104,6 +105,7 @@
     "talk.who.main": "{name}, {м:основной помощник|ж:основная помощница} в {appPrepositional}. {м:Вторая|ж:Второй} — {other}.",
     "talk.who.secondary": "{name}, {м:второй помощник|ж:вторая помощница} в {appPrepositional}. {м:Основная|ж:Основной} — {other}.",
     "talk.who.solo": "{name}, {м:помощник|ж:помощница} в {appPrepositional}.",
+    "talk.roles": "Помогаю {roles}.",
     "talk.capabilities": "Умею: {skills}.",
     "talk.joke.none": "Шуток нет: включи{вы:те|ты:} пак в «Настройки → Расширения».",
     "talk.set.brief": "Понял{м:|ж:а}. Коротко.",

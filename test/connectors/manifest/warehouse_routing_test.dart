@@ -70,9 +70,9 @@ void main() {
         const CalculatorConnector(),
         TalkConnector(taskService: tasks),
       ],
+      // Склад входит в роль «Кладовщик» (ADR-012): включён вместе с ней.
       choice: ExtensionChoice(
-        enabled: <String>{if (warehouse) 'warehouse'},
-        disabled: <String>{if (!warehouse) 'warehouse'},
+        enabledRoles: <String>{if (warehouse) Roles.storekeeperId},
       ),
     );
     return (

@@ -1,0 +1,266 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:local_assistant/app/assistant_theme.dart';
+import 'package:local_assistant/app/screens/settings_screen.dart';
+import 'package:local_assistant/core/connectors/connector.dart';
+import 'package:local_assistant/core/connectors/http_transport.dart';
+import 'package:local_assistant/core/connectors/manifest/connection.dart';
+import 'package:local_assistant/core/connectors/manifest/connection_service.dart';
+import 'package:local_assistant/core/connectors/secret_store.dart';
+import 'package:local_assistant/core/connectors/tasks_connector.dart';
+import 'package:local_assistant/core/extensions/extension_registry.dart';
+import 'package:local_assistant/core/scenario/scenario_parser.dart';
+import 'package:local_assistant/core/services/clock.dart';
+import 'package:local_assistant/core/services/task_service.dart';
+import 'package:local_assistant/core/settings/app_settings.dart';
+import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
+import 'package:local_assistant/core/skills/talk/talk_connector.dart';
+import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
+
+import '../connectors/fakes.dart';
+import '../connectors/manifest/fixtures.dart';
+
+/// Заведомо поддельные значения: настоящих секретов в тестах нет.
+const String fakeToken = 'fake-token-not-real';
+const String fakeSid = 'fake-sid-not-real';
+const String code = '0123456789abcdef0123456789abcdef';
+
+final class _Harness {
+  _Harness({AppSettings settings = const AppSettings()})
+      : _settings = settings {
+    final clock = FixedClock(DateTime(2026, 11, 2, 16, 30));
+    final tasks = TaskService(
+      repository: InMemoryTaskRepository(),
+      clock: clock,
+    );
+    final transport = FakeHttpTransport(_respond);
+    final connector = warehouseConnector(
+      path: patchedManifestPath,
+      transport: transport,
+      secrets: secrets,
+    );
+    service = ConnectionService(
+      connector: connector,
+      transport: transport,
+      secrets: secrets,
+      store: InMemoryConnectionStore(),
+      clock: clock,
+    );
+    registry = ExtensionRegistry(
+      connectors: <Connector>[
+        TasksConnector(
+          taskService: tasks,
+          parser: ScenarioParser(clock: clock),
+        ),
+        connector,
+        const CalculatorConnector(),
+        TalkConnector(taskService: tasks),
+      ],
+      choice: settings.extensionChoice,
+    );
+  }
+
+  final InMemorySecretStore secrets = InMemorySecretStore();
+  late final ConnectionService service;
+  late final ExtensionRegistry registry;
+  AppSettings _settings;
+  AppSettings get settings => _settings;
+
+  static HttpResponseData _json(Map<String, Object?> body) =>
+      HttpResponseData(statusCode: 200, body: jsonEncode(body));
+
+  HttpResponseData _respond(HttpRequestData request) {
+    if (request.uri.path.endsWith('assistant.json')) {
+      return HttpResponseData(
+        statusCode: 200,
+        body: manifestSource(patchedManifestPath),
+      );
+    }
+    return switch (request.uri.queryParameters['action']) {
+      'qr_take' => _json(<String, Object?>{
+          'ok': true,
+          'token': fakeToken,
+          'sid': fakeSid,
+          'login': 'ivanov',
+        }),
+      _ => _json(<String, Object?>{'ok': true}),
+    };
+  }
+
+  Widget build({Size? size, double scale = 1}) {
+    final app = MaterialApp(
+      theme: AssistantTheme.dark(),
+      home: StatefulBuilder(
+        builder: (context, setState) => Scaffold(
+          body: SettingsScreen(
+            settings: _settings,
+            onChanged: (AppSettings value) => setState(() {
+              _settings = value;
+              registry.apply(value.extensionChoice);
+            }),
+            onClearChat: () {},
+            messageCount: 1,
+            extensions: registry,
+            connections: <ConnectionService>[service],
+          ),
+        ),
+      ),
+    );
+    if (size == null) return app;
+    return MediaQuery(
+      data: MediaQueryData(size: size, textScaler: TextScaler.linear(scale)),
+      child: app,
+    );
+  }
+}
+
+Finder _key(String key) => find.byKey(ValueKey<String>(key));
+
+Future<void> _tap(WidgetTester tester, String key) async {
+  await tester.ensureVisible(_key(key));
+  await tester.pumpAndSettle();
+  await tester.tap(_key(key));
+  await tester.pumpAndSettle();
+}
+
+SwitchListTile _switch(WidgetTester tester, String key) =>
+    tester.widget<SwitchListTile>(_key(key));
+
+void main() {
+  testWidgets('«Роли» над «Расширениями»: карточки, что входит, статус',
+      (tester) async {
+    final h = _Harness();
+    await tester.pumpWidget(h.build());
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('Роли')).dy,
+      lessThan(tester.getTopLeft(find.text('Расширения')).dy),
+    );
+    expect(_switch(tester, 'role-personal').value, isTrue);
+    expect(_switch(tester, 'role-storekeeper').value, isFalse);
+    expect(
+      find.text('Входит: Задачи, Калькулятор, Беседа'),
+      findsOneWidget,
+    );
+    expect(find.text('Входит: Складские вопросы, Беседа'), findsOneWidget);
+    expect(
+      find.text('Кнопки: «Где лежит…», «Что пришло сегодня», «Без фото»'),
+      findsOneWidget,
+    );
+    expect(find.text('Склад не подключён'), findsOneWidget);
+    expect(find.text('Подключить склад'), findsOneWidget);
+    // Склад вне роли неактивен и в «Расширениях».
+    await tester.ensureVisible(_key('extension-warehouse'));
+    expect(_switch(tester, 'extension-warehouse').onChanged, isNull);
+  });
+
+  testWidgets('переключатель роли: склад включается, подключения не трогает',
+      (tester) async {
+    final h = _Harness();
+    await h.secrets.write('warehouse.token', fakeToken);
+    h.service.connector.record = connectedRecord();
+    await tester.pumpWidget(h.build());
+    await tester.pumpAndSettle();
+    await _tap(tester, 'role-storekeeper');
+    expect(h.settings.enabledRoles, <String>{Roles.storekeeperId});
+    expect(h.registry.isEnabled('warehouse'), isTrue);
+    expect(find.text('Подключён: ivanov · под своим логином'), findsWidgets);
+    await tester.ensureVisible(_key('extension-warehouse'));
+    expect(_switch(tester, 'extension-warehouse').value, isTrue);
+    expect(_switch(tester, 'extension-warehouse').onChanged, isNotNull);
+
+    await _tap(tester, 'role-storekeeper');
+    expect(h.settings.enabledRoles, isEmpty);
+    expect(h.registry.isEnabled('warehouse'), isFalse);
+    expect(await h.secrets.read('warehouse.token'), fakeToken);
+    expect(h.service.connected, isTrue);
+
+    await _tap(tester, 'role-personal');
+    expect(h.settings.disabledRoles, <String>{Roles.personalId});
+    expect(h.registry.isEnabled('calc'), isFalse);
+    expect(h.registry.isEnabled(TasksConnector.id), isTrue);
+  });
+
+  testWidgets('«Ведёт» — только в дуэте; основной — без записи',
+      (tester) async {
+    final h = _Harness();
+    await tester.pumpWidget(h.build());
+    await tester.pumpAndSettle();
+    final noda = 'role-owner-${Roles.storekeeperId}-noda';
+    final rio = 'role-owner-${Roles.storekeeperId}-rio';
+    expect(tester.widget<ChoiceChip>(_key(rio)).selected, isTrue);
+    await _tap(tester, noda);
+    expect(
+      h.settings.roleOwners,
+      <String, String>{Roles.storekeeperId: 'noda'},
+    );
+    expect(tester.widget<ChoiceChip>(_key(noda)).selected, isTrue);
+    await _tap(tester, rio);
+    expect(h.settings.roleOwners, isEmpty);
+
+    final solo = _Harness(
+      settings: const AppSettings(
+        personas: PersonaSettings(mode: AssistantMode.solo),
+      ),
+    );
+    await tester.pumpWidget(solo.build());
+    await tester.pumpAndSettle();
+    expect(find.text('Ведёт:'), findsNothing);
+  });
+
+  testWidgets('«Подключить склад» → экран подключения, вход включает роль',
+      (tester) async {
+    final h = _Harness();
+    await tester.pumpWidget(h.build());
+    await tester.pumpAndSettle();
+    await _tap(tester, 'role-connect-${Roles.storekeeperId}');
+    expect(_key('connection-link'), findsOneWidget);
+    expect(_key('connection-manifest-origin'), findsOneWidget);
+    await tester.enterText(
+      _key('connection-link'),
+      'https://warehouse.example/#qr=$code',
+    );
+    await _tap(tester, 'connection-link-connect');
+    expect(h.service.connected, isTrue);
+    expect(h.settings.enabledRoles, <String>{Roles.storekeeperId});
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(_switch(tester, 'role-storekeeper').value, isTrue);
+    expect(find.text('Склад не подключён'), findsNothing);
+    expect(find.text('Настроить'), findsWidgets);
+  });
+
+  for (final (name, size, scale) in <(String, Size, double)>[
+    ('320x640 при масштабе 2', const Size(320, 640), 2.0),
+    ('1600x900', const Size(1600, 900), 1.0),
+  ]) {
+    testWidgets('без переполнения: $name', (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final h = _Harness(
+        settings: const AppSettings(
+          enabledRoles: <String>{Roles.storekeeperId},
+        ),
+      );
+      await tester.pumpWidget(h.build(size: size, scale: scale));
+      await tester.pumpAndSettle();
+      for (final key in <String>[
+        'role-card-${Roles.personalId}',
+        'role-card-${Roles.storekeeperId}',
+        'role-owner-${Roles.storekeeperId}-noda',
+        'role-connect-${Roles.storekeeperId}',
+      ]) {
+        await tester.ensureVisible(_key(key));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: key);
+      }
+      await _tap(tester, 'role-owner-${Roles.storekeeperId}-noda');
+      expect(tester.takeException(), isNull);
+    });
+  }
+}

@@ -357,12 +357,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Включает и выключает расширения сразу, без перезапуска: история
   /// чата, задачи, выбранная задача и черновик в поле ввода не меняются.
   void _applyExtensions(AppSettings settings) {
-    widget.assistant.extensions.apply(
-      ExtensionChoice(
-        disabled: settings.disabledExtensions,
-        enabled: settings.enabledExtensions,
-      ),
-    );
+    widget.assistant.extensions.apply(settings.extensionChoice);
   }
 
   /// Новые настройки применяются сразу и ничего не сбрасывают: история
@@ -1715,6 +1710,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             if (!compact)
               _QuickActions(
                 hasSelection: selected != null && selected.isActive,
+                // Кнопки включённых ролей («Кладовщик»): пропадают, как
+                // только роль выключили.
+                roleChips: widget.assistant.extensions.activeChips,
                 sending: _sending,
                 onSend: _send,
                 onTemplate: _applyTemplate,
@@ -2437,9 +2435,20 @@ final class _QuickActions extends StatelessWidget {
     required this.sending,
     required this.onSend,
     required this.onTemplate,
+    this.roleChips = const <RoleChip>[],
   });
 
   final bool hasSelection;
+
+  /// Кнопки включённых ролей: отправить сразу или вставить шаблон.
+  final List<RoleChip> roleChips;
+
+  static IconData _icon(String name) => switch (name) {
+        'search' => Icons.search,
+        'inbox' => Icons.move_to_inbox_outlined,
+        'photo' => Icons.no_photography_outlined,
+        _ => Icons.chat_bubble_outline,
+      };
   final bool sending;
   final Future<void> Function([String? preset]) onSend;
   final ValueChanged<String> onTemplate;
@@ -2469,6 +2478,15 @@ final class _QuickActions extends StatelessWidget {
           sending ? null : () => onSend('Заверши её'),
         ),
       ],
+      for (final chip in roleChips)
+        (
+          chip.label,
+          _icon(chip.icon),
+          switch (chip.action) {
+            RoleChipAction.send => sending ? null : () => onSend(chip.text),
+            RoleChipAction.insert => () => onTemplate(chip.text),
+          },
+        ),
     ];
     // Перенос строк вместо горизонтальной прокрутки: все действия видны.
     return Padding(

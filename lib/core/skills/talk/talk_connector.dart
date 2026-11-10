@@ -459,21 +459,53 @@ final class TalkConnector implements Connector, ConnectorHealth {
       'appPrepositional': AppInfo.namePrepositional,
     };
     if (settings.mode == AssistantMode.solo) {
-      return _say(
+      return _withRoles(
         session,
-        'talk.who.solo',
-        command: command,
-        values: <String, String>{
-          'name': speaker.name,
-          'appPrepositional': AppInfo.namePrepositional,
-        },
+        _say(
+          session,
+          'talk.who.solo',
+          command: command,
+          values: <String, String>{
+            'name': speaker.name,
+            'appPrepositional': AppInfo.namePrepositional,
+          },
+        ),
       );
     }
-    return _say(
+    return _withRoles(
       session,
-      settings.main.id == speaker.id ? 'talk.who.main' : 'talk.who.secondary',
-      command: command,
-      values: values,
+      _say(
+        session,
+        settings.main.id == speaker.id ? 'talk.who.main' : 'talk.who.secondary',
+        command: command,
+        values: values,
+      ),
+    );
+  }
+
+  /// «Сейчас помогаю с задачами и со складом.» после «кто ты» и «что
+  /// умеешь» (ADR-012): только если включена роль сверх «Личного» или
+  /// «Личное» выключено — о задачах и счёте помощник и так рассказывает.
+  AssistantResponse _withRoles(
+    AssistantSession session,
+    AssistantResponse response,
+  ) {
+    final registry = session.extensions;
+    if (registry == null) return response;
+    final active = registry.activeRoles;
+    if (active.isEmpty ||
+        (active.length == 1 && active.single.id == Roles.personalId)) {
+      return response;
+    }
+    final helps = registry.helpsWith;
+    if (helps.isEmpty) return response;
+    final tail = session.say('talk.roles', <String, String>{'roles': helps});
+    return AssistantResponse(
+      message: '${response.message} $tail',
+      intent: response.intent,
+      status: response.status,
+      replyId: response.replyId,
+      values: <String, String>{...response.values, 'roles': helps},
     );
   }
 
@@ -482,19 +514,24 @@ final class TalkConnector implements Connector, ConnectorHealth {
   AssistantResponse _capabilities(AssistantSession session, String command) {
     final connectors =
         session.extensions?.enabledConnectors ?? const <Connector>[];
+    String title(Connector c) =>
+        session.extensions?.skillTitle(c.info.id) ?? c.info.title;
     final items = <String>[
       for (final connector in connectors)
         connector.info.examples.isEmpty
-            ? '«${connector.info.title}»'
-            : '«${connector.info.title}» — например, '
+            ? '«${title(connector)}»'
+            : '«${title(connector)}» — например, '
                 '«${connector.info.examples.first}»',
     ];
     if (items.isEmpty) items.add('«$_selfTitle»');
-    return _say(
+    return _withRoles(
       session,
-      'talk.capabilities',
-      command: command,
-      values: <String, String>{'skills': items.join('; ')},
+      _say(
+        session,
+        'talk.capabilities',
+        command: command,
+        values: <String, String>{'skills': items.join('; ')},
+      ),
     );
   }
 

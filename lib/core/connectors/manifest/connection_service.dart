@@ -5,6 +5,7 @@ import '../../services/clock.dart';
 import '../http_transport.dart';
 import '../secret_store.dart';
 import 'connection.dart';
+import 'description_authority.dart';
 import 'manifest_connector.dart';
 import 'manifest_format.dart';
 import 'manifest_text.dart';
@@ -66,10 +67,21 @@ final class ConnectionService {
     required SecretStore secrets,
     required ConnectionStore store,
     Clock clock = const SystemClock(),
+    this.builtIn,
+    DescriptionPick? pick,
   })  : _transport = transport,
         _secrets = secrets,
         _store = store,
         _clock = clock {
+    final initial = pick ??
+        DescriptionAuthority.choose(
+          builtIn: builtIn,
+          server: identical(connector.description, builtIn)
+              ? null
+              : connector.description,
+        );
+    descriptionOrigin = initial.origin;
+    descriptionReason = initial.reason;
     connector
       ..onRecordChanged = (ConnectionRecord record) {
         unawaited(_store.save(record).catchError((Object _) {}));
@@ -81,9 +93,11 @@ final class ConnectionService {
       };
   }
 
-  /// Подключение после перезапуска: состояние и кэш описания из [store],
-  /// а если кэша нет или он битый — встроенная копия [builtIn]. Без
-  /// описания коннектор не понимает фраз, но экран подключения работает.
+  /// Подключение после перезапуска: состояние и кэш описания сервера из
+  /// [store] и встроенная копия [builtIn]. Главное — встроенное: кэш
+  /// сервера в работе, только если он новее и не шире по правам
+  /// ([DescriptionAuthority]). Без описания коннектор не понимает фраз, но
+  /// экран подключения работает.
   static Future<ConnectionService> restore({
     required ConnectionSlot slot,
     required HttpTransport transport,
@@ -101,28 +115,33 @@ final class ConnectionService {
       record = null;
       cached = null;
     }
-    ManifestDescription? description;
-    for (final (source, origin) in <(String?, Uri?)>[
-      (cached, record?.manifestUri),
-      (builtIn, null),
-    ]) {
-      if (source == null) continue;
+    ManifestDescription? parse(String? source, Uri? origin) {
+      if (source == null) return null;
       try {
-        description = ManifestDescription.parse(
+        return ManifestDescription.parse(
           source,
           appId: slot.appId,
           manifestUri: origin,
         );
-        break;
       } on ManifestException {
-        continue;
+        return null;
       }
     }
+
+    final ours = parse(builtIn, null);
+    final server = parse(cached, record?.manifestUri);
+    final pick = DescriptionAuthority.choose(
+      builtIn: ours,
+      server: server,
+      serverError: cached != null && server == null
+          ? 'сохранённая копия не прошла проверку'
+          : null,
+    );
     final connector = ManifestConnector(
       slot: slot,
       transport: transport,
       secrets: secrets,
-      description: description,
+      description: pick.description,
       record: record,
     );
     return ConnectionService(
@@ -131,6 +150,8 @@ final class ConnectionService {
       secrets: secrets,
       store: store,
       clock: clock,
+      builtIn: ours,
+      pick: pick,
     );
   }
 
@@ -144,6 +165,32 @@ final class ConnectionService {
 
   /// Почему последнее описание не принято; `null` — принято.
   String? manifestError;
+
+  /// Встроенная копия описания (`assets/connectors/`) — главная (ADR-012).
+  final ManifestDescription? builtIn;
+
+  /// Какое описание в работе: встроенное или с сервера.
+  late DescriptionOrigin descriptionOrigin;
+
+  /// Почему в работе именно оно — для экрана подключения.
+  late String descriptionReason;
+
+  /// Выбирает описание между встроенным и [fetched] и загружает его в
+  /// коннектор. `null` — описания нет совсем.
+  ManifestDescription? _apply(_Fetched fetched) {
+    final pick = _pick(fetched);
+    descriptionOrigin = pick.origin;
+    descriptionReason = pick.reason;
+    final description = pick.description;
+    if (description != null) connector.load(description);
+    return description;
+  }
+
+  DescriptionPick _pick(_Fetched fetched) => DescriptionAuthority.choose(
+        builtIn: builtIn,
+        server: fetched.description,
+        serverError: fetched.rejected,
+      );
 
   ConnectionSlot get slot => connector.slot;
   ConnectionRecord get record => connector.record;
@@ -340,8 +387,32 @@ final class ConnectionService {
         ),
       );
     } on ManifestException catch (error) {
+      // Это то приложение, но описание сервера не прошло проверку: если
+      // есть встроенное, работаем по нему (ADR-012).
+      if (builtIn != null && _sameApp(response.body)) {
+        return _Fetched.rejected(
+          error.message,
+          ManifestMeta.of(
+            builtIn!,
+            etag: response.headers['etag'],
+            lastModified: response.headers['last-modified'],
+            fetchedAt: _clock.now(),
+          ),
+        );
+      }
       return _Fetched.failed('Описание не принято: ${error.message}.');
     }
+  }
+
+  /// Ответ — описание этого приложения (`format` и `app.id` совпадают),
+  /// пусть и не прошедшее проверку.
+  bool _sameApp(String body) {
+    final json = _object(body);
+    if (json == null || json['format'] != ManifestDescription.format) {
+      return false;
+    }
+    final app = json['app'];
+    return app is Map && app['id'] == slot.appId;
   }
 
   /// Проверяет описание на сервере заново: «Обновить описание» и раз в
@@ -371,19 +442,29 @@ final class ConnectionService {
         _notify();
         return const ConnectionResult.ok('Описание не изменилось.');
       }
-      final description = fetched.description;
-      if (description == null) {
+      if (fetched.error != null) {
         manifestError = fetched.error;
         _notify();
         return ConnectionResult.failed(fetched.error!);
       }
-      await _store.saveManifest(slot.appId, description.source);
-      connector.load(description);
-      manifestError = null;
+      // Принятое сервером — в кэш (выбор повторится после перезапуска);
+      // не прошедшее проверку кэш не заменяет.
+      if (fetched.description case final ManifestDescription server) {
+        await _store.saveManifest(slot.appId, server.source);
+      }
+      final description = _apply(fetched);
+      manifestError = fetched.rejected == null
+          ? null
+          : 'Описание сервера не принято: ${fetched.rejected}.';
       await _save(record.copyWith(manifest: fetched.meta));
       _notify();
+      if (description == null) {
+        return const ConnectionResult.failed('Описание не получено.');
+      }
       return ConnectionResult.ok(
-        'Описание обновлено: версия ${fetched.meta!.label}.',
+        descriptionOrigin == DescriptionOrigin.server
+            ? 'Описание обновлено: версия ${fetched.meta!.label}.'
+            : 'Описание проверено. В работе: $descriptionReason',
       );
     } finally {
       _refreshing = false;
@@ -403,9 +484,10 @@ final class ConnectionService {
       return ConnectionResult.failed(error.message);
     }
     final fetched = await _fetchManifest(parsed.base);
-    final description = fetched.description;
+    if (fetched.error != null) return ConnectionResult.failed(fetched.error!);
+    final description = _pick(fetched).description;
     if (description == null) {
-      return ConnectionResult.failed(fetched.error ?? 'Описание не получено.');
+      return const ConnectionResult.failed('Описание не получено.');
     }
     final qr = description.qr ?? slot.builtInQr;
     if (qr == null) {
@@ -458,7 +540,7 @@ final class ConnectionService {
     try {
       await _saveConnection(
         base: parsed.base,
-        description: description,
+        fetched: fetched,
         meta: fetched.meta!,
         token: token,
         sid: sid,
@@ -492,9 +574,10 @@ final class ConnectionService {
       return const ConnectionResult.failed('Введите пароль склада.');
     }
     final fetched = await _fetchManifest(base);
-    final description = fetched.description;
+    if (fetched.error != null) return ConnectionResult.failed(fetched.error!);
+    final description = _pick(fetched).description;
     if (description == null) {
-      return ConnectionResult.failed(fetched.error ?? 'Описание не получено.');
+      return const ConnectionResult.failed('Описание не получено.');
     }
     final checked = await _checkToken(description, base, password);
     if (checked != null) return ConnectionResult.failed(checked);
@@ -508,7 +591,7 @@ final class ConnectionService {
     try {
       await _saveConnection(
         base: base,
-        description: description,
+        fetched: fetched,
         meta: fetched.meta!,
         token: password,
         sid: sid,
@@ -776,7 +859,7 @@ final class ConnectionService {
 
   Future<void> _saveConnection({
     required Uri base,
-    required ManifestDescription description,
+    required _Fetched fetched,
     required ManifestMeta meta,
     required String token,
     required String sid,
@@ -788,9 +871,13 @@ final class ConnectionService {
     } else {
       await _secrets.write(slot.sidKey, sid);
     }
-    await _store.saveManifest(slot.appId, description.source);
-    connector.load(description);
-    manifestError = null;
+    if (fetched.description case final ManifestDescription server) {
+      await _store.saveManifest(slot.appId, server.source);
+    }
+    _apply(fetched);
+    manifestError = fetched.rejected == null
+        ? null
+        : 'Описание сервера не принято: ${fetched.rejected}.';
     await _save(
       ConnectionRecord(
         appId: slot.appId,
@@ -828,21 +915,38 @@ final class ConnectionService {
 final class _Fetched {
   const _Fetched(this.description, this.meta)
       : error = null,
+        rejected = null,
         unchanged = false;
 
   const _Fetched.failed(this.error)
       : description = null,
         meta = null,
+        rejected = null,
+        unchanged = false;
+
+  /// Описание того же приложения пришло, но проверку не прошло: работаем
+  /// по встроенному ([meta] — по нему, с `etag` ответа сервера).
+  const _Fetched.rejected(this.rejected, this.meta)
+      : description = null,
+        error = null,
         unchanged = false;
 
   const _Fetched.unchanged()
       : description = null,
         meta = null,
         error = null,
+        rejected = null,
         unchanged = true;
 
+  /// Описание сервера, прошедшее проверку (выбор — [DescriptionAuthority]).
   final ManifestDescription? description;
   final ManifestMeta? meta;
+
+  /// Сервер недоступен или ответил не описанием этого приложения: войти
+  /// нельзя.
   final String? error;
+
+  /// Почему описание сервера не принято.
+  final String? rejected;
   final bool unchanged;
 }

@@ -28,7 +28,8 @@ final class _SickConnector implements Connector, ConnectorHealth {
 
   @override
   ConnectorInfo get info => const ConnectorInfo(
-        id: 'warehouse',
+        // Не `warehouse`: тот входит в роль «Кладовщик» и выключен с ней.
+        id: 'sick',
         title: 'Склад',
         description: 'Учебный склад.',
         examples: <String>['где лежит 64115'],
@@ -727,7 +728,7 @@ void main() {
       final no = await f.say('нет');
       expect(no.message, 'Хорошо, не передаю.');
 
-      f.registry.apply(f.registry.choiceWith('warehouse', false));
+      f.registry.apply(f.registry.choiceWith('sick', false));
       final checks = sick.checks;
       final ok = await f.say('как дела');
       expect(ok.status, AssistantStatus.completed);

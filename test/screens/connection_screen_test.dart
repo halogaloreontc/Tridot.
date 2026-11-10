@@ -94,12 +94,7 @@ final class _Harness {
               settings: settings,
               onChanged: (AppSettings value) => setState(() {
                 settings = value;
-                registry.apply(
-                  ExtensionChoice(
-                    disabled: value.disabledExtensions,
-                    enabled: value.enabledExtensions,
-                  ),
-                );
+                registry.apply(value.extensionChoice);
               }),
               onClearChat: () {},
               messageCount: 1,
@@ -161,9 +156,12 @@ void main() {
       find.byKey(const ValueKey<String>('extension-warehouse')),
     );
     expect(
-      find.text('Не подключён — сначала подключите'),
+      find.textContaining('Не подключён — сначала подключите'),
       findsOneWidget,
     );
+    // Склад входит в роль «Кладовщик» (ADR-012): пока она выключена,
+    // переключатель неактивен.
+    expect(find.textContaining('Входит в роль «Кладовщик»'), findsOneWidget);
     expect(_switch(tester).onChanged, isNull);
     expect(_switch(tester).value, isFalse);
     expect(
@@ -195,7 +193,8 @@ void main() {
     );
     expect(find.text('Версия описания: 1.4.56'), findsOneWidget);
     expect(_fieldText(tester, 'connection-link'), isEmpty);
-    expect(h.settings.enabledExtensions, contains('warehouse'));
+    // Вход включает роль «Кладовщик» (ADR-012): склад включён через неё.
+    expect(h.settings.enabledRoles, contains(Roles.storekeeperId));
     expect(h.registry.isEnabled('warehouse'), isTrue);
     expect(await h.secrets.read('warehouse.token'), fakeToken);
 
@@ -216,16 +215,17 @@ void main() {
       expect(text, isNot(contains(fakeSid)));
       expect(text, isNot(contains(code)));
     }
-    expect(saved, contains('warehouse'));
+    expect(saved, contains(Roles.storekeeperId));
     expect(find.textContaining(fakeToken), findsNothing);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(_switch(tester).value, isTrue);
     expect(_switch(tester).onChanged, isNotNull);
+    // Статус — и в строке расширения, и в карточке роли.
     expect(
       find.text('Подключён: ivanov · под своим логином'),
-      findsOneWidget,
+      findsNWidgets(2),
     );
 
     await _tap(tester, 'extension-configure-warehouse');
@@ -234,7 +234,9 @@ void main() {
     await _tap(tester, 'connection-logout-confirm');
     expect(await h.secrets.read('warehouse.token'), isNull);
     expect(await h.secrets.read('warehouse.sid'), isNull);
-    expect(h.settings.enabledExtensions, isNot(contains('warehouse')));
+    // Выход роль не выключает: склад отвечает «ещё не подключён».
+    expect(h.settings.enabledRoles, contains(Roles.storekeeperId));
+    expect(h.registry.isEnabled('warehouse'), isTrue);
     expect(find.text('Не подключён'), findsOneWidget);
     // Описание 1.4.56 умеет выход на сервере.
     expect(

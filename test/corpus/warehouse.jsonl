@@ -61,3 +61,14 @@
 {"id":"wh-061","text":"склад, готово","connector":"warehouse","intent":"unknown","source":"manual"}
 {"id":"wh-062","text":"склад, да","connector":"warehouse","intent":"unknown","source":"manual"}
 {"id":"wh-063","text":"склад, хорошо","connector":"warehouse","intent":"unknown","source":"manual"}
+{"id":"wh-064","text":"сегодня","connector":"warehouse","intent":"warehouse.today","connected":true,"note":"роль «Кладовщик» и подключённый склад: «сегодня» — приходы без «склад, …»","source":"manual"}
+{"id":"wh-065","text":"вчера","connector":"warehouse","intent":"warehouse.yesterday","connected":true,"note":"роль «Кладовщик» и подключённый склад","source":"manual"}
+{"id":"wh-066","text":"64115","connector":"warehouse","intent":"warehouse.where","connected":true,"note":"роль «Кладовщик» и подключённый склад: голый артикул уверенно — «где лежит»","source":"manual"}
+{"id":"wh-067","text":"64115","connector":"warehouse","intent":"unknown","roles":["personal"],"connected":true,"note":"роль «Кладовщик» выключена: склад не отвечает, даже подключённый","source":"manual"}
+{"id":"wh-068","text":"где лежит 64115","connector":"warehouse","intent":"unknown","roles":["personal"],"connected":true,"note":"роль «Кладовщик» выключена","source":"manual"}
+{"id":"wh-069","text":"сегодня","connector":"warehouse","intent":"unknown","roles":["personal"],"connected":true,"note":"роль «Кладовщик» выключена","source":"manual"}
+{"id":"wh-070","text":"где лежит 64115","connector":"warehouse","intent":"warehouse.where","roles":["storekeeper"],"connected":true,"note":"только «Кладовщик», без «Личного»","source":"manual"}
+{"id":"wh-071","text":"Добавь задачу проверить приход на сегодня","intent":"createTask","connected":true,"note":"задачи с ролью «Кладовщик» и подключённым складом не меняются","source":"manual"}
+{"id":"wh-072","text":"сколько будет 2+2","connector":"calc","intent":"calc.evaluate","connected":true,"note":"калькулятор с подключённым складом не меняется","source":"manual"}
+{"id":"wh-073","text":"привет","connector":"talk","intent":"talk.greet","connected":true,"note":"беседа с подключённым складом: «привет» из справки описания не перехватывает","source":"manual"}
+{"id":"wh-074","text":"сегодня","connector":"warehouse","intent":"unknown","roles":["personal","storekeeper"],"note":"без подключения «сегодня» — не приходы","source":"manual"}

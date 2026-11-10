@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/manifest/connection_slots.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
+import 'package:local_assistant/core/extensions/extension_registry.dart';
 import 'package:local_assistant/core/models/bulk.dart';
 import 'package:local_assistant/core/models/task.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
@@ -29,6 +30,12 @@ import 'connectors/manifest/fixtures.dart';
 /// Поле `connector` (по умолчанию `tasks`) говорит, какой коннектор должен
 /// забрать фразу. Для каждой строки проверяется и спор коннекторов: среди
 /// всех из [_connectorFactories] побеждает именно этот.
+///
+/// Роли (ADR-012): по умолчанию включены все встроенные роли («Личное» и
+/// «Кладовщик»), а склад не подключён — так склад спорит за каждую фразу
+/// корпуса, но подсказки роли, которым нужно подключение, молчат. Поле
+/// `roles` (список id ролей) задаёт включённые роли строки, `connected:
+/// true` — склад подключён (подсказки роли «Кладовщик» действуют).
 void main() {
   final corpusDir = Directory('test/corpus');
   final files = corpusDir
@@ -107,16 +114,24 @@ const Set<String> _allowedKeys = <String>{
   'answer',
   'scope',
   'shift',
+  'roles',
+  'connected',
 };
+
+/// Роли строки без поля `roles`: все встроенные.
+final List<String> _defaultRoles = <String>[
+  for (final role in Roles.all) role.id,
+];
 
 final DateTime _defaultNow = DateTime(2026, 11, 2, 16, 30);
 
 /// Коннекторы, чьи фразы живут в корпусе. Новый коннектор добавляется сюда
 /// фабрикой с подделками вместо сети и хранилищ (docs/CONNECTORS.md):
 /// `match` не делает ввода-вывода, поэтому подделкам нечего отвечать.
-final Map<String, Connector Function(DateTime now)> _connectorFactories =
-    <String, Connector Function(DateTime now)>{
-  TasksConnector.id: (DateTime now) => TasksConnector(
+final Map<String, Connector Function(DateTime now, bool connected)>
+    _connectorFactories =
+    <String, Connector Function(DateTime now, bool connected)>{
+  TasksConnector.id: (DateTime now, bool connected) => TasksConnector(
         taskService: TaskService(
           repository: InMemoryTaskRepository(),
           clock: FixedClock(now),
@@ -126,11 +141,13 @@ final Map<String, Connector Function(DateTime now)> _connectorFactories =
   // Склад по описанию assistant/1 (test/fixtures/assistant): его фразы
   // проверяют, что задачи, калькулятор, беседа и склад не перехватывают
   // команды друг друга.
-  ConnectionSlots.warehouse.id: (DateTime now) => warehouseConnector(),
-  CalculatorConnector.id: (DateTime now) => const CalculatorConnector(),
+  ConnectionSlots.warehouse.id: (DateTime now, bool connected) =>
+      warehouseConnector(record: connected ? connectedRecord() : null),
+  CalculatorConnector.id: (DateTime now, bool connected) =>
+      const CalculatorConnector(),
   // Беседа уступает любой команде (fallback): её фразы проверяют, что
   // «привет, добавь задачу …» остаётся задачей.
-  TalkConnector.id: (DateTime now) => TalkConnector(),
+  TalkConnector.id: (DateTime now, bool connected) => TalkConnector(),
 };
 
 /// Ответ калькулятора для сравнения с полем `answer`: пример — как его
@@ -278,6 +295,17 @@ void _validate(Map<String, dynamic> json, String location) {
           '«${CalculatorConnector.commandId}»');
     }
   }
+  final roles = json['roles'];
+  if (roles != null &&
+      (roles is! List ||
+          roles.any((Object? r) => r is! String || Roles.byId(r) == null))) {
+    fail('поле roles — список id ролей: '
+        '${Roles.all.map((RoleInfo r) => r.id).join(', ')}');
+  }
+  final connected = json['connected'];
+  if (connected != null && connected is! bool) {
+    fail('поле connected — true или false');
+  }
   final status = json['status'];
   if (status != null && status != 'active' && status != 'known_gap') {
     fail('неизвестный status «$status»');
@@ -314,10 +342,28 @@ final class _Case {
     final connectorId = json['connector'] as String? ?? TasksConnector.id;
     final expectedIntent = json['intent'] as String;
     final utterance = Utterance.analyze(text, now: now);
+    final roles = <String>{
+      ...(json['roles'] as List<dynamic>?)?.cast<String>() ?? _defaultRoles,
+    };
+    final connected = json['connected'] as bool? ?? false;
+    // Реестр с выбором ролей строки: выключенная роль прячет свои навыки,
+    // включённая — передаёт подсказки маршрутизации.
+    final registry = ExtensionRegistry(
+      connectors: <Connector>[
+        for (final factory in _connectorFactories.values)
+          factory(now, connected),
+      ],
+      choice: ExtensionChoice(
+        enabledRoles: roles,
+        disabledRoles: <String>{
+          for (final role in Roles.all)
+            if (!roles.contains(role.id)) role.id,
+        },
+      ),
+    );
     final matches = <ConnectorMatch>[
-      for (final factory in _connectorFactories.values)
-        if (factory(now).match(utterance) case final ConnectorMatch match)
-          match,
+      for (final connector in registry.enabledConnectors)
+        if (connector.match(utterance) case final ConnectorMatch match) match,
     ]..sort(
         (ConnectorMatch a, ConnectorMatch b) =>
             b.confidence.compareTo(a.confidence),

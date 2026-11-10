@@ -33,7 +33,9 @@ void main() {
     );
     final registry = ExtensionRegistry(
       connectors: <Connector>[warehouse, TalkConnector()],
-      choice: const ExtensionChoice(enabled: <String>{'warehouse'}),
+      choice: const ExtensionChoice(
+        enabledRoles: <String>{Roles.storekeeperId},
+      ),
     );
     return AssistantController(extensions: registry, clock: FixedClock(now));
   }

@@ -221,6 +221,9 @@ final class AssistantController {
     // сообщения.
     final settings = personas;
     final (persona, text, addressed) = resolve(message, addressee: addressee);
+    // Явное обращение (имя в сообщении или адресат в поле ввода) важнее
+    // владельца роли (ADR-012).
+    _explicit = addressed || Personas.byId(addressee) != null;
     _inFlight++;
     session.chatTaskId = chatTaskId;
     if (chatTaskId != null) selectTask(chatTaskId);
@@ -296,13 +299,75 @@ final class AssistantController {
         intent: 'welcome',
       );
 
-  /// «Команда обрабатывается…» голосом того, кто ответит на [message].
-  AssistantResponse working(String message, {String? addressee}) => speak(
-        const Reply('common.working'),
-        resolve(message, addressee: addressee).$1,
-        intent: 'working',
-        countTurn: false,
-      );
+  /// «Команда обрабатывается…» голосом того, кто ответит на [message]: в
+  /// дуэте без явного обращения — владелец роли, чей навык, скорее всего,
+  /// заберёт фразу.
+  AssistantResponse working(String message, {String? addressee}) {
+    final (persona, text, addressed) = resolve(message, addressee: addressee);
+    var speaker = persona;
+    if (!addressed &&
+        Personas.byId(addressee) == null &&
+        session.pendingConfirmation == null &&
+        personas.mode == AssistantMode.duo) {
+      final likely = _likely(text);
+      if (likely != null) {
+        speaker = extensions.ownerFor(likely.info.id, personas) ?? speaker;
+      }
+    }
+    return speak(
+      const Reply('common.working'),
+      speaker,
+      intent: 'working',
+      countTurn: false,
+    );
+  }
+
+  /// Обратились ли в текущем сообщении к помощнику явно: по имени или
+  /// выбором в поле ввода.
+  bool _explicit = false;
+
+  /// Кто, скорее всего, заберёт [text] — по тем же правилам, что
+  /// [_route], без подтверждений и без запуска. Только для голоса
+  /// «обрабатывается…».
+  Connector? _likely(String text) {
+    final utterance = Utterance.analyze(text, now: session.clock.now())
+        .withChat(session.chatTaskId);
+    final found = <(Connector, ConnectorMatch)>[];
+    for (final connector in _connectors) {
+      try {
+        final match = connector.match(utterance);
+        if (match != null && match.confidence > 0) {
+          found.add((connector, match));
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    if (found.any(((Connector, ConnectorMatch) c) => !c.$2.fallback)) {
+      found.removeWhere(((Connector, ConnectorMatch) c) => c.$2.fallback);
+    }
+    if (found.any(((Connector, ConnectorMatch) c) => !c.$2.implicit)) {
+      found.removeWhere(((Connector, ConnectorMatch) c) => c.$2.implicit);
+    }
+    if (found.isEmpty) return null;
+    var best = found.first;
+    for (final candidate in found.skip(1)) {
+      if (candidate.$2.confidence > best.$2.confidence) best = candidate;
+    }
+    return best.$1;
+  }
+
+  /// Фразу забрал навык роли: в дуэте без явного обращения отвечает тот,
+  /// кто ведёт роль (ADR-012). Обращение по имени и адресат в поле ввода
+  /// важнее; в соло помощник один.
+  void _leadByRole(Connector connector) {
+    if (_explicit || session.personas.mode != AssistantMode.duo) return;
+    final owner = extensions.ownerFor(connector.info.id, session.personas);
+    if (owner == null || owner.id == session.speaker.id) return;
+    session
+      ..speaker = owner
+      ..voice = session.personas.voiceOf(owner);
+  }
 
   /// Первым пишет второй помощник (в соло — единственный): просроченные
   /// задачи. `null`, если просроченных нет.
@@ -522,6 +587,7 @@ final class AssistantController {
       break;
     }
 
+    _leadByRole(bestConnector);
     return _run(bestConnector, best);
   }
 

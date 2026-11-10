@@ -15,8 +15,11 @@ import 'task_tile.dart';
 /// [onChanged], а применяет их владелец экрана — сразу, без перезапуска.
 ///
 /// У подключения к приложению ([connections], ADR-011) в строке — статус и
-/// «Настроить»: экран входа. Пока подключения нет, переключатель неактивен;
-/// вход включает подключение сам, выход — выключает.
+/// «Настроить»: экран входа. Расширение, которое входит в роль (ADR-012),
+/// работает, пока включена его роль; здесь его можно только выключить
+/// явно и снова включить — правило старшинства в
+/// [ExtensionRegistry.enabledUnder]. Пока все его роли выключены,
+/// переключатель неактивен.
 class ExtensionsSection extends StatefulWidget {
   const ExtensionsSection({
     super.key,
@@ -79,7 +82,15 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
           builder: (BuildContext context) => ConnectionScreen(
             service: service,
             onEnabledChanged: (bool value) {
-              if (mounted) _toggle(info, value);
+              if (!mounted) return;
+              widget.onChanged(
+                connectionChanged(
+                  widget.registry,
+                  widget.settings,
+                  info.id,
+                  connected: value,
+                ),
+              );
             },
           ),
         ),
@@ -89,19 +100,28 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
     if (mounted) setState(() {});
   }
 
-  ExtensionChoice get _choice => ExtensionChoice(
-        disabled: widget.settings.disabledExtensions,
-        enabled: widget.settings.enabledExtensions,
-      );
+  ExtensionChoice get _choice => widget.settings.extensionChoice;
 
   void _toggle(ExtensionInfo info, bool value) {
-    final choice = _choice.withEnabled(info, value);
-    widget.onChanged(
-      widget.settings.copyWith(
-        disabledExtensions: choice.disabled,
-        enabledExtensions: choice.enabled,
-      ),
-    );
+    final choice = widget.registry.choiceWithFor(_choice, info.id, value);
+    widget.onChanged(widget.settings.withChoice(choice));
+  }
+
+  /// Пояснение у расширения, которое входит в роль: «Входит в роль
+  /// «Кладовщик» — включите её в «Ролях»», пока все его роли выключены.
+  String? _roleNote(ExtensionInfo info) {
+    final roles = widget.registry.rolesOf(info.id);
+    if (roles.isEmpty || info.required) return null;
+    if (roles.any(_choice.isRoleEnabled)) return null;
+    final names = roles.map((RoleInfo r) => '«${r.title}»').join(' или ');
+    return 'Входит в роль $names — включите её в «Ролях»';
+  }
+
+  /// Переключатель расширения: у обязательного и у расширения с
+  /// выключенными ролями — неактивен.
+  ValueChanged<bool>? _switch(ExtensionInfo info) {
+    if (info.required || _roleNote(info) != null) return null;
+    return (bool v) => _toggle(info, v);
   }
 
   Future<void> _addPack() async {
@@ -127,13 +147,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
     final staleEnabled = settings.enabledExtensions.contains(id) &&
         !registryChoice.enabled.contains(id);
     if (!staleDisabled && !staleEnabled) return;
-    final choice = _choice.without(id);
-    widget.onChanged(
-      settings.copyWith(
-        disabledExtensions: choice.disabled,
-        enabledExtensions: choice.enabled,
-      ),
-    );
+    widget.onChanged(settings.withChoice(_choice.without(id)));
   }
 
   Future<void> _removePack(ExtensionInfo info) async {
@@ -212,20 +226,23 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
             if (_connection(info.id) case final ConnectionService service)
               _ExtensionTile(
                 info: info,
-                // Без подключения коннектору нечего делать: переключатель
-                // выключен и неактивен до входа.
-                enabled: service.connected && choice.isEnabled(info),
-                onChanged: service.connected ? (v) => _toggle(info, v) : null,
-                status: service.connected
-                    ? connectionStatus(service)
-                    : 'Не подключён — сначала подключите',
+                enabled: registry.enabledUnder(choice, info),
+                onChanged: _switch(info),
+                status: <String>[
+                  if (service.connected)
+                    connectionStatus(service)
+                  else
+                    'Не подключён — сначала подключите',
+                  if (_roleNote(info) case final String note) note,
+                ].join('. '),
                 onConfigure: () => _configure(info, service),
               )
             else
               _ExtensionTile(
                 info: info,
-                enabled: choice.isEnabled(info),
-                onChanged: info.required ? null : (v) => _toggle(info, v),
+                enabled: registry.enabledUnder(choice, info),
+                onChanged: _switch(info),
+                status: _roleNote(info),
                 onRemove: info.kind == ExtensionKind.pack && !info.builtIn
                     ? () => _removePack(info)
                     : null,
@@ -269,6 +286,38 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
       ],
     );
   }
+}
+
+/// Подключение [id] вошло ([connected]) или вышло: новые настройки.
+///
+/// Вне ролей — как раньше: вход включает подключение, выход выключает.
+/// Подключение роли (ADR-012) вход включает (снимает явное выключение и,
+/// если все его роли выключены, включает первую), а выход ничего не
+/// меняет: роль остаётся включённой, карточка говорит «Склад не
+/// подключён», а фразы склада получают подсказку, как подключить.
+AppSettings connectionChanged(
+  ExtensionRegistry registry,
+  AppSettings settings,
+  String id, {
+  required bool connected,
+}) {
+  final info = registry.info(id);
+  if (info == null) return settings;
+  var choice = settings.extensionChoice;
+  final roles = registry.rolesOf(id);
+  if (roles.isEmpty) {
+    return settings.withChoice(choice.withEnabled(info, connected));
+  }
+  if (!connected) return settings;
+  choice = choice.withRoleExtension(info, true);
+  if (!roles.any(choice.isRoleEnabled)) {
+    final role = roles
+            .where((RoleInfo r) => r.connection?.extensionId == id)
+            .firstOrNull ??
+        roles.first;
+    choice = choice.withRole(role, true);
+  }
+  return settings.withChoice(choice);
 }
 
 /// Строка расширения: название, описание, версия и автор, переключатель.

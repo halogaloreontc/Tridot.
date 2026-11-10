@@ -84,10 +84,10 @@ void main() {
       }
     });
 
-    test('встроенная копия в assets — та же, что fixture', () {
+    test('встроенная копия в assets — описание 1.4.56 (ADR-012)', () {
       expect(
         File(ConnectionSlots.warehouse.builtInAsset!).readAsStringSync(),
-        manifestSource(),
+        manifestSource(patchedManifestPath),
       );
     });
   });

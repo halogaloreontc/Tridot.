@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../extensions/extension_info.dart';
+import '../extensions/role.dart';
 import '../personas/persona.dart';
 
 export '../personas/persona.dart';
@@ -12,6 +14,9 @@ final class AppSettings {
     this.showTimestamps = true,
     this.disabledExtensions = const <String>{},
     this.enabledExtensions = const <String>{},
+    this.disabledRoles = const <String>{},
+    this.enabledRoles = const <String>{},
+    this.roleOwners = const <String, String>{},
     this.personas = const PersonaSettings(),
     this.noticeDay,
   });
@@ -21,14 +26,39 @@ final class AppSettings {
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     final reduceMotion = json['reduce_motion'];
     final showTimestamps = json['show_timestamps'];
+    final enabledExtensions = _ids(json['enabled_extensions']);
+    // Настройки до ролей: подключение, которое включали сами, включает
+    // свою роль (Roles.migratedFrom) — склад продолжает отвечать.
+    final legacy = !json.containsKey('enabled_roles') &&
+        !json.containsKey('disabled_roles');
     return AppSettings(
       reduceMotion: reduceMotion is bool && reduceMotion,
       showTimestamps: showTimestamps is! bool || showTimestamps,
       disabledExtensions: _ids(json['disabled_extensions']),
-      enabledExtensions: _ids(json['enabled_extensions']),
+      enabledExtensions: enabledExtensions,
+      disabledRoles: _ids(json['disabled_roles']),
+      enabledRoles: legacy
+          ? Roles.migratedFrom(enabledExtensions)
+          : _ids(json['enabled_roles']),
+      roleOwners: _owners(json['role_owners']),
       personas: PersonaSettings.fromJson(json),
       noticeDay: _day(json['notice_day']),
     );
+  }
+
+  /// Кто ведёт роль: не объект — пусто; ключи — id до 64 знаков, значения
+  /// — только известные помощники.
+  static Map<String, String> _owners(Object? value) {
+    if (value is! Map) return const <String, String>{};
+    return <String, String>{
+      for (final MapEntry(:key, :value) in value.entries)
+        if (key is String &&
+            key.trim().isNotEmpty &&
+            key.length <= 64 &&
+            value is String &&
+            Personas.byId(value) != null)
+          key.trim(): value,
+    };
   }
 
   /// День вида `2026-11-06` или `null`.
@@ -67,8 +97,35 @@ final class AppSettings {
   /// Явно включённые расширения из выключенных по умолчанию.
   final Set<String> enabledExtensions;
 
+  /// Выключенные роли из включённых по умолчанию («Личное»).
+  final Set<String> disabledRoles;
+
+  /// Включённые роли из выключенных по умолчанию («Кладовщик»).
+  final Set<String> enabledRoles;
+
+  /// Кто ведёт роль в дуэте: id роли → id помощника. Нет записи — основной.
+  final Map<String, String> roleOwners;
+
   /// Помощники: дуэт или соло, кто основной, стили, «вы»/«ты», эмодзи.
   final PersonaSettings personas;
+
+  /// Выбор расширений и ролей для [ExtensionRegistry.apply].
+  ExtensionChoice get extensionChoice => ExtensionChoice(
+        disabled: disabledExtensions,
+        enabled: enabledExtensions,
+        disabledRoles: disabledRoles,
+        enabledRoles: enabledRoles,
+        roleOwners: roleOwners,
+      );
+
+  /// Настройки с выбором расширений и ролей [choice]; остальное — как было.
+  AppSettings withChoice(ExtensionChoice choice) => copyWith(
+        disabledExtensions: choice.disabled,
+        enabledExtensions: choice.enabled,
+        disabledRoles: choice.disabledRoles,
+        enabledRoles: choice.enabledRoles,
+        roleOwners: choice.roleOwners,
+      );
 
   /// Служебное: день, когда второй помощник уже написал о просроченных
   /// задачах (`2026-11-06`). Не чаще раза в день, и смена настроек
@@ -80,6 +137,9 @@ final class AppSettings {
     bool? showTimestamps,
     Set<String>? disabledExtensions,
     Set<String>? enabledExtensions,
+    Set<String>? disabledRoles,
+    Set<String>? enabledRoles,
+    Map<String, String>? roleOwners,
     PersonaSettings? personas,
     String? noticeDay,
   }) =>
@@ -88,6 +148,9 @@ final class AppSettings {
         showTimestamps: showTimestamps ?? this.showTimestamps,
         disabledExtensions: disabledExtensions ?? this.disabledExtensions,
         enabledExtensions: enabledExtensions ?? this.enabledExtensions,
+        disabledRoles: disabledRoles ?? this.disabledRoles,
+        enabledRoles: enabledRoles ?? this.enabledRoles,
+        roleOwners: roleOwners ?? this.roleOwners,
         personas: personas ?? this.personas,
         noticeDay: noticeDay ?? this.noticeDay,
       );
@@ -97,6 +160,15 @@ final class AppSettings {
         'show_timestamps': showTimestamps,
         'disabled_extensions': disabledExtensions.toList()..sort(),
         'enabled_extensions': enabledExtensions.toList()..sort(),
+        'disabled_roles': disabledRoles.toList()..sort(),
+        'enabled_roles': enabledRoles.toList()..sort(),
+        // Списки ролей пишутся всегда: по ним видно, что файл уже знает
+        // роли, и перенос из enabled_extensions не повторяется.
+        if (roleOwners.isNotEmpty)
+          'role_owners': <String, String>{
+            for (final id in roleOwners.keys.toList()..sort())
+              id: roleOwners[id]!,
+          },
         ...personas.toJson(),
         if (noticeDay != null) 'notice_day': noticeDay,
       };

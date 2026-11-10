@@ -293,7 +293,13 @@ void main() {
       expect(loaded.disabledExtensions, <String>{'calc'});
       // Сохранение ничего не переименовывает: файл тот же.
       await JsonSettingsStore(path).save(loaded);
-      expect(jsonDecode(await File(path).readAsString()), old);
+      // Добавились только списки ролей (ADR-012): по ним видно, что файл
+      // уже знает роли.
+      expect(jsonDecode(await File(path).readAsString()), <String, Object?>{
+        ...old,
+        'disabled_roles': <String>[],
+        'enabled_roles': <String>[],
+      });
     });
 
     test('испорченный файл настроек — по умолчанию, задачи не тронуты',

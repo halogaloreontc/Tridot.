@@ -12,6 +12,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
   "protected": [
     "common.confirm.unclear",
     "common.loginLink",
+    "role.notConnected",
     "router.failed",
     "task.ask.confirmComplete",
     "task.confirm.inactive",
@@ -46,6 +47,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "router.ambiguous": "Не {м:понял|ж:поняла}, к чему относится команда: «{first}» или «{second}»? {вы:Уточните|ты:Уточни}, пожалуйста.",
     "router.failed": "Не удалось выполнить действие: {error}",
     "common.confirm.unclear": "Пока ничего не {м:сделал|ж:сделала}. {вы:Ответьте|ты:Ответь}, пожалуйста: «да» или «нет»?",
+    "role.notConnected": "{app} ещё не подключён — Настройки → Роли → {role} → {button}.",
 
     "task.created": "{м:Создал|ж:Создала} задачу «{title}».",
     "task.created.withDue": "{м:Создал|ж:Создала} задачу «{title}» на {due}.",
@@ -139,6 +141,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "talk.who.main": "Я {name}, {м:основной помощник|ж:основная помощница} в {appPrepositional}: отвечаю на сообщения, веду задачи и считаю. {other} — {м:вторая помощница: пишет первой|ж:второй помощник: пишет первым} о просроченных задачах. К любому из нас можно обратиться по имени.",
     "talk.who.secondary": "Я {name}, {м:второй помощник|ж:вторая помощница} в {appPrepositional}: пишу {м:первым|ж:первой} о просроченных задачах и отвечаю, если ко мне обратиться по имени. {м:Основная помощница|ж:Основной помощник} — {other}.",
     "talk.who.solo": "Я {name}, {м:помощник|ж:помощница} в {appPrepositional}: отвечаю на {вы:ваши|ты:твои} сообщения, веду задачи и считаю.",
+    "talk.roles": "Сейчас помогаю {roles}.",
     "talk.capabilities": "Сейчас умею: {skills}. Навыки включаются и выключаются в «Настройки → Расширения».",
     "talk.joke": "{joke}",
     "talk.joke.none": "Шуток пока нет: не включён ни один пак шуток. {вы:Включите|ты:Включи} его в «Настройки → Расширения» или {вы:добавьте|ты:добавь} свой пак.",
@@ -185,6 +188,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     ],
     "router.failed": "Ой, не получилось. {э:😕} Причина: {error}",
     "common.confirm.unclear": "Пока ничего не {м:сделал|ж:сделала}. Так «да» или «нет»? {э:🙂}",
+    "role.notConnected": "{app} ещё не подключён {э:🔌} — {вы:загляните|ты:загляни} в Настройки → Роли → {role} → {button}.",
 
     "task.created": [
       "Готово! {м:Добавил|ж:Добавила} задачу «{title}». {э:✅}",
@@ -385,6 +389,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "talk.who.main": "Я {name}! {э:👋} {м:Основной помощник|ж:Основная помощница} в {appPrepositional}: отвечаю на сообщения, веду задачи и считаю. А {other} — {м:вторая помощница, пишет первой|ж:второй помощник, пишет первым} о просроченных задачах. Звать можно любого по имени.",
     "talk.who.secondary": "Я {name}! {э:👋} {м:Второй помощник|ж:Вторая помощница} в {appPrepositional}: пишу {м:первым|ж:первой}, когда что-то просрочено, и отвечаю, если меня позвать по имени. {м:Основная|ж:Основной} у нас — {other}.",
     "talk.who.solo": "Я {name}! {э:👋} {м:Помощник|ж:Помощница} в {appPrepositional}: отвечаю на {вы:ваши|ты:твои} сообщения, веду задачи и считаю.",
+    "talk.roles": "А ещё сейчас помогаю {roles}! {э:🙂}",
     "talk.capabilities": "Вот что я умею: {skills}. {э:🙂} А в «Настройки → Расширения» можно включить или выключить навыки.",
     "talk.joke": [
       "{joke} {э:😄}",
@@ -422,6 +427,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "router.ambiguous": "«{first}» или «{second}»?",
     "router.failed": "Ошибка: {error}",
     "common.confirm.unclear": "Ничего не сделано. «Да» или «нет»?",
+    "role.notConnected": "{app} не подключён: Настройки → Роли → {role} → {button}.",
 
     "task.created": ["Создано: «{title}».", "Добавлено: «{title}»."],
     "task.created.withDue": ["Создано: «{title}», {due}.", "Добавлено: «{title}» — {due}."],
@@ -515,6 +521,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "talk.who.main": "{name}, {м:основной помощник|ж:основная помощница} в {appPrepositional}. {м:Вторая|ж:Второй} — {other}.",
     "talk.who.secondary": "{name}, {м:второй помощник|ж:вторая помощница} в {appPrepositional}. {м:Основная|ж:Основной} — {other}.",
     "talk.who.solo": "{name}, {м:помощник|ж:помощница} в {appPrepositional}.",
+    "talk.roles": "Помогаю {roles}.",
     "talk.capabilities": "Умею: {skills}.",
     "talk.joke.none": "Шуток нет: включи{вы:те|ты:} пак в «Настройки → Расширения».",
     "talk.set.brief": "Понял{м:|ж:а}. Коротко.",
@@ -548,6 +555,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "router.ambiguous": "Требуется уточнение: команда относится к разделу «{first}» или «{second}»?",
     "router.failed": "Действие не выполнено. Причина: {error}",
     "common.confirm.unclear": "Действие не выполнено. {вы:Ответьте|ты:Ответь}, пожалуйста: «да» или «нет»?",
+    "role.notConnected": "{app} ещё не подключён. Подключение: Настройки → Роли → {role} → {button}.",
 
     "task.created": ["Задача «{title}» создана.", "Задача «{title}» зарегистрирована."],
     "task.created.withDue": ["Задача «{title}» создана, срок — {due}.", "Задача «{title}» зарегистрирована со сроком {due}."],
@@ -641,6 +649,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "talk.who.main": "{name}, {м:основной помощник|ж:основная помощница} в {appPrepositional}: обработка сообщений, задачи, расчёты. {м:Вторая помощница|ж:Второй помощник} — {other}: уведомления о просроченных задачах.",
     "talk.who.secondary": "{name}, {м:второй помощник|ж:вторая помощница} в {appPrepositional}: уведомления о просроченных задачах и ответы по обращению. {м:Основная помощница|ж:Основной помощник} — {other}.",
     "talk.who.solo": "{name}, {м:персональный помощник|ж:персональная помощница} в {appPrepositional}: обработка сообщений, задачи, расчёты.",
+    "talk.roles": "Текущие направления работы: помощь {roles}.",
     "talk.capabilities": "Доступные функции: {skills}. Управление — «Настройки → Расширения».",
     "talk.joke.none": "Паки шуток не включены. {вы:Включите|ты:Включи} пак в «Настройки → Расширения».",
     "talk.set.brief": "Принято: краткий стиль.",

@@ -7,9 +7,10 @@ import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
 import '../widgets/extensions_section.dart';
 import '../widgets/personas_section.dart';
+import '../widgets/roles_section.dart';
 import '../widgets/task_tile.dart';
 
-/// Экран «Настройки»: поведение интерфейса, помощники, расширения,
+/// Экран «Настройки»: поведение интерфейса, помощники, роли, расширения,
 /// история чата, о приложении.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
@@ -114,6 +115,14 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: onChanged,
                 registry: extensions,
               ),
+              if (extensions case final ExtensionRegistry registry
+                  when registry.roles.isNotEmpty)
+                RolesSection(
+                  registry: registry,
+                  settings: settings,
+                  onChanged: onChanged,
+                  connections: connections,
+                ),
               if (extensions case final ExtensionRegistry registry)
                 ExtensionsSection(
                   registry: registry,
