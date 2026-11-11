@@ -10,6 +10,18 @@ enum SecureCardKind {
   list,
   training,
   importPreview,
+
+  /// Логин записи целиком (в пузыре — маска, D15).
+  login,
+
+  /// Открыть редактор записи (добавить или сменить пароль).
+  editor,
+
+  /// «Забыл мастер-пароль»: честные пути этого устройства (5.11).
+  recovery,
+
+  /// Удалить запись — только кнопкой карточки.
+  delete,
 }
 
 /// Временная карточка под ответом (D10): несёт только id записей и
@@ -38,4 +50,29 @@ final class SecureCardRequest {
 
   @override
   String toString() => 'SecureCardRequest(${kind.name}, ${entryIds.length})';
+}
+
+/// Нажатие в карточке, которое выполняет навык (не сообщение в чате):
+/// выбор записи, удаление кнопкой, отметка «пароль был показан». Несёт
+/// только id и имя действия.
+final class SecureCardCommand {
+  const SecureCardCommand(this.card, this.action, {this.entryId});
+
+  final SecureCardRequest card;
+
+  /// `choose` (выбрана запись), `resume` (хранилище открыто — повторить
+  /// команду), `delete` (кнопка «Удалить»), `revealed` / `copied` (в
+  /// историю — только факт).
+  final String action;
+
+  final String? entryId;
+
+  static const String choose = 'choose';
+  static const String resume = 'resume';
+  static const String delete = 'delete';
+  static const String revealed = 'revealed';
+  static const String copied = 'copied';
+
+  @override
+  String toString() => 'SecureCardCommand($action)';
 }

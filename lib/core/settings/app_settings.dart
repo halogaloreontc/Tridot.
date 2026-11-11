@@ -20,6 +20,8 @@ final class AppSettings {
     this.roleActions = const <String, String>{},
     this.personas = const PersonaSettings(),
     this.noticeDay,
+    this.passwordsSeenRev,
+    this.passwordsVaultExisted = false,
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -45,8 +47,14 @@ final class AppSettings {
       roleActions: _actions(json['role_actions']),
       personas: PersonaSettings.fromJson(json),
       noticeDay: _day(json['notice_day']),
+      passwordsSeenRev: _rev(json['passwords.seen_rev']),
+      passwordsVaultExisted: json['passwords.vault_existed'] == true,
     );
   }
+
+  /// Номер версии хранилища: целое от 1, иначе `null`.
+  static int? _rev(Object? value) =>
+      value is int && value > 0 && value < 1 << 52 ? value : null;
 
   /// Кто ведёт роль: не объект — пусто; ключи — id до 64 знаков, значения
   /// — только известные помощники.
@@ -157,6 +165,17 @@ final class AppSettings {
   /// помощников не повторяет сообщение.
   final String? noticeDay;
 
+  /// Служебное (навык «Пароли», раздел 4.1): самая новая версия файла
+  /// хранилища, которую открывали на этом устройстве. Файл с меньшей
+  /// версией — повод предупредить об откате; это не защита от вредоноса,
+  /// который перепишет и этот файл.
+  final int? passwordsSeenRev;
+
+  /// Служебное (D28): хранилище на этом устройстве уже создавали. Если
+  /// файла нет — «не найдено на устройстве», а не «не создано». Только
+  /// да/нет: ни названий, ни числа записей.
+  final bool passwordsVaultExisted;
+
   AppSettings copyWith({
     bool? reduceMotion,
     bool? showTimestamps,
@@ -168,6 +187,8 @@ final class AppSettings {
     Map<String, String>? roleActions,
     PersonaSettings? personas,
     String? noticeDay,
+    int? passwordsSeenRev,
+    bool? passwordsVaultExisted,
   }) =>
       AppSettings(
         reduceMotion: reduceMotion ?? this.reduceMotion,
@@ -180,6 +201,9 @@ final class AppSettings {
         roleActions: roleActions ?? this.roleActions,
         personas: personas ?? this.personas,
         noticeDay: noticeDay ?? this.noticeDay,
+        passwordsSeenRev: passwordsSeenRev ?? this.passwordsSeenRev,
+        passwordsVaultExisted:
+            passwordsVaultExisted ?? this.passwordsVaultExisted,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -203,6 +227,8 @@ final class AppSettings {
           },
         ...personas.toJson(),
         if (noticeDay != null) 'notice_day': noticeDay,
+        if (passwordsSeenRev != null) 'passwords.seen_rev': passwordsSeenRev,
+        if (passwordsVaultExisted) 'passwords.vault_existed': true,
       };
 }
 

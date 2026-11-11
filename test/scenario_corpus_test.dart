@@ -15,6 +15,7 @@ import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/skills/calculator/calculator.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
+import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
@@ -157,6 +158,10 @@ final Map<String, Connector Function(DateTime now, bool connected)>
   // Беседа уступает любой команде (fallback): её фразы проверяют, что
   // «привет, добавь задачу …» остаётся задачей.
   TalkConnector.id: (DateTime now, bool connected) => TalkConnector(),
+  // Навык «Пароли» (ADR-014) выключен по умолчанию, но в корпусе включён
+  // всегда: он спорит за каждую строку, а его фразы — только синтетика.
+  // `match` не трогает хранилище, поэтому фасад не нужен.
+  PasswordsConnector.id: (DateTime now, bool connected) => PasswordsConnector(),
 };
 
 /// Ответ калькулятора для сравнения с полем `answer`: пример — как его
@@ -180,6 +185,12 @@ String? _routed(List<ConnectorMatch> all) {
   final sorted = firm.any((ConnectorMatch m) => !m.implicit)
       ? firm.where((ConnectorMatch m) => !m.implicit).toList()
       : firm;
+  // Явная фраза о паролях — у навыка «Пароли», как в AssistantController.
+  if (sorted.any(
+    (ConnectorMatch m) => m.connectorId == PasswordsConnector.id && !m.implicit,
+  )) {
+    return PasswordsConnector.id;
+  }
   final best = sorted.first;
   for (final other in sorted.skip(1)) {
     if (other.connectorId == best.connectorId) continue;
@@ -363,6 +374,7 @@ final class _Case {
           factory(now, connected),
       ],
       choice: ExtensionChoice(
+        enabled: const <String>{PasswordsConnector.id},
         enabledRoles: roles,
         disabledRoles: <String>{
           for (final role in Roles.all)
@@ -370,9 +382,13 @@ final class _Case {
         },
       ),
     );
+    // Фразу о паролях не получает ни один сетевой коннектор (раздел 5.9)
+    // — то же правило, что в AssistantController.
+    final passwordsPhrase = PasswordPhrases.looksLike(utterance);
     final matches = <ConnectorMatch>[
       for (final connector in registry.enabledConnectors)
-        if (connector.match(utterance) case final ConnectorMatch match) match,
+        if (!(passwordsPhrase && connector.info.requiresNetwork))
+          if (connector.match(utterance) case final ConnectorMatch match) match,
     ]..sort(
         (ConnectorMatch a, ConnectorMatch b) =>
             b.confidence.compareTo(a.confidence),

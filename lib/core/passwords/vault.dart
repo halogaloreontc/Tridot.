@@ -4,10 +4,12 @@ import 'dart:typed_data';
 
 import '../extensions/extension_registry.dart';
 import '../services/clock.dart';
+import 'master_variants.dart';
 import 'secret_bytes.dart';
 import 'vault_crypto.dart';
 import 'vault_errors.dart';
 import 'vault_format.dart';
+import 'vault_prefs.dart';
 import 'vault_store.dart';
 
 /// Состояние хранилища (раздел 3.6).
@@ -66,7 +68,11 @@ final class VaultPolicy {
 
 /// Итог открытия.
 final class VaultUnlockResult {
-  const VaultUnlockResult({required this.rev, required this.rolledBack});
+  const VaultUnlockResult({
+    required this.rev,
+    required this.rolledBack,
+    this.variantHit = false,
+  });
 
   /// Версия открытого файла (для `passwords.seen_rev`).
   final int rev;
@@ -74,6 +80,10 @@ final class VaultUnlockResult {
   /// Файл старее, чем был (`rev < seen_rev`): его могли подменить или
   /// восстановить из старой копии. Только предупреждение (раздел 4.1).
   final bool rolledBack;
+
+  /// Подошёл не сам ввод, а его вариант (D25): другая раскладка, Caps
+  /// Lock, регистр первой буквы, пробелы по краям.
+  final bool variantHit;
 }
 
 /// Хранилище паролей: конверт с ключом, индекс и секреты записей
@@ -247,7 +257,9 @@ final class Vault {
   /// Открывает хранилище мастер-паролем. Ошибки: [VaultRateLimited]
   /// (пауза, D25), `wrongPassword`, `corrupt`, `kdfInvalid`, `tooNew`,
   /// `io`, `locked` (навык выключен). [seenRev] — `passwords.seen_rev`
-  /// из настроек: по нему видно откат файла.
+  /// из настроек: по нему видно откат файла. При неверном вводе сразу
+  /// пробуются его варианты ([MasterVariants], D25) — это одна попытка
+  /// счётчика.
   Future<VaultUnlockResult> unlock(SecretBytes master, {int? seenRev}) {
     // Эпоха — в момент вызова, а не когда очередь дойдёт: запирание,
     // пришедшее, пока ввод ждал в очереди (двойное нажатие + фон), не
@@ -277,20 +289,30 @@ final class Vault {
       // Мигрированный файл пишется текущей версией: обёртку ключа нужно
       // запечатать заново с новым header (в нём версия формата).
       SealedBox? rewrapped;
-      final vk = await _unwrap(
-        master,
-        envelope,
-        header,
-        withKek: envelope.migrated
-            ? (VaultKey kek, VaultKey vk) => rewrapped = crypto.sealKey(
-                  kek,
-                  vk,
-                  VaultKeys.wrapPwAd(
-                    _headerFor(envelope.kind, envelope.vaultId, envelope.kdf),
-                  ),
-                )
-            : null,
-      );
+      final variants = MasterVariants.of(master);
+      final VaultKey vk;
+      final bool variantHit;
+      try {
+        (vk, variantHit) = await _unwrapAny(
+          master,
+          envelope,
+          header,
+          variants: variants,
+          withKek: envelope.migrated
+              ? (VaultKey kek, VaultKey vk) => rewrapped = crypto.sealKey(
+                    kek,
+                    vk,
+                    VaultKeys.wrapPwAd(
+                      _headerFor(envelope.kind, envelope.vaultId, envelope.kdf),
+                    ),
+                  )
+              : null,
+        );
+      } finally {
+        for (final variant in variants) {
+          variant.wipe();
+        }
+      }
       final ring = VaultKeyRing.from(crypto, vk);
       VaultIndex? index;
       VaultKey? kFp;
@@ -346,6 +368,7 @@ final class Vault {
       return VaultUnlockResult(
         rev: _open!.envelope.rev,
         rolledBack: seenRev != null && envelope.rev < seenRev,
+        variantHit: variantHit,
       );
     });
   }
@@ -407,7 +430,17 @@ final class Vault {
   Future<VaultKey> _unwrap(
     SecretBytes master,
     VaultEnvelope envelope,
+    Uint8List header,
+  ) async =>
+      (await _unwrapAny(master, envelope, header)).$1;
+
+  /// Как [_unwrap], но после неверного [master] пробует [variants] в той же
+  /// попытке счётчика. Второе в ответе — подошёл вариант.
+  Future<(VaultKey, bool)> _unwrapAny(
+    SecretBytes master,
+    VaultEnvelope envelope,
     Uint8List header, {
+    List<SecretBytes> variants = const <SecretBytes>[],
     void Function(VaultKey kek, VaultKey vk)? withKek,
   }) async {
     final params = VaultKdfParams.checkLoaded(
@@ -426,25 +459,27 @@ final class Vault {
     // приложение не получает бесплатную попытку. Записать не вышло —
     // не проверяем вовсе (без счётчика перебор был бы без пауз).
     await store.writeAttempts(attempts.failed(now).encode());
-    final kek = await crypto.derive(master, envelope.kdf.salt, params);
-    final VaultKey? vk;
-    try {
-      vk = crypto.openKey(kek, envelope.wrapPw, VaultKeys.wrapPwAd(header));
-      if (vk != null) withKek?.call(kek, vk);
-    } finally {
-      kek.dispose();
+    final candidates = <SecretBytes>[master, ...variants];
+    for (var i = 0; i < candidates.length; i++) {
+      final kek = await crypto.derive(candidates[i], envelope.kdf.salt, params);
+      final VaultKey? vk;
+      try {
+        vk = crypto.openKey(kek, envelope.wrapPw, VaultKeys.wrapPwAd(header));
+        if (vk != null) withKek?.call(kek, vk);
+      } finally {
+        kek.dispose();
+      }
+      if (vk == null) continue;
+      try {
+        await store.writeAttempts(const VaultAttempts().encode());
+      } on Object {
+        // Не сбросился счётчик — лишняя ошибка в нём, не дыра.
+      }
+      return (vk, i > 0);
     }
-    if (vk == null) {
-      // Та же попытка, время — конец проверки (пауза от него).
-      await store.writeAttempts(attempts.failed(clock.now()).encode());
-      throw VaultError.wrongPassword;
-    }
-    try {
-      await store.writeAttempts(const VaultAttempts().encode());
-    } on Object {
-      // Не сбросился счётчик — лишняя ошибка в нём, не дыра.
-    }
-    return vk;
+    // Та же попытка, время — конец проверки (пауза от него).
+    await store.writeAttempts(attempts.failed(clock.now()).encode());
+    throw VaultError.wrongPassword;
   }
 
   /// Верен ли мастер-пароль открытого хранилища (тренировка, обязательный
@@ -479,6 +514,33 @@ final class Vault {
         touch();
         return true;
       });
+
+  /// «Начать заново» (5.11): мастер-пароль не нужен — кто держит
+  /// устройство, и так может удалить файл. Хранилище запирается, а файл
+  /// уходит в `archive/forgotten-<дата>.relayvault` — не стирается. После
+  /// этого можно создать новое. Возвращает имя файла в архиве.
+  Future<String?> startOver() {
+    lock();
+    return _serial(
+      () => _guard(() async {
+        await _ensureLoaded();
+        if (!await store.hasVault()) {
+          _exists = false;
+          return null;
+        }
+        final day = clock.now().toUtc().toIso8601String().substring(0, 10);
+        final taken = (await store.archived()).toSet();
+        var name = 'forgotten-$day.relayvault';
+        for (var n = 2; taken.contains(name); n++) {
+          name = 'forgotten-$day-$n.relayvault';
+        }
+        await store.archiveVault(name);
+        _exists = false;
+        _notify(VaultSignal.changed);
+        return name;
+      }),
+    );
+  }
 
   // --------------------------------------------------------- запирание
 
@@ -699,7 +761,45 @@ final class Vault {
         _notify(VaultSignal.changed);
       });
 
+  /// Новая заметка записи (пароль прежний). Прежняя заметка не живёт и в
+  /// `.prev`.
+  Future<void> updateNote(String id, SecretBytes note) => _op(() async {
+        final open = _requireOpen();
+        final entry = _entry(open, id);
+        if (note.length > VaultFormat.maxNote) {
+          throw ArgumentError('секрет вне пределов');
+        }
+        final current = _openSecret(open, open.ring, entry);
+        try {
+          final updated = entry.copyWith(srev: entry.srev + 1);
+          final sealed = _sealSecret(
+            open.ring,
+            open.envelope,
+            updated,
+            current.password,
+            note,
+          );
+          await _commit(
+            open,
+            entries: _replace(open.index.entries, updated),
+            secrets: <String, SealedSecret>{
+              ...open.envelope.secrets,
+              id: sealed,
+            },
+            replacePrevious: true,
+          );
+        } finally {
+          current.wipe();
+        }
+        touch();
+        _notify(VaultSignal.changed);
+      });
+
   /// Правка полей записи без пароля.
+  ///
+  /// Снять с записи «Важный» при включённом «Переспрашивать для важных» —
+  /// ослабление защиты (3.6, 15.2): только с верным [master], как и
+  /// выключение самой настройки.
   Future<void> updateInfo(
     String id, {
     String? service,
@@ -707,10 +807,23 @@ final class Vault {
     String? hint,
     List<String>? urls,
     bool? important,
+    SecretBytes? master,
   }) =>
       _op(() async {
         final open = _requireOpen();
         final entry = _entry(open, id);
+        if (important == false &&
+            entry.important &&
+            VaultPrefs.repromptImportant.of(open.index.prefs)) {
+          if (master == null) throw ArgumentError('нужен мастер-пароль');
+          final vk = await _unwrap(
+            master,
+            open.envelope,
+            VaultKeys.header(open.envelope),
+          );
+          vk.dispose();
+          _alive(open);
+        }
         final updated = entry.copyWith(
           service: service,
           login: login,
@@ -786,6 +899,42 @@ final class Vault {
   /// Отпечаток пароля ключом `k_fp` открытого хранилища.
   Uint8List fingerprint(SecretBytes password) =>
       VaultKeys.fingerprint(crypto, _requireOpen().kFp, password);
+
+  /// Ослабит ли [changes] защитные настройки (раздел 9): тогда
+  /// [setPrefs] требует мастер-пароль.
+  bool prefsWeaken(Map<String, Object?> changes) =>
+      VaultPrefs.weakens(prefs, changes);
+
+  /// Меняет защитные настройки в индексе. Ослабление — только с верным
+  /// мастер-паролем [master] (тот же счётчик ошибок, что у открытия);
+  /// без него — `ArgumentError`, с неверным — `wrongPassword`.
+  Future<void> setPrefs(
+    Map<String, Object?> changes, {
+    SecretBytes? master,
+  }) =>
+      _op(() async {
+        final open = _requireOpen();
+        VaultPrefs.check(changes);
+        if (VaultPrefs.weakens(open.index.prefs, changes)) {
+          if (master == null) throw ArgumentError('нужен мастер-пароль');
+          final vk = await _unwrap(
+            master,
+            open.envelope,
+            VaultKeys.header(open.envelope),
+          );
+          vk.dispose();
+          _alive(open);
+        }
+        await _commit(
+          open,
+          entries: open.index.entries,
+          secrets: open.envelope.secrets,
+          prefs: <String, Object?>{...open.index.prefs, ...changes},
+        );
+        touch();
+        _schedule();
+        _notify(VaultSignal.changed);
+      });
 
   // ------------------------------------------------ мастер-пароль
 
@@ -1066,6 +1215,7 @@ final class Vault {
     required List<VaultEntry> entries,
     required Map<String, SealedSecret> secrets,
     Map<String, Object?>? master,
+    Map<String, Object?>? prefs,
     VaultKeyRing? ring,
     KdfRecord? kdf,
     SealedBox? wrapPw,
@@ -1076,6 +1226,7 @@ final class Vault {
       rev: rev,
       entries: List<VaultEntry>.unmodifiable(entries),
       master: master,
+      prefs: prefs,
     );
     final envelope = _sealEnvelope(
       ring: ring ?? open.ring,

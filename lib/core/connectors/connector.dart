@@ -41,6 +41,7 @@ final class ConnectorInfo {
     this.replies = const <String, String>{},
     this.protectedReplies = const <String>{},
     this.sensitive = false,
+    this.chips = const <RoleChip>[],
   }) : assert(kind != ExtensionKind.pack, 'Пак — данные, а не коннектор');
 
   /// Автор встроенных расширений.
@@ -96,6 +97,11 @@ final class ConnectorInfo {
   /// упал, маршрутизатор отвечает `router.failed.quiet` без текста ошибки
   /// — в исключении мог оказаться пароль (D13).
   final bool sensitive;
+
+  /// Кнопки быстрых действий навыка вне ролей (D17): видны, пока навык
+  /// включён ([ExtensionRegistry.activeChips]). У навыков ролей кнопки
+  /// задаёт роль.
+  final List<RoleChip> chips;
 }
 
 /// Ответ коннектора на вопрос «это твоя фраза?».

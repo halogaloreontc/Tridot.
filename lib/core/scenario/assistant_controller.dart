@@ -4,12 +4,14 @@ import '../connectors/tasks_connector.dart';
 import '../extensions/extension_registry.dart';
 import '../models/action_card.dart';
 import '../models/bulk.dart';
+import '../models/secure_card.dart';
 import '../models/task.dart';
 import '../passwords/secret_guard.dart';
 import '../personas/persona.dart';
 import '../personas/persona_address.dart';
 import '../replies/reply_library.dart';
 import '../services/clock.dart';
+import '../skills/passwords/passwords_phrases.dart';
 
 /// Маршрутизатор сообщений между коннекторами.
 ///
@@ -407,7 +409,9 @@ final class AssistantController {
     final utterance = Utterance.analyze(text, now: session.clock.now())
         .withChat(session.chatTaskId, awaitingAnswer: _awaitingAnswer);
     final found = <(Connector, ConnectorMatch)>[];
+    final passwordsPhrase = PasswordPhrases.looksLike(utterance);
     for (final connector in _connectors) {
+      if (passwordsPhrase && connector.info.requiresNetwork) continue;
       try {
         final match = connector.match(utterance);
         if (match != null && match.confidence > 0) {
@@ -517,8 +521,9 @@ final class AssistantController {
     if (secretRedacted ||
         SecretGuard.redact(message, known: knownSecret).guarded) {
       session.lastConnectorId = null;
+      // Навык выключен — подсказать, где его включить.
       return session.reply(
-        'secret.redacted',
+        _passwordsOff ? 'secret.redacted.off' : 'secret.redacted',
         intent: 'secret.redacted',
         status: AssistantStatus.noAction,
       );
@@ -540,6 +545,10 @@ final class AssistantController {
       session.chatTaskId,
       awaitingAnswer: _awaitingAnswer || session.pendingConfirmation != null,
     );
+    // Фраза о паролях или просто со словом «пароль» (раздел 5.9): её не
+    // получает ни один сетевой коннектор — ни в match, ни в уточнении
+    // ответа, при любой уверенности, включён навык или нет.
+    final hideFromNetwork = PasswordPhrases.looksLike(utterance);
     final asker = session.pendingSpeaker;
     final pending = session.takePendingConfirmation();
     final owner = pending == null
@@ -567,7 +576,8 @@ final class AssistantController {
       }
       // «Кроме хлеба», «только отчёт»: уточнение ответа, которое понимает
       // сам спросивший коннектор (ConfirmationFollowUp).
-      if (owner is ConfirmationFollowUp) {
+      if (owner is ConfirmationFollowUp &&
+          !(hideFromNetwork && owner.info.requiresNetwork)) {
         final followUp = (owner as ConfirmationFollowUp).matchFollowUp(
           answerUtterance,
           pending,
@@ -578,8 +588,22 @@ final class AssistantController {
         }
       }
     }
+    // Разобранная фраза о паролях при выключенном навыке не становится
+    // задачей.
+    final passwordsPhrase = PasswordPhrases.parse(utterance);
+    if (passwordsPhrase != null &&
+        passwordsPhrase.confidence >= PasswordPhrases.firm &&
+        _passwordsOff) {
+      session.lastConnectorId = null;
+      return session.reply(
+        'passwords.off',
+        intent: 'passwords.off',
+        status: AssistantStatus.noAction,
+      );
+    }
     final candidates = <(Connector, ConnectorMatch)>[];
     for (final connector in connectors) {
+      if (hideFromNetwork && connector.info.requiresNetwork) continue;
       final ConnectorMatch? match;
       try {
         match = connector.match(utterance);
@@ -602,7 +626,8 @@ final class AssistantController {
         _speakAsAsker(asker, addressed: addressed, trailing: named);
         // Владелец может не принять согласие с оговоркой («да, но хлеб не
         // трогай» в ответ на список задач) и переспросить.
-        final instead = owner is ConfirmationFollowUp
+        final instead = owner is ConfirmationFollowUp &&
+                !(hideFromNetwork && owner.info.requiresNetwork)
             ? (owner as ConfirmationFollowUp)
                 .matchLeadingAnswer(answerUtterance, pending, reply)
             : null;
@@ -646,6 +671,17 @@ final class AssistantController {
     if (candidates.any(((Connector, ConnectorMatch) c) => !c.$2.implicit)) {
       candidates.removeWhere(
         ((Connector, ConnectorMatch) c) => c.$2.implicit,
+      );
+    }
+
+    // Явная фраза о паролях — у навыка «Пароли» (раздел 6): «добавь
+    // пароль для озона» — не задача «Пароль для озона».
+    if (candidates.any(
+      ((Connector, ConnectorMatch) c) =>
+          c.$1.info.id == passwordsId && !c.$2.implicit,
+    )) {
+      candidates.removeWhere(
+        ((Connector, ConnectorMatch) c) => c.$1.info.id != passwordsId,
       );
     }
 
@@ -747,6 +783,43 @@ final class AssistantController {
     if (!leaked && !text.guarded) return response;
     outboundLeaks++;
     return response.withText(text.text, values);
+  }
+
+  /// Id навыка «Пароли» (ADR-014).
+  static const String passwordsId = 'passwords';
+
+  /// Навык «Пароли» есть в сборке, но выключен: фразы о паролях получают
+  /// `passwords.off`, а не становятся задачами (D18).
+  bool get _passwordsOff =>
+      extensions.info(passwordsId) != null &&
+      !extensions.isEnabled(passwordsId);
+
+  /// Нажатие во временной карточке навыка «Пароли» ([SecureCardCommand]):
+  /// выбор записи, «Удалить», повтор команды после открытия хранилища,
+  /// отметка «пароль был показан». Говорит помощник [personaId] (автор
+  /// карточки). `null` — навык выключен.
+  Future<AssistantResponse?> secureCardAction(
+    SecureCardRequest card,
+    String action, {
+    String? entryId,
+    String? personaId,
+  }) async {
+    final owner = _connectors
+        .where((Connector c) => c.info.id == passwordsId)
+        .firstOrNull;
+    if (owner == null) return null;
+    final speaker = Personas.byId(personaId) ?? personas.responder;
+    _voiceOf(speaker);
+    final response = await _run(
+      owner,
+      ConnectorMatch(
+        connectorId: owner.info.id,
+        commandId: '$passwordsId.card',
+        confidence: 1,
+        payload: SecureCardCommand(card, action, entryId: entryId),
+      ),
+    );
+    return response.withPersona(speaker.id);
   }
 
   // ------------------------------------------------- массовые команды

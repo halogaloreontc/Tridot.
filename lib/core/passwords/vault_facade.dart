@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'vault.dart';
 import 'vault_format.dart';
+import 'vault_prefs.dart';
 
 /// Ссылка на запись для навыка: id, название и логин в маске. Ни пароля,
 /// ни подсказки, ни заметки.
@@ -10,10 +11,19 @@ final class VaultEntryRef {
     required this.id,
     required this.service,
     required this.maskedLogin,
+    this.names = const <String>[],
+    this.hasLogin = false,
   });
 
   final String id;
   final String service;
+
+  /// По чему искать запись: название, синонимы и хосты адресов (без
+  /// схемы и `www.`). Не секрет.
+  final List<String> names;
+
+  /// У записи есть логин.
+  final bool hasLogin;
 
   /// `iv***@mail.ru` (D15) или логин целиком, если включено
   /// `prefs.login_in_replies`.
@@ -111,10 +121,45 @@ final class VaultFacade {
   VaultEntryRef _ref(VaultEntry entry) => VaultEntryRef(
         id: entry.id,
         service: entry.service,
-        maskedLogin: _vault.prefs['login_in_replies'] == true
-            ? entry.login
-            : maskLogin(entry.login),
+        maskedLogin: loginInReplies ? entry.login : maskLogin(entry.login),
+        names: <String>[
+          entry.service,
+          ...entry.aliases,
+          for (final url in entry.urls) hostOf(url),
+        ],
+        hasLogin: entry.login.isNotEmpty,
       );
+
+  /// Ссылка на запись [id] или `null`.
+  VaultEntryRef? ref(String id) {
+    final entry = _vault.entry(id);
+    return entry == null ? null : _ref(entry);
+  }
+
+  /// Хост адреса без схемы, порта, пути и `www.`: `https://www.ozon.ru/x`
+  /// → `ozon.ru`; `android://…@com.vk` → `com.vk`.
+  static String hostOf(String url) {
+    var rest = url.trim().toLowerCase();
+    final scheme = rest.indexOf('://');
+    if (scheme >= 0) rest = rest.substring(scheme + 3);
+    final at = rest.lastIndexOf('@');
+    if (at >= 0) rest = rest.substring(at + 1);
+    final end = rest.indexOf(RegExp('[/:?#]'));
+    if (end >= 0) rest = rest.substring(0, end);
+    return rest.startsWith('www.') ? rest.substring(4) : rest;
+  }
+
+  /// Логин в ответах целиком (`prefs.login_in_replies`), иначе в маске.
+  bool get loginInReplies => VaultPrefs.loginInReplies.of(_vault.prefs);
+
+  /// Сколько секунд виден показанный пароль (`prefs.reveal_s`).
+  int get revealSeconds => VaultPrefs.revealSeconds.of(_vault.prefs);
+
+  /// Через сколько секунд очищается буфер (`prefs.clipboard_s`).
+  int get clipboardSeconds => VaultPrefs.clipboardSeconds.of(_vault.prefs);
+
+  /// Минут простоя до запирания.
+  int get idleMinutes => _vault.idleTimeout.inMinutes;
 
   bool hasHint(String id) => _vault.entry(id)?.hasHint ?? false;
 
@@ -181,6 +226,7 @@ final class VaultFacade {
   /// (по умолчанию выключено, решение владельца №1).
   String? hintForHistory(String id) {
     if (_vault.prefs['hints_in_history'] != true) return null;
+    if (!VaultPrefs.hintsInHistory.of(_vault.prefs)) return null;
     final hint = _vault.entry(id)?.hint;
     return hint == null || hint.isEmpty ? null : hint;
   }

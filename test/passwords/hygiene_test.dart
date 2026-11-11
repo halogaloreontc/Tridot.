@@ -9,6 +9,7 @@ import 'package:local_assistant/core/chats/chat_models.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/models/secure_card.dart';
 import 'package:local_assistant/core/replies/reply_library.dart';
+import 'package:local_assistant/core/settings/app_settings.dart';
 import 'package:path/path.dart' as p;
 
 /// Строки кода без комментариев.
@@ -202,6 +203,113 @@ void main() {
         'Не получилось выполнить действие.',
       );
     });
+  });
+
+  test(
+      'экраны паролей: без SelectableText и автозаполнения, поля — '
+      'через SecretField', () {
+    final files = _dart('lib/app/passwords');
+    expect(files, isNotEmpty);
+    for (final file in files) {
+      final source =
+          _code(file).map(((int, String) line) => line.$2).join('\n');
+      expect(source, isNot(contains('SelectableText(')), reason: _rel(file));
+      expect(source, isNot(contains('AutofillGroup')), reason: _rel(file));
+      expect(
+        RegExp(r'autofillHints:(?!\s*null)').hasMatch(source),
+        isFalse,
+        reason: _rel(file),
+      );
+      // Скрытое поле — только в SecretField.
+      if (!file.path.endsWith('secret_widgets.dart')) {
+        expect(source, isNot(contains('obscureText')), reason: _rel(file));
+      }
+      // Системных уведомлений и озвучивания навык не делает (D23).
+      for (final banned in <String>['flutter_tts', 'notification']) {
+        expect(source, isNot(contains(banned)), reason: _rel(file));
+      }
+    }
+  });
+
+  test('навык и фразы: только VaultFacade, без сети', () {
+    final connector = File(
+      'lib/core/skills/passwords/passwords_connector.dart',
+    ).readAsStringSync();
+    expect(connector, contains('VaultFacade'));
+    for (final banned in <String>['readSecret', 'unsafeBytes', '.note']) {
+      expect(connector, isNot(contains(banned)), reason: banned);
+    }
+    // Подсказку навык читает только через hintForHistory (при флаге).
+    expect(
+      RegExp(r'\b(?:ref|entry|e|vault|_vault)\.hint\b').hasMatch(connector),
+      isFalse,
+    );
+  });
+
+  test('ключи навыка этапа 2 есть во всех стилях, предупреждения — protected',
+      () {
+    final library = ReplyLibrary.builtIn;
+    const protectedIds = <String>[
+      'passwords.off',
+      'passwords.locked',
+      'passwords.noRecovery',
+      'passwords.lostDevice',
+      'passwords.notFoundOnDevice',
+      'passwords.reveal.confirm',
+      'passwords.revealed',
+      'passwords.copy.confirm',
+      'passwords.copy.done',
+      'passwords.copy.unavailable',
+      'passwords.delete.confirm',
+      'passwords.delete.button',
+      'passwords.failed',
+      'secret.redacted.off',
+    ];
+    for (final id in protectedIds) {
+      expect(library.schema[id]?.protected, isTrue, reason: id);
+    }
+    final ids = library.schema.specs.keys
+        .where((String id) => id.startsWith('passwords.'))
+        .toList();
+    expect(ids.length, greaterThanOrEqualTo(35));
+    for (final catalog in library.styles) {
+      for (final id in <String>[...ids, 'secret.redacted.off']) {
+        expect(
+          library.variants(id, catalog.style),
+          isNotEmpty,
+          reason: '$id/${catalog.style}',
+        );
+      }
+    }
+    // secret.redacted говорит, куда вносить пароли.
+    expect(
+      library.render(const Reply('secret.redacted'), const ReplyVoice()),
+      contains('«Пароли»'),
+    );
+  });
+
+  test('settings.json: только версия файла и «хранилище было»', () {
+    const settings = AppSettings(
+      passwordsSeenRev: 42,
+      passwordsVaultExisted: true,
+    );
+    final json = settings.toJson();
+    expect(json['passwords.seen_rev'], 42);
+    expect(json['passwords.vault_existed'], isTrue);
+    final back = AppSettings.fromJson(json);
+    expect(back.passwordsSeenRev, 42);
+    expect(back.passwordsVaultExisted, isTrue);
+    expect(
+      const AppSettings().toJson().keys.where((k) => k.contains('passw')),
+      isEmpty,
+    );
+    expect(
+      AppSettings.fromJson(<String, dynamic>{
+        'passwords.seen_rev': 'x',
+        'passwords.vault_existed': 'да',
+      }).passwordsSeenRev,
+      isNull,
+    );
   });
 
   test('ChatMessage.secureCard: нет в toJson и copyAs', () {

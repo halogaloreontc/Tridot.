@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app/assistant_theme.dart';
 import 'app/home_page.dart';
+import 'app/passwords/passwords_kit.dart';
 import 'core/app_info.dart';
 import 'core/chats/chat_store.dart';
 import 'core/connectors/connector.dart';
@@ -20,7 +21,6 @@ import 'core/connectors/tasks_connector.dart';
 import 'core/extensions/extension_registry.dart';
 import 'core/passwords/vault.dart';
 import 'core/passwords/vault_crypto.dart';
-import 'core/passwords/vault_facade.dart';
 import 'core/passwords/vault_store.dart';
 import 'core/scenario/assistant_controller.dart';
 import 'core/scenario/scenario_parser.dart';
@@ -28,6 +28,7 @@ import 'core/services/clock.dart';
 import 'core/services/task_service.dart';
 import 'core/settings/app_settings.dart';
 import 'core/skills/calculator/calculator_connector.dart';
+import 'core/skills/passwords/passwords_connector.dart';
 import 'core/skills/talk/talk_connector.dart';
 import 'core/storage/json_task_repository.dart';
 import 'core/storage/storage_info.dart';
@@ -77,6 +78,13 @@ Future<void> main() async {
         clock: clock,
       ),
   ];
+  // Хранилище паролей (ADR-014): <поддержка>/assistant/vault, отдельно от
+  // secrets.json склада (D19) и исключено из облачной копии Android
+  // (D20). Транспорт ему не передаётся. Навык видит только VaultFacade;
+  // показ, копирование и ввод — экраны и карточки lib/app. Если libsodium
+  // не загрузилась — навык честно говорит, что хранилище недоступно.
+  final vault = await _openVault(p.join(support.path, 'assistant', 'vault'));
+  final passwords = vault == null ? null : PasswordsKit(vault: vault);
   // Навыки и подключения регистрируются здесь; порядок важен только при
   // равной уверенности (тогда маршрутизатор всё равно переспросит). Что
   // включено — выбор пользователя в «Настройки → Расширения».
@@ -86,21 +94,22 @@ Future<void> main() async {
       for (final connection in connections) connection.connector,
       const CalculatorConnector(),
       TalkConnector(taskService: tasks),
+      // Включаемый навык вне ролей, по умолчанию выключен (D1).
+      PasswordsConnector(
+        vault: passwords?.facade,
+        canCopySecrets: passwords?.canCopySecrets ?? false,
+        vaultExisted: () => passwords?.vaultExisted ?? false,
+      ),
     ],
     packs: packs,
   );
   await packs.load();
-  // Хранилище паролей (ADR-014): <поддержка>/assistant/vault, отдельно от
-  // secrets.json склада (D19) и исключено из облачной копии Android
-  // (D20). Транспорт ему не передаётся. Пока навыка нет (этап 1), оно
-  // нужно SecretGuard: при открытом хранилище пароль в чате узнаётся по
-  // отпечатку. Если libsodium не загрузилась — приложение работает без
-  // хранилища.
-  final vault = await _openVault(p.join(support.path, 'assistant', 'vault'));
+  // SecretGuard: при открытом хранилище пароль в чате узнаётся и по
+  // отпечатку, без слова «пароль».
   final assistant = AssistantController(
     extensions: extensions,
     clock: clock,
-    knownSecret: vault == null ? null : VaultFacade(vault).knownSecret,
+    knownSecret: passwords?.facade.knownSecret,
   );
   runApp(
     AssistantApp(
@@ -111,6 +120,7 @@ Future<void> main() async {
       settingsStore: JsonSettingsStore(p.join(folder, 'settings.json')),
       chatStore: JsonChatStore(chatsPath),
       connections: connections,
+      passwords: passwords,
     ),
   );
 }
@@ -166,6 +176,7 @@ final class AssistantApp extends StatelessWidget {
     this.settingsStore,
     this.chatStore,
     this.connections = const <ConnectionService>[],
+    this.passwords,
   });
 
   final AssistantController assistant;
@@ -177,6 +188,9 @@ final class AssistantApp extends StatelessWidget {
 
   /// Подключения к приложениям: экран «Настройки → Подключения».
   final List<ConnectionService> connections;
+
+  /// Навык «Пароли»; `null` — libsodium не загрузилась.
+  final PasswordsKit? passwords;
 
   @override
   Widget build(BuildContext context) {
@@ -194,6 +208,7 @@ final class AssistantApp extends StatelessWidget {
         settingsStore: settingsStore,
         chatStore: chatStore,
         connections: connections,
+        passwords: passwords,
       ),
     );
   }

@@ -68,6 +68,10 @@ final class _LoggingStore implements VaultStore {
   Future<void> writeAttempts(Uint8List bytes) => inner.writeAttempts(bytes);
   @override
   Future<void> removeTemporary() => inner.removeTemporary();
+  @override
+  Future<void> archiveVault(String name) => inner.archiveVault(name);
+  @override
+  Future<List<String>> archived() => inner.archived();
 }
 
 void main() {

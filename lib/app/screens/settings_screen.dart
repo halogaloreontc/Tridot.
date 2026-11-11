@@ -5,6 +5,7 @@ import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
+import '../passwords/passwords_kit.dart';
 import '../widgets/extensions_section.dart';
 import '../widgets/personas_section.dart';
 import '../widgets/roles_section.dart';
@@ -21,6 +22,7 @@ class SettingsScreen extends StatelessWidget {
     required this.messageCount,
     this.extensions,
     this.connections = const <ConnectionService>[],
+    this.passwords,
   });
 
   final AppSettings settings;
@@ -36,6 +38,9 @@ class SettingsScreen extends StatelessWidget {
   /// Подключения к приложениям: у их строк в «Подключениях» — статус и
   /// «Настроить».
   final List<ConnectionService> connections;
+
+  /// Навык «Пароли»: статус и «Настроить» в «Расширениях».
+  final PasswordsKit? passwords;
 
   static const applicationName = AppInfo.name;
 
@@ -129,6 +134,7 @@ class SettingsScreen extends StatelessWidget {
                   settings: settings,
                   onChanged: onChanged,
                   connections: connections,
+                  passwords: passwords,
                 ),
               const SectionLabel('Чат'),
               Padding(

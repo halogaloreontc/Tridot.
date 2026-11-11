@@ -13,6 +13,7 @@ import '../core/connectors/manifest/connection.dart';
 import '../core/formatting/due_format.dart';
 import '../core/models/assistant_types.dart';
 import '../core/models/bulk.dart';
+import '../core/models/secure_card.dart';
 import '../core/models/task.dart';
 import '../core/passwords/secret_guard.dart';
 import '../core/replies/reply_library.dart';
@@ -23,6 +24,10 @@ import '../core/extensions/extension_registry.dart';
 import '../core/settings/app_settings.dart';
 import '../core/storage/storage_info.dart';
 import 'assistant_theme.dart';
+import 'passwords/entry_screens.dart';
+import 'passwords/passwords_kit.dart';
+import 'passwords/passwords_screen.dart';
+import 'passwords/secure_card_view.dart';
 import 'screens/overview_screen.dart';
 import 'screens/planning_screen.dart';
 import 'screens/projects_screen.dart';
@@ -110,6 +115,7 @@ final class HomePage extends StatefulWidget {
     this.settingsStore,
     this.chatStore,
     this.connections = const <ConnectionService>[],
+    this.passwords,
   });
 
   final AssistantController assistant;
@@ -117,6 +123,10 @@ final class HomePage extends StatefulWidget {
   final Clock clock;
   final StorageInfo storage;
   final SettingsStore? settingsStore;
+
+  /// Навык «Пароли» (ADR-014): хранилище, буфер, запирание; `null` —
+  /// хранилища нет (не загрузилась libsodium).
+  final PasswordsKit? passwords;
 
   /// Где хранятся чаты (ADR-010). По умолчанию — в памяти, как задачи и
   /// настройки в тестах и режиме «Только в памяти».
@@ -251,11 +261,38 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _settingsReady = _loadSettings();
     _chatsReady = _loadChats();
     _refresh();
+    // Хранилище запирается, как только навык выключили (D18).
+    final passwords = widget.passwords;
+    if (passwords != null) {
+      passwords.lifecycle.follow(widget.assistant.extensions);
+      passwords.onSettings = _onPasswordsSettings;
+      passwords.addListener(_onPasswordsChanged);
+    }
+  }
+
+  /// Служебные флаги навыка «Пароли» — в settings.json (только версия
+  /// файла и «хранилище было», 4.1 и D28).
+  void _onPasswordsSettings({int? seenRev, bool? vaultExisted}) {
+    if (!mounted) return;
+    _changeSettings(
+      _settings.copyWith(
+        passwordsSeenRev: seenRev,
+        passwordsVaultExisted: vaultExisted,
+      ),
+    );
+  }
+
+  void _onPasswordsChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.passwords?.removeListener(_onPasswordsChanged);
+    if (widget.passwords?.onSettings == _onPasswordsSettings) {
+      widget.passwords?.onSettings = null;
+    }
     for (final connection in widget.connections) {
       connection.removeSessionListener(_onSessionChanged);
     }
@@ -288,6 +325,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Хранилище паролей: фон и «спрятано» запирают, потеря фокуса прячет
+    // показанное (3.6).
+    widget.passwords?.lifecycle.onAppState(state);
     if (state == AppLifecycleState.resumed) _refresh();
     if (state == AppLifecycleState.paused) _saveDocument();
     if (state == AppLifecycleState.paused ||
@@ -302,6 +342,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// отвечает — выход не держим дольше [_exitFlushLimit].
   @override
   Future<AppExitResponse> didRequestAppExit() async {
+    try {
+      await widget.passwords?.lifecycle.onExit();
+    } on Object {
+      // Запереть не помешает выходу.
+    }
     try {
       await _book.flush().timeout(_exitFlushLimit);
     } on Object {
@@ -351,6 +396,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (pruned != null) unawaited(_settingsStore.save(pruned));
     _applyExtensions(settings);
     widget.assistant.personas = settings.personas;
+    widget.passwords?.syncSettings(
+      seenRev: settings.passwordsSeenRev,
+      vaultExisted: settings.passwordsVaultExisted,
+    );
     setState(() {
       _settings = settings;
       _settingsLoaded = true;
@@ -1531,6 +1580,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           messageCount: _book.totalMessages,
           extensions: widget.assistant.extensions,
           connections: widget.connections,
+          passwords: widget.passwords,
         );
       case AppSection.tasks:
         return _buildTasksWorkspace(wide: wide);
@@ -1614,8 +1664,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         day = messageDay;
         rows.add(_DaySeparator(label: _dayLabel(messageDay)));
       }
-      final key =
-          message.fromUser ? _messageKeys.putIfAbsent(i, GlobalKey.new) : null;
+      // Строка с карточкой паролей — с ключом: новое сообщение снизу не
+      // пересоздаёт её (показанный пароль не гаснет от «был показан»).
+      final key = message.fromUser
+          ? _messageKeys.putIfAbsent(i, GlobalKey.new)
+          : message.secureCard != null
+              ? ValueKey<String>('secure-row-${message.id}')
+              : null;
       final (linkLabel, linkKey) = _linkOf(message);
       rows.add(
         _MessageRow(
@@ -1644,7 +1699,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 lastWithChecklist,
                 viewportHeight,
               ) ??
-              _actionCard(message, i, lastWithCard),
+              _actionCard(message, i, lastWithCard) ??
+              _secureCard(message),
         ),
       );
     }
@@ -1773,6 +1829,53 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  /// Временная карточка навыка «Пароли» (D10): только в памяти, после
+  /// перезапуска её нет.
+  Widget? _secureCard(ChatMessage message) {
+    final card = message.secureCard;
+    final passwords = widget.passwords;
+    if (card == null || passwords == null) return null;
+    return SecureCardView(
+      card: card,
+      kit: passwords,
+      busy: _bulkBusy || _sending,
+      onCommand: (SecureCardRequest card, String action, {String? entryId}) =>
+          unawaited(
+        _cardAction(
+          () => widget.assistant.secureCardAction(
+            card,
+            action,
+            entryId: entryId,
+            personaId: message.personaId,
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool get _passwordsEnabled =>
+      widget.passwords != null &&
+      widget.assistant.extensions.isEnabled(AssistantController.passwordsId);
+
+  Future<void> _openPasswords({bool add = false}) async {
+    final passwords = widget.passwords;
+    if (passwords == null) return;
+    if (!add || !passwords.isUnlocked) {
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (BuildContext context) =>
+              PasswordsScreen(kit: passwords, unlockOnly: add),
+        ),
+      );
+    }
+    if (!add || !mounted || !passwords.isUnlocked) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => EntryEditorScreen(kit: passwords),
+      ),
+    );
+  }
+
   /// Колонка чата: не шире [chatColumnWidth] плюс место под хронику
   /// команд справа, по центру. Одна и та же для ленты сообщений, «Кому» и
   /// нижней части, поэтому их края совпадают. Сама хроника лежит слоем
@@ -1875,6 +1978,21 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               onModeChanged: _setMode,
               onSend: _send,
               onTemplate: _insertTemplate,
+              // Пункты навыка «Пароли» в «+» — пока он включён.
+              extraActions: _passwordsEnabled
+                  ? <ComposerAction>[
+                      ComposerAction(
+                        'Пароли',
+                        Icons.key_outlined,
+                        () => unawaited(_openPasswords()),
+                      ),
+                      ComposerAction(
+                        'Добавить запись',
+                        Icons.add_moderator_outlined,
+                        () => unawaited(_openPasswords(add: true)),
+                      ),
+                    ]
+                  : const <ComposerAction>[],
               onDocumentSource: (DocumentSource source) => _announce(
                 'Подключение «${source.label}» — следующий этап: '
                 'документы будут создаваться и правиться через помощника.',
@@ -2640,6 +2758,8 @@ final class _QuickActionsState extends State<_QuickActions> {
         'search' => Icons.search,
         'inbox' => Icons.move_to_inbox_outlined,
         'photo' => Icons.no_photography_outlined,
+        'key' => Icons.key_outlined,
+        'lock' => Icons.lock_outline,
         _ => Icons.chat_bubble_outline,
       };
 

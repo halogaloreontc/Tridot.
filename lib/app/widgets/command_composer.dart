@@ -26,6 +26,16 @@ enum DocumentSource {
   final IconData icon;
 }
 
+/// Пункт «+» навыка (например, «Пароли»): открывает экран, а не
+/// вставляет текст.
+final class ComposerAction {
+  const ComposerAction(this.label, this.icon, this.onSelected);
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onSelected;
+}
+
 const List<CommandTemplate> defaultTemplates = <CommandTemplate>[
   CommandTemplate('Новая задача', 'Добавь задачу «|»', icon: Icons.add),
   CommandTemplate(
@@ -63,6 +73,7 @@ final class CommandComposer extends StatefulWidget {
     required this.previousCommand,
     required this.nextCommand,
     this.header,
+    this.extraActions = const <ComposerAction>[],
   });
 
   final TextEditingController controller;
@@ -85,6 +96,10 @@ final class CommandComposer extends StatefulWidget {
 
   /// Строка над полем: выбор адресата в дуэте помощников.
   final Widget? header;
+
+  /// Пункты включённых навыков в «+» (раздел 8: «Пароли», «Добавить
+  /// запись»).
+  final List<ComposerAction> extraActions;
 
   @override
   State<CommandComposer> createState() => _CommandComposerState();
@@ -204,6 +219,7 @@ final class _CommandComposerState extends State<CommandComposer> {
                       if (value is DocumentSource) {
                         widget.onDocumentSource(value);
                       }
+                      if (value is ComposerAction) value.onSelected();
                     },
                     color: AssistantColors.raised,
                     itemBuilder: (BuildContext context) =>
@@ -229,6 +245,22 @@ final class _CommandComposerState extends State<CommandComposer> {
                           ),
                         ),
                       const PopupMenuDivider(),
+                      if (widget
+                          .extraActions.isNotEmpty) ...<PopupMenuEntry<Object>>[
+                        for (final action in widget.extraActions)
+                          PopupMenuItem<Object>(
+                            key: Key('composer-action-${action.label}'),
+                            value: action,
+                            child: Row(
+                              children: <Widget>[
+                                Icon(action.icon, size: 18),
+                                const SizedBox(width: 10),
+                                Flexible(child: Text(action.label)),
+                              ],
+                            ),
+                          ),
+                        const PopupMenuDivider(),
+                      ],
                       const PopupMenuItem<Object>(
                         enabled: false,
                         height: 28,

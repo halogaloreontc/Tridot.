@@ -50,6 +50,14 @@ abstract interface class VaultStore {
 
   /// Остатки `.tmp` после сбоя (они зашифрованы, но не нужны).
   Future<void> removeTemporary();
+
+  /// «Начать заново» без мастер-пароля (5.11): файл хранилища уходит в
+  /// `archive/` под именем [name] (не стирается — вдруг вспомнится),
+  /// `vault.prev` и `vault.v<N>.bak` удаляются. Счётчик ошибок остаётся.
+  Future<void> archiveVault(String name);
+
+  /// Имена файлов в `archive/` по порядку.
+  Future<List<String>> archived();
 }
 
 /// Хранилище в каталоге на диске.
@@ -77,7 +85,11 @@ final class FileVaultStore implements VaultStore {
   static const String previousName = 'vault.prev';
   static const String attemptsName = 'attempts.json';
 
+  static const String archiveName = 'archive';
+
   static String backupName(int version) => 'vault.v$version.bak';
+
+  static final RegExp _archiveName = RegExp(r'^[a-z0-9-]+\.relayvault$');
 
   static final RegExp _backup = RegExp(r'^vault\.v(\d+)\.bak$');
 
@@ -213,6 +225,33 @@ final class FileVaultStore implements VaultStore {
       });
 
   @override
+  Future<void> archiveVault(String name) => _io(() async {
+        if (!_archiveName.hasMatch(name)) throw ArgumentError('имя архива');
+        await _prepare();
+        final archive = Directory(_path(archiveName));
+        if (!await archive.exists()) await archive.create();
+        await _chmod('700', archive.path);
+        final current = File(_path(vaultName));
+        if (!await current.exists()) return;
+        await _rename(current, p.join(archive.path, name));
+        final previous = File(_path(previousName));
+        if (await previous.exists()) await previous.delete();
+        for (final version in await backupVersions()) {
+          await deleteBackup(version);
+        }
+      });
+
+  @override
+  Future<List<String>> archived() => _io(() async {
+        final archive = Directory(_path(archiveName));
+        if (!await archive.exists()) return const <String>[];
+        return <String>[
+          await for (final entity in archive.list())
+            if (entity is File) p.basename(entity.path),
+        ]..sort();
+      });
+
+  @override
   String toString() => 'FileVaultStore';
 }
 
@@ -291,6 +330,24 @@ final class InMemoryVaultStore implements VaultStore {
 
   @override
   Future<void> removeTemporary() async {}
+
+  @override
+  Future<void> archiveVault(String name) async {
+    final current = files.remove(FileVaultStore.vaultName);
+    if (current == null) return;
+    files['${FileVaultStore.archiveName}/$name'] = current;
+    files.remove(FileVaultStore.previousName);
+    files.removeWhere(
+      (String key, _) => FileVaultStore._backup.hasMatch(key),
+    );
+  }
+
+  @override
+  Future<List<String>> archived() async => <String>[
+        for (final key in files.keys)
+          if (key.startsWith('${FileVaultStore.archiveName}/'))
+            key.substring(FileVaultStore.archiveName.length + 1),
+      ]..sort();
 
   @override
   String toString() => 'InMemoryVaultStore';

@@ -4,7 +4,10 @@ import '../../core/app_info.dart';
 import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
+import '../../core/passwords/vault.dart';
 import '../assistant_theme.dart';
+import '../passwords/passwords_kit.dart';
+import '../passwords/passwords_screen.dart';
 import 'connection_screen.dart';
 import 'task_tile.dart';
 
@@ -27,12 +30,16 @@ class ExtensionsSection extends StatefulWidget {
     required this.settings,
     required this.onChanged,
     this.connections = const <ConnectionService>[],
+    this.passwords,
   });
 
   final ExtensionRegistry registry;
   final AppSettings settings;
   final ValueChanged<AppSettings> onChanged;
   final List<ConnectionService> connections;
+
+  /// Навык «Пароли»: статус хранилища и «Настроить» — экран «Пароли».
+  final PasswordsKit? passwords;
 
   @override
   State<ExtensionsSection> createState() => _ExtensionsSectionState();
@@ -46,11 +53,16 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
     for (final connection in widget.connections) {
       connection.addListener(_changed);
     }
+    widget.passwords?.addListener(_changed);
   }
 
   @override
   void didUpdateWidget(ExtensionsSection oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.passwords != widget.passwords) {
+      oldWidget.passwords?.removeListener(_changed);
+      widget.passwords?.addListener(_changed);
+    }
     if (oldWidget.registry != widget.registry) {
       oldWidget.registry.removeListener(_changed);
       widget.registry.addListener(_changed);
@@ -65,6 +77,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
 
   @override
   void dispose() {
+    widget.passwords?.removeListener(_changed);
     widget.registry.removeListener(_changed);
     for (final connection in widget.connections) {
       connection.removeListener(_changed);
@@ -99,6 +112,37 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
   void _changed() {
     if (mounted) setState(() {});
   }
+
+  /// Статус хранилища в плитке «Пароли» (раздел 8).
+  String _passwordsStatus(PasswordsKit kit, bool enabled) {
+    if (!enabled) {
+      return kit.vaultExisted || kit.state != VaultState.notCreated
+          ? 'Выключено — данные сохранены и заперты'
+          : 'Выключено';
+    }
+    switch (kit.state) {
+      case VaultState.notCreated:
+        return kit.vaultExisted
+            ? 'Не найдено на устройстве — восстановить можно из копии'
+            : 'Не создано';
+      case VaultState.locked:
+      case VaultState.disabled:
+        return 'Заперто';
+      case VaultState.unlocked:
+        final at = kit.vault.lockAt?.toLocal();
+        return at == null
+            ? 'Открыто'
+            : 'Открыто до ${at.hour.toString().padLeft(2, '0')}:'
+                '${at.minute.toString().padLeft(2, '0')}';
+    }
+  }
+
+  Future<void> _openPasswords(PasswordsKit kit) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => PasswordsScreen(kit: kit),
+        ),
+      );
 
   ExtensionChoice get _choice => widget.settings.extensionChoice;
 
@@ -236,6 +280,20 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
                   if (_roleNote(info) case final String note) note,
                 ].join('. '),
                 onConfigure: () => _configure(info, service),
+              )
+            else if (info.id == PasswordsKit.skillId &&
+                widget.passwords != null)
+              _ExtensionTile(
+                info: info,
+                enabled: registry.enabledUnder(choice, info),
+                onChanged: _switch(info),
+                status: _passwordsStatus(
+                  widget.passwords!,
+                  registry.enabledUnder(choice, info),
+                ),
+                onConfigure: registry.enabledUnder(choice, info)
+                    ? () => _openPasswords(widget.passwords!)
+                    : null,
               )
             else
               _ExtensionTile(

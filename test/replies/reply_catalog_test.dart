@@ -57,6 +57,12 @@ const Map<String, String> facts = <String, String>{
   'login': 'ivanov',
   'now': 'petrov',
   'right': 'перемещение товара',
+  // Навык «Пароли» (ADR-014): только синтетика, без паролей.
+  'service': 'Почта',
+  'hint': 'CANARY-подсказка',
+  'minutes': '5',
+  'seconds': '15',
+  'code': 'io',
 };
 
 /// Подстановки-числа с формами слова: проверяются при 1, 2, 3, 5, 11, 21.

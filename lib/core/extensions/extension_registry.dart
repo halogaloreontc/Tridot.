@@ -187,7 +187,8 @@ final class ExtensionRegistry {
               found,
       ];
 
-  /// Кнопки быстрых действий включённых ролей, без повторов по подписи.
+  /// Кнопки быстрых действий включённых ролей, затем включённых навыков
+  /// вне ролей ([ConnectorInfo.chips], D17), без повторов по подписи.
   /// Кнопка, которой нужно выключенное расширение ([RoleChip.needs]), не
   /// показывается: она бы ничего не сделала.
   List<RoleChip> get activeChips {
@@ -197,6 +198,11 @@ final class ExtensionRegistry {
         for (final chip in role.chips)
           if (chip.needs == null || isEnabled(chip.needs!))
             if (seen.add(chip.label)) chip,
+      for (final connector in enabledConnectors)
+        if (rolesOf(connector.info.id).isEmpty)
+          for (final chip in connector.info.chips)
+            if (chip.needs == null || isEnabled(chip.needs!))
+              if (seen.add(chip.label)) chip,
     ];
   }
 

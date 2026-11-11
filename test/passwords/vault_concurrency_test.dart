@@ -321,4 +321,8 @@ final class _HookStore implements VaultStore {
 
   @override
   Future<void> removeTemporary() => inner.removeTemporary();
+  @override
+  Future<void> archiveVault(String name) => inner.archiveVault(name);
+  @override
+  Future<List<String>> archived() => inner.archived();
 }
