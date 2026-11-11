@@ -144,6 +144,8 @@ void main() {
       expect(info.sensitive, isTrue);
       expect(info.chips.map((RoleChip c) => c.label), <String>[
         'Подсказка к паролю…',
+        'Сгенерировать пароль',
+        'Проверить пароли',
         'Открыть пароли',
       ]);
       expect(
@@ -372,6 +374,50 @@ void main() {
       expect(assistant.session.pendingConfirmation, isNull);
     });
 
+    test('удаление важной: кнопка без мастер-пароля — карточка снова',
+        () async {
+      await setUpWith();
+      await vault.create(secret(Canary.master), params: fastKdf);
+      final id = await vault.addEntry(
+        service: 'Почта',
+        password: secret(Canary.password),
+        important: true,
+      );
+      final ask = await assistant.handle('удали пароль от почты');
+      expect(ask.replyId, 'passwords.delete.confirm');
+      final card = ask.secureCard!;
+      var response = await assistant.secureCardAction(
+        card,
+        SecureCardCommand.delete,
+        entryId: id,
+      );
+      expect(response!.replyId, 'passwords.delete.master');
+      expect(response.secureCard!.kind, SecureCardKind.delete);
+      expect(response.secureCard!.entryIds, <String>[id]);
+      expect(vault.entry(id), isNotNull);
+      expectNoSecrets(response);
+      // Мастер-пароль, набранный в чате, ничего не подтверждает.
+      response = await assistant.handle(Canary.master);
+      expect(vault.entry(id), isNotNull);
+      expectNoSecrets(response);
+      response = await assistant.secureCardAction(
+        card,
+        SecureCardCommand.delete,
+        entryId: id,
+      );
+      expect(response!.replyId, 'passwords.delete.master');
+      expect(vault.entry(id), isNotNull);
+      // Окно карточки (askMaster → kit.confirm) подтвердило — удаляется.
+      expect(await vault.verifyMaster(secret(Canary.master)), isTrue);
+      response = await assistant.secureCardAction(
+        card,
+        SecureCardCommand.delete,
+        entryId: id,
+      );
+      expect(response!.replyId, 'passwords.delete.done');
+      expect(vault.entry(id), isNull);
+    });
+
     test('список, добавить, сменить, запереть, открыть', () async {
       await setUpWith();
       await seed();
@@ -407,10 +453,60 @@ void main() {
       final forgot = await assistant.handle('забыл мастер-пароль');
       expect(forgot.replyId, 'passwords.noRecovery');
       expect(forgot.secureCard!.kind, SecureCardKind.recovery);
+      final generated = await assistant.handle('сгенерируй пароль');
+      expect(generated.replyId, 'passwords.generate.ready');
+      expect(generated.secureCard!.kind, SecureCardKind.generate);
+      final lost = await assistant.handle('потерял телефон');
+      expect(lost.secureCard!.kind, SecureCardKind.restore);
+      final restore = await assistant.handle('восстанови пароли из копии');
+      expect(restore.replyId, 'passwords.restore.card');
+      expect(restore.secureCard!.kind, SecureCardKind.restore);
+      // Копия и импорт — только из открытого хранилища.
       expect(
-        (await assistant.handle('сгенерируй пароль')).replyId,
-        'passwords.soon',
+        (await assistant.handle('сделай резервную копию паролей')).replyId,
+        'passwords.notCreated',
       );
+    });
+
+    test('импорт, копия, восстановление: карточки экранов, без паролей',
+        () async {
+      await setUpWith();
+      await seed();
+      final cases = <String, (String, SecureCardKind)>{
+        'импорт паролей из браузера': (
+          'passwords.import.card',
+          SecureCardKind.importPreview,
+        ),
+        'сделай резервную копию паролей': (
+          'passwords.backup.card',
+          SecureCardKind.backup,
+        ),
+        'восстанови пароли из копии': (
+          'passwords.restore.card',
+          SecureCardKind.restore,
+        ),
+      };
+      for (final MapEntry(key: text, value: (reply, kind)) in cases.entries) {
+        final response = await assistant.handle(text);
+        expect(response.replyId, reply, reason: text);
+        expect(response.secureCard!.kind, kind, reason: text);
+        expect(response.secureCard!.entryIds, isEmpty);
+        expectNoSecrets(response);
+      }
+      // Заперто — сначала открыть, потом та же команда.
+      vault.lock();
+      final locked = await assistant.handle('сделай резервную копию паролей');
+      expect(locked.replyId, 'passwords.locked');
+      expect(locked.secureCard!.resume, PasswordCommands.backup);
+    });
+
+    test('не найдено на устройстве: восстановить из копии (D28)', () async {
+      await setUpWith();
+      existed = true;
+      final response = await assistant.handle('открой пароли');
+      expect(response.replyId, 'passwords.notFoundOnDevice');
+      final restore = await assistant.handle('восстанови пароли из копии');
+      expect(restore.secureCard!.kind, SecureCardKind.restore);
     });
 
     test('сервис не назван — переспросить', () async {

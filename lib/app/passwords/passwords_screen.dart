@@ -8,9 +8,13 @@ import '../../core/passwords/vault_errors.dart';
 import '../../core/passwords/vault_facade.dart';
 import '../../core/passwords/vault_format.dart';
 import '../assistant_theme.dart';
+import 'backup_screens.dart';
 import 'entry_screens.dart';
+import 'generator_view.dart';
+import 'import_screen.dart';
 import 'passwords_kit.dart';
 import 'passwords_settings_screen.dart';
+import 'recall_views.dart';
 import 'secret_widgets.dart';
 
 /// Экран «Пароли» (раздел 8): создание хранилища, замок, список записей.
@@ -85,6 +89,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         VaultState.notCreated => _CreateView(
             kit: kit,
             onCreated: () => setState(() => _recheck = true),
+            onRestored: _done,
           ),
         VaultState.locked => _LockView(kit: kit, onUnlocked: _done),
         VaultState.unlocked => _ListView(kit: kit, now: widget.now),
@@ -102,19 +107,55 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
               tooltip: 'Ещё',
               color: AssistantColors.raised,
               onSelected: (String value) {
-                if (value == 'settings') {
-                  unawaited(
-                    Navigator.of(context).push<void>(
-                      MaterialPageRoute<void>(
-                        builder: (BuildContext context) =>
-                            PasswordsSettingsScreen(kit: kit),
-                      ),
+                final Widget screen = switch (value) {
+                  'generator' => GeneratorScreen(kit: kit),
+                  'check' => CheckScreen(kit: kit),
+                  'training' => TrainingScreen(kit: kit),
+                  'import' => CsvImportScreen(kit: kit),
+                  'backup' => BackupExportScreen(kit: kit),
+                  'restore' => BackupRestoreScreen(kit: kit),
+                  _ => PasswordsSettingsScreen(kit: kit),
+                };
+                unawaited(
+                  Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (BuildContext context) => screen,
                     ),
-                  );
-                }
+                  ),
+                );
               },
               itemBuilder: (BuildContext context) =>
                   const <PopupMenuEntry<String>>[
+                PopupMenuItem<String>(
+                  key: ValueKey<String>('passwords-menu-generator'),
+                  value: 'generator',
+                  child: Text('Генератор'),
+                ),
+                PopupMenuItem<String>(
+                  key: ValueKey<String>('passwords-menu-check'),
+                  value: 'check',
+                  child: Text('Проверка'),
+                ),
+                PopupMenuItem<String>(
+                  key: ValueKey<String>('passwords-menu-training'),
+                  value: 'training',
+                  child: Text('Тренировка'),
+                ),
+                PopupMenuItem<String>(
+                  key: ValueKey<String>('passwords-menu-import'),
+                  value: 'import',
+                  child: Text('Импорт из браузера'),
+                ),
+                PopupMenuItem<String>(
+                  key: ValueKey<String>('passwords-menu-backup'),
+                  value: 'backup',
+                  child: Text('Резервная копия'),
+                ),
+                PopupMenuItem<String>(
+                  key: ValueKey<String>('passwords-menu-restore'),
+                  value: 'restore',
+                  child: Text('Восстановить из копии'),
+                ),
                 PopupMenuItem<String>(
                   value: 'settings',
                   child: Text('Настройки'),
@@ -225,10 +266,17 @@ class _Point extends StatelessWidget {
 // ------------------------------------------------------------ создание
 
 class _CreateView extends StatefulWidget {
-  const _CreateView({required this.kit, required this.onCreated});
+  const _CreateView({
+    required this.kit,
+    required this.onCreated,
+    required this.onRestored,
+  });
 
   final PasswordsKit kit;
   final VoidCallback onCreated;
+
+  /// Хранилище создано из копии — оно уже открыто.
+  final VoidCallback onRestored;
 
   @override
   State<_CreateView> createState() => _CreateViewState();
@@ -254,8 +302,17 @@ class _CreateViewState extends State<_CreateView> {
     super.dispose();
   }
 
+  Future<void> _restore() async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (BuildContext context) => BackupRestoreScreen(kit: widget.kit),
+      ),
+    );
+    if (mounted && widget.kit.isUnlocked) widget.onRestored();
+  }
+
   Future<void> _create() async {
-    final problem = masterProblem(_master.text);
+    final problem = masterProblem(_master.text, strength: widget.kit.strength);
     final mismatch = _master.text != _repeat.text;
     setState(() {
       _masterError = problem;
@@ -291,10 +348,29 @@ class _CreateViewState extends State<_CreateView> {
           const _Banner(
             key: ValueKey<String>('passwords-not-found'),
             text: 'Хранилище на этом устройстве не найдено. Если есть '
-                'резервная копия, пароли вернёт только она — восстановление '
-                'из копии появится в следующем обновлении. Можно создать '
+                'резервная копия, пароли вернёт только она. Можно и создать '
                 'новое хранилище.',
           ),
+        // D28: на новом устройстве первым пунктом — восстановление.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: kit.vaultExisted
+                ? FilledButton.icon(
+                    key: const ValueKey<String>('passwords-restore'),
+                    onPressed: _busy ? null : () => unawaited(_restore()),
+                    icon: const Icon(Icons.restore, size: 18),
+                    label: const Text('Восстановить из копии'),
+                  )
+                : OutlinedButton.icon(
+                    key: const ValueKey<String>('passwords-restore'),
+                    onPressed: _busy ? null : () => unawaited(_restore()),
+                    icon: const Icon(Icons.restore, size: 18),
+                    label: const Text('Восстановить из копии'),
+                  ),
+          ),
+        ),
         const Text(
           'Создать хранилище паролей',
           style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
@@ -777,6 +853,10 @@ class _ListViewState extends State<_ListView> {
         (VaultEntry a, VaultEntry b) =>
             a.service.toLowerCase().compareTo(b.service.toLowerCase()),
       );
+    final groups = kit.groups();
+    final reused = <String>{for (final g in groups.reused) ...g};
+    final weak = groups.weak.toSet();
+    final old = groups.old.toSet();
     final lockAt = vault.lockAt?.toLocal();
     final until = lockAt == null
         ? ''
@@ -900,6 +980,9 @@ class _ListViewState extends State<_ListView> {
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (BuildContext context, int i) => EntryTile(
                         entry: entries[i],
+                        weak: weak.contains(entries[i].id),
+                        reused: reused.contains(entries[i].id),
+                        old: old.contains(entries[i].id),
                         onTap: () => unawaited(
                           _open(EntryScreen(kit: kit, id: entries[i].id)),
                         ),
@@ -915,11 +998,33 @@ class _ListViewState extends State<_ListView> {
 
 /// Строка списка: буква-значок, сервис, логин в маске, «важный».
 class EntryTile extends StatelessWidget {
-  const EntryTile({super.key, required this.entry, this.onTap, this.trailing});
+  const EntryTile({
+    super.key,
+    required this.entry,
+    this.onTap,
+    this.trailing,
+    this.weak = false,
+    this.reused = false,
+    this.old = false,
+  });
 
   final VaultEntry entry;
   final VoidCallback? onTap;
   final Widget? trailing;
+
+  /// Значки «слабый», «повтор», «старый» (5.5).
+  final bool weak;
+  final bool reused;
+  final bool old;
+
+  static Widget _badge(String key, String tip, IconData icon, Color color) =>
+      Tooltip(
+        message: tip,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Icon(icon, key: ValueKey<String>(key), size: 18, color: color),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -948,14 +1053,39 @@ class EntryTile extends StatelessWidget {
               style: const TextStyle(color: AssistantColors.muted),
             ),
       trailing: trailing ??
-          (entry.important
-              ? const Tooltip(
-                  message: 'Важный',
-                  child: Icon(
-                    Icons.star_outline,
-                    size: 18,
-                    color: AssistantColors.warning,
-                  ),
+          (entry.important || weak || reused || old
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    if (weak)
+                      _badge(
+                        'badge-weak-${entry.id}',
+                        'Слабый',
+                        Icons.warning_amber_outlined,
+                        AssistantColors.danger,
+                      ),
+                    if (reused)
+                      _badge(
+                        'badge-reused-${entry.id}',
+                        'Повтор',
+                        Icons.copy_all_outlined,
+                        AssistantColors.warning,
+                      ),
+                    if (old)
+                      _badge(
+                        'badge-old-${entry.id}',
+                        'Давно не меняли',
+                        Icons.history,
+                        AssistantColors.muted,
+                      ),
+                    if (entry.important)
+                      _badge(
+                        'badge-important-${entry.id}',
+                        'Важный',
+                        Icons.star_outline,
+                        AssistantColors.warning,
+                      ),
+                  ],
                 )
               : null),
     );

@@ -22,6 +22,7 @@ final class AppSettings {
     this.noticeDay,
     this.passwordsSeenRev,
     this.passwordsVaultExisted = false,
+    this.passwordsTrainingDue,
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -49,6 +50,7 @@ final class AppSettings {
       noticeDay: _day(json['notice_day']),
       passwordsSeenRev: _rev(json['passwords.seen_rev']),
       passwordsVaultExisted: json['passwords.vault_existed'] == true,
+      passwordsTrainingDue: _day(json['passwords.training_due']),
     );
   }
 
@@ -176,6 +178,11 @@ final class AppSettings {
   /// да/нет: ни названий, ни числа записей.
   final bool passwordsVaultExisted;
 
+  /// Служебное (5.8): с какого дня можно снова спросить о тренировке
+  /// памяти паролей (`2026-11-12`). Только дата: ни названий, ни числа
+  /// записей. Не чаще раза в день и трёх раз в неделю.
+  final String? passwordsTrainingDue;
+
   AppSettings copyWith({
     bool? reduceMotion,
     bool? showTimestamps,
@@ -189,6 +196,7 @@ final class AppSettings {
     String? noticeDay,
     int? passwordsSeenRev,
     bool? passwordsVaultExisted,
+    String? passwordsTrainingDue,
   }) =>
       AppSettings(
         reduceMotion: reduceMotion ?? this.reduceMotion,
@@ -204,6 +212,7 @@ final class AppSettings {
         passwordsSeenRev: passwordsSeenRev ?? this.passwordsSeenRev,
         passwordsVaultExisted:
             passwordsVaultExisted ?? this.passwordsVaultExisted,
+        passwordsTrainingDue: passwordsTrainingDue ?? this.passwordsTrainingDue,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -229,6 +238,8 @@ final class AppSettings {
         if (noticeDay != null) 'notice_day': noticeDay,
         if (passwordsSeenRev != null) 'passwords.seen_rev': passwordsSeenRev,
         if (passwordsVaultExisted) 'passwords.vault_existed': true,
+        if (passwordsTrainingDue != null)
+          'passwords.training_due': passwordsTrainingDue,
       };
 }
 

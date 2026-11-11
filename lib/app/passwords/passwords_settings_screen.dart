@@ -282,7 +282,9 @@ class _ChangeMasterDialogState extends State<_ChangeMasterDialog> {
   }
 
   Future<void> _submit() async {
-    final problem = masterProblem(_next.text);
+    // Повтор с записями — в [PasswordsKit.changeMaster], после проверки
+    // текущего мастер-пароля (15.2): до неё это оракул по важным записям.
+    final problem = masterProblem(_next.text, strength: widget.kit.strength);
     if (problem != null || _next.text != _repeat.text) {
       setState(() => _error = problem ?? 'Новые пароли не совпадают.');
       return;
@@ -299,6 +301,13 @@ class _ChangeMasterDialogState extends State<_ChangeMasterDialog> {
     try {
       await widget.kit.changeMaster(current, next);
       if (mounted) Navigator.of(context).pop(true);
+    } on PasswordProblem catch (problem) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = problem.text;
+        });
+      }
     } on VaultError catch (error) {
       if (mounted) {
         setState(() {

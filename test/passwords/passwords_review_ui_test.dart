@@ -142,8 +142,18 @@ void main() {
         throwsA(anything),
       );
       expect(vault.entry(id)!.important, isTrue);
-      // Прочие поля и ужесточение — без вопроса.
-      await vault.updateInfo(id, hint: 'новая');
+      // Прочие поля и ужесточение — без вопроса; новая подсказка важной
+      // записи сверяется с её паролем — только после мастер-пароля (15.2).
+      await expectLater(
+        vault.updateInfo(id, hint: 'новая'),
+        throwsStateError,
+      );
+      expect(vault.entry(id)!.hint, isNot('новая'));
+      // Название, логин, адреса — тоже (D1: оракул по подстрокам).
+      await expectLater(
+        vault.updateInfo(id, service: 'Почта (новая)'),
+        throwsStateError,
+      );
       await vault.updateInfo(
         id,
         important: false,
@@ -430,6 +440,7 @@ void main() {
                   SecureCardRequest c,
                   String action, {
                   String? entryId,
+                  String? detail,
                 }) =>
                     chosen.add(entryId),
               ),
@@ -452,6 +463,7 @@ void main() {
                 SecureCardRequest c,
                 String action, {
                 String? entryId,
+                String? detail,
               }) =>
                   chosen.add(entryId),
             ),

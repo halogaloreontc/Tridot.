@@ -18,6 +18,7 @@ abstract final class PasswordCommands {
   static const String lock = 'passwords.lock';
   static const String backup = 'passwords.backup';
   static const String import = 'passwords.import';
+  static const String restore = 'passwords.restore';
   static const String masterForgot = 'passwords.masterForgot';
   static const String login = 'passwords.login';
   static const String lostDevice = 'passwords.lostDevice';
@@ -39,6 +40,7 @@ abstract final class PasswordCommands {
     lock,
     backup,
     import,
+    restore,
     masterForgot,
     login,
     lostDevice,
@@ -55,6 +57,7 @@ final class PasswordCommand {
     required this.confidence,
     this.query,
     this.implicit = false,
+    this.options = const <String, Object?>{},
   });
 
   final String cmd;
@@ -67,6 +70,10 @@ final class PasswordCommand {
   /// Совпадение без уверенности: уступает любому явному (маркеры задачи,
   /// одно слово «пароль»).
   final bool implicit;
+
+  /// Параметры без секретов: у генератора — режим, длина, число слов,
+  /// классы символов (`GeneratorOptions.toJson`).
+  final Map<String, Object?> options;
 
   @override
   String toString() => 'PasswordCommand($cmd)';
@@ -108,6 +115,11 @@ abstract final class PasswordPhrases {
   /// «купить чехол, потерял телефон» — задача, а не навык.
   static const String _device =
       r'(?:телефон|смартфон|ноутбук|ноут|планшет|компьютер)';
+
+  /// «(новый, надёжный …) пароль» после глагола генератора.
+  static const String _newPw =
+      '(?:новый\\s+|надежный\\s+|сложный\\s+|случайный\\s+|хороший\\s+|'
+      'длинный\\s+|запоминающийся\\s+|простой\\s+|стойкий\\s+)*$_pw';
 
   static final List<(RegExp, String, double)> _rules =
       <(RegExp, String, double)>[
@@ -192,11 +204,19 @@ abstract final class PasswordPhrases {
       PasswordCommands.open,
       0.92,
     ),
-    // Генератор (этап 3 — пока честное «скоро»).
+    // Генератор (5.4): параметры — в [PasswordCommand.options].
     (
-      RegExp('(?:сгенерируй|придумай|создай|сгенерировать|придумать|нужен)\\s+'
-          '(?:мне\\s+)?(?:новый\\s+|надежный\\s+|сложный\\s+|случайный\\s+|'
-          'хороший\\s+|длинный\\s+)*$_pw'),
+      RegExp('(?:сгенерируй|придумай|создай|сгенерировать|придумать)\\s+'
+          '(?:мне\\s+)?$_newPw'),
+      PasswordCommands.generate,
+      0.92,
+    ),
+    // «Нужен пароль» — новый, только если дальше не «от/для/к/у …»: «мне
+    // нужен пароль от почты» — это забытый пароль (подсказка), а не
+    // генератор. «Нужен пароль на 20 символов» — генератор.
+    (
+      RegExp('нужен\\s+(?:мне\\s+)?$_newPw'
+          '(?!\\s+(?:от|для|к|у)\\s|\\s+на\\s+(?!\\d))'),
       PasswordCommands.generate,
       0.92,
     ),
@@ -221,25 +241,57 @@ abstract final class PasswordPhrases {
     ),
     // Тренировка.
     (
-      RegExp('(?:проверь|проверить),?\\s+помню ли я\\s+$_pw'),
+      RegExp('(?:проверь|проверить),?\\s+помню ли я\\s+$_pw'
+          '(?:\\s+$_prep\\s+(.+))?\$'),
       PasswordCommands.train,
       0.9,
     ),
     (
-      RegExp(r'^потренируй (?:меня|мою память)'),
+      RegExp(r'^потренируй (?:меня|мою память)'
+          r'(?:\s+(?:в|на|по)\s+(?:паролях|паролям|пароли))?$'),
       PasswordCommands.train,
       0.9,
     ),
-    // Копия и импорт.
+    // Копия, восстановление и импорт (5.6, 5.7).
+    (
+      RegExp(r'(?:восстанови|восстановить|верни|вернуть|загрузи|загрузить|'
+          r'достань|достать)\s+(?:мои\s+|все\s+)?(?:пароли|хранилище'
+          r'(?:\s+паролей)?)\s+из\s+(?:резервной\s+)?(?:копии|бэкапа)'),
+      PasswordCommands.restore,
+      0.85,
+    ),
+    (
+      RegExp(r'^восстановление\s+(?:паролей|хранилища(?:\s+паролей)?)\s+'
+          r'из\s+(?:резервной\s+)?(?:копии|бэкапа)'),
+      PasswordCommands.restore,
+      0.85,
+    ),
     (
       RegExp(r'(?:сделай|создай|сохрани)\s+(?:резервную\s+)?копию\s+'
-          r'(?:паролей|хранилища)'),
+          r'(?:моих\s+)?(?:паролей|хранилища)'),
+      PasswordCommands.backup,
+      0.85,
+    ),
+    (
+      RegExp(r'^(?:резервная\s+копия|бэкап)\s+(?:моих\s+)?'
+          r'(?:паролей|хранилища(?:\s+паролей)?)$'),
       PasswordCommands.backup,
       0.85,
     ),
     (
       RegExp(r'(?:импортируй|импортировать|загрузи|перенеси|забери)\s+'
           r'(?:мои\s+)?пароли\s+(?:из|с)\s+\S+'),
+      PasswordCommands.import,
+      0.85,
+    ),
+    (
+      RegExp(r'^(?:импорт|перенос|загрузка)\s+(?:моих\s+)?паролей\s+'
+          r'(?:из|с)\s+\S+'),
+      PasswordCommands.import,
+      0.85,
+    ),
+    (
+      RegExp(r'^(?:импортируй|импортировать)\s+(?:мои\s+)?пароли$'),
       PasswordCommands.import,
       0.85,
     ),
@@ -413,6 +465,35 @@ abstract final class PasswordPhrases {
   /// Прошедшее время: «Маша просила», «сказал».
   static final RegExp _past = RegExp(r'[аеиоуяы]л(?:а|и|о)?$');
 
+  /// Глаголы настоящего времени о другом человеке («мама просит …»,
+  /// «коллеги хотят …»): просьба не к навыку.
+  static const Set<String> _thirdPerson = <String>{
+    'просит',
+    'просят',
+    'попросит',
+    'попросят',
+    'хочет',
+    'хотят',
+    'велит',
+    'велят',
+    'говорит',
+    'говорят',
+    'требует',
+    'требуют',
+    'ждёт',
+    'ждет',
+    'ждут',
+    'пишет',
+    'пишут',
+    'учит',
+    'учат',
+  };
+
+  /// «спрашивает», «предлагает», «советует», «уговаривают»: окончание
+  /// третьего лица у длинных глаголов (у «привет», «ответ» его нет).
+  static final RegExp _thirdPersonEnding =
+      RegExp(r'^[а-яё]{3,}(?:ает|яет|ует|юет|ают|яют|уют|еет|еют)$');
+
   /// Глаголы, которые сами просят пароль у навыка: перед «пароль от …»
   /// они не мешают («найди пароль от почты», «покажи-ка пароль от …»).
   static const Set<String> _ownVerbs = <String>{
@@ -530,6 +611,10 @@ abstract final class PasswordPhrases {
         continue;
       }
       if (_imperative.hasMatch(word) || _past.hasMatch(word)) return true;
+      // Настоящее время о другом: «мама просит придумать пароль».
+      if (_thirdPerson.contains(word) || _thirdPersonEnding.hasMatch(word)) {
+        return true;
+      }
       // Имя с большой буквы не в начале фразы: «скажи Пете …».
       if (i > 0 &&
           shownWords.length == words.length &&
@@ -559,6 +644,18 @@ abstract final class PasswordPhrases {
     r'(?:\s+(?:пожалуйста|плиз|срочно|снова|опять|еще раз|уже|теперь|'
     r'забыл|забыла|не помню|какой|какая|какое|какой он|был|была|там|тут|'
     r'у меня|подскажи|напомни|скажи|покажи))+$',
+  );
+
+  /// «(у) меня от …» перед названием сервиса.
+  static final RegExp _holder = RegExp(
+    r'^(?:у\s+)?(?:меня|нас|тебя)\s+(?:от|для|на|к|в)\s+',
+    caseSensitive: false,
+  );
+
+  /// Вместо сервиса — только «меня», «у нас».
+  static final RegExp _holderOnly = RegExp(
+    r'^(?:у\s+)?(?:меня|нас|тебя)$',
+    caseSensitive: false,
   );
 
   /// Притяжательное перед названием сервиса: «своей почты» → «почты».
@@ -596,6 +693,16 @@ abstract final class PasswordPhrases {
       final match = pattern.firstMatch(text);
       if (match == null) continue;
       var group = 1;
+      if (cmd == PasswordCommands.generate && match.start > 0) {
+        // Генератор не привязан к началу фразы: «Маша просила придумать
+        // пароль для wifi» — о другом человеке, это не просьба к навыку.
+        final before = text.substring(0, match.start);
+        final shown = _clean(utterance.original);
+        final shownBefore = shown.length == text.length
+            ? shown.substring(0, match.start)
+            : before;
+        if (_foreign(before, shownBefore)) continue;
+      }
       if (match.groupCount >= 2) {
         // Общее правило «… пароль от …»: первая группа — слова перед ним.
         final prefix = match.group(1)!;
@@ -615,13 +722,15 @@ abstract final class PasswordPhrases {
           raw = shown.substring(start, start + raw.length);
         }
       }
-      final query = _service(raw, utterance);
+      final generator = cmd == PasswordCommands.generate;
+      final query = generator ? null : _service(raw, utterance);
       final yields = _yields(utterance, text, cmd);
       return PasswordCommand(
         cmd: cmd,
         query: query,
         confidence: yields ? yielded : confidence,
         implicit: yields,
+        options: generator ? generatorOptions(text) : const <String, Object?>{},
       );
     }
     if (_single.hasMatch(text)) {
@@ -632,6 +741,42 @@ abstract final class PasswordPhrases {
       );
     }
     return null;
+  }
+
+  /// Параметры генератора из фразы: «на 24 символа», «из 6 слов», «без
+  /// символов», «только буквы и цифры», «без похожих», «запоминающийся».
+  /// Слова — только английские (EFF): русских режимов нет (решение
+  /// владельца №6). Пусто — значения по умолчанию.
+  static Map<String, Object?> generatorOptions(String text) {
+    final lower = text.toLowerCase();
+    final options = <String, Object?>{};
+    final words = RegExp(r'из\s+(?:(\d+)\s+)?(?:английских\s+)?слов|'
+            r'запоминающ|фраз[аыу]|парольн\S* фраз')
+        .firstMatch(lower);
+    final chars = RegExp(r'(?:на|из|в|длиной)\s+(\d+)\s+(?:символ|знак|букв)')
+        .firstMatch(lower);
+    if (words != null && chars == null) {
+      options['mode'] = 'words';
+      final count = int.tryParse(words.group(1) ?? '');
+      if (count != null) options['words'] = count;
+    } else {
+      options['mode'] = 'characters';
+      final length = int.tryParse(chars?.group(1) ?? '');
+      if (length != null) options['length'] = length;
+    }
+    // «без цифр и символов», «без символов, цифр» — каждое слово после
+    // одного «без».
+    const without = r'без\s+(?:[а-яё]+\s*(?:,\s*|\s+и\s+))*';
+    if (RegExp('$without(?:спец\\S*\\s*)?(?:символов|знаков)|'
+            r'только\s+(?:из\s+)?букв\S*\s+и\s+цифр|из\s+букв\s+и\s+цифр')
+        .hasMatch(lower)) {
+      options['symbols'] = false;
+    }
+    if (RegExp('$withoutцифр').hasMatch(lower)) options['digits'] = false;
+    if (RegExp('$withoutпохожих').hasMatch(lower)) {
+      options['noLookAlike'] = true;
+    }
+    return options;
   }
 
   /// Хоть одно опорное слово: без него фраза точно не о паролях.
@@ -708,6 +853,11 @@ abstract final class PasswordPhrases {
     if (tail != null) value = value.substring(0, tail.start).trim();
     // «от почты в задачи» и подобное уже ушло задачам; «у меня» — не
     // сервис.
+    value = value.replaceAll(_possessive, '');
+    // «нужен пароль у меня от почты»: правило «пароль у …» взяло «меня от
+    // почты» — сервис после предлога.
+    value = value.replaceFirst(_holder, '');
+    if (_holderOnly.hasMatch(value)) return null;
     value = value.replaceAll(_possessive, '');
     if (value.isEmpty || value.length > 60) return null;
     return ServiceAliases.display(value);

@@ -1,5 +1,5 @@
-import 'dart:typed_data';
-
+import 'password_audit.dart';
+import 'password_training.dart';
 import 'vault.dart';
 import 'vault_format.dart';
 import 'vault_prefs.dart';
@@ -63,6 +63,10 @@ final class VaultCheckReport {
     required this.weak,
     required this.old,
     required this.ids,
+    this.similar = 0,
+    this.unknownDate = 0,
+    this.hintLeaks = 0,
+    this.unchecked = 0,
   });
 
   final int total;
@@ -72,6 +76,22 @@ final class VaultCheckReport {
   final int reusedPlaces;
   final int weak;
   final int old;
+
+  /// Групп «почти повтор» (`Kotik2019` / `kotik2020`).
+  final int similar;
+
+  /// Дата смены неизвестна.
+  final int unknownDate;
+
+  /// Подсказка раскрывает пароль.
+  final int hintLeaks;
+
+  /// Ещё не оценены (нет словарей или проверки не было).
+  final int unchecked;
+
+  /// Замечаний нет.
+  bool get allGood =>
+      weak == 0 && reused == 0 && old == 0 && similar == 0 && hintLeaks == 0;
 
   /// Записи с замечаниями.
   final List<String> ids;
@@ -92,6 +112,9 @@ final class VaultFacade {
   final Vault _vault;
 
   VaultState get state => _vault.state;
+
+  /// Время хранилища (часы приложения).
+  DateTime get now => _vault.clock.now();
 
   bool get isUnlocked => _vault.isUnlocked;
 
@@ -169,52 +192,77 @@ final class VaultFacade {
         lockAt: _vault.lockAt,
       );
 
-  /// Повторы по отпечаткам и флаги записей (полная оценка надёжности —
-  /// этап 3).
-  VaultCheckReport checkReport() {
-    final entries = _vault.entries;
-    final groups = <List<VaultEntry>>[];
-    for (final entry in entries) {
-      final group = groups
-          .where((List<VaultEntry> g) => _same(g.first.fp, entry.fp))
-          .firstOrNull;
-      if (group == null) {
-        groups.add(<VaultEntry>[entry]);
-      } else {
-        group.add(entry);
-      }
-    }
-    final reused = groups.where((List<VaultEntry> g) => g.length > 1).toList();
-    final flagged = <String>{
-      for (final g in reused) ...g.map((VaultEntry e) => e.id),
-      for (final e in entries)
-        if (e.flags.contains('weak') || e.flags.contains('old')) e.id,
-    };
+  /// Отчёт проверки по индексу: повторы по отпечаткам, флаги записей,
+  /// даты. Только числа и id (D16).
+  VaultCheckReport checkReport([DateTime? now]) {
+    final groups = CheckGroups.of(
+      _vault.entries,
+      now ?? _vault.clock.now(),
+      equal: _vault.crypto.equal,
+      guarded: _vault.isGuarded,
+    );
     return VaultCheckReport(
-      total: entries.length,
-      reused: reused.length,
-      reusedPlaces: reused.fold(0, (int n, List<VaultEntry> g) => n + g.length),
-      weak: entries.where((VaultEntry e) => e.flags.contains('weak')).length,
-      old: entries.where((VaultEntry e) => e.flags.contains('old')).length,
-      ids: flagged.toList(),
+      total: groups.total,
+      reused: groups.reused.length,
+      reusedPlaces: groups.reusedPlaces,
+      weak: groups.weak.length,
+      old: groups.old.length,
+      similar: groups.similar.length,
+      unknownDate: groups.unknownDate.length,
+      hintLeaks: groups.hintLeaks.length,
+      unchecked: groups.unchecked.length,
+      ids: groups.flagged,
     );
   }
 
-  static bool _same(Uint8List a, Uint8List b) {
-    if (a.length != b.length) return false;
-    var diff = 0;
-    for (var i = 0; i < a.length; i++) {
-      diff |= a[i] ^ b[i];
-    }
-    return diff == 0;
+  /// Полная проверка (5.5): хранилище само расшифровывает пароли по
+  /// одному и пересчитывает оценки; навыку достаются только числа.
+  Future<VaultCheckReport> audit([DateTime? now]) async {
+    await _vault.reassess();
+    return checkReport(now);
   }
 
-  /// Есть ли запись, которую пора тренировать (`train.next` наступил).
-  bool trainingDue(DateTime now) => _vault.entries.any((VaultEntry e) {
-        final next = DateTime.tryParse('${e.train['next']}');
-        return e.important && next != null && !now.isBefore(next);
-      });
+  /// Есть ли запись, которую пора тренировать (5.8).
+  bool trainingDue(DateTime now) => _vault.entries.any(
+        (VaultEntry e) => e.important && TrainingSchedule.isDue(e.train, now),
+      );
 
+  /// Важные записи в тренировке: сначала те, кому пора, затем по дате.
+  List<VaultEntryRef> trainingQueue(DateTime now) {
+    final list = <VaultEntry>[
+      for (final e in _vault.entries)
+        if (e.important && !TrainingSchedule.isOff(e.train)) e,
+    ]..sort((VaultEntry a, VaultEntry b) {
+        final x = TrainingSchedule.nextOf(a.train) ?? now;
+        final y = TrainingSchedule.nextOf(b.train) ?? now;
+        return x.compareTo(y);
+      });
+    return <VaultEntryRef>[for (final e in list) _ref(e)];
+  }
+
+  /// Серия и дней до следующей тренировки записи [id].
+  (int streak, int days)? training(String id, DateTime now) {
+    final entry = _vault.entry(id);
+    if (entry == null) return null;
+    return (
+      TrainingSchedule.streakOf(entry.train),
+      TrainingSchedule.daysUntil(entry.train, now),
+    );
+  }
+
+  /// Важная ли запись.
+  bool isImportant(String id) => _vault.entry(id)?.important ?? false;
+
+  /// Действие с записью [id] сейчас требует мастер-пароля: она важная,
+  /// переспрос включён, а подтверждали больше минуты назад
+  /// ([Vault.isGuarded], 3.6). Мастер-пароль спрашивает карточка, не чат.
+  bool needsMaster(String id) {
+    final entry = _vault.entry(id);
+    return entry != null && _vault.isGuarded(entry);
+  }
+
+  /// Удалить запись. Охраняемую важную ([needsMaster]) хранилище без
+  /// свежего мастер-пароля не удаляет (`StateError`).
   Future<void> delete(String id) => _vault.deleteEntry(id);
 
   void lock() => _vault.lock();

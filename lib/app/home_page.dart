@@ -25,6 +25,7 @@ import '../core/settings/app_settings.dart';
 import '../core/storage/storage_info.dart';
 import 'assistant_theme.dart';
 import 'passwords/entry_screens.dart';
+import 'passwords/generator_view.dart';
 import 'passwords/passwords_kit.dart';
 import 'passwords/passwords_screen.dart';
 import 'passwords/secure_card_view.dart';
@@ -272,12 +273,84 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// Служебные флаги навыка «Пароли» — в settings.json (только версия
   /// файла и «хранилище было», 4.1 и D28).
-  void _onPasswordsSettings({int? seenRev, bool? vaultExisted}) {
+  void _onPasswordsSettings({
+    int? seenRev,
+    bool? vaultExisted,
+    String? trainingDue,
+  }) {
     if (!mounted) return;
+    // Дата тренировки не сдвигается раньше уже назначенной: после вопроса
+    // «заметки дня» она отодвинута на 3 дня (не чаще 3 раз в неделю).
+    final today = AppSettings.dayKey(_now);
+    final current = _settings.passwordsTrainingDue;
+    final due = trainingDue == null ||
+            (current != null &&
+                current.compareTo(today) > 0 &&
+                current.compareTo(trainingDue) > 0)
+        ? null
+        : trainingDue;
+    if (seenRev == null && vaultExisted == null && due == null) return;
+    if (seenRev == null &&
+        vaultExisted == null &&
+        due == _settings.passwordsTrainingDue) {
+      return;
+    }
     _changeSettings(
       _settings.copyWith(
         passwordsSeenRev: seenRev,
         passwordsVaultExisted: vaultExisted,
+        passwordsTrainingDue: due,
+      ),
+    );
+  }
+
+  Timer? _trainingTimer;
+  bool _trainingAsked = false;
+
+  /// Тренировка памяти паролей (5.8) — через «заметку дня», не в первые
+  /// 30 с после запуска, не чаще раза в день и трёх раз в неделю. В
+  /// `settings.json` — только дата.
+  void _scheduleTrainingNotice() {
+    if (_trainingTimer != null || _trainingAsked || !_passwordsEnabled) {
+      return;
+    }
+    _trainingTimer = Timer(const Duration(seconds: 30), () {
+      _trainingTimer = null;
+      unawaited(_maybeTrainingNotice());
+    });
+  }
+
+  Future<void> _maybeTrainingNotice() async {
+    final passwords = widget.passwords;
+    if (!mounted || passwords == null || !_passwordsEnabled) return;
+    if (_trainingAsked) return;
+    if (_sending || _bulkBusy) {
+      _scheduleTrainingNotice();
+      return;
+    }
+    final today = AppSettings.dayKey(_now);
+    final due = _settings.passwordsTrainingDue;
+    if (due == null || due.compareTo(today) > 0) return;
+    if (passwords.isUnlocked &&
+        !passwords.facade.trainingDue(passwords.vault.clock.now())) {
+      return;
+    }
+    _trainingAsked = true;
+    final response = await widget.assistant.secureCardAction(
+      const SecureCardRequest(kind: SecureCardKind.training),
+      SecureCardCommand.notice,
+      personaId: widget.assistant.personas.notifier.id,
+    );
+    if (!mounted || response == null) return;
+    setState(() {
+      _pristineWelcome = false;
+      _book.append(ChatThread.mainId, _answer(response));
+    });
+    _changeSettings(
+      _settings.copyWith(
+        passwordsTrainingDue: AppSettings.dayKey(
+          _now.add(const Duration(days: 3)),
+        ),
       ),
     );
   }
@@ -298,6 +371,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     _cubeTimer?.cancel();
     _docTimer?.cancel();
+    _trainingTimer?.cancel();
     _tick?.cancel();
     // Несохранённые правки документа не теряем и при закрытии экрана.
     if (_docPending && _docTaskId != null) {
@@ -496,6 +570,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_sending) return;
     final now = _now;
     final today = AppSettings.dayKey(now);
+    _scheduleTrainingNotice();
     if (_noticeChecked == today) return;
     _noticeChecked = today;
     if (_settings.noticeDay == today) return;
@@ -1839,13 +1914,19 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       card: card,
       kit: passwords,
       busy: _bulkBusy || _sending,
-      onCommand: (SecureCardRequest card, String action, {String? entryId}) =>
+      onCommand: (
+        SecureCardRequest card,
+        String action, {
+        String? entryId,
+        String? detail,
+      }) =>
           unawaited(
         _cardAction(
           () => widget.assistant.secureCardAction(
             card,
             action,
             entryId: entryId,
+            detail: detail,
             personaId: message.personaId,
           ),
         ),
@@ -1856,6 +1937,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool get _passwordsEnabled =>
       widget.passwords != null &&
       widget.assistant.extensions.isEnabled(AssistantController.passwordsId);
+
+  Future<void> _openGenerator() async {
+    final passwords = widget.passwords;
+    if (passwords == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => GeneratorScreen(kit: passwords),
+      ),
+    );
+  }
 
   Future<void> _openPasswords({bool add = false}) async {
     final passwords = widget.passwords;
@@ -1985,6 +2076,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         'Пароли',
                         Icons.key_outlined,
                         () => unawaited(_openPasswords()),
+                      ),
+                      ComposerAction(
+                        'Сгенерировать пароль',
+                        Icons.password,
+                        () => unawaited(_openGenerator()),
                       ),
                       ComposerAction(
                         'Добавить запись',
@@ -2760,6 +2856,8 @@ final class _QuickActionsState extends State<_QuickActions> {
         'photo' => Icons.no_photography_outlined,
         'key' => Icons.key_outlined,
         'lock' => Icons.lock_outline,
+        'password' => Icons.password,
+        'shield' => Icons.shield_outlined,
         _ => Icons.chat_bubble_outline,
       };
 

@@ -87,3 +87,15 @@ final class VaultRateLimited extends VaultError {
   @override
   VaultErrorCode get code => VaultErrorCode.rateLimited;
 }
+
+/// Операцию отменил вызывающий сразу после проверки мастер-пароля
+/// (`afterVerify` у выгрузки копии и смены мастер-пароля): [reason] —
+/// текст для человека, без секретов.
+final class VaultRejected implements Exception {
+  const VaultRejected(this.reason);
+
+  final String reason;
+
+  @override
+  String toString() => 'VaultRejected';
+}

@@ -36,6 +36,10 @@ flutter:
     # Встроенные копии описаний assistant/1 подключений (ADR-011): по ним
     # коннектор понимает фразы до подключения.
     - assets/connectors/
+    # Словари навыка «Пароли» (ADR-014): EFF large (CC BY 3.0 US) для
+    # генератора и 10 000 частых паролей SecLists (MIT) для оценки
+    # надёжности. Лицензии — assets/passwords/NOTICE.txt.
+    - assets/passwords/
   fonts:
     - family: Inter
       fonts:

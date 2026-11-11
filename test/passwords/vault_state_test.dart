@@ -19,7 +19,7 @@ import 'package:local_assistant/core/services/clock.dart';
 import 'vault_test_support.dart';
 
 /// Часы, идущие вместе с `fakeAsync`.
-final class _FakeClock implements Clock {
+final class _FakeClock implements Clock, MonotonicClock {
   _FakeClock(this.async, this.start);
 
   final FakeAsync async;
@@ -27,6 +27,9 @@ final class _FakeClock implements Clock {
 
   @override
   DateTime now() => start.add(async.elapsed);
+
+  @override
+  Duration get elapsed => async.elapsed;
 }
 
 /// Криптография, которая считает живые ключи.

@@ -42,6 +42,12 @@ Future<void> main() async {
     final mono =
         await rootBundle.loadString('assets/fonts/JetBrainsMono-OFL.txt');
     yield LicenseEntryWithLineBreaks(<String>['JetBrains Mono'], mono);
+    // Словари навыка «Пароли»: EFF large (CC BY 3.0 US), SecLists (MIT).
+    final words = await rootBundle.loadString('assets/passwords/NOTICE.txt');
+    yield LicenseEntryWithLineBreaks(
+      <String>['EFF Long Wordlist', 'SecLists'],
+      words,
+    );
   });
   final documents = await getApplicationDocumentsDirectory();
   final folder = p.join(documents.path, 'assistant');
@@ -85,6 +91,8 @@ Future<void> main() async {
   // не загрузилась — навык честно говорит, что хранилище недоступно.
   final vault = await _openVault(p.join(support.path, 'assistant', 'vault'));
   final passwords = vault == null ? null : PasswordsKit(vault: vault);
+  // Словари генератора и оценки — встроенные файлы, без сети.
+  await passwords?.loadWordlists(rootBundle.loadString);
   // Навыки и подключения регистрируются здесь; порядок важен только при
   // равной уверенности (тогда маршрутизатор всё равно переспросит). Что
   // включено — выбор пользователя в «Настройки → Расширения».

@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:sodium/sodium_sumo.dart';
 
+import 'keyboard_layouts.dart';
+import 'password_strength.dart' show Utf8Runes;
 import 'secret_bytes.dart';
 import 'vault_errors.dart';
 import 'vault_format.dart';
@@ -310,6 +312,39 @@ abstract final class VaultKeys {
       ..[0] = 0x70 // p
       ..[1] = 0x7C // |
       ..setRange(2, bytes.length + 2, bytes);
+    try {
+      return cipher.keyedHash(kFp, message);
+    } finally {
+      message.fillRange(0, message.length, 0);
+    }
+  }
+
+  /// «Почти повтор» `BLAKE2b_K_fp("l|" + lower(без хвоста из цифр и
+  /// знаков))` (3.4): `Kotik2019` и `kotik2020` дают одно значение.
+  /// `null` — от пароля ничего не осталось (одни цифры и знаки).
+  static Uint8List? looseFingerprint(
+    VaultCipher cipher,
+    VaultKey kFp,
+    SecretBytes password,
+  ) {
+    final runes = Utf8Runes.decode(password.unsafeBytes);
+    if (runes == null) return null;
+    var end = runes.length;
+    while (end > 0 && !KeyboardLayouts.isLetter(runes[end - 1])) {
+      end--;
+    }
+    final core = <int>[
+      for (var i = 0; i < end; i++) KeyboardLayouts.lower(runes[i]),
+    ];
+    runes.fillRange(0, runes.length, 0);
+    if (core.isEmpty) return null;
+    final body = Utf8Runes.encode(core);
+    core.fillRange(0, core.length, 0);
+    final message = Uint8List(body.length + 2)
+      ..[0] = 0x6C // l
+      ..[1] = 0x7C // |
+      ..setRange(2, body.length + 2, body);
+    body.fillRange(0, body.length, 0);
     try {
       return cipher.keyedHash(kFp, message);
     } finally {

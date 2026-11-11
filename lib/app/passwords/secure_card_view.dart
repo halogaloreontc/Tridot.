@@ -3,13 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/models/secure_card.dart';
+import '../../core/passwords/generator_options.dart';
+import '../../core/passwords/password_training.dart';
 import '../../core/passwords/vault.dart';
 import '../../core/passwords/vault_facade.dart';
 import '../../core/passwords/vault_format.dart';
 import '../assistant_theme.dart';
+import 'backup_screens.dart';
 import 'entry_screens.dart';
+import 'generator_view.dart';
+import 'import_screen.dart';
 import 'passwords_kit.dart';
 import 'passwords_screen.dart';
+import 'recall_views.dart';
 import 'secret_widgets.dart';
 
 /// Нажатие в карточке, которое выполняет навык: выбор записи, «Удалить»,
@@ -18,6 +24,7 @@ typedef SecureCardCallback = void Function(
   SecureCardRequest card,
   String action, {
   String? entryId,
+  String? detail,
 });
 
 /// Временная карточка навыка «Пароли» под ответом (D10): несёт только id,
@@ -48,9 +55,6 @@ class _SecureCardViewState extends State<SecureCardView> {
 
   /// «Вспомнил» / «Отмена»: карточка свёрнута.
   bool _closed = false;
-
-  /// Пароль показан по кнопке «Показать пароль» в карточке подсказки.
-  bool _revealAsked = false;
 
   bool _copied = false;
 
@@ -104,6 +108,17 @@ class _SecureCardViewState extends State<SecureCardView> {
     final Widget body;
     if (card.kind == SecureCardKind.recovery) {
       body = _recovery();
+    } else if (card.kind == SecureCardKind.generate &&
+        kit.state != VaultState.disabled) {
+      // Генератору хранилище не нужно (5.4): работает и при запертом.
+      body = GeneratorPanel(
+        kit: kit,
+        initial: GeneratorOptions.fromJson(card.options),
+      );
+    } else if (card.kind == SecureCardKind.restore &&
+        kit.state == VaultState.notCreated) {
+      // Восстановлению хранилище не нужно (5.12, D28).
+      body = _files();
     } else if (kit.state == VaultState.disabled) {
       body = const _Line(
         icon: Icons.lock_outline,
@@ -123,6 +138,12 @@ class _SecureCardViewState extends State<SecureCardView> {
         SecureCardKind.login => _login(),
         SecureCardKind.editor => _editor(),
         SecureCardKind.delete => _delete(),
+        SecureCardKind.check => CheckView(kit: kit, groups: kit.groups()),
+        SecureCardKind.training => _training(),
+        SecureCardKind.importPreview ||
+        SecureCardKind.backup ||
+        SecureCardKind.restore =>
+          _files(),
         _ => const _Line(
             icon: Icons.schedule,
             text: 'Появится в следующем обновлении навыка.',
@@ -151,6 +172,42 @@ class _SecureCardViewState extends State<SecureCardView> {
 
   // --------------------------------------------------------------- виды
 
+  /// Импорт, копия, восстановление — кнопки экранов (5.6, 5.7).
+  Widget _files() {
+    final unlocked = kit.isUnlocked;
+    final buttons = <Widget>[
+      if (card.kind == SecureCardKind.importPreview && unlocked)
+        FilledButton.icon(
+          key: const ValueKey<String>('secure-card-import-open'),
+          onPressed: () => unawaited(_push(CsvImportScreen(kit: kit))),
+          icon: const Icon(Icons.upload_file_outlined, size: 16),
+          label: const Text('Импорт из браузера'),
+        ),
+      if ((card.kind == SecureCardKind.backup ||
+              (card.kind == SecureCardKind.restore &&
+                  kit.vault.lastBackupAt == null)) &&
+          unlocked)
+        FilledButton.icon(
+          key: const ValueKey<String>('secure-card-backup-open'),
+          onPressed: () => unawaited(_push(BackupExportScreen(kit: kit))),
+          icon: const Icon(Icons.save_alt_outlined, size: 16),
+          label: Text(
+            card.kind == SecureCardKind.backup
+                ? 'Сделать копию'
+                : 'Сделать копию сейчас',
+          ),
+        ),
+      if (card.kind == SecureCardKind.restore)
+        OutlinedButton.icon(
+          key: const ValueKey<String>('secure-card-restore-open'),
+          onPressed: () => unawaited(_push(BackupRestoreScreen(kit: kit))),
+          icon: const Icon(Icons.restore, size: 16),
+          label: const Text('Восстановить из копии'),
+        ),
+    ];
+    return Wrap(spacing: 8, runSpacing: 8, children: buttons);
+  }
+
   Widget _locked() {
     final notCreated = kit.state == VaultState.notCreated;
     final unlocked = kit.isUnlocked;
@@ -178,6 +235,18 @@ class _SecureCardViewState extends State<SecureCardView> {
                 size: 16,
               ),
               label: Text(notCreated ? 'Создать хранилище' : 'Открыть'),
+            ),
+          ),
+        if (notCreated && kit.vaultExisted)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: OutlinedButton.icon(
+              key: const ValueKey<String>('secure-card-restore-open'),
+              onPressed: widget.busy
+                  ? null
+                  : () => unawaited(_push(BackupRestoreScreen(kit: kit))),
+              icon: const Icon(Icons.restore, size: 16),
+              label: const Text('Восстановить из копии'),
             ),
           ),
       ],
@@ -273,46 +342,36 @@ class _SecureCardViewState extends State<SecureCardView> {
       children: <Widget>[
         _title(entry),
         const SizedBox(height: 8),
-        Text(
-          entry.hint.isEmpty ? 'Своей подсказки нет.' : entry.hint,
-          key: const ValueKey<String>('secure-card-hint-text'),
-          style: TextStyle(
-            fontSize: 15,
-            color: entry.hint.isEmpty
-                ? AssistantColors.muted
-                : AssistantColors.textStrong,
+        if (entry.login.isNotEmpty) _loginRow(entry),
+        HintLadder(
+          kit: kit,
+          entry: entry,
+          reveal: _secret(entry),
+          copyButton: _copyButton(entry),
+          onStep: (int step) => widget.onCommand(
+            card,
+            SecureCardCommand.hintStep,
+            entryId: entry.id,
+            detail: '$step',
           ),
         ),
-        if (entry.login.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 4),
-          _loginRow(entry),
-        ],
-        if (_revealAsked) ...<Widget>[
-          const SizedBox(height: 8),
-          _secret(entry),
-        ],
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: <Widget>[
-            TextButton.icon(
-              key: const ValueKey<String>('secure-card-remembered'),
-              onPressed: () => setState(() => _closed = true),
-              icon: const Icon(Icons.check, size: 16),
-              label: const Text('Вспомнил'),
-            ),
-            if (!_revealAsked)
-              TextButton.icon(
-                key: const ValueKey<String>('secure-card-reveal'),
-                onPressed: () => setState(() => _revealAsked = true),
-                icon: const Icon(Icons.visibility_outlined, size: 16),
-                label: const Text('Показать пароль'),
-              ),
-            _copyButton(entry),
-          ],
-        ),
       ],
+    );
+  }
+
+  Widget _training() {
+    final entry = _entry;
+    if (entry == null) return _gone();
+    return TrainingView(
+      kit: kit,
+      entry: entry,
+      reveal: _secret(entry),
+      onOutcome: (TrainingOutcome outcome) => widget.onCommand(
+        card,
+        SecureCardCommand.trained,
+        entryId: entry.id,
+        detail: outcome.name,
+      ),
     );
   }
 
@@ -418,6 +477,13 @@ class _SecureCardViewState extends State<SecureCardView> {
     );
   }
 
+  /// «Удалить»: важную запись — после мастер-пароля в окне поверх чата
+  /// (3.6); в чат он не вводится. Отменили — ничего не уходит навыку.
+  Future<void> _confirmDelete(String id) async {
+    if (!await confirmDelete(context, kit, id) || !mounted) return;
+    widget.onCommand(card, SecureCardCommand.delete, entryId: id);
+  }
+
   Widget _delete() {
     final entry = _entry;
     if (entry == null) return _gone();
@@ -437,13 +503,7 @@ class _SecureCardViewState extends State<SecureCardView> {
                 backgroundColor: AssistantColors.danger,
                 foregroundColor: AssistantColors.background,
               ),
-              onPressed: widget.busy
-                  ? null
-                  : () => widget.onCommand(
-                        card,
-                        SecureCardCommand.delete,
-                        entryId: entry.id,
-                      ),
+              onPressed: widget.busy ? null : () => _confirmDelete(entry.id),
               icon: const Icon(Icons.delete_outline, size: 16),
               label: const Text('Удалить'),
             ),

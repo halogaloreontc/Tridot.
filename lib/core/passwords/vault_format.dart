@@ -364,6 +364,10 @@ Object? _decodeJson(Uint8List bytes) {
 /// Быстрая проверка глубины вложенности и числа элементов JSON без
 /// построения дерева.
 abstract final class JsonLimits {
+  /// JSON из байтов с пределами [VaultFormat.maxDepth] и
+  /// [VaultFormat.maxElements]; любая ошибка — [VaultError.corrupt].
+  static Object? decode(Uint8List bytes) => _decodeJson(bytes);
+
   static bool within(
     String text, {
     required int maxDepth,
@@ -551,6 +555,7 @@ final class VaultEntry {
     Uint8List? fp,
     Uint8List? fpLoose,
     List<Uint8List>? fpOld,
+    int? score,
     List<String>? flags,
     Map<String, Object?>? train,
   }) =>
@@ -569,7 +574,7 @@ final class VaultEntry {
         fp: fp ?? this.fp,
         fpLoose: fpLoose ?? this.fpLoose,
         fpOld: fpOld ?? this.fpOld,
-        score: score,
+        score: score ?? this.score,
         flags: flags ?? this.flags,
         train: train ?? this.train,
         extra: extra,

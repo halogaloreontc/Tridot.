@@ -532,6 +532,7 @@ void main() {
                 SecureCardRequest c,
                 String action, {
                 String? entryId,
+                String? detail,
               }) =>
                   commands.add(action),
             ),
@@ -573,6 +574,7 @@ void main() {
                 SecureCardRequest c,
                 String action, {
                 String? entryId,
+                String? detail,
               }) =>
                   commands.add(action),
             ),
@@ -620,6 +622,7 @@ void main() {
                   SecureCardRequest c,
                   String a, {
                   String? entryId,
+                  String? detail,
                 }) {},
               ),
             ),

@@ -802,6 +802,7 @@ final class AssistantController {
     SecureCardRequest card,
     String action, {
     String? entryId,
+    String? detail,
     String? personaId,
   }) async {
     final owner = _connectors
@@ -816,7 +817,12 @@ final class AssistantController {
         connectorId: owner.info.id,
         commandId: '$passwordsId.card',
         confidence: 1,
-        payload: SecureCardCommand(card, action, entryId: entryId),
+        payload: SecureCardCommand(
+          card,
+          action,
+          entryId: entryId,
+          detail: detail,
+        ),
       ),
     );
     return response.withPersona(speaker.id);

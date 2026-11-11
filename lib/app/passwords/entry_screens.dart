@@ -1,12 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../core/passwords/hint_guard.dart';
+import '../../core/passwords/password_strength.dart';
 import '../../core/passwords/secret_bytes.dart';
+import '../../core/passwords/vault_errors.dart';
 import '../../core/passwords/vault_facade.dart';
 import '../../core/passwords/vault_format.dart';
 import '../../core/passwords/vault_prefs.dart';
 import '../assistant_theme.dart';
+import 'generator_view.dart';
 import 'passwords_kit.dart';
 import 'secret_widgets.dart';
 
@@ -66,6 +71,24 @@ Future<bool> _reprompt(
     title: 'Важная запись',
     text: 'Для важных записей показ и копирование подтверждаются '
         'мастер-паролем.',
+    check: kit.confirm,
+  );
+}
+
+/// Удаление важной записи [id] (3.6): при включённом переспросе —
+/// мастер-пароль, если подтверждали больше минуты назад. `false` —
+/// отменили или не подошёл. Запас [PasswordsKit.saveMargin]: окно не
+/// должно кончиться между подтверждением и удалением.
+Future<bool> confirmDelete(
+  BuildContext context,
+  PasswordsKit kit,
+  String id,
+) async {
+  if (!kit.needsReprompt(id, margin: PasswordsKit.saveMargin)) return true;
+  return askMaster(
+    context,
+    title: 'Удалить важную запись',
+    text: 'Удаление важной записи подтверждается мастер-паролем.',
     check: kit.confirm,
   );
 }
@@ -176,7 +199,11 @@ class _EntryScreenState extends State<EntryScreen>
         ],
       ),
     );
-    if (!(confirmed ?? false)) return;
+    if (!(confirmed ?? false) || !mounted) return;
+    // Удаление важной записи — необратимое действие: при включённом
+    // переспросе только после мастер-пароля (3.6), иначе хранилище
+    // откажет.
+    if (!await confirmDelete(context, kit, entry.id) || !mounted) return;
     try {
       await kit.vault.deleteEntry(entry.id);
       if (mounted) Navigator.of(context).pop();
@@ -381,9 +408,18 @@ class EntryEditorScreen extends StatefulWidget {
     this.id,
     this.service,
     this.passwordOnly = false,
+    this.generated,
+    this.structureHint,
   });
 
   final PasswordsKit kit;
+
+  /// Пароль из генератора («Сохранить для…»): редактор забирает байты и
+  /// затирает их, значение живёт только в поле.
+  final SecretBytes? generated;
+
+  /// Подсказка по структуре сгенерированного пароля (5.4).
+  final String? structureHint;
 
   /// Запись для правки; `null` — новая.
   final String? id;
@@ -417,6 +453,24 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
   String? _repeatWarning;
   String? _failure;
 
+  /// Живая оценка надёжности под полем пароля.
+  String? _strength;
+
+  /// Оценка — не на каждое нажатие, а после паузы [_rateDelay]: длинный
+  /// пароль разбирается заметное время.
+  Timer? _rateTimer;
+  static const Duration _rateDelay = Duration(milliseconds: 250);
+
+  /// Подсказка по структуре из генератора.
+  String? _structure;
+
+  /// Подсказку с предупреждением [HintGuard] уже показывали — второй
+  /// «Сохранить» сохраняет.
+  String? _warnedHint;
+
+  /// Пароль, о повторе которого уже предупредили при сохранении.
+  String? _warnedRepeat;
+
   @override
   void initState() {
     super.initState();
@@ -428,7 +482,77 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
     _login = TextEditingController(text: entry?.login ?? '');
     _hint = TextEditingController(text: entry?.hint ?? '');
     _important = entry?.important ?? false;
+    final generated = widget.generated;
+    if (generated != null && !generated.isWiped) {
+      _password.text = utf8.decode(generated.unsafeBytes, allowMalformed: true);
+      generated.wipe();
+      _structure = widget.structureHint;
+      _rate(_password.text);
+    }
     startWatching();
+  }
+
+  /// Оценить [_password] после паузы в наборе (пустой — сразу).
+  void _rateLater(String value) {
+    _rateTimer?.cancel();
+    _rateTimer = null;
+    if (value.isEmpty) {
+      _strength = null;
+      return;
+    }
+    _rateTimer = Timer(_rateDelay, () {
+      _rateTimer = null;
+      if (!mounted) return;
+      setState(() => _rate(_password.text));
+    });
+  }
+
+  void _rate(String value) {
+    if (value.isEmpty) {
+      _strength = null;
+      return;
+    }
+    final estimate = kit.estimate(
+      value,
+      userInputs: <String>[_service.text, _login.text, _urls.text],
+    );
+    _strength = 'Надёжность: ${estimate.label} (~${estimate.bits.floor()} '
+        'бит)${estimate.score <= 2 ? '. ${_why(estimate)}' : ''}';
+  }
+
+  static String _why(StrengthEstimate estimate) {
+    final r = estimate.reasons;
+    if (r.contains(StrengthReason.common)) return 'Это частый пароль.';
+    if (r.contains(StrengthReason.userInput)) {
+      return 'В нём название или логин.';
+    }
+    if (r.contains(StrengthReason.russianLayout)) {
+      return 'Русское слово в английской раскладке подбирают первым.';
+    }
+    if (r.contains(StrengthReason.keyboard)) return 'Соседние клавиши.';
+    if (r.contains(StrengthReason.date)) return 'В нём год или дата.';
+    if (r.contains(StrengthReason.short)) return 'Слишком короткий.';
+    return 'Его легко подобрать.';
+  }
+
+  Future<void> _generate() async {
+    final picked = await pickGenerated(context, kit);
+    if (picked == null || !mounted) {
+      picked?.$1.wipe();
+      return;
+    }
+    final (value, options) = picked;
+    final text = utf8.decode(value.unsafeBytes, allowMalformed: true);
+    value.wipe();
+    setState(() {
+      _password.text = text;
+      _structure = options.structureHint;
+      _rate(text);
+    });
+    _checkRepeat(text);
+    // Сгенерированное оценено сразу — ждать паузы незачем.
+    _rateTimer?.cancel();
+    _rateTimer = null;
   }
 
   static String _title(String text) => text.isEmpty
@@ -439,8 +563,11 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
   void onLocked() => _clear();
 
   void _clear() {
+    _rateTimer?.cancel();
+    _rateTimer = null;
     _password.clear();
     _note.clear();
+    _warnedRepeat = null;
   }
 
   @override
@@ -465,11 +592,29 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
   void _checkRepeat(String value) {
     final same = kit.sameAs(value, except: widget.id);
     setState(() {
-      _repeatWarning = same.isEmpty
-          ? null
-          : 'Этот пароль уже используется для: '
-              '${same.map((VaultEntry e) => e.service).join(', ')}.';
+      _rateLater(value);
+      _repeatWarning = _repeatText(same);
     });
+  }
+
+  static String? _repeatText(List<VaultEntry> same) => same.isEmpty
+      ? null
+      : 'Этот пароль уже используется для: '
+          '${same.map((VaultEntry e) => e.service).join(', ')}.';
+
+  /// Поля редактора отличаются от записи [entry].
+  bool _changed(VaultEntry entry, String service, String hint) {
+    final urls = <String>[
+      for (final line in _urls.text.split('\n'))
+        if (line.trim().isNotEmpty) line.trim(),
+    ];
+    return service != entry.service ||
+        hint != entry.hint ||
+        _login.text.trim() != entry.login ||
+        urls.join('\n') != entry.urls.join('\n') ||
+        _important != entry.important ||
+        _password.text.isNotEmpty ||
+        _note.text.isNotEmpty;
   }
 
   Future<void> _save() async {
@@ -480,31 +625,127 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
       _serviceError = service.isEmpty ? 'Как назвать запись?' : null;
       _passwordError =
           _isNew && password.isEmpty ? 'Без пароля запись не сохранить.' : null;
-      _hintError = password.length >= 4 &&
-              hint.toLowerCase().contains(password.toLowerCase())
-          ? 'В подсказке не должно быть самого пароля.'
-          : null;
+      _hintError = null;
       _failure = null;
     });
-    if (_serviceError != null || _passwordError != null || _hintError != null) {
+    if (_serviceError != null || _passwordError != null) return;
+    final previous = widget.id == null ? null : kit.vault.entry(widget.id!);
+    // Правка охраняемой важной записи (15.2) — только после мастер-пароля:
+    // новое название, логин или адрес сверяются с куском её пароля (флаги
+    // «в пароле название или логин», оценка), новая подсказка — с самим
+    // паролем. Без переспроса это оракул по подстрокам без предела.
+    // «Снять «Важный»» спрашивает мастер-пароль сам — второй раз не нужно.
+    final dropping = previous != null &&
+        previous.important &&
+        !_important &&
+        VaultPrefs.repromptImportant.of(kit.vault.prefs);
+    // Запас [PasswordsKit.saveMargin]: окно подтверждения не должно
+    // кончиться, пока идут проверки и запись.
+    if (previous != null &&
+        !dropping &&
+        _changed(previous, service, hint) &&
+        kit.needsReprompt(previous.id, margin: PasswordsKit.saveMargin)) {
+      final ok = await askMaster(
+        context,
+        title: 'Важная запись',
+        text: 'Правка важной записи подтверждается мастер-паролем.',
+        check: kit.confirm,
+      );
+      if (!mounted) return;
+      if (!ok) {
+        setState(
+          () => _failure = 'Не сохранено: для важной записи нужен '
+              'мастер-пароль.',
+        );
+        return;
+      }
+    }
+    // HintGuard (5.3): кусок пароля с учётом регистра, раскладки,
+    // транслита и l33t, пароль другой записи — запрет; слово фразы —
+    // предупреждение (второй «Сохранить» сохраняет).
+    // Прежнюю подсказку при прежнем пароле не перепроверяем: её отметит
+    // «Проверка» (флаг «подсказка раскрывает пароль»).
+    // Повтор пароля с важными записями сообщается только здесь (живое
+    // предупреждение их не сравнивает, 15.2): показать один раз, второй
+    // «Сохранить» сохраняет.
+    final review = previous != null && previous.hint == hint && password.isEmpty
+        ? SaveReview.fine
+        : await kit.reviewSave(hint, password, id: widget.id);
+    if (!mounted) return;
+    final verdict = review.hint;
+    if (verdict.block == HintProblem.needsConfirm) {
+      setState(() => _hintError = verdict.message);
+      final ok = await askMaster(
+        context,
+        title: 'Проверить подсказку',
+        text: 'Без мастер-пароля подсказку больше не сверить с паролями '
+            'важных записей. Подтвердите — и сохраните ещё раз.',
+        check: kit.confirm,
+      );
+      if (!mounted || !ok) return;
+      return _save();
+    }
+    if (!verdict.ok || (verdict.warning != null && _warnedHint != hint)) {
+      setState(() {
+        _hintError = verdict.message;
+        if (verdict.ok) _warnedHint = hint;
+      });
+      return;
+    }
+    final repeat = _repeatText(review.same);
+    if (repeat != null &&
+        repeat != _repeatWarning &&
+        _warnedRepeat != password) {
+      setState(() {
+        _repeatWarning = repeat;
+        _warnedRepeat = password;
+      });
       return;
     }
     final id = widget.id;
     final before = id == null ? null : kit.vault.entry(id);
+    final urls = <String>[
+      for (final line in _urls.text.split('\n'))
+        if (line.trim().isNotEmpty) line.trim(),
+    ];
+    final login = _login.text.trim();
+    final note = _note.text;
     if (id != null &&
         before != null &&
         before.important &&
         !_important &&
         VaultPrefs.repromptImportant.of(kit.vault.prefs)) {
       // Снять «Важный» — ослабить защиту (3.6, 15.2): как и выключение
-      // переспроса в настройках, только с мастер-паролем.
+      // переспроса в настройках, только с мастер-паролем. Мастер-пароль
+      // проверяется той же операцией, что сохраняет правку: всё или
+      // ничего.
       setState(() => _busy = true);
+      String? failure;
       final ok = await askMaster(
         context,
         title: 'Снять «Важный»?',
         text: 'Без этой отметки пароль покажут и скопируют без '
             'подтверждения. Подтвердите мастер-паролем.',
-        check: (String master) => kit.dropImportant(id, master),
+        check: (String master) async {
+          final bytes = SecretBytes.fromText(master);
+          try {
+            failure = await _write(
+              id: id,
+              service: service,
+              login: login,
+              hint: hint,
+              urls: urls,
+              password: password,
+              note: note,
+              master: bytes,
+            );
+            return true;
+          } on VaultError {
+            return false;
+          } finally {
+            bytes.wipe();
+          }
+        },
       );
       if (!mounted) return;
       if (!ok) {
@@ -514,18 +755,58 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
         });
         return;
       }
+      _finish(failure);
+      return;
     }
     setState(() => _busy = true);
-    final urls = <String>[
-      for (final line in _urls.text.split('\n'))
-        if (line.trim().isNotEmpty) line.trim(),
-    ];
-    final login = _login.text.trim();
+    try {
+      _finish(
+        await _write(
+          id: id,
+          service: service,
+          login: login,
+          hint: hint,
+          urls: urls,
+          password: password,
+          note: note,
+        ),
+      );
+    } on VaultError {
+      _finish('Не получилось сохранить.');
+    }
+  }
+
+  /// Итог сохранения: закрыть редактор или показать [failure].
+  void _finish(String? failure) {
+    if (!mounted) return;
+    if (failure == null) {
+      _clear();
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _failure = failure;
+    });
+  }
+
+  /// Записать правку одной операцией хранилища ([Vault.updateEntry]):
+  /// поля, пароль и заметка ложатся вместе или не ложатся вовсе.
+  /// `null` — сохранено, иначе текст ошибки. Неверный [master] —
+  /// `VaultError` наружу (диалог мастер-пароля скажет «не подошёл»).
+  Future<String?> _write({
+    required String? id,
+    required String service,
+    required String login,
+    required String hint,
+    required List<String> urls,
+    required String password,
+    required String note,
+    SecretBytes? master,
+  }) async {
     final passwordBytes =
         password.isEmpty ? null : SecretBytes.fromText(password);
-    final noteBytes =
-        _note.text.isEmpty ? null : SecretBytes.fromText(_note.text);
-    _clear();
+    final noteBytes = note.isEmpty ? null : SecretBytes.fromText(note);
     try {
       if (id == null) {
         await kit.vault.addEntry(
@@ -538,30 +819,37 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
           important: _important,
         );
       } else {
-        await kit.vault.updateInfo(
+        await kit.vault.updateEntry(
           id,
           service: service,
           login: login,
           hint: hint,
           urls: urls,
           important: _important,
+          password: passwordBytes,
+          note: noteBytes,
+          master: master,
         );
-        if (passwordBytes != null) {
-          await kit.vault.updatePassword(id, passwordBytes);
-        }
-        if (noteBytes != null) await kit.vault.updateNote(id, noteBytes);
       }
-      if (mounted) Navigator.of(context).pop();
+      return null;
+    } on VaultError catch (error) {
+      if (master != null &&
+          (error.code == VaultErrorCode.wrongPassword ||
+              error.code == VaultErrorCode.rateLimited)) {
+        rethrow;
+      }
+      return 'Не получилось сохранить.';
     } on ArgumentError {
-      if (mounted) {
-        setState(() => _failure = 'Слишком длинное поле — сократите его.');
-      }
+      return 'Слишком длинное поле — сократите его.';
+    } on StateError {
+      // Окно подтверждения кончилось до записи: ничего не сохранено.
+      return 'Не сохранено: для важной записи нужен мастер-пароль. '
+          'Нажмите «Сохранить» ещё раз.';
     } on Object {
-      if (mounted) setState(() => _failure = 'Не получилось сохранить.');
+      return 'Не получилось сохранить.';
     } finally {
       passwordBytes?.wipe();
       noteBytes?.wipe();
-      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -621,18 +909,32 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
                 key: const ValueKey<String>('editor-password'),
                 controller: _password,
                 label: _isNew ? 'Пароль' : 'Новый пароль',
-                helper: _repeatWarning ??
-                    (_isNew ? null : 'Пусто — оставить прежний пароль.'),
+                helper: <String>[
+                  if (_repeatWarning != null) _repeatWarning!,
+                  if (_strength != null) _strength!,
+                  if (_repeatWarning == null && _strength == null && !_isNew)
+                    'Пусто — оставить прежний пароль.',
+                ].join('\n').nullIfEmpty,
                 error: _passwordError,
                 enabled: !_busy,
                 allowShow: true,
                 autofocus: widget.passwordOnly,
                 onChanged: _checkRepeat,
               ),
-              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const ValueKey<String>('editor-generate'),
+                  onPressed: _busy ? null : () => unawaited(_generate()),
+                  icon: const Icon(Icons.casino_outlined, size: 16),
+                  label: const Text('Сгенерировать'),
+                ),
+              ),
+              const SizedBox(height: 4),
               TextField(
                 key: const ValueKey<String>('editor-hint'),
                 controller: _hint,
+                onChanged: (_) => setState(() {}),
                 enabled: !_busy,
                 autocorrect: false,
                 decoration: InputDecoration(
@@ -643,9 +945,21 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
                       'покажет её, когда вы забудете пароль.',
                   helperMaxLines: 12,
                   errorText: _hintError,
+                  errorMaxLines: 4,
                   border: const OutlineInputBorder(),
                 ),
               ),
+              if (_structure != null && _hint.text.trim().isEmpty)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    key: const ValueKey<String>('editor-structure-hint'),
+                    onPressed: () => setState(() {
+                      _hint.text = '${_structure!}. ';
+                    }),
+                    child: const Text('Подставить подсказку по структуре'),
+                  ),
+                ),
               const SizedBox(height: 12),
               SecretField(
                 key: const ValueKey<String>('editor-note'),
@@ -664,9 +978,10 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
                 value: _important,
                 onChanged:
                     _busy ? null : (bool v) => setState(() => _important = v),
-                title: const Text('Важный'),
+                title: const Text('Важный — тренировать память'),
                 subtitle: const Text(
-                  'Показ и копирование — с подтверждением мастер-паролем.',
+                  'Показ и копирование — с подтверждением мастер-паролем; '
+                  'иногда спрошу пароль по памяти.',
                 ),
               ),
               if (_failure != null)
@@ -689,4 +1004,8 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
       ),
     );
   }
+}
+
+extension on String {
+  String? get nullIfEmpty => isEmpty ? null : this;
 }

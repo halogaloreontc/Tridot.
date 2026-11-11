@@ -63,10 +63,24 @@ const Map<String, String> facts = <String, String>{
   'minutes': '5',
   'seconds': '15',
   'code': 'io',
+  'strength': 'высокая',
+  'bits': '76',
+  'weak': '2',
+  'reused': '1',
+  'places': '3',
+  'old': '4',
+  'streak': '3',
+  'days': '7',
 };
 
 /// Подстановки-числа с формами слова: проверяются при 1, 2, 3, 5, 11, 21.
-const Set<String> countFacts = <String>{'count', 'active', 'overdue'};
+const Set<String> countFacts = <String>{
+  'count',
+  'active',
+  'overdue',
+  'total',
+  'places',
+};
 const List<String> countSamples = <String>['1', '2', '3', '5', '11', '21'];
 
 String catalog({
@@ -185,6 +199,41 @@ void main() {
         'в списке.',
       );
     });
+  });
+
+  test('«Пароли» на «ты»: ни одного «-ите/-йте» вне выбора обращения', () {
+    final formal = RegExp(r'[А-Яа-яЁё]+(?:ите|йте|ьте)(?![А-Яа-яЁё])');
+    // Не глаголы: «на сайте».
+    const nouns = <String>{'сайте'};
+    var checked = 0;
+    for (final MapEntry(key: id, value: _) in library.neutral.entries.entries) {
+      if (!id.startsWith('passwords.')) continue;
+      final spec = library.schema[id]!;
+      final values = <String, String>{
+        for (final name in spec.placeholders)
+          name: countFacts.contains(name) ? '2' : facts[name] ?? 'Почта',
+      };
+      for (final catalog in library.styles) {
+        final variants = library.variants(id, catalog.style);
+        for (var turn = 0; turn < variants.length; turn++) {
+          final text = library.render(
+            Reply(id, values),
+            ReplyVoice(style: catalog.style, address: ReplyAddress.informal),
+            turn: turn,
+          );
+          expect(
+            formal
+                .allMatches(text)
+                .map((Match m) => m.group(0)!.toLowerCase())
+                .where((String w) => !nouns.contains(w)),
+            isEmpty,
+            reason: '$id/${catalog.style}/$turn: $text',
+          );
+          checked++;
+        }
+      }
+    }
+    expect(checked, greaterThan(100));
   });
 
   test(

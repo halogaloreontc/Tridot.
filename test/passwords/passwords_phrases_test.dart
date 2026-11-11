@@ -44,8 +44,29 @@ void main() {
       'сгенерируй пароль': (PasswordCommands.generate, null),
       'проверь мои пароли': (PasswordCommands.check, null),
       'потренируй меня': (PasswordCommands.train, null),
+      'потренируй меня в паролях': (PasswordCommands.train, null),
+      // Тренировка названной записи — сервис из фразы, не первая в очереди.
+      'проверь, помню ли я пароль от госуслуг': (
+        PasswordCommands.train,
+        'Госуслуги',
+      ),
+      'проверить, помню ли я пароль от wifi': (PasswordCommands.train, 'Wi-Fi'),
+      // «Нужен пароль от …» — забытый пароль, а не новый.
+      'мне нужен пароль от почты': (PasswordCommands.hint, 'почта'),
+      'нужен пароль от wifi': (PasswordCommands.hint, 'Wi-Fi'),
+      'нужен пароль на 20 символов': (PasswordCommands.generate, null),
+      'нужен новый случайный пароль': (PasswordCommands.generate, null),
       'сделай копию паролей': (PasswordCommands.backup, null),
       'импортируй пароли из браузера': (PasswordCommands.import, null),
+      'импорт паролей из браузера': (PasswordCommands.import, null),
+      'перенеси пароли из firefox': (PasswordCommands.import, null),
+      'сделай резервную копию паролей': (PasswordCommands.backup, null),
+      'резервная копия паролей': (PasswordCommands.backup, null),
+      'восстанови пароли из копии': (PasswordCommands.restore, null),
+      'восстановить хранилище из резервной копии': (
+        PasswordCommands.restore,
+        null,
+      ),
     };
     for (final MapEntry(key: text, value: (cmd, query)) in cases.entries) {
       test(text, () {
@@ -57,6 +78,75 @@ void main() {
         expect(command.confidence, greaterThanOrEqualTo(0.75));
       });
     }
+  });
+
+  test('«потренируй меня …» о другом — не тренировка паролей', () {
+    for (final text in <String>[
+      'потренируй меня в английском',
+      'потренируй меня отжиматься',
+    ]) {
+      expect(parse(text), isNull, reason: text);
+    }
+  });
+
+  test('чужая просьба придумать пароль — не генератор', () {
+    final command = parse('маша просила придумать пароль для wifi');
+    expect(command?.cmd, isNot(PasswordCommands.generate));
+    expect(
+      PasswordPhrases.looksLike(
+        Utterance.analyze(
+          'маша просила придумать пароль для wifi',
+          now: DateTime(2026, 11, 2),
+        ),
+      ),
+      isTrue,
+    );
+  });
+
+  test('чужая просьба в настоящем времени — не команда', () {
+    for (final text in <String>[
+      'мама просит придумать пароль',
+      'мама хочет придумать пароль',
+      'коллеги просят придумать пароль для wifi',
+      'папа спрашивает пароль от почты',
+      'сын предлагает придумать пароль',
+    ]) {
+      expect(parse(text), isNull, reason: text);
+    }
+    // Своя просьба — по-прежнему генератор.
+    expect(parse('привет, придумай пароль')?.cmd, PasswordCommands.generate);
+    expect(parse('придумай пароль')?.cmd, PasswordCommands.generate);
+  });
+
+  test('«у меня от почты» — сервис после предлога', () {
+    for (final text in <String>[
+      'нужен пароль у меня от почты',
+      'нужен пароль от почты',
+    ]) {
+      final command = parse(text)!;
+      expect(command.cmd, PasswordCommands.hint, reason: text);
+      expect(command.query, 'почта', reason: text);
+    }
+  });
+
+  test('«без цифр и символов» выключает и цифры, и символы', () {
+    for (final text in <String>[
+      'сгенерируй пароль без цифр и символов',
+      'сгенерируй пароль без символов и цифр',
+      'сгенерируй пароль без символов, цифр',
+    ]) {
+      final options = parse(text)!.options;
+      expect(options['symbols'], false, reason: text);
+      expect(options['digits'], false, reason: text);
+    }
+    expect(
+      parse('сгенерируй пароль без похожих и символов')!.options,
+      containsPair('noLookAlike', true),
+    );
+    expect(
+      parse('сгенерируй пароль без цифр')!.options.containsKey('symbols'),
+      isFalse,
+    );
   });
 
   test('«пароль» одним словом — справка, уступает всему', () {

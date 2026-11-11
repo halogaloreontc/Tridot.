@@ -4,8 +4,10 @@
 // Канарейки — заведомо искусственные строки `CANARY-…`: в файлах, логах и
 // названиях тестов не бывает ничего похожего на настоящий пароль.
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:local_assistant/core/passwords/password_wordlists.dart';
 import 'package:local_assistant/core/passwords/secret_bytes.dart';
 import 'package:local_assistant/core/passwords/vault.dart';
 import 'package:local_assistant/core/passwords/vault_crypto.dart';
@@ -16,13 +18,24 @@ import 'package:local_assistant/core/services/clock.dart';
 Future<SodiumVaultCrypto> testCrypto({bool isolated = false}) =>
     SodiumVaultCrypto.load(isolated: isolated);
 
-/// Часы, которые двигает тест.
-final class TestClock implements Clock {
+/// Часы, которые двигает тест: стенные ([value]) и монотонные
+/// ([elapsed]). [advance] двигает оба; [jump] — только стенные (перевод
+/// системных часов), [value] можно и присвоить.
+final class TestClock implements Clock, MonotonicClock {
   TestClock([DateTime? start]) : value = start ?? DateTime.utc(2026, 11, 10, 9);
 
   DateTime value;
 
-  void advance(Duration by) => value = value.add(by);
+  @override
+  Duration elapsed = Duration.zero;
+
+  void advance(Duration by) {
+    value = value.add(by);
+    elapsed += by;
+  }
+
+  /// Перевести только стенные часы (вперёд или назад).
+  void jump(Duration by) => value = value.add(by);
 
   @override
   DateTime now() => value;
@@ -125,4 +138,51 @@ bool containsBytes(Uint8List haystack, Uint8List needle) {
     return true;
   }
   return false;
+}
+
+/// Встроенные словари навыка (assets/passwords/), прочитанные с диска.
+PasswordWordlists testWordlists() => PasswordWordlists.parse(
+      eff: File('assets/passwords/eff_large_wordlist.txt').readAsStringSync(),
+      common: File('assets/passwords/common_passwords.txt').readAsStringSync(),
+    );
+
+/// Хранилище в памяти, у которого запись файла хранилища падает по
+/// требованию ([fail]): проверка атомарности импорта и слияния.
+final class FailingVaultStore implements VaultStore {
+  final InMemoryVaultStore inner = InMemoryVaultStore();
+  bool fail = false;
+
+  @override
+  Future<bool> hasVault() => inner.hasVault();
+  @override
+  Future<Uint8List?> readVault() => inner.readVault();
+  @override
+  Future<Uint8List?> readPrevious() => inner.readPrevious();
+  @override
+  Future<void> writeVault(Uint8List bytes, {bool replacePrevious = false}) {
+    if (fail) throw const FileSystemException('диск');
+    return inner.writeVault(bytes, replacePrevious: replacePrevious);
+  }
+
+  @override
+  Future<void> writePrevious(Uint8List bytes) => inner.writePrevious(bytes);
+  @override
+  Future<List<int>> backupVersions() => inner.backupVersions();
+  @override
+  Future<Uint8List?> readBackup(int version) => inner.readBackup(version);
+  @override
+  Future<void> writeBackup(int version, Uint8List bytes) =>
+      inner.writeBackup(version, bytes);
+  @override
+  Future<void> deleteBackup(int version) => inner.deleteBackup(version);
+  @override
+  Future<Uint8List?> readAttempts() => inner.readAttempts();
+  @override
+  Future<void> writeAttempts(Uint8List bytes) => inner.writeAttempts(bytes);
+  @override
+  Future<void> removeTemporary() => inner.removeTemporary();
+  @override
+  Future<void> archiveVault(String name) => inner.archiveVault(name);
+  @override
+  Future<List<String>> archived() => inner.archived();
 }
