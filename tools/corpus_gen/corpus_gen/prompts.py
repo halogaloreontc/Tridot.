@@ -30,6 +30,9 @@ TASKS_GENERATION_RULES = """Пиши фразы так, как пишут в о�
 «напомни мне в пятницу купить хлеб», «запиши сдать отчёт #работа»). Кавычки («…», “…”, „…“ или "…")
 используй лишь иногда — примерно в каждой пятой фразе, когда название нужно передать точно."""
 
+# Коннекторы, правила генерации которых нарушать нельзя даже ради теста (запрет секретов).
+STRICT_CONNECTORS = frozenset({"passwords"})
+
 GENERATION_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {"phrases": {"type": "array", "items": {"type": "string"}}},
@@ -51,10 +54,13 @@ def generation_prompt(
     area = f"Раздел помощника: {connector.title}"
     if connector.description:
         area += f" — {connector.description}"
+    # Навыку «Пароли» правила нарушать нельзя: нарушение — это и есть секрет во фразе.
+    loose = "" if connector.id in STRICT_CONNECTORS else "Часть фраз может нарушать правила — это тоже полезно для тестов.\n"
     return (
         f"Придумай {count} разных фраз пользователя. {area}. Тема: {topic.description}.\n\n"
         + (f"{rules}\n" if rules else "")
-        + "Часть фраз может нарушать правила — это тоже полезно для тестов.\n\n"
+        + loose
+        + "\n"
         f"Фразы, которые уже есть (не повторяй их):\n{sample}\n\n"
         'Верни JSON: {"phrases": ["…", "…"]}.'
     )

@@ -19,6 +19,7 @@ from . import prompts
 from .config import Config, Source
 from .topics import DEFAULT_CONNECTOR, Catalog, ConnectorTopics, load_catalog, row_connector, split_ref
 from .providers import Provider, ProviderError, make_provider
+from .secret_filter import looks_secret
 from .store import CandidateStore, Checkpoint, append_jsonl, candidate_id, clean_phrase, corpus_rows, normalize_text
 
 ProviderFactory = Callable[[Source], Provider]
@@ -39,6 +40,10 @@ APP_CHECK_MARK = "parser"
 AGREED_BY_PARSER = "agreed_by_parser"  # из agreed: подтверждены приложением
 RECHECKED = "rechecked"  # старые спорные с одной разметкой, решённые заново
 CHECK_FAILED = "check_failed"  # проверка приложением не удалась (dart упал)
+SECRET_DROPPED = "secret_dropped"  # похожи на секрет: не отправлены моделям, не в корпусе
+
+# Пометка check у фразы, отклонённой фильтром секретов (сам текст не печатается нигде).
+SECRET_CHECK = "отклонено: фраза похожа на секрет (пароль, код, логин, почта, телефон)"
 
 
 def catalog_for(config: Config) -> Catalog:
@@ -63,6 +68,8 @@ class Interrupted(Exception):
 class Report:
     added: int = 0
     duplicates: int = 0
+    # Похожие на секрет фразы (secret_filter): не сохранены; текст не печатается.
+    secret_dropped: int = 0
     errors: list[str] | None = None
 
     def error(self, message: str) -> None:
@@ -113,7 +120,7 @@ def generate(
             except Exception as error:  # noqa: BLE001 — сеть, лимиты, отказ, не-JSON
                 with lock:
                     if not checkpoint.closed:
-                        report.error(f"{source.name}: {error}")
+                        report.error(f"{source.name}: {_generation_error(error, connector.id)}")
                         checkpoint.add_usage(_usage_row(source, "generate", error))
                         finished[source.name] = batches
                 return
@@ -129,6 +136,9 @@ def generate(
                 finished[source.name] += 1
                 for phrase in phrases:
                     if not isinstance(phrase, str) or not phrase.strip():
+                        continue
+                    if looks_secret(clean_phrase(phrase), connector.id):
+                        report.secret_dropped += 1
                         continue
                     if not _add_candidate(
                         store, known, phrase, source.name, source.family, connector.id, topic_.name, config
@@ -153,6 +163,22 @@ def generate(
     return report
 
 
+def _generation_error(error: Exception, connector_id: str) -> str:
+    """Текст ошибки генерации для печати: кусок ответа модели — непроверенные фразы.
+
+    У навыка «Пароли» кусок ответа скрывается всегда, у других коннекторов — если похож на
+    секрет. Ошибку не провайдера, похожую на секрет, заменяет её тип.
+    """
+    if isinstance(error, ProviderError) and error.snippet:
+        strict = connector_id in prompts.STRICT_CONNECTORS
+        if strict or looks_secret(error.snippet, connector_id):
+            return error.redacted()
+    text = str(error)
+    if looks_secret(text, connector_id):
+        return f"{type(error).__name__}: <текст ошибки скрыт: похож на секрет>"
+    return text
+
+
 def import_manual(
     config: Config,
     store: CandidateStore,
@@ -174,6 +200,9 @@ def import_manual(
     for raw in lines:
         phrase = re.sub(r"^\s*(?:\d+[.)]\s+|[-*•–—]\s+)", "", clean_phrase(raw)).strip()
         if not phrase:
+            continue
+        if looks_secret(phrase, connector_id):
+            report.secret_dropped += 1
             continue
         if _add_candidate(store, known, phrase, source_name, f"manual:{source_name}", connector_id, topic, config):
             report.added += 1
@@ -221,6 +250,7 @@ def _known_texts(config: Config, store: CandidateStore) -> set[str]:
 
 
 def _examples(config: Config, connector: ConnectorTopics, intents: frozenset[str] | None) -> list[str]:
+    """Примеры для промпта генерации; строки корпуса, похожие на секрет, моделям не уходят."""
     rows = corpus_rows(config.corpus_dir)
     return [
         r["text"]
@@ -228,6 +258,7 @@ def _examples(config: Config, connector: ConnectorTopics, intents: frozenset[str
         if r.get("text")
         and row_connector(r) == connector.id
         and (intents is None or r.get("intent") in intents)
+        and not looks_secret(r["text"], connector.id)
     ]
 
 
@@ -271,6 +302,9 @@ def label(
     """
     catalog = catalog or catalog_for(config)
     router = router or run_dart_router
+    # Фразы, похожие на секрет (вписаны в work/candidates.jsonl руками или сохранены до
+    # фильтра), моделям не отправляются: отклоняются без разметки.
+    secret = reject_secrets(store)
     # Новые раньше упавших, чтобы --limit не застревал на одной ошибочной фразе;
     # фразы без подходящих разметчиков пропускаются.
     pending = [row for row in store.rows if row["status"] == "new"]
@@ -358,7 +392,10 @@ def label(
                     on_progress(finished, len(jobs))
 
             _run_jobs(jobs, run, workers, stop=stop, tick=tick)
-            return _decide_all(config, pending, recheck, labelers, connectors, router, checkpoint)
+            counts = _decide_all(config, pending, recheck, labelers, connectors, router, checkpoint)
+            if secret:
+                counts[SECRET_DROPPED] = secret
+            return counts
         except KeyboardInterrupt:
             stop.set()
             _final_save(checkpoint)
@@ -406,6 +443,33 @@ def _decide_all(
         checkpoint.changed()
     _final_save(checkpoint)
     return counts
+
+
+def reject_secrets(store: CandidateStore) -> int:
+    """Отклоняет ещё не перенесённые фразы, похожие на секрет; возвращает их число.
+
+    Статус rejected (review их не показывает, promote не переносит), разметки моделей и ошибки
+    стираются, check объясняет причину без текста фразы. Принятые человеком (accepted) фразы
+    сохраняют статус и разметку — только check: promote пропускает их по тому же фильтру.
+    """
+    count = 0
+    for row in store.rows:
+        if row.get("status") in {"promoted", "rejected"} or row.get("check") == SECRET_CHECK:
+            continue
+        if not looks_secret(row.get("text", ""), row_connector(row)):
+            continue
+        row["check"] = SECRET_CHECK
+        count += 1
+        if row.get("status") == "accepted":
+            # Решение человека не стирается: promote всё равно не перенесёт фразу.
+            continue
+        row["status"] = "rejected"
+        row["labels"] = {}
+        row.pop("final", None)
+        row.pop("errors", None)
+    if count:
+        store.save()
+    return count
 
 
 def _single_label_disputed(row: dict[str, Any], labelers: list[Source]) -> bool:
@@ -757,8 +821,15 @@ def promote(
     Писать их как known_gap нельзя — верно размеченная фраза уронила бы этот тест («смените
     status на active»). Коннектор должен быть зарегистрирован в _connectorFactories теста.
     """
-    ready = [r for r in store.rows if r["status"] in {"agreed", "accepted"} and r.get("final")]
     counts: Counter[str] = Counter()
+    secret = reject_secrets(store) if not dry_run else 0
+    if secret:
+        counts[SECRET_DROPPED] = secret
+    ready = [
+        r
+        for r in store.rows
+        if r["status"] in {"agreed", "accepted"} and r.get("final") and not looks_secret(r["text"], row_connector(r))
+    ]
     if not ready:
         return counts
     catalog = catalog or catalog_for(config)

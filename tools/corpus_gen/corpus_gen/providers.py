@@ -25,10 +25,21 @@ class ProviderError(RuntimeError):
     Токены оплаченного, но непригодного ответа сохраняются, чтобы попасть в расход.
     """
 
-    def __init__(self, message: str, input_tokens: int = 0, output_tokens: int = 0) -> None:
+    def __init__(
+        self, message: str, input_tokens: int = 0, output_tokens: int = 0, *, snippet: str | None = None
+    ) -> None:
         super().__init__(message)
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
+        # Кусок ответа модели, вставленный в message (не-JSON): в нём могут быть фразы.
+        self.snippet = snippet
+
+    def redacted(self) -> str:
+        """Сообщение без куска ответа модели: только его длина."""
+        text = str(self)
+        if self.snippet:
+            text = text.replace(repr(self.snippet), f"<текст ответа скрыт: {len(self.snippet)} символов>")
+        return text
 
 
 class Provider(Protocol):
@@ -179,7 +190,8 @@ def _load_json(text: str, name: str, tokens: tuple[int, int] = (0, 0)) -> dict[s
     except json.JSONDecodeError:
         start, end = cleaned.find("{"), cleaned.rfind("}")
         if start == -1 or end <= start:
-            raise ProviderError(f"{name}: ответ не JSON: {text[:200]!r}", *tokens) from None
+            snippet = text[:200]
+            raise ProviderError(f"{name}: ответ не JSON: {snippet!r}", *tokens, snippet=snippet) from None
         candidate = cleaned[start : end + 1]
         try:
             value = json.loads(candidate)
@@ -188,7 +200,9 @@ def _load_json(text: str, name: str, tokens: tuple[int, int] = (0, 0)) -> dict[s
                 value = json.loads(_escape_stray_quotes(candidate))
             except json.JSONDecodeError:
                 near = candidate[max(0, error.pos - 40) : error.pos + 40]
-                raise ProviderError(f"{name}: ответ не JSON: {error}; рядом: {near!r}", *tokens) from None
+                raise ProviderError(
+                    f"{name}: ответ не JSON: {error}; рядом: {near!r}", *tokens, snippet=near
+                ) from None
     if not isinstance(value, dict):
         raise ProviderError(f"{name}: ожидался JSON-объект", *tokens)
     return value

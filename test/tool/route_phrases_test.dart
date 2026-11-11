@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_assistant/core/passwords/secret_guard.dart';
+import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 
 import '../../tool/route_phrases.dart';
 
@@ -67,5 +71,89 @@ void main() {
     }
     final parse = routed('«купить хлеб»')['parse']! as Map<String, Object?>;
     expect(parse['intent'], 'unknown');
+  });
+
+  group('навык «Пароли» включён, как в корпусном тесте', () {
+    List<String?> connectorsOf(Map<String, Object?> result) => <String?>[
+          for (final m in result['matches']! as List<Map<String, Object?>>)
+            m['connector'] as String?,
+        ];
+
+    test('фразы навыка забирает он с commandId навыка', () {
+      const expected = <String, String>{
+        'забыл пароль от почты': PasswordCommands.hint,
+        'покажи пароль от wifi': PasswordCommands.reveal,
+        'сгенерируй пароль на 24 символа': PasswordCommands.generate,
+        'запри пароли': PasswordCommands.lock,
+        'забыл мастер-пароль': PasswordCommands.masterForgot,
+      };
+      for (final MapEntry(key: text, value: command) in expected.entries) {
+        final result = routed(text);
+        expect(result['connector'], PasswordsConnector.id, reason: text);
+        expect(result['command'], command, reason: text);
+      }
+    });
+
+    test('явная фраза о паролях — у навыка, а не у задач', () {
+      final result = routed('добавь пароль для озона');
+      expect(result['connector'], PasswordsConnector.id);
+      expect(result['command'], PasswordCommands.add);
+    });
+
+    test('задача со словом «пароль» остаётся задачей', () {
+      final result = routed('напомни завтра сменить пароль от почты');
+      expect(result['connector'], 'tasks');
+      expect(
+        (result['parse']! as Map<String, Object?>)['intent'],
+        'createTask',
+      );
+    });
+
+    test('фразу о паролях не видит сетевой коннектор (склад)', () {
+      final result = routed('склад, пароль от почты');
+      expect(result['connector'], PasswordsConnector.id);
+      expect(connectorsOf(result), isNot(contains('warehouse')));
+      // Без слова «пароль» склад фразу видит.
+      expect(
+        connectorsOf(routed('склад, где лежит 64115')),
+        contains('warehouse'),
+      );
+    });
+
+    test('чужая просьба — не команда навыка', () {
+      final result = routed('скажи Пете пароль от wifi');
+      expect(connectorsOf(result), isNot(contains(PasswordsConnector.id)));
+    });
+  });
+
+  test('темы tools/corpus_gen: намерения паролей — ровно PasswordCommands', () {
+    // corpus_gen размечает фразы навыка этими намерениями, а корпусный
+    // тест сравнивает их с commandId совпадения.
+    final toml =
+        File('tools/corpus_gen/topics/passwords.toml').readAsStringSync();
+    final block = RegExp(r'^intents = \[([^\]]*)\]', multiLine: true)
+        .firstMatch(toml)!
+        .group(1)!;
+    final intents = <String>[
+      for (final m in RegExp(r'"([^"]+)"').allMatches(block)) m.group(1)!,
+    ];
+    expect(intents, <String>[...PasswordCommands.all, 'unknown']);
+    expect(toml, contains('\nconnector = "passwords"\n'));
+  });
+
+  test('фразы-маркеры corpus_gen маскирует настоящий SecretGuard', () {
+    // tools/corpus_gen/tests/test_passwords.py требует, чтобы фильтр
+    // corpus_gen отбрасывал эти же фразы: так он не слабее SecretGuard.
+    final lines = File(
+      'tools/corpus_gen/tests/fixtures/secret_guard_positive.txt',
+    ).readAsLinesSync();
+    final phrases = [
+      for (final line in lines)
+        if (line.trim().isNotEmpty && !line.startsWith('#')) line,
+    ];
+    expect(phrases.length, greaterThanOrEqualTo(10));
+    for (final phrase in phrases) {
+      expect(SecretGuard.redact(phrase).guarded, isTrue, reason: phrase);
+    }
   });
 }

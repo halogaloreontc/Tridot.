@@ -165,6 +165,7 @@ def _generate(config: Config, store: CandidateStore, args: argparse.Namespace) -
         )
         return INTERRUPTED_EXIT
     print(f"Добавлено фраз: {report.added}, дублей пропущено: {report.duplicates}")
+    _print_secret_dropped(report.secret_dropped)
     for error in report.errors or []:
         print(f"Ошибка: {error}", file=sys.stderr)
     return 0 if not report.errors else 1
@@ -245,10 +246,18 @@ def _duration(seconds: float) -> str:
     return f"{hours} ч {minutes} мин" if hours else f"{minutes} мин"
 
 
+def _print_secret_dropped(count: int) -> None:
+    """Сколько фраз отброшено фильтром секретов; сами фразы не печатаются никогда."""
+    if count:
+        print(f"Отброшено фраз, похожих на секрет (пароль, код, логин, почта, телефон): {count}")
+
+
 def _label_summary(counts: Counter[str]) -> str:
-    extra = {pipeline.AGREED_BY_PARSER, pipeline.RECHECKED, pipeline.CHECK_FAILED}
+    extra = {pipeline.AGREED_BY_PARSER, pipeline.RECHECKED, pipeline.CHECK_FAILED, pipeline.SECRET_DROPPED}
     statuses = [f"{k}={v}" for k, v in sorted(counts.items()) if k not in extra]
     if not statuses:
+        if counts.get(pipeline.SECRET_DROPPED):
+            return f"Итог разметки: нечего размечать; отклонено как похожие на секрет={counts[pipeline.SECRET_DROPPED]}"
         return "Итог разметки: нечего размечать"
     details = []
     if counts.get(pipeline.AGREED_BY_PARSER):
@@ -257,6 +266,8 @@ def _label_summary(counts: Counter[str]) -> str:
         details.append(f"перепроверено спорных с одной разметкой={counts[pipeline.RECHECKED]}")
     if counts.get(pipeline.CHECK_FAILED):
         details.append(f"проверка не удалась={counts[pipeline.CHECK_FAILED]}")
+    if counts.get(pipeline.SECRET_DROPPED):
+        details.append(f"отклонено как похожие на секрет={counts[pipeline.SECRET_DROPPED]}")
     summary = "Итог разметки: " + ", ".join(statuses)
     return summary + (f"; из них {', '.join(details)}" if details else "")
 
@@ -378,6 +389,7 @@ def _import_manual(config: Config, store: CandidateStore, args: argparse.Namespa
         print(f"Ошибка: {error}", file=sys.stderr)
         return 2
     print(f"Добавлено фраз: {report.added}, дублей пропущено: {report.duplicates}")
+    _print_secret_dropped(report.secret_dropped)
     return 0
 
 
