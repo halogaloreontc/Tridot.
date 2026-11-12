@@ -121,4 +121,39 @@ void main() {
       ),
     );
   });
+
+  testWidgets('«Свернуть «Сегодня»» — значок »» и подсказка', (tester) async {
+    tester.view.physicalSize = const Size(340, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var collapsed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AssistantTheme.dark(),
+        home: Scaffold(
+          body: TodayPanel(
+            now: _now,
+            tasks: const <Task>[],
+            onOpenTask: (_) {},
+            onToggleDone: (_) {},
+            onAllTasks: () {},
+            onClose: () => collapsed++,
+          ),
+        ),
+      ),
+    );
+    final button = find.byKey(const Key('today-collapse'));
+    expect(
+      find.descendant(
+        of: button,
+        matching: find.byIcon(Icons.keyboard_double_arrow_right),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Свернуть «Сегодня»'), findsOneWidget);
+    expect(find.byKey(const Key('today-close')), findsNothing);
+    expect(tester.getSize(button).height, greaterThanOrEqualTo(44));
+    await tester.tap(button);
+    expect(collapsed, 1);
+  });
 }

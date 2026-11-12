@@ -1,6 +1,7 @@
-// Быстрые действия над полем ввода (макет «Д»): крупные в пустой сессии,
-// «пилюли» после первой команды, «Пароль» — только с навыком, кнопки ролей
-// и выбранной задачи остаются.
+// Быстрые действия над полем ввода (макет «Д»): «Задача», «Напомнить»,
+// «Пароль» — только крупными в пустой сессии, «Пароль» — только с
+// навыком; после первой команды остаются лишь кнопки ролей и выбранной
+// задачи.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
@@ -64,27 +65,25 @@ void main() {
     ]);
   });
 
-  testWidgets('после команд: «пилюли» 44 px в ряд на всю ширину',
+  testWidgets('после команд «Задачи», «Напомнить» и «Пароля» нет',
       (tester) async {
     await _pump(tester, big: false, onPassword: () {});
-    final rects = <Rect>[
-      for (final label in <String>['Задача', 'Напомнить', 'Пароль'])
-        tester.getRect(find.byKey(Key('quick-$label'))),
-    ];
-    for (final rect in rects) {
-      expect(rect.height, 44);
-      expect(rect.top, rects.first.top);
-      expect(rect.width, moreOrLessEquals(rects.first.width));
+    for (final label in <String>['Задача', 'Напомнить', 'Пароль']) {
+      expect(find.byKey(Key('quick-$label')), findsNothing, reason: label);
     }
+    // Ни ролей, ни выбранной задачи — пусто, без отступа.
+    expect(find.byKey(const Key('quick-actions')), findsNothing);
+    expect(find.byKey(const Key('quick-strip')), findsNothing);
+    expect(tester.getSize(find.byType(QuickActions)).height, 0);
   });
 
   testWidgets('«Пароль» — только с навыком «Пароли»', (tester) async {
-    await _pump(tester, big: false);
+    await _pump(tester, big: true);
     expect(find.byKey(const Key('quick-Пароль')), findsNothing);
     expect(find.byKey(const Key('quick-Задача')), findsOneWidget);
     expect(find.byKey(const Key('quick-Напомнить')), findsOneWidget);
     var opened = 0;
-    await _pump(tester, big: false, onPassword: () => opened++);
+    await _pump(tester, big: true, onPassword: () => opened++);
     await tester.tap(find.byKey(const Key('quick-Пароль')));
     expect(opened, 1);
   });
@@ -111,5 +110,7 @@ void main() {
     await tester.tap(find.byKey(const Key('quick-Заверши её')));
     expect(calls, <String>['send:товары без фото', 'send:Заверши её']);
     expect(find.byKey(const Key('quick-Покажи задачи')), findsNothing);
+    // Основных кнопок рядом с ними нет: сессия уже не новая.
+    expect(find.byKey(const Key('quick-Задача')), findsNothing);
   });
 }

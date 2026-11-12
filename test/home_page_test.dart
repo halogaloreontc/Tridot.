@@ -134,7 +134,8 @@ void main() {
 
     expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
     expect(find.byKey(const Key('status-cube')), findsOneWidget);
-    expect(find.byKey(const Key('history-rail')), findsOneWidget);
+    // Хроника команд появляется с первой командой.
+    expect(find.byKey(const Key('history-rail')), findsNothing);
     expect(find.byKey(const Key('assistant-composer')), findsOneWidget);
     for (final title in <String>[
       'Мой Связной',
@@ -246,6 +247,10 @@ void main() {
 
     expect(await h.tasks.listActive(), isEmpty);
     expect(find.byKey(const Key('selected-task-strip')), findsNothing);
+    // «Задача» — только в новой сессии: в этой уже есть сообщения.
+    expect(find.byKey(const Key('quick-Задача')), findsNothing);
+    await tester.tap(find.byKey(const Key('new-session')));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('quick-Задача')));
     await tester.pump();
@@ -280,16 +285,20 @@ void main() {
     expect(await _status(service, report.id), TaskStatus.planned);
   });
 
-  testWidgets('на ноутбуке «Сегодня» открывается кнопкой', (tester) async {
+  testWidgets('на ноутбуке «Сегодня» открывается кнопкой в шапке',
+      (tester) async {
     await _pump(tester, size: _laptop);
     expect(find.byKey(const Key('today-panel')), findsNothing);
+    expect(find.byKey(const Key('today-button')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('today-button')));
+    await tester.tap(find.byKey(const Key('today-show')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('today-panel')), findsOneWidget);
+    expect(find.byKey(const Key('today-show')), findsNothing);
     await tester.tap(find.byKey(const Key('today-collapse')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('today-panel')), findsNothing);
+    expect(find.byKey(const Key('today-show')), findsOneWidget);
   });
 
   testWidgets('ошибка загрузки задач видна и даёт повторить', (tester) async {
@@ -719,18 +728,18 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('«Сегодня» прижата к правому краю, «Мой Связной» в меню',
-      (tester) async {
-    for (final size in <Size>[_desktop, _phone]) {
-      await tester.pumpWidget(const SizedBox());
-      await _pump(tester, size: size);
-      final today = tester.getRect(find.byKey(const Key('today-button')));
-      expect(
-        size.width - (size == _desktop ? 341 : 0) - today.right,
-        lessThan(48),
-        reason: 'ширина ${size.width}',
-      );
-    }
+  testWidgets(
+      '«Сегодня» — колонкой у правого края только на компьютере, «Мой '
+      'Связной» в меню', (tester) async {
+    await _pump(tester, size: _desktop);
+    final panel = tester.getRect(find.byKey(const Key('today-panel')));
+    expect(panel.right, _desktop.width);
+    expect(find.byKey(const Key('today-button')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await _pump(tester, size: _phone);
+    expect(find.byKey(const Key('today-panel')), findsNothing);
+    expect(find.byKey(const Key('today-button')), findsNothing);
+    expect(find.byKey(const Key('today-show')), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await _pump(tester);
     expect(
@@ -776,7 +785,7 @@ void main() {
     expect(find.byKey(const Key('menu-button')), findsOneWidget);
   });
 
-  testWidgets('хроника стоит по центру высоты всего экрана', (tester) async {
+  testWidgets('хроника — под шапкой, по центру колонки сессии', (tester) async {
     for (final size in <Size>[_desktop, _laptop, _phone]) {
       await tester.pumpWidget(const SizedBox());
       await _pump(tester, size: size);
@@ -784,18 +793,21 @@ void main() {
       await _say(tester, 'Привет');
       await _say(tester, 'Покажи задачи');
 
-      final marks = find.byWidgetPredicate(
-        (Widget w) =>
-            w.key is ValueKey<String> &&
-            RegExp(r'^history-\d+$').hasMatch(
-              (w.key! as ValueKey<String>).value,
-            ),
-      );
-      final first = tester.getRect(marks.first);
-      final last = tester.getRect(marks.last);
-      final centre = (first.top + last.bottom) / 2;
+      final rail = tester.getRect(find.byKey(const Key('history-rail')));
+      final persona = tester.getRect(find.byKey(const Key('persona-switch')));
+      final composer =
+          tester.getRect(find.byKey(const Key('assistant-composer')));
+      // Под строкой шапки, над лентой.
       expect(
-        (centre - size.height / 2).abs(),
+        rail.top,
+        greaterThanOrEqualTo(persona.bottom),
+        reason: 'ширина ${size.width}',
+      );
+      expect(rail.bottom, lessThan(140), reason: 'ширина ${size.width}');
+      // По центру колонки сессии (между меню и «Сегодня»): там же, где
+      // центр поля ввода.
+      expect(
+        (rail.center.dx - composer.center.dx).abs(),
         lessThan(2),
         reason: 'ширина ${size.width}',
       );

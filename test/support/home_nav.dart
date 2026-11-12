@@ -1,5 +1,6 @@
 // Переходы по оболочке «Д» в тестах главного экрана: меню, «Мой Связной»
-// и его вкладки, «Сегодня», возврат в сессию.
+// и его вкладки, «Сегодня» (компьютер) и «Сводка» (телефон), возврат в
+// сессию.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -59,9 +60,13 @@ Future<void> backToSession(WidgetTester tester) async {
   await tapInDrawer(tester, const Key('chat-main'));
 }
 
-/// Открывает «Сегодня» (на телефоне — выдвижная панель).
+/// Открывает колонку «Сегодня» на компьютере, если она свёрнута. На
+/// телефоне её нет — там [openSummary].
 Future<void> openToday(WidgetTester tester) async {
   if (find.byKey(const Key('today-panel')).evaluate().isNotEmpty) return;
-  await tester.tap(find.byKey(const Key('today-button')));
+  await tester.tap(find.byKey(const Key('today-show')));
   await tester.pumpAndSettle();
 }
+
+/// «Мой Связной» → «Сводка»: на телефоне здесь всё, что было в «Сегодня».
+Future<void> openSummary(WidgetTester tester) => openMyRelay(tester);

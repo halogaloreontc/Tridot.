@@ -38,11 +38,18 @@ import '../skills/passwords/passwords_phrases.dart';
 /// коннектора.
 ///
 /// Отвечает один из помощников ([personas], docs/PLANS.md, «Liorio и Noda»):
-/// в дуэте — основной, адресат из поля ввода или тот, к кому обратились по
-/// имени («Noda, …»), в соло — выбранный. Обращение по имени в дуэте
-/// отмечается в ответе ([AssistantResponse.addressedPersonaId]), и
-/// интерфейс делает названного адресатом чата ([addresseeAfter]): к кому
-/// обратились, тот и продолжает. На «да» или «нет» в дуэте отвечает тот,
+/// в дуэте — основной или ведущий роли, чей навык забрал фразу (ADR-012),
+/// а тот, к кому обратились по имени («Noda, …»), — на это сообщение; в
+/// соло — выбранный. Обращение по имени в дуэте отмечается в ответе
+/// ([AssistantResponse.addressedPersonaId]).
+///
+/// К кому обратились — тот и продолжает, пока разговор идёт тем же
+/// навыком ([_followUp]): «Нода, расскажи шутку» → «ещё шутку» — снова
+/// Noda, а «покажи задачи» после этого — уже ведущий роли или основной.
+/// Продолжение — не дольше [followUpLimit] фраз без имени. Это короткое
+/// продолжение живёт только здесь, в памяти: интерфейс его не
+/// показывает и не сохраняет, смена чата его снимает. Выбора «Кому» в
+/// интерфейсе нет. На «да» или «нет» в дуэте отвечает тот,
 /// кто спросил ([AssistantSession.pendingSpeaker]), если в ответе никого
 /// не назвали по имени. Голос (стиль, род, обращение, эмодзи) фиксируется
 /// в начале сообщения: смена настроек посреди ответа применится со
@@ -190,6 +197,9 @@ final class AssistantController {
   /// Если ответ ещё готовится, смена применится после него: контекст
   /// сообщения не меняется посреди ответа.
   void enterChat({String? taskId, String? sessionId}) {
+    // Продолжение разговора — только в том чате, где обратились.
+    _followUp = null;
+    _chatEpoch++;
     _viewChatTaskId = taskId;
     _viewSessionId = taskId == null ? sessionId : null;
     _awaitingAnswer = false;
@@ -227,8 +237,78 @@ final class AssistantController {
 
   /// Забывает выбор («её») всех чатов: история сессий очищена.
   void forgetChatSelections() {
+    _followUp = null;
     _selections.clear();
     clearSelection();
+  }
+
+  /// Продолжение разговора с тем, к кому обратились по имени: помощник и
+  /// навык, которым шёл разговор. Следующая фраза без имени, которую
+  /// забрал тот же навык, — снова ему ([_leadByRole]); другой навык —
+  /// продолжение снимается. `connectorId == null` — обратились по имени
+  /// без команды («Нода»): следующая фраза — ему, каким бы навыком она ни
+  /// была. Только в памяти и только в текущем чате ([enterChat]).
+  ///
+  /// Продолжение короткое: не больше [followUpLimit] фраз без имени
+  /// подряд, потом снова отвечает ведущий роли или основной. Интерфейс
+  /// продолжение не показывает — долгое «залипание» было бы невидимым
+  /// адресатом.
+  ({String personaId, String? connectorId, int left})? _followUp;
+
+  /// Сколько фраз без имени после обращения по имени продолжает тот, к
+  /// кому обратились: «Нода, расскажи шутку» → «ещё шутку» → «ещё» — Noda,
+  /// следующая — снова по ролям.
+  static const int followUpLimit = 2;
+
+  /// Растёт при каждой смене чата: ответ, пришедший после смены, не
+  /// заводит продолжение в новом чате.
+  int _chatEpoch = 0;
+
+  /// Кто продолжает разговор: для тестов и отладки.
+  String? get followUpPersonaId => _followUp?.personaId;
+
+  /// Продолжение после ответа [response]: обратились по имени — этот
+  /// помощник продолжает навыком, которым ответил; фраза без имени ушла
+  /// другому навыку (или никакому) — продолжение снимается.
+  void _updateFollowUp(AssistantResponse response) {
+    if (personas.mode != AssistantMode.duo ||
+        response.settingsChange?.mainPersona != null) {
+      _followUp = null;
+      return;
+    }
+    final connectorId = session.lastConnectorId;
+    final named = Personas.byId(response.addressedPersonaId);
+    if (named != null) {
+      if (named.id == personas.main.id && extensions.mainLeadsAll(personas)) {
+        // Основной и так отвечает на всё.
+        _followUp = null;
+      } else if (response.replyId == 'common.addressed') {
+        // «Нода» без команды: следующая фраза — ей, любым навыком.
+        _followUp = (personaId: named.id, connectorId: null, left: 1);
+      } else {
+        _followUp = connectorId == null
+            ? null
+            : (
+                personaId: named.id,
+                connectorId: connectorId,
+                left: followUpLimit,
+              );
+      }
+      return;
+    }
+    final follow = _followUp;
+    if (follow == null ||
+        connectorId == null ||
+        connectorId != follow.connectorId ||
+        follow.left <= 1) {
+      _followUp = null;
+      return;
+    }
+    _followUp = (
+      personaId: follow.personaId,
+      connectorId: follow.connectorId,
+      left: follow.left - 1,
+    );
   }
 
   /// Кто ответит на [message]: в дуэте обращение по имени («Noda, …»)
@@ -246,43 +326,11 @@ final class AssistantController {
     return (Personas.byId(addressee) ?? settings.main, message, false);
   }
 
-  /// Адресат чата после ответа [response]; [current] — адресат до
-  /// сообщения (`null` — никого не выбирали). В дуэте обращение по имени
-  /// делает названного адресатом, как выбор в поле ввода: следующие
-  /// сообщения без имени получает он. Основной — снова `null`, пока все
-  /// роли ведёт он сам (тогда он и так отвечает на всё); если какую-то
-  /// роль ведёт второй помощник — [mainAddressee], иначе следующую фразу
-  /// этой роли забрал бы её ведущий, а не тот, к кому обратились. Просьба
-  /// сменить основного («пусть отвечает Лиорио») возвращает `null`: дальше
-  /// отвечает новый основной. В соло адресат не используется и не
-  /// меняется.
-  String? addresseeAfter(AssistantResponse response, {String? current}) {
-    final settings = personas;
-    if (settings.mode == AssistantMode.solo) return current;
-    if (response.settingsChange?.mainPersona != null) return null;
-    final addressed = Personas.byId(response.addressedPersonaId);
-    if (addressed == null) return current;
-    if (addressed.id != settings.main.id) return addressed.id;
-    return extensions.mainLeadsAll(settings) ? null : mainAddressee;
-  }
-
-  /// Кто показан выбранным в «Кому:» при адресате [addressee]: тот, кто
-  /// ответит на следующее сообщение без имени. `null` — никого не выбрали,
-  /// а какую-то роль ведёт не основной: отвечает ведущий роли, чей навык
-  /// заберёт фразу, и заранее его не назвать. Переключатель не показывает
-  /// выбранным того, кто может не ответить. [settings] — настройки
-  /// интерфейса, если они новее, чем у маршрутизатора.
-  Persona? shownAddressee(String? addressee, {PersonaSettings? settings}) {
-    settings ??= personas;
-    final chosen = Personas.byId(addressee);
-    if (chosen != null) return chosen;
-    if (addressee == mainAddressee) return settings.main;
-    return extensions.mainLeadsAll(settings) ? settings.main : null;
-  }
-
-  /// Отвечает на сообщение пользователя. [addressee] — помощник,
-  /// выбранный в поле ввода (только в дуэте). Если к помощнику обратились
-  /// по имени, ответ это отмечает ([AssistantResponse.addressedPersonaId]).
+  /// Отвечает на сообщение пользователя. [addressee] — помощник, которому
+  /// пишут явно (только в дуэте; интерфейс его больше не передаёт, выбора
+  /// «Кому» нет). Если к помощнику обратились по имени, ответ это отмечает
+  /// ([AssistantResponse.addressedPersonaId]), и он продолжает разговор
+  /// тем же навыком ([_followUp]).
   ///
   /// [chatTaskId] — задача чата, в котором отправлено сообщение (`null` —
   /// главный чат): в чате задачи она — цель «готово», «закрой», «перенеси
@@ -300,10 +348,24 @@ final class AssistantController {
     // Кто ответит и обратились ли по имени — по настройкам на начало
     // сообщения.
     final settings = personas;
-    final (persona, text, addressed) = resolve(message, addressee: addressee);
-    // Явное обращение (имя в сообщении или адресат в поле ввода, в том
-    // числе явно выбранный основной) важнее владельца роли (ADR-012).
+    var (persona, text, addressed) = resolve(message, addressee: addressee);
+    // «Нода» без команды, затем фраза без имени — как «Нода, <фраза>».
+    final waiting = _followUp;
+    if (!addressed &&
+        addressee == null &&
+        waiting != null &&
+        waiting.connectorId == null &&
+        settings.mode == AssistantMode.duo) {
+      final named = Personas.byId(waiting.personaId);
+      if (named != null) {
+        persona = named;
+        addressed = true;
+      }
+    }
+    // Явное обращение (имя в сообщении или явный адресат, в том числе
+    // основной) важнее владельца роли (ADR-012).
     _explicit = addressed || isExplicitAddressee(addressee);
+    final epoch = _chatEpoch;
     _inFlight++;
     session.chatTaskId = chatTaskId;
     if (chatTaskId != null) selectTask(chatTaskId);
@@ -336,8 +398,13 @@ final class AssistantController {
     _awaitingAnswer = response.status == AssistantStatus.needsClarification;
     // Навык мог отметить адресата сам: «Нода, пусть отвечает Лио» — дальше
     // отвечает Liorio, а не та, к кому обратились в начале.
-    if (!addressed || response.addressedPersonaId != null) return response;
-    return response.withAddressed(persona.id);
+    final result = !addressed || response.addressedPersonaId != null
+        ? response
+        : response.withAddressed(persona.id);
+    // Чат сменили, пока готовился ответ: продолжение в новый чат не
+    // переносится.
+    if (epoch == _chatEpoch) _updateFollowUp(result);
+    return result;
   }
 
   Future<AssistantResponse> _handle(
@@ -404,14 +471,25 @@ final class AssistantController {
     // Фразу с паролем не получает ни один коннектор, даже для голоса.
     final guarded =
         secretRedacted || SecretGuard.redact(text, known: knownSecret).guarded;
-    if (!guarded &&
+    final follow = _followUp;
+    final followed = Personas.byId(follow?.personaId);
+    if (!addressed &&
+        !isExplicitAddressee(addressee) &&
+        personas.mode == AssistantMode.duo &&
+        follow != null &&
+        follow.connectorId == null &&
+        followed != null) {
+      speaker = followed;
+    } else if (!guarded &&
         !addressed &&
         !isExplicitAddressee(addressee) &&
         session.pendingConfirmation == null &&
         personas.mode == AssistantMode.duo) {
       final likely = _likely(text);
       if (likely != null) {
-        speaker = extensions.ownerFor(likely.info.id, personas) ?? speaker;
+        speaker = followed != null && likely.info.id == follow?.connectorId
+            ? followed
+            : extensions.ownerFor(likely.info.id, personas) ?? speaker;
       }
     }
     return speak(
@@ -463,10 +541,19 @@ final class AssistantController {
   }
 
   /// Фразу забрал навык роли: в дуэте без явного обращения отвечает тот,
-  /// кто ведёт роль (ADR-012). Обращение по имени и адресат в поле ввода
-  /// важнее; в соло помощник один.
+  /// кто ведёт роль (ADR-012). Обращение по имени и явный адресат важнее;
+  /// продолжение разговора тем же навыком ([_followUp]) — тоже. В соло
+  /// помощник один.
   void _leadByRole(Connector connector) {
     if (_explicit || session.personas.mode != AssistantMode.duo) return;
+    final follow = _followUp;
+    final followed = Personas.byId(follow?.personaId);
+    if (followed != null && follow?.connectorId == connector.info.id) {
+      session
+        ..speaker = followed
+        ..voice = session.personas.voiceOf(followed);
+      return;
+    }
     final owner = extensions.ownerFor(connector.info.id, session.personas);
     if (owner == null || owner.id == session.speaker.id) return;
     session

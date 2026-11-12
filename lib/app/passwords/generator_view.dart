@@ -1,3 +1,4 @@
+import '../shell/drawer_swipe.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -331,14 +332,17 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
 
   List<Widget> _charControls(GeneratorOptions o) => <Widget>[
         Text('Длина: ${o.length}', style: technicalTextStyle),
-        Slider(
-          key: const ValueKey<String>('generator-length'),
-          value: o.length.toDouble(),
-          min: GeneratorOptions.minLength.toDouble(),
-          max: GeneratorOptions.maxLength.toDouble(),
-          divisions: GeneratorOptions.maxLength - GeneratorOptions.minLength,
-          label: '${o.length}',
-          onChanged: (double v) => _change(o.copyWith(length: v.round())),
+        // Ползунок тянут вбок: этот жест — его, а не свайп меню.
+        DrawerSwipeBlocker(
+          child: Slider(
+            key: const ValueKey<String>('generator-length'),
+            value: o.length.toDouble(),
+            min: GeneratorOptions.minLength.toDouble(),
+            max: GeneratorOptions.maxLength.toDouble(),
+            divisions: GeneratorOptions.maxLength - GeneratorOptions.minLength,
+            label: '${o.length}',
+            onChanged: (double v) => _change(o.copyWith(length: v.round())),
+          ),
         ),
         Wrap(
           spacing: 6,

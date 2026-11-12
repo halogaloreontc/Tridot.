@@ -1,13 +1,13 @@
 // Вёрстка главного экрана на типичных размерах окна настольного приложения:
 // ничего не переполняется и не уходит за край окна, края колонки чата
-// совпадают, хроника команд стоит рядом с чатом, карточка хроники не
-// залезает на панель задач, кубик состояния стоит в строке автора ответа.
+// совпадают, хроника команд стоит под шапкой по центру и ширину у поля
+// ввода не отнимает, карточка хроники не залезает на панель задач, кубик
+// состояния стоит в строке автора ответа.
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
-import 'package:local_assistant/app/shell/quick_actions.dart';
 import 'package:local_assistant/app/widgets/status_cube.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
@@ -113,29 +113,33 @@ void main() {
       final composer = tester.getRect(
         find.byKey(const Key('assistant-composer')),
       );
-      final addressee = tester.getRect(
-        find.byKey(const Key('addressee-switch')),
-      );
-      final quick = tester.getRect(find.byKey(const Key('quick-Задача')));
       final rail = tester.getRect(find.byKey(const Key('history-rail')));
       _expectInside(composer, window, 'поле ввода');
       _expectInside(rail, window, 'хроника');
+      expect(find.byKey(const Key('addressee-switch')), findsNothing);
+      // «Задача» и «Напомнить» — только в новой сессии.
+      expect(find.byKey(const Key('quick-Задача')), findsNothing);
 
-      // Один левый край у «Кому:» и поля ввода; «пилюли» на широкой
-      // колонке — группой по центру поля (D-Desk), на узкой — от края.
-      expect(addressee.left, moreOrLessEquals(composer.left));
-      if (composer.width >= QuickActions.fillLimit) {
-        final group = tester.getRect(
-          find.byKey(const Key('quick-pills-centered')),
-        );
-        expect(
-          group.center.dx,
-          moreOrLessEquals(composer.center.dx, epsilon: 1),
-        );
-        expect(quick.left, greaterThan(composer.left));
-      } else {
-        expect(quick.left, moreOrLessEquals(composer.left));
-      }
+      // Колонка сессии — между меню и «Сегодня».
+      final sidebar = find.byKey(const Key('app-sidebar'));
+      final left =
+          sidebar.evaluate().isEmpty ? 0.0 : tester.getRect(sidebar).right;
+      final right =
+          panel.evaluate().isEmpty ? size.width : tester.getRect(panel).left;
+      final centre = (left + right) / 2;
+      // Поле ввода — по центру колонки, без места под хронику справа.
+      expect(composer.center.dx, moreOrLessEquals(centre, epsilon: 1));
+      expect(
+        composer.width,
+        moreOrLessEquals(
+          (right - left - 1).clamp(0, chatColumnWidth) - 2 * chatInset,
+          epsilon: 2,
+        ),
+      );
+      // Хроника — под шапкой, по центру той же колонки.
+      expect(rail.center.dx, moreOrLessEquals(centre, epsilon: 1));
+      expect(rail.top, greaterThanOrEqualTo(56));
+      expect(rail.bottom, lessThanOrEqualTo(56 + 44 + 1));
 
       // Текст ответа начинается там же; кубик — в строке автора, а не
       // отдельным значком левее текста.
@@ -154,17 +158,10 @@ void main() {
           )
           .first;
       expect(tester.getRect(bubble).right, moreOrLessEquals(composer.right));
-
-      // Хроника — справа от колонки, вплотную, и не под полем ввода.
-      expect(rail.left, greaterThanOrEqualTo(composer.right - .5));
-      expect(rail.left - composer.right, lessThan(chatInset + 1));
-      if (size.width >= todayOpenBreakpoint) {
-        expect(rail.right, lessThanOrEqualTo(tester.getRect(panel).left));
-      }
     });
   }
 
-  testWidgets('карточка хроники при наведении — слева от хроники',
+  testWidgets('карточка хроники при наведении — под хроникой, над лентой',
       (tester) async {
     for (final size in <Size>[const Size(1280, 800), const Size(1728, 1117)]) {
       await _pump(tester, size);
@@ -183,11 +180,12 @@ void main() {
       );
       final rail = tester.getRect(find.byKey(const Key('history-rail')));
       final panel = tester.getRect(find.byKey(const Key('today-panel')));
+      final sidebar = tester.getRect(find.byKey(const Key('app-sidebar')));
       expect(card.width, greaterThan(100), reason: 'карточка не схлопнулась');
       expect(card.width, lessThanOrEqualTo(340));
-      expect(card.right, lessThanOrEqualTo(rail.left));
+      expect(card.top, greaterThanOrEqualTo(rail.bottom - 4));
       expect(card.right, lessThan(panel.left));
-      expect(card.left, greaterThanOrEqualTo(0));
+      expect(card.left, greaterThan(sidebar.right));
 
       await gesture.removePointer();
       await tester.pumpAndSettle();

@@ -1,12 +1,14 @@
-// Левое меню (макет «Д»): карточка «Мой Связной», разделы, дерево
-// расширений со статусами, недавние сессии, поиск по сессиям, который
-// растягивается и прячет «+ Сессия», «Отмена» и Esc, подсветка совпадения.
-// Секреты из карточек «Паролей» поиск не находит.
+// Левое меню (макет «Д»): шапка «Связной» с версией, карточка «Мой
+// Связной», разделы, дерево расширений со статусами, недавние сессии,
+// поиск по сессиям, который растягивается и прячет «+», «Отмена» и Esc,
+// встаёт над клавиатурой, подсветка совпадения. Секреты из карточек
+// «Паролей» поиск не находит.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/shell/relay_drawer.dart';
+import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/chats/chat_book.dart';
 import 'package:local_assistant/core/chats/chat_models.dart';
 import 'package:local_assistant/core/chats/chat_search.dart';
@@ -26,6 +28,7 @@ Future<_Calls> _pump(
   Future<List<ChatSearchHit>> Function(String)? search,
   Size size = const Size(316, 844),
   bool wide = false,
+  VoidCallback? onCollapse,
 }) async {
   final calls = _Calls();
   tester.view.physicalSize = size;
@@ -35,8 +38,11 @@ Future<_Calls> _pump(
     MaterialApp(
       theme: AssistantTheme.dark(),
       home: Scaffold(
+        // Как выдвижная панель: Scaffold не сжимает её под клавиатуру.
+        resizeToAvoidBottomInset: false,
         body: RelayDrawer(
           wide: wide,
+          onCollapse: onCollapse,
           reduceMotion: true,
           sessions: <SessionEntry>[
             const SessionEntry(
@@ -154,7 +160,106 @@ void main() {
     expect(find.text('Расширения'), findsNothing);
   });
 
-  testWidgets('поиск растягивается, прячет «+ Сессия», «Отмена» и Esc',
+  testWidgets('шапка «Связной» с версией — и на телефоне', (tester) async {
+    await _pump(tester);
+    expect(find.byKey(const ValueKey<String>('app-name')), findsOneWidget);
+    expect(find.text(AppInfo.name), findsOneWidget);
+    final version = find.byKey(const ValueKey<String>('app-version'));
+    expect(tester.widget<Text>(version).data, AppInfo.version);
+    expect(find.bySemanticsLabel('Версия ${AppInfo.version}'), findsOneWidget);
+    // Версия — рядом с названием, в той же строке, над «Мой Связной».
+    final name = tester.getRect(find.byKey(const ValueKey<String>('app-name')));
+    final ver = tester.getRect(version);
+    expect(ver.left, greaterThan(name.right));
+    expect(ver.center.dy, moreOrLessEquals(name.center.dy, epsilon: 4));
+    expect(
+      name.bottom,
+      lessThanOrEqualTo(
+        tester.getRect(find.byKey(const Key('drawer-my-relay'))).top,
+      ),
+    );
+    // «Свернуть панель» — только на компьютере.
+    expect(find.byKey(const Key('sidebar-collapse')), findsNothing);
+    var collapsed = 0;
+    await _pump(tester, wide: true, onCollapse: () => collapsed++);
+    expect(find.byKey(const ValueKey<String>('app-version')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('sidebar-collapse')));
+    expect(collapsed, 1);
+  });
+
+  testWidgets('«+» — новая сессия: только значок, треть строки',
+      (tester) async {
+    final calls = await _pump(tester);
+    final button = find.byKey(const Key('new-session'));
+    expect(
+      find.descendant(of: button, matching: find.byIcon(Icons.add)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: button, matching: find.byType(Text)),
+      findsNothing,
+    );
+    expect(find.text('Сессия'), findsNothing);
+    expect(find.byTooltip('Новая сессия'), findsOneWidget);
+    expect(find.bySemanticsLabel('Новая сессия'), findsOneWidget);
+    final row = tester.getRect(find.byKey(const Key('session-search-box')));
+    final rect = tester.getRect(button);
+    // Поле — две трети, «+» — треть за промежутком 8.
+    expect(rect.width, moreOrLessEquals(row.width / 2, epsilon: 1));
+    expect(rect.height, row.height);
+    expect(rect.height, greaterThanOrEqualTo(44));
+    await tester.tap(button);
+    expect(calls.log, <String>['new']);
+  });
+
+  testWidgets('поиск с клавиатурой: строка поиска — над ней, результаты видны',
+      (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await _pump(
+      tester,
+      size: const Size(320, 640),
+      search: (String q) async => <ChatSearchHit>[
+        for (var i = 0; i < 6; i++)
+          ChatSearchHit(
+            chatId: 'session:$i',
+            title: 'Сессия $i',
+            snippet: 'накладные $i',
+            matchStart: 0,
+            matchEnd: 9,
+            at: _now,
+          ),
+      ],
+    );
+    await tester.tap(find.byKey(const Key('session-search')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('session-search')), 'наклад');
+    await tester.pump(RelayDrawer.searchDelay);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final box = tester.getRect(find.byKey(const Key('session-search-box')));
+    expect(box.bottom, lessThanOrEqualTo(640 - 300));
+    expect(box.top, greaterThan(0));
+    expect(
+      tester.getRect(find.byKey(const Key('session-search-cancel'))).bottom,
+      lessThanOrEqualTo(640 - 300),
+    );
+    // Шапка, «Мой Связной» и разделы уступили место результатам.
+    expect(find.byKey(const ValueKey<String>('app-name')), findsNothing);
+    expect(find.byKey(const Key('drawer-my-relay')), findsNothing);
+    final hit = find.byKey(const Key('search-hit-session:0'));
+    expect(hit.hitTestable(), findsOneWidget);
+    expect(tester.getRect(hit).bottom, lessThanOrEqualTo(box.top));
+    // Клавиатура скрылась — всё на месте.
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('app-name')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('поиск растягивается, прячет «+», «Отмена» и Esc',
       (tester) async {
     await _pump(tester);
     final box = find.byKey(const Key('session-search-box'));

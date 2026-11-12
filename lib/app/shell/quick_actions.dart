@@ -8,14 +8,15 @@ import '../widgets/quick_dock.dart';
 /// что делать; `null` — недоступно (идёт отправка).
 typedef QuickAction = (String label, IconData icon, VoidCallback? onTap);
 
-/// Быстрые действия над полем ввода (макет «Д»): «Задача», «Напомнить»
-/// и, если включён навык «Пароли», «Пароль».
+/// Быстрые действия над полем ввода (макет «Д»).
 ///
-/// - [big] — пустая сессия: круглые кнопки 52 px с подписью под ними.
-/// - Иначе — ряд «пилюль» высотой 44 px: на телефоне на всю ширину, на
-///   широкой колонке ([fillLimit]) — своей ширины по центру.
+/// - [big] — пустая (новая) сессия: круглые кнопки 52 px «Задача»,
+///   «Напомнить» и, если включён навык «Пароли», «Пароль». Только здесь:
+///   когда в сессии уже есть сообщения, этих трёх кнопок нет — поле ввода
+///   и «+» их заменяют.
 /// - Ниже — кнопки включённых ролей и действия выбранной задачи
 ///   («Перенести», «Заверши её»): переносом по строкам ('quick-rows').
+///   Нет ни того, ни другого — виджет пустой, без отступов.
 /// - Тесно (узкий экран и крупный шрифт, [QuickDock.isTight]) — всё одной
 ///   строкой с горизонтальной прокруткой ('quick-strip').
 final class QuickActions extends StatefulWidget {
@@ -43,10 +44,6 @@ final class QuickActions extends StatefulWidget {
 
   /// Кнопки включённых ролей: отправить сразу или вставить шаблон.
   final List<RoleChip> roleChips;
-
-  /// С какой ширины «пилюли» не растягиваются на всю строку, а стоят
-  /// группой по центру (широкий экран).
-  static const double fillLimit = 560;
 
   /// Шаблоны «Задачи» и «Напомнить»: «|» — место курсора.
   static const String taskTemplate = 'Добавь задачу «|»';
@@ -125,8 +122,10 @@ final class _QuickActionsState extends State<QuickActions> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final main = _main;
+        // Три основные кнопки — только в новой сессии.
+        final main = widget.big ? _main : const <QuickAction>[];
         final extra = _extra;
+        if (main.isEmpty && extra.isEmpty) return const SizedBox.shrink();
         if (QuickDock.isTight(constraints)) {
           // Узкий экран и крупный шрифт: строк не уместить. Одна строка с
           // горизонтальной прокруткой и видимой полосой; кнопки ролей —
@@ -170,37 +169,14 @@ final class _QuickActionsState extends State<QuickActions> {
                 key: const Key('quick-actions'),
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  Semantics(
-                    container: true,
-                    label: 'Быстрые действия',
-                    child: widget.big
-                        ? _BigRow(items: main)
-                        : constraints.maxWidth >= QuickActions.fillLimit
-                            // Широкая колонка (D-Desk): «пилюли» своей
-                            // ширины, группой по центру.
-                            ? Wrap(
-                                key: const Key('quick-pills-centered'),
-                                alignment: WrapAlignment.center,
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: <Widget>[
-                                  for (final item in main) _Pill(item: item),
-                                ],
-                              )
-                            // Телефон (D-Phone-Chat): поровну на всю ширину.
-                            : Row(
-                                children: <Widget>[
-                                  for (final (index, item) in main.indexed) ...[
-                                    if (index > 0) const SizedBox(width: 8),
-                                    Expanded(
-                                      child: _Pill(item: item, fill: true),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                  ),
+                  if (main.isNotEmpty)
+                    Semantics(
+                      container: true,
+                      label: 'Быстрые действия',
+                      child: _BigRow(items: main),
+                    ),
                   if (extra.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: 8),
+                    if (main.isNotEmpty) const SizedBox(height: 8),
                     Wrap(
                       key: const Key('quick-rows'),
                       spacing: 8,
@@ -292,18 +268,15 @@ final class _BigRow extends StatelessWidget {
   }
 }
 
-/// «Пилюля» 44 px: в ряду быстрых действий ([fill]) — на свою долю
-/// ширины, в строках ролей ([small]) — по тексту.
+/// «Пилюля» 44 px: в строках ролей ([small]) — по тексту.
 final class _Pill extends StatelessWidget {
   const _Pill({
     required this.item,
-    this.fill = false,
     this.small = false,
     this.strip = false,
   });
 
   final QuickAction item;
-  final bool fill;
   final bool small;
 
   /// В строке с горизонтальной прокруткой: ширина по тексту, без сжатия.
@@ -337,7 +310,7 @@ final class _Pill extends StatelessWidget {
             // D-Desk; в доле строки и в прокручиваемой строке — 8.
             horizontal: small
                 ? 14
-                : fill || strip
+                : strip
                     ? 8
                     : 16,
           ),
@@ -347,7 +320,7 @@ final class _Pill extends StatelessWidget {
             borderRadius: BorderRadius.circular(22),
           ),
           child: Row(
-            mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               Icon(icon, size: 16, color: color),

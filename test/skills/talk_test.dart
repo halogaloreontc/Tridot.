@@ -1280,7 +1280,7 @@ void main() {
     });
   });
 
-  group('к кому обратились, тот и продолжает', () {
+  group('к кому обратились, тот и продолжает — тем же навыком', () {
     final mixed = _pack('jokes.mixed', <Map<String, Object?>>[
       <String, Object?>{
         'id': 'r',
@@ -1294,17 +1294,15 @@ void main() {
       },
     ]);
 
-    /// Разговор в одном чате: адресат после ответа — как в интерфейсе.
+    /// Разговор в одном чате, как в интерфейсе: адресата он не передаёт,
+    /// продолжение разговора помнит сам помощник.
     Future<List<AssistantResponse>> chat(
       _Fixture f,
       List<String> messages,
     ) async {
-      String? addressee;
       final responses = <AssistantResponse>[];
       for (final message in messages) {
-        final response = await f.say(message, addressee: addressee);
-        addressee = f.assistant.addresseeAfter(response, current: addressee);
-        responses.add(response);
+        responses.add(await f.say(message));
       }
       return responses;
     }
@@ -1351,13 +1349,17 @@ void main() {
       );
     });
 
-    test('«говори короче, Нода», дальше без имени — Noda кратко', () async {
+    test(
+        '«говори короче, Нода» — кратко говорит Noda; задача без имени — '
+        'основной', () async {
       final f = await _fixture();
       final responses = await chat(f, <String>[
         'говори короче, Нода',
         'Добавь задачу купить хлеб',
       ]);
-      expect(responses.last.personaId, 'noda');
+      // Задачи — другой навык: отвечает основной, а не та, к кому
+      // обращались в беседе.
+      expect(responses.last.personaId, 'rio');
       expect(f.assistant.personas.styleOf(Personas.noda), ReplyStyles.brief);
       expect(
         f.assistant.personas.styleOf(Personas.liorio),
@@ -1386,14 +1388,11 @@ void main() {
         'Нода, пусть отвечает Лиорио',
       ]) {
         final f = await _fixture();
-        String? addressee;
         final responses = <AssistantResponse>[];
         for (final message in <String>['Нода, привет', request, '2+2']) {
-          final response = await f.say(message, addressee: addressee);
-          addressee = f.assistant.addresseeAfter(response, current: addressee);
-          responses.add(response);
+          responses.add(await f.say(message));
           if (message == request) {
-            expect(addressee, isNull, reason: request);
+            expect(f.assistant.followUpPersonaId, isNull, reason: request);
           }
         }
         expect(responses[1].replyId, 'talk.set.already', reason: request);
@@ -1435,18 +1434,15 @@ void main() {
       for (final ack in <String>['спасибо, Лиорио', 'Лиорио, спасибо']) {
         final f = await _fixture();
         await f.tasks.create(title: 'Купить хлеб');
-        String? addressee;
         final responses = <AssistantResponse>[];
         for (final message in <String>['Нода, я купил хлеб', ack, '2+2']) {
-          final response = await f.say(message, addressee: addressee);
-          addressee = f.assistant.addresseeAfter(response, current: addressee);
-          responses.add(response);
+          responses.add(await f.say(message));
         }
         expect(responses[0].personaId, 'noda', reason: ack);
         expect(responses[1].replyId, 'common.confirm.unclear', reason: ack);
         expect(responses[1].personaId, 'rio', reason: ack);
         expect(responses[1].addressedPersonaId, 'rio', reason: ack);
-        expect(addressee, isNull, reason: ack);
+        expect(f.assistant.followUpPersonaId, isNull, reason: ack);
         expect(responses.last.personaId, 'rio', reason: ack);
       }
     });
@@ -1468,8 +1464,9 @@ void main() {
       }
     });
 
-    test('«да» без имени на вопрос Noda — отвечает Noda, адресат прежний',
-        () async {
+    test(
+        '«да» без имени на вопрос Noda — отвечает Noda; другой навык — '
+        'снова основной', () async {
       final f = await _fixture();
       await f.tasks.create(title: 'Купить хлеб');
       final responses = await chat(f, <String>[
@@ -1479,7 +1476,8 @@ void main() {
       ]);
       expect(responses[1].personaId, 'noda');
       expect(responses[1].addressedPersonaId, isNull);
-      expect(responses.last.personaId, 'noda');
+      // Калькулятор — другой навык: продолжения нет.
+      expect(responses.last.personaId, 'rio');
     });
 
     test('соло: шутки «ещё» — от выбранного, имя не закрепляется', () async {

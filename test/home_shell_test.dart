@@ -1,6 +1,9 @@
 // Оболочка «Д» на главном экране: «Лиорио ▾» → «Мой Связной · Помощники»,
-// «+ Сессия», «Сегодня N» с точкой просрочки, жесты от краёв экрана, поиск
-// по сессиям из меню, телефон и крупный шрифт без переполнений.
+// «+» (новая сессия), «Сегодня» — колонкой на компьютере и «Сводкой» на
+// телефоне, свайп вправо по сессии открывает меню, хроника команд под
+// шапкой, чистый «Документ», поиск по сессиям из меню, телефон и крупный
+// шрифт без переполнений.
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
@@ -87,41 +90,379 @@ void main() {
     expect(find.byKey(const Key('assistant-composer')), findsOneWidget);
   });
 
-  testWidgets('«Сегодня N»: число, точка просрочки, панель справа',
-      (tester) async {
+  testWidgets(
+      'телефон: кнопки и панели «Сегодня» нет — всё в «Мой Связной» → '
+      '«Сводка», сегодняшние не обрезаются', (tester) async {
     final tasks = await _pump(tester);
     await tasks.create(title: 'Позвонить', dueAt: DateTime(2026, 11, 9, 11));
-    await tasks.create(title: 'Сверить', dueAt: DateTime(2026, 11, 9, 16));
+    for (var i = 1; i <= 6; i++) {
+      await tasks.create(
+        title: 'Сверить $i',
+        dueAt: DateTime(2026, 11, 9, 13 + i),
+      );
+    }
     await tasks.create(title: 'Потом', dueAt: DateTime(2026, 11, 12));
     await _say(tester, 'привет');
+    expect(find.byKey(const Key('today-button')), findsNothing);
+    expect(find.byKey(const Key('today-show')), findsNothing);
+    expect(find.byKey(const Key('today-panel')), findsNothing);
+    await openSummary(tester);
     expect(
-      tester.widget<Text>(find.byKey(const Key('today-count'))).data,
-      '2',
+      tester.widget<Text>(find.byKey(const Key('summary-today'))).data,
+      'сегодня: просрочена 1 задача',
     );
-    expect(find.byKey(const Key('today-overdue-dot')), findsOneWidget);
-    await openToday(tester);
-    expect(find.byKey(const Key('today-panel')), findsOneWidget);
     expect(find.text('11:00, просрочено'), findsOneWidget);
-    expect(find.text('Потом'), findsNothing);
+    // Все 7 дел на сегодня — больше пяти, и ни одно не обрезано; «Потом»
+    // — следом.
+    for (final task in await tasks.listActive()) {
+      expect(
+        find.byKey(Key('next-task-${task.id}')),
+        findsOneWidget,
+        reason: task.title,
+      );
+    }
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('жест от левого края — меню, от правого — «Сегодня»',
+  testWidgets('свайп вправо по сессии открывает меню, влево — закрывает',
       (tester) async {
     await _pump(tester);
+    // От края — как раньше (жест Scaffold).
     await tester.dragFrom(const Offset(4, 400), const Offset(260, 0));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
     await tester.tapAt(const Offset(380, 400));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('app-sidebar')), findsNothing);
-    await tester.dragFrom(const Offset(386, 400), const Offset(-280, 0));
+    // С середины пустой сессии.
+    await tester.dragFrom(const Offset(160, 300), const Offset(160, 0));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('today-panel')), findsOneWidget);
+    expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
+    // Влево по открытому меню — закрывается.
+    await tester.dragFrom(const Offset(250, 400), const Offset(-240, 0));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+    // Влево по сессии — ничего: справа панели больше нет.
+    await tester.dragFrom(const Offset(380, 300), const Offset(-280, 0));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+    expect(find.byKey(const Key('today-panel')), findsNothing);
   });
 
   testWidgets(
-      '«+ Сессия»: пустая сессия, «Что сделать?», название — '
-      'первая команда', (tester) async {
+      'свайп по ленте и тексту сообщения — меню; вертикальный — прокрутка',
+      (tester) async {
+    await _pump(tester);
+    for (var i = 0; i < 12; i++) {
+      await _say(tester, 'запомни: строка $i');
+    }
+    // Свайп, начатый на тексте сообщения (SelectableText), открывает меню.
+    final bubble = find.text('запомни: строка 11').first;
+    await tester.dragFrom(
+      tester.getCenter(bubble) - const Offset(60, 0),
+      const Offset(180, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
+    await tester.tapAt(const Offset(380, 400));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+    // Прокрутка ленты вверх-вниз меню не открывает.
+    final list = find.byKey(const Key('chat-list'));
+    final scroll = tester.state<ScrollableState>(
+      find.descendant(of: list, matching: find.byType(Scrollable)).first,
+    );
+    await tester.drag(list, const Offset(0, 300));
+    await tester.pumpAndSettle();
+    expect(scroll.position.pixels, greaterThan(0));
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+  });
+
+  testWidgets('палец задержали, потом повели — это выделение, а не свайп',
+      (tester) async {
+    await _pump(tester);
+    await _say(tester, 'запомни: длинная строка для выделения');
+    final bubble = find.text('запомни: длинная строка для выделения').first;
+    final gesture = await tester.startGesture(
+      tester.getCenter(bubble) - const Offset(80, 0),
+    );
+    await tester.pump(const Duration(milliseconds: 700));
+    await gesture.moveBy(const Offset(30, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(120, 0));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+  });
+
+  testWidgets('свайп по полю ввода меню не открывает', (tester) async {
+    await _pump(tester);
+    await tester.enterText(
+      find.byKey(const Key('assistant-input')),
+      'длинный черновик команды',
+    );
+    await tester.pump();
+    final field = tester.getRect(find.byKey(const Key('assistant-input')));
+    await tester.dragFrom(
+      Offset(field.left + 20, field.center.dy),
+      const Offset(200, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+    // И по кнопкам под полем — тоже.
+    final send = tester.getRect(find.byKey(const Key('assistant-composer')));
+    await tester.dragFrom(
+      Offset(send.left + 8, send.bottom - 8),
+      const Offset(200, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+  });
+
+  testWidgets('свайп в «Документе» тоже открывает меню', (tester) async {
+    await _pump(tester);
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+    await tester.dragFrom(const Offset(120, 300), const Offset(200, 0));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
+  });
+
+  testWidgets(
+      '«Документ» задачи: свайп по тексту документа открывает меню, по полю '
+      'с курсором — нет', (tester) async {
+    await _pump(tester);
+    await _say(tester, 'добавь задачу сверить приход 318');
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+    final editor = find.byKey(const Key('document-editor'));
+    final body = tester.getRect(editor);
+    final start = Offset(120, body.center.dy);
+    await tester.dragFrom(start, const Offset(200, 0));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
+    await tester.tapAt(const Offset(380, 400));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+    // В поле поставили курсор — палец там двигает курсор и выделение.
+    await tester.tap(editor);
+    await tester.pumpAndSettle();
+    await tester.dragFrom(
+      Offset(120, tester.getRect(editor).top + 30),
+      const Offset(200, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+  });
+
+  testWidgets('между краем Scaffold и свайпом нет «мёртвой» полосы',
+      (tester) async {
+    await _pump(tester);
+    for (final x in <double>[4, 20, 23.5, 24, 26, 28, 30, 120]) {
+      await tester.dragFrom(Offset(x, 400), const Offset(200, 0));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('app-sidebar')),
+        findsOneWidget,
+        reason: '$x',
+      );
+      await tester.tapAt(const Offset(380, 400));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('app-sidebar')), findsNothing, reason: '$x');
+    }
+  });
+
+  testWidgets('компьютер: перетаскивание мышью меню не открывает',
+      (tester) async {
+    await _pump(tester, size: const Size(1100, 800));
+    await tester.tap(find.byKey(const Key('sidebar-collapse')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+    await tester.dragFrom(
+      const Offset(300, 300),
+      const Offset(300, 0),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+  });
+
+  testWidgets(
+      'хроника команд — под шапкой по центру, поле ввода — во всю колонку',
+      (tester) async {
+    await _pump(tester);
+    expect(find.byKey(const Key('history-rail')), findsNothing);
+    for (final text in <String>['привет', '2+2', 'запомни: хлеб']) {
+      await _say(tester, text);
+    }
+    final rail = tester.getRect(find.byKey(const Key('history-rail')));
+    final header = tester.getRect(find.byKey(const Key('persona-switch')));
+    expect(rail.top, greaterThanOrEqualTo(header.bottom));
+    expect(rail.top, lessThan(56 + 8));
+    expect(rail.height, greaterThanOrEqualTo(44));
+    expect(rail.center.dx, moreOrLessEquals(195, epsilon: 1));
+    expect(find.byKey(const Key('history-2')), findsOneWidget);
+    // Поле ввода — от отступа до отступа, места справа под хронику нет.
+    final composer =
+        tester.getRect(find.byKey(const Key('assistant-composer')));
+    expect(composer.left, moreOrLessEquals(16, epsilon: 1));
+    expect(composer.right, moreOrLessEquals(390 - 16, epsilon: 1));
+    // На телефоне хроника — кнопка «Хроника команд».
+    await tester.tap(find.byKey(const Key('history-rail-open')));
+    await tester.pumpAndSettle();
+    expect(find.text('Хроника команд'), findsOneWidget);
+    expect(find.byKey(const Key('history-item-0')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('history-item-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('Хроника команд'), findsNothing);
+  });
+
+  testWidgets('телефон: одна-две команды — кнопка хроники не уже 44 px',
+      (tester) async {
+    await _pump(tester);
+    for (final text in <String>['привет', '2+2']) {
+      await _say(tester, text);
+      final button = tester.getSize(find.byKey(const Key('history-rail-open')));
+      expect(button.width, greaterThanOrEqualTo(44), reason: text);
+      expect(button.height, greaterThanOrEqualTo(44), reason: text);
+    }
+    final button = tester.getRect(find.byKey(const Key('history-rail-open')));
+    expect(button.center.dx, moreOrLessEquals(195, epsilon: 1));
+  });
+
+  testWidgets('планшет пальцем (800 px): хроника — одна кнопка списка',
+      (tester) async {
+    await _pump(tester, size: const Size(800, 1100));
+    for (final text in <String>['привет', '2+2', 'запомни: хлеб']) {
+      await _say(tester, text);
+    }
+    final button = tester.getSize(find.byKey(const Key('history-rail-open')));
+    expect(button.width, greaterThanOrEqualTo(44));
+    expect(button.height, greaterThanOrEqualTo(44));
+    await tester.tap(find.byKey(const Key('history-rail-open')));
+    await tester.pumpAndSettle();
+    expect(find.text('Хроника команд'), findsOneWidget);
+  });
+
+  testWidgets(
+      'компьютер: 40 команд — «+N» и кнопка списка открывают «Хроника '
+      'команд» со всеми, старая команда достижима', (tester) async {
+    await _pump(tester, size: const Size(1440, 900));
+    for (var i = 0; i < 40; i++) {
+      await _say(tester, '$i+1');
+    }
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('history-rail-open')), findsNothing);
+    expect(find.byKey(const Key('history-0')), findsNothing);
+    final list = find.byKey(const Key('history-rail-list'));
+    final size = tester.getSize(list);
+    expect(size.width, greaterThanOrEqualTo(44));
+    expect(size.height, greaterThanOrEqualTo(44));
+    expect(
+      find.bySemanticsLabel(RegExp('Хроника команд: 40')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel(RegExp(r'Ещё \d+ команд')),
+      findsOneWidget,
+    );
+    // «+N» — тоже кнопка списка.
+    await tester.tap(find.byKey(const Key('history-more-open')));
+    await tester.pumpAndSettle();
+    expect(find.text('Хроника команд'), findsOneWidget);
+    // Самая старая — в конце списка: долистать пальцем.
+    final sheet = find.byType(BottomSheet);
+    await tester.dragUntilVisible(
+      find.byKey(const Key('history-item-0')),
+      sheet,
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
+    final item = tester.getRect(find.byKey(const Key('history-item-0')));
+    expect(item.bottom, lessThanOrEqualTo(900));
+    await tester.tap(find.byKey(const Key('history-item-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('Хроника команд'), findsNothing);
+    expect(find.text('0+1'), findsOneWidget);
+    // Кнопка списка справа от полос.
+    await tester.tap(list);
+    await tester.pumpAndSettle();
+    expect(find.text('Хроника команд'), findsOneWidget);
+  });
+
+  testWidgets('много команд на 320 px: хроника не переполняется, «+N»',
+      (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _pump(tester, size: const Size(320, 640));
+    for (var i = 0; i < 40; i++) {
+      await _say(tester, '$i+1');
+    }
+    expect(tester.takeException(), isNull);
+    final rail = tester.getRect(find.byKey(const Key('history-rail')));
+    expect(rail.left, greaterThanOrEqualTo(0));
+    expect(rail.right, lessThanOrEqualTo(320));
+    expect(find.byKey(const Key('history-more')), findsOneWidget);
+    expect(find.byKey(const Key('history-39')), findsOneWidget);
+    expect(find.byKey(const Key('history-0')), findsNothing);
+  });
+
+  testWidgets(
+      '«Документ» чистый: документ, поле ввода и хроника; ответ — '
+      'уведомлением и в истории', (tester) async {
+    await _pump(tester);
+    await _say(tester, 'привет');
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Документ открывается для выбранной задачи.'),
+      findsOneWidget,
+    );
+    for (final key in <String>[
+      'chat-list',
+      'quick-actions',
+      'quick-rows',
+      'quick-strip',
+      'addressee-switch',
+    ]) {
+      expect(find.byKey(Key(key)), findsNothing, reason: key);
+    }
+    // Последнего ответа под документом больше нет.
+    expect(find.textContaining('Я готов к работе'), findsNothing);
+    expect(find.byKey(const Key('history-rail')), findsOneWidget);
+    expect(find.byKey(const Key('assistant-composer')), findsOneWidget);
+
+    await _say(tester, 'покажи задачи');
+    final toast = find.byKey(const Key('doc-reply-toast'));
+    expect(toast, findsOneWidget);
+    final reply = tester
+        .widget<Text>(
+          find.descendant(of: toast, matching: find.byType(Text)).first,
+        )
+        .data!;
+    expect(reply, isNot('Ответ в диалоге'));
+    expect(reply, contains('задач'));
+    // Уведомление не закрывает поле ввода.
+    expect(
+      tester.getRect(toast).bottom,
+      lessThanOrEqualTo(
+        tester.getRect(find.byKey(const Key('assistant-composer'))).top,
+      ),
+    );
+    expect(find.byKey(const Key('document-view')), findsNothing);
+    await tester.pump(const Duration(seconds: 5));
+    expect(toast, findsNothing);
+    await tester.tap(find.byKey(const Key('mode-dialogue')));
+    await tester.pumpAndSettle();
+    // Ответ — в истории сессии.
+    expect(find.text(reply), findsWidgets);
+    expect(find.text('покажи задачи'), findsWidgets);
+  });
+
+  testWidgets(
+      '«+»: пустая сессия, «Что сделать?», «Задача» и «Напомнить» — только '
+      'в ней, название — первая команда', (tester) async {
     await _pump(tester);
     await _say(tester, 'привет');
     await tapInDrawer(tester, const Key('new-session'));
@@ -136,10 +477,11 @@ void main() {
     await _say(tester, 'Сверить накладные за ноябрь');
     expect(find.text('Что сделать?'), findsNothing);
     expect(
-      tester.getSize(find.byKey(const Key('quick-Задача'))).height,
-      44,
-      reason: 'после команды — «пилюли»',
+      find.byKey(const Key('quick-Задача')),
+      findsNothing,
+      reason: 'после первой команды «Задачи» и «Напомнить» нет',
     );
+    expect(find.byKey(const Key('quick-Напомнить')), findsNothing);
     await openDrawerIfNeeded(tester);
     expect(find.text('Сверить накладные за ноябрь'), findsWidgets);
     expect(find.byKey(const Key('chat-main')), findsOneWidget);
@@ -173,9 +515,19 @@ void main() {
     expect(find.byKey(const Key('today-panel')), findsOneWidget);
     expect(find.byKey(const Key('menu-button')), findsNothing);
     expect(find.byKey(const Key('session-subtitle')), findsOneWidget);
+    expect(find.byKey(const Key('today-show')), findsNothing);
+    expect(find.byKey(const Key('today-button')), findsNothing);
     await tester.tap(find.byKey(const Key('today-collapse')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('today-panel')), findsNothing);
+    // Свёрнута — маленькая кнопка у правого края шапки.
+    final show = find.byKey(const Key('today-show'));
+    expect(find.byTooltip('Показать «Сегодня»'), findsOneWidget);
+    expect(tester.getRect(show).right, greaterThan(1440 - 24));
+    await tester.tap(show);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('today-panel')), findsOneWidget);
+    expect(show, findsNothing);
     await tester.tap(find.byKey(const Key('sidebar-collapse')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('app-sidebar')), findsNothing);
@@ -187,7 +539,7 @@ void main() {
   for (final size in const <Size>[Size(320, 640), Size(390, 844)]) {
     testWidgets(
         '${size.width.toInt()}x${size.height.toInt()}, шрифт 2x: шапка, '
-        'меню, «Сегодня», «Мой Связной» без переполнений', (tester) async {
+        'меню, «Мой Связной» и «Сводка» без переполнений', (tester) async {
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       final tasks = await _pump(tester, size: size);
@@ -221,9 +573,9 @@ void main() {
         await tester.tap(back);
         await tester.pumpAndSettle();
       }
-      await openToday(tester);
-      expect(find.byKey(const Key('today-panel')), findsOneWidget);
-      expect(tester.takeException(), isNull, reason: '«Сегодня»');
+      await openSummary(tester);
+      expect(find.byKey(const Key('summary-today')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '«Сводка»');
     });
   }
 

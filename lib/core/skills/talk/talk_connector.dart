@@ -717,8 +717,9 @@ final class TalkConnector implements Connector, ConnectorHealth {
         );
       }
       // «Пусть отвечает Лиорио», а Лиорио и так основной: настройки не меняются,
-      // но просьба ясна — отвечает основной, и выбор адресата снимается
-      // (адресат-основной — это `null`, [AssistantController.addresseeAfter]).
+      // но просьба ясна — отвечает основной, и продолжение разговора с
+      // другим помощником снимается (обращение к основному, который ведёт
+      // всё, ничего не продолжает — AssistantController._followUp).
       final main = named ?? speaker;
       session
         ..speaker = main

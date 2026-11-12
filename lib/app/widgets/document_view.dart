@@ -31,7 +31,6 @@ final class DocumentView extends StatelessWidget {
     required this.onSaveNow,
     required this.onReopen,
     required this.onOpenTasks,
-    required this.answer,
   });
 
   final Task? task;
@@ -45,9 +44,6 @@ final class DocumentView extends StatelessWidget {
   final VoidCallback onSaveNow;
   final VoidCallback onReopen;
   final VoidCallback onOpenTasks;
-
-  /// Последний ответ помощника — под документом, рядом с кубиком.
-  final Widget answer;
 
   @override
   Widget build(BuildContext context) {
@@ -82,8 +78,6 @@ final class DocumentView extends StatelessWidget {
               label: const Text('Открыть список задач'),
             ),
           ),
-          const SizedBox(height: 28),
-          answer,
         ],
       );
     }
@@ -187,8 +181,6 @@ final class DocumentView extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: 28),
-        answer,
       ],
     );
   }

@@ -115,22 +115,6 @@ String _input(WidgetTester tester) => tester
     .controller!
     .text;
 
-/// Кто выбран в «Кому:»; `null` — никто.
-String? _addressee(WidgetTester tester) {
-  for (final persona in <String>['rio', 'noda']) {
-    final semantics = tester.widget<Semantics>(
-      find
-          .ancestor(
-            of: find.byKey(Key('addressee-$persona')),
-            matching: find.byType(Semantics),
-          )
-          .first,
-    );
-    if (semantics.properties.selected ?? false) return persona;
-  }
-  return null;
-}
-
 /// Автор последнего ответа в ленте (`rio`, `noda`).
 String? _lastAuthor(WidgetTester tester) {
   // Лента перевёрнута: первый в дереве — самый новый.
@@ -238,7 +222,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  group('«Кому:» и ведущий роли', () {
+  group('ведущий роли и обращение по имени (выбора «Кому» нет)', () {
     Future<InMemorySettingsStore> nodaLeads() async {
       final store = InMemorySettingsStore();
       await store.save(
@@ -250,51 +234,51 @@ void main() {
       return store;
     }
 
-    testWidgets('никого не выбрали — никто не выделен, отвечает ведущая роли',
+    testWidgets('без имени: фразы роли — ведущей роли, остальное — основному',
         (tester) async {
       await _pump(tester, await nodaLeads(), connected: true);
-      expect(_addressee(tester), isNull);
-      expect(find.byKey(const Key('addressee-by-role')), findsOneWidget);
+      expect(find.byKey(const Key('addressee-switch')), findsNothing);
+      expect(find.byKey(const Key('addressee-by-role')), findsNothing);
       await _tapQuick(tester, 'Без фото');
       expect(_lastAuthor(tester), 'noda');
       await _say(tester, '2+2');
       expect(_lastAuthor(tester), 'rio', reason: '«Личное» ведёт основной');
-      expect(_addressee(tester), isNull);
+      await _say(tester, '64115');
+      expect(_lastAuthor(tester), 'noda');
     });
 
-    testWidgets('выбранный основной отвечает и на фразы роли Noda',
+    testWidgets(
+        '«Лиорио, …» при роли Noda — Liorio продолжает, пока разговор о '
+        'складе', (tester) async {
+      await _pump(tester, await nodaLeads(), connected: true);
+      await _say(tester, 'Лиорио, где лежит 64115');
+      expect(_lastAuthor(tester), 'rio');
+      await _say(tester, '64115');
+      expect(_lastAuthor(tester), 'rio', reason: 'тот же навык склада');
+      // Другая тема — продолжение снято, склад снова у ведущей роли.
+      await _say(tester, '2+2');
+      expect(_lastAuthor(tester), 'rio');
+      await _say(tester, '64115');
+      expect(_lastAuthor(tester), 'noda');
+      expect(_transport.requests, hasLength(3));
+    });
+
+    testWidgets('«Нода, …» — на задачи отвечает она, пока речь о них',
         (tester) async {
       await _pump(tester, await nodaLeads(), connected: true);
-      await tester.tap(find.byKey(const Key('addressee-rio')));
-      await tester.pump();
-      expect(_addressee(tester), 'rio');
-      expect(find.byKey(const Key('addressee-by-role')), findsNothing);
-      await _tapQuick(tester, 'Без фото');
-      expect(_lastAuthor(tester), 'rio');
-      await _say(tester, '64115');
-      expect(_lastAuthor(tester), 'rio');
-      expect(_addressee(tester), 'rio');
-      expect(_transport.requests, hasLength(2));
-      // Нажатие на выбранного снимает выбор: снова «по роли».
-      await tester.tap(find.byKey(const Key('addressee-rio')));
-      await tester.pump();
-      expect(_addressee(tester), isNull);
-      await _say(tester, '64115');
+      await _say(tester, 'Нода, покажи задачи');
       expect(_lastAuthor(tester), 'noda');
-      // Noda в «Кому:» — она отвечает и на задачи.
-      await tester.tap(find.byKey(const Key('addressee-noda')));
-      await tester.pump();
-      expect(_addressee(tester), 'noda');
+      await _say(tester, 'покажи задачи');
+      expect(_lastAuthor(tester), 'noda');
       await _say(tester, '2+2');
-      expect(_lastAuthor(tester), 'noda');
+      expect(_lastAuthor(tester), 'rio');
     });
 
-    testWidgets('выбор основного — «основной», а не имя', (tester) async {
+    testWidgets('сменили основного — отвечает новый основной', (tester) async {
       final store = await nodaLeads();
       final assistant = await _pump(tester, store, connected: true);
-      await tester.tap(find.byKey(const Key('addressee-rio')));
-      await tester.pump();
-      // Основной сменился в настройках: выбран и отвечает новый основной.
+      await _say(tester, 'Лиорио, 2+2');
+      expect(_lastAuthor(tester), 'rio');
       await openMyRelay(tester, 'assistants');
       final main = find.byKey(const ValueKey<String>('main-persona-noda'));
       await tester.ensureVisible(main);
@@ -303,38 +287,21 @@ void main() {
       await tester.pumpAndSettle();
       await backToSession(tester);
       expect(assistant.personas.main.id, 'noda');
-      expect(_addressee(tester), 'noda');
-      await _say(tester, '2+2');
+      await _say(tester, 'покажи задачи');
       expect(_lastAuthor(tester), 'noda');
     });
 
-    testWidgets('«Лиорио, …» при роли Noda — дальше отвечает Liorio',
-        (tester) async {
-      await _pump(tester, await nodaLeads(), connected: true);
-      await _say(tester, 'Лиорио, где лежит 64115');
-      expect(_lastAuthor(tester), 'rio');
-      expect(_addressee(tester), 'rio');
-      await _say(tester, '64115');
-      expect(_lastAuthor(tester), 'rio');
-    });
-
-    testWidgets('все роли ведёт основной — он и выбран, подписи нет',
+    testWidgets('все роли ведёт основной — он и отвечает на всё',
         (tester) async {
       final store = InMemorySettingsStore();
       await store.save(
         const AppSettings(enabledRoles: <String>{Roles.storekeeperId}),
       );
       await _pump(tester, store, connected: true);
-      expect(_addressee(tester), 'rio');
-      expect(find.byKey(const Key('addressee-by-role')), findsNothing);
       await _tapQuick(tester, 'Без фото');
       expect(_lastAuthor(tester), 'rio');
-      // Нажатие на и так выбранного ничего не снимает.
-      await tester.tap(find.byKey(const Key('addressee-rio')));
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('addressee-rio')));
-      await tester.pump();
-      expect(_addressee(tester), 'rio');
+      await _say(tester, '2+2');
+      expect(_lastAuthor(tester), 'rio');
     });
   });
 
@@ -387,13 +354,13 @@ void main() {
       expect(tester.takeException(), isNull);
       final strip = find.byKey(const Key('quick-strip'));
       expect(strip, findsOneWidget);
-      // Главная кнопка роли видна сразу, целиком, под «Кому:» и над полем.
+      // Главная кнопка роли видна сразу, целиком, над полем ввода.
       _expectReachable(tester, 'Где лежит…', size);
       final first = tester.getRect(find.byKey(const Key('quick-Где лежит…')));
       expect(
-        first.top,
-        greaterThanOrEqualTo(
-          tester.getRect(find.byKey(const Key('addressee-switch'))).bottom,
+        first.bottom,
+        lessThanOrEqualTo(
+          tester.getRect(find.byKey(const Key('assistant-composer'))).top,
         ),
       );
       expect(first.bottom, lessThan(size.height));
@@ -496,14 +463,14 @@ void main() {
         await tester.pumpAndSettle();
         _expectReachable(tester, label, size);
       }
-      // Кнопки не заходят ни под «Кому:», ни на поле ввода.
+      // Кнопки не заходят на поле ввода.
       final area = tester.getRect(
         find.ancestor(of: rows, matching: find.byType(Scrollable)).first,
       );
       expect(
-        area.top,
-        greaterThanOrEqualTo(
-          tester.getRect(find.byKey(const Key('addressee-switch'))).bottom,
+        area.bottom,
+        lessThanOrEqualTo(
+          tester.getRect(find.byKey(const Key('assistant-composer'))).top,
         ),
       );
       expect(tester.takeException(), isNull);
@@ -522,11 +489,39 @@ void main() {
       final first = find.byKey(const Key('quick-Задача'));
       expect(first.hitTestable(), findsOneWidget);
       expect(
-        tester.getRect(first).top,
-        greaterThanOrEqualTo(
-          tester.getRect(find.byKey(const Key('addressee-switch'))).bottom,
+        tester.getRect(first).bottom,
+        lessThanOrEqualTo(
+          tester.getRect(find.byKey(const Key('assistant-composer'))).top,
         ),
       );
+    });
+
+    testWidgets(
+        '320x640, шрифт 2x: строку кнопок листают пальцем — меню не '
+        'открывается', (tester) async {
+      const size = Size(320, 640);
+      await _pump(
+        tester,
+        await storekeeper(),
+        size: size,
+        textScale: 2,
+        connected: true,
+      );
+      final strip = find.byKey(const Key('quick-strip'));
+      final position = tester
+          .state<ScrollableState>(
+            find.descendant(of: strip, matching: find.byType(Scrollable)),
+          )
+          .position;
+      await tester.drag(strip, const Offset(-120, 0));
+      await tester.pumpAndSettle();
+      expect(position.pixels, greaterThan(0));
+      // И обратно — вправо: это прокрутка строки, а не свайп меню.
+      await tester.drag(strip, const Offset(200, 0));
+      await tester.pumpAndSettle();
+      expect(position.pixels, 0);
+      expect(find.byKey(const Key('app-sidebar')), findsNothing);
+      expect(tester.takeException(), isNull);
     });
   });
 }

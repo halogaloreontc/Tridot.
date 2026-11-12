@@ -17,13 +17,25 @@ final class HistoryEntry {
   final String? result;
 }
 
-/// Хроника команд: колонка коротких полос у правого края чата, закреплённая
-/// по центру средней части — зеркальная пара кубику у последнего ответа.
+/// Хроника команд: строка коротких вертикальных полос под названием
+/// сессии, по центру шапки. Ширину колонки чата и поля ввода она не
+/// занимает.
 ///
 /// Полосы «живые»: старые короче и тусклее, свежие длиннее и светлее,
-/// последняя — цвета успешного кубика. Наведение показывает карточку с
-/// командой и ответом, нажатие ведёт к сообщению. На узком экране полосы
-/// слишком мелкие для пальца, поэтому нажатие открывает список команд.
+/// последняя — цвета успешного кубика.
+///
+/// - Узко ([compact], телефон и планшет — пальцем): полосы слишком мелкие
+///   для пальца, поэтому вся строка — одна кнопка не уже [minTarget],
+///   которая открывает список команд («Хроника команд»).
+/// - Широко (компьютер, мышь): наведение на полосу показывает карточку с
+///   командой и ответом, нажатие ведёт к сообщению. Рядом — кнопка списка
+///   [minTarget]×[minTarget] (`history-rail-list`): весь список, в том
+///   числе команды, которым не хватило места, и цель нажатия для пальца на
+///   сенсорном экране.
+///
+/// Команд больше, чем помещается, — видны последние, а слева от них
+/// подпись «+N» (сколько не показано); нажатие на неё тоже открывает
+/// список. Прокрутки нет: строка не спорит с жестом открытия меню.
 final class HistoryRail extends StatelessWidget {
   const HistoryRail({
     super.key,
@@ -31,61 +43,180 @@ final class HistoryRail extends StatelessWidget {
     required this.onSelect,
     this.activeIndex,
     this.compact = false,
-    this.cardInset = 48,
   });
 
   final List<HistoryEntry> entries;
   final ValueChanged<int> onSelect;
   final int? activeIndex;
 
-  /// Узкий экран: вся колонка — одна кнопка, открывающая список команд.
+  /// Узкий экран: вся строка — одна кнопка, открывающая список команд.
   final bool compact;
 
-  /// Сколько от правого края окна до правого края карточки при наведении.
-  /// Хозяин ставит её левее хроники, чтобы карточка не уходила на панель
-  /// задач и за край окна.
-  final double cardInset;
+  /// Высота строки — она же высота цели нажатия.
+  static const double height = 44;
+
+  /// Наименьшая ширина и высота цели нажатия пальцем.
+  static const double minTarget = 44;
+
+  /// Наибольшая ширина строки: на телефоне и на компьютере (вместе с
+  /// кнопкой списка).
+  static double maxWidth({required bool compact}) => compact ? 240 : 360;
+
+  /// Шаг полос: ширина полосы и промежуток.
+  static double step({required bool compact}) => compact ? 9 : 11;
+
+  /// Ширина подписи «+N».
+  static const double _moreWidth = 36;
+
+  String get _label => 'Хроника команд: ${entries.length}. Открыть список';
 
   @override
   Widget build(BuildContext context) {
-    final rail = SizedBox(
-      key: const Key('history-rail'),
-      width: compact ? 24 : 32,
+    final marks = SizedBox(
+      height: height,
       child: entries.isEmpty
           ? const SizedBox.shrink()
-          : Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+          : LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                final step = HistoryRail.step(compact: compact);
+                // Место под «+N» — только если все полосы не входят.
+                final all = (constraints.maxWidth / step).floor();
+                final fit = entries.length <= all
+                    ? entries.length
+                    : ((constraints.maxWidth - _moreWidth) / step)
+                        .floor()
+                        .clamp(1, entries.length);
+                final first = entries.length - fit;
+                return Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    for (var index = 0; index < entries.length; index++)
+                    if (first > 0) _more(context, first),
+                    for (var index = first; index < entries.length; index++)
                       _Mark(
                         key: Key('history-$index'),
                         entry: entries[index],
                         age: entries.length - 1 - index,
                         active: index == activeIndex,
                         compact: compact,
-                        cardInset: cardInset,
+                        width: step,
                         onTap: compact
                             ? () => _openList(context)
                             : () => onSelect(index),
                       ),
                   ],
+                );
+              },
+            ),
+    );
+    if (entries.isEmpty) {
+      return ConstrainedBox(
+        key: const Key('history-rail'),
+        constraints: BoxConstraints(maxWidth: maxWidth(compact: compact)),
+        child: marks,
+      );
+    }
+    if (!compact) {
+      return ConstrainedBox(
+        key: const Key('history-rail'),
+        constraints: BoxConstraints(maxWidth: maxWidth(compact: false)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            // Пустое место слева той же ширины, что и кнопка справа: полосы
+            // остаются по центру шапки.
+            const SizedBox(width: minTarget),
+            Flexible(child: marks),
+            Tooltip(
+              message: 'Хроника команд',
+              child: Semantics(
+                button: true,
+                label: _label,
+                child: InkWell(
+                  key: const Key('history-rail-list'),
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _openList(context),
+                  child: const ExcludeSemantics(
+                    child: SizedBox(
+                      width: minTarget,
+                      height: minTarget,
+                      child: Icon(
+                        Icons.format_list_bulleted,
+                        size: 16,
+                        color: AssistantColors.faint,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-    );
-    if (!compact || entries.isEmpty) return rail;
+          ],
+        ),
+      );
+    }
     return Semantics(
       button: true,
-      label: 'Хроника команд: ${entries.length}. Открыть список',
+      label: _label,
       child: GestureDetector(
         key: const Key('history-rail-open'),
         behavior: HitTestBehavior.opaque,
         onTap: () => _openList(context),
-        child: ExcludeSemantics(child: rail),
+        child: ExcludeSemantics(
+          child: ConstrainedBox(
+            // Одна-две полосы — всё равно цель не уже пальца.
+            constraints: const BoxConstraints(minWidth: minTarget + 4),
+            child: Padding(
+              // Цель нажатия шире самих полос.
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: ConstrainedBox(
+                key: const Key('history-rail'),
+                constraints: BoxConstraints(maxWidth: maxWidth(compact: true)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[Flexible(child: marks)],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Подпись «+N»: сколько старых команд не поместилось. На компьютере —
+  /// кнопка списка; на телефоне нажатие и так открывает список.
+  Widget _more(BuildContext context, int hidden) {
+    final text = SizedBox(
+      width: _moreWidth,
+      height: height,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Text(
+          '+$hidden',
+          key: const Key('history-more'),
+          maxLines: 1,
+          overflow: TextOverflow.clip,
+          textAlign: TextAlign.right,
+          textScaler: TextScaler.noScaling,
+          style: technicalTextStyle.copyWith(
+            fontSize: 11,
+            color: AssistantColors.faint,
+          ),
+        ),
+      ),
+    );
+    if (compact) return text;
+    return Semantics(
+      button: true,
+      label: 'Ещё $hidden команд. Открыть «Хроника команд»',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          key: const Key('history-more-open'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _openList(context),
+          child: ExcludeSemantics(child: text),
+        ),
       ),
     );
   }
@@ -133,17 +264,19 @@ final class _Mark extends StatefulWidget {
     required this.age,
     required this.active,
     required this.compact,
-    required this.cardInset,
+    required this.width,
     required this.onTap,
   });
 
   final HistoryEntry entry;
-  final double cardInset;
 
   /// 0 — последняя команда, дальше — старше.
   final int age;
   final bool active;
   final bool compact;
+
+  /// Ширина ячейки полосы (полоса и промежуток).
+  final double width;
   final VoidCallback onTap;
 
   @override
@@ -161,7 +294,7 @@ String _clip(String text, int max) =>
 final class _MarkState extends State<_Mark> {
   bool _hover = false;
 
-  /// Длина и цвет полосы по свежести команды.
+  /// Высота и цвет полосы по свежести команды.
   (double, Color) get _look {
     final scale = widget.compact ? .8 : 1.0;
     if (widget.active || _hover) {
@@ -177,24 +310,18 @@ final class _MarkState extends State<_Mark> {
 
   @override
   Widget build(BuildContext context) {
-    final (width, color) = _look;
+    final (height, color) = _look;
     final mark = SizedBox(
-      width: widget.compact ? 24 : 32,
-      height: widget.compact ? 14 : 20,
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: Padding(
-          // Отступ от разделителя панели задач или края окна: полосы
-          // не должны сливаться с границей.
-          padding: EdgeInsets.only(right: widget.compact ? 4 : 8),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            width: width,
-            height: 3,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(1),
-            ),
+      width: widget.width,
+      height: HistoryRail.height,
+      child: Center(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: 3,
+          height: height,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(1),
           ),
         ),
       ),
@@ -202,14 +329,12 @@ final class _MarkState extends State<_Mark> {
     if (widget.compact) return mark;
     return Tooltip(
       key: Key('history-tip-${widget.entry.timestamp}-${widget.age}'),
-      preferBelow: false,
-      verticalOffset: 0,
-      // Карточка центрируется на полосе, а правое поле не пускает её правее
-      // [cardInset] от края окна: она остаётся слева от хроники, над
-      // сообщениями, а не над панелью задач.
-      margin: EdgeInsets.only(left: 16, right: widget.cardInset),
-      // Ограничение включает поля карточки.
-      constraints: BoxConstraints(maxWidth: _cardWidth + 16 + widget.cardInset),
+      // Карточка — под строкой, над сообщениями; поля не пускают её за
+      // края окна.
+      preferBelow: true,
+      verticalOffset: HistoryRail.height / 2 + 4,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      constraints: const BoxConstraints(maxWidth: _cardWidth),
       waitDuration: const Duration(milliseconds: 200),
       decoration: BoxDecoration(
         color: AssistantColors.raised,

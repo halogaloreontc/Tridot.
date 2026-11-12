@@ -122,8 +122,8 @@ final class TodayPanel extends StatelessWidget {
     this.pending = const <TodayPending>[],
     this.sections = const <TodaySection>[],
     this.onClose,
-    this.closeTooltip = 'Закрыть «Сегодня»',
-    this.closeKey = const Key('today-close'),
+    this.closeTooltip = 'Свернуть «Сегодня»',
+    this.closeKey = const Key('today-collapse'),
     this.selectedId,
     this.loading = false,
     this.error,
@@ -141,7 +141,8 @@ final class TodayPanel extends StatelessWidget {
   final List<TodayPending> pending;
   final List<TodaySection> sections;
 
-  /// Закрыть (телефон) или свернуть колонку (широкий экран).
+  /// Свернуть колонку (широкий экран; на телефоне панели нет — всё это
+  /// в «Мой Связной» → «Сводка»).
   final VoidCallback? onClose;
   final String closeTooltip;
   final Key closeKey;
@@ -209,7 +210,10 @@ final class TodayPanel extends StatelessWidget {
                   style: IconButton.styleFrom(
                     minimumSize: const Size(44, 44),
                   ),
-                  icon: const Icon(Icons.close, color: AssistantColors.text),
+                  icon: const Icon(
+                    Icons.keyboard_double_arrow_right,
+                    color: AssistantColors.text,
+                  ),
                 ),
             ],
           ),

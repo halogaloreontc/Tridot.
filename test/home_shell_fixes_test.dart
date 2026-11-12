@@ -147,35 +147,31 @@ void main() {
     expect(find.text('Архив выполненных · 0'), findsOneWidget);
   });
 
-  testWidgets('широкий экран: «Сегодня» у правого края, «пилюли» по тексту',
-      (tester) async {
+  testWidgets(
+      'широкий экран: колонка «Сегодня» у правого края, свёрнута — кнопка '
+      'в шапке; «пилюли» ролей по тексту', (tester) async {
     await _pump(tester, size: const Size(1440, 900));
     await _say(tester, 'привет');
-    final header = tester.getRect(find.byKey(const Key('session-subtitle')));
-    final today = tester.getRect(find.byKey(const Key('today-button')));
-    final column = tester.getRect(find.byKey(const Key('assistant-composer')));
-    expect(today.left, greaterThan(header.right));
+    expect(find.byKey(const Key('today-button')), findsNothing);
     expect(
-      today.right,
-      greaterThan(column.right - 40),
-      reason: 'кнопка прижата вправо, без пустоты после неё',
+      tester.getRect(find.byKey(const Key('today-panel'))).right,
+      1440,
     );
-    final pill = tester.getSize(find.byKey(const Key('quick-Задача')));
-    expect(pill.height, 44);
-    expect(pill.width, lessThan(200), reason: 'своей ширины, не на треть');
-    expect(find.byKey(const Key('quick-pills-centered')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('today-collapse')));
+    await tester.pumpAndSettle();
+    final header = tester.getRect(find.byKey(const Key('session-subtitle')));
+    final show = tester.getRect(find.byKey(const Key('today-show')));
+    expect(show.left, greaterThan(header.right));
+    expect(show.right, greaterThan(1440 - 24), reason: 'прижата вправо');
+    expect(show.height, greaterThanOrEqualTo(44));
+    // Основных кнопок после команды нет, поле ввода — на свою колонку.
+    expect(find.byKey(const Key('quick-Задача')), findsNothing);
   });
 
-  testWidgets('телефон 390: подписи «Сегодня», «Диалог» и «Документ» видны',
+  testWidgets('телефон 390: «Диалог» и «Документ» подписаны, «Сегодня» нет',
       (tester) async {
     await _pump(tester);
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('today-button')),
-        matching: find.text('Сегодня'),
-      ),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('today-button')), findsNothing);
     expect(find.text('Диалог'), findsOneWidget);
     expect(find.text('Документ'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -183,13 +179,7 @@ void main() {
 
   testWidgets('телефон 320: только иконки, без переполнений', (tester) async {
     await _pump(tester, size: const Size(320, 640));
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('today-button')),
-        matching: find.text('Сегодня'),
-      ),
-      findsNothing,
-    );
+    expect(find.byKey(const Key('today-button')), findsNothing);
     expect(find.text('Диалог'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -332,8 +322,13 @@ void main() {
     expect(_buttonsWithoutTap(tester), isEmpty, reason: '«Мой Связной»');
     await tester.tap(find.byKey(const Key('my-relay-back')));
     await tester.pumpAndSettle();
-    await openToday(tester);
+    // Колонка «Сегодня» на компьютере: «Свернуть» и «Показать».
+    await tester.pumpWidget(const SizedBox());
+    await _pump(tester, size: const Size(1440, 900));
     expect(_buttonsWithoutTap(tester), isEmpty, reason: '«Сегодня»');
+    await tester.tap(find.byKey(const Key('today-collapse')));
+    await tester.pumpAndSettle();
+    expect(_buttonsWithoutTap(tester), isEmpty, reason: '«Показать «Сегодня»»');
     handle.dispose();
   });
 }

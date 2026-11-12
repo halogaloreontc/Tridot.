@@ -8,12 +8,12 @@ import '../core/chats/chat_book.dart';
 import '../core/chats/chat_models.dart';
 import '../core/chats/chat_search.dart';
 import '../core/chats/chat_store.dart';
+import '../core/connectors/connector.dart';
 import '../core/connectors/login_link.dart';
 import '../core/connectors/manifest/connection_service.dart';
 import '../core/connectors/manifest/connection.dart';
 import '../core/formatting/due_format.dart';
 import '../core/models/action_card.dart';
-import '../core/models/assistant_types.dart';
 import '../core/models/bulk.dart';
 import '../core/models/secure_card.dart';
 import '../core/models/task.dart';
@@ -38,6 +38,7 @@ import 'screens/planning_screen.dart';
 import 'screens/projects_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/storage_screen.dart';
+import 'shell/drawer_swipe.dart';
 import 'shell/quick_actions.dart';
 import 'shell/relay_drawer.dart';
 import 'shell/session_header.dart';
@@ -71,15 +72,16 @@ extension AppSectionInfo on AppSection {
 }
 
 /// Ширина, начиная с которой меню стоит постоянной колонкой слева, а
-/// «Сегодня» — колонкой справа (три колонки, макет D-Desk). Уже — меню и
-/// «Сегодня» выдвигаются: кнопками в шапке и жестом от края экрана.
+/// «Сегодня» — колонкой справа (три колонки, макет D-Desk). Уже — меню
+/// выдвигается (кнопкой в шапке и свайпом вправо), а «Сегодня» отдельно
+/// нет: всё оттуда — в «Мой Связной» → «Сводка».
 const double wideBreakpoint = 1000;
 
 /// Ширина, начиная с которой колонка «Сегодня» открыта сразу; уже — она
-/// свёрнута, пока её не откроют кнопкой «Сегодня».
+/// свёрнута, пока её не откроют кнопкой «Показать «Сегодня»» в шапке.
 const double todayOpenBreakpoint = 1280;
 
-/// Ширина, ниже которой хроника команд узкая.
+/// Ширина, ниже которой хроника команд — одна кнопка со списком.
 const double narrowBreakpoint = 700;
 
 /// Ширина постоянного меню и колонки «Сегодня» на широком экране.
@@ -91,32 +93,13 @@ const double todayWidth = 340;
 const String emptyTasksHint =
     'Напишите в сессии, например:\nзавтра купить хлеб';
 
-/// Наибольшая ширина колонки чата (сообщения, «Кому», быстрые действия и
-/// поле ввода) без хроники команд.
+/// Наибольшая ширина колонки чата (сообщения, быстрые действия и поле
+/// ввода).
 const double chatColumnWidth = 760;
 
 /// Общий отступ содержимого колонки чата от её краёв: по нему выровнены
-/// текст ответов, правый край пузырей, «Кому:», быстрые действия и поле
-/// ввода.
+/// текст ответов, правый край пузырей, быстрые действия и поле ввода.
 const double chatInset = 16;
-
-/// Ширина колонки хроники команд справа от колонки чата.
-double historyRailWidth({required bool narrow}) => narrow ? 24 : 32;
-
-/// Сколько от правого края окна до правого края хроники команд. Хроника
-/// стоит вплотную к колонке чата, а колонка (вместе с хроникой) — по
-/// центру области между меню и колонкой «Сегодня».
-double historyRailRight({
-  required double width,
-  required double sidebarWidth,
-  required double panelWidth,
-  required bool narrow,
-}) {
-  final chat = width - sidebarWidth - panelWidth;
-  final column = chatColumnWidth + historyRailWidth(narrow: narrow);
-  final free = chat - column;
-  return panelWidth + (free > 0 ? free / 2 : 0);
-}
 
 final class HomePage extends StatefulWidget {
   const HomePage({
@@ -202,18 +185,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// День, за который уже проверены просроченные задачи.
   String? _noticeChecked;
-
-  /// Кому писать в дуэте, выбор в поле ввода: `null` — никого не
-  /// выбирали (отвечает основной или ведущий роли, чей навык заберёт
-  /// фразу), [AssistantController.mainAddressee] — явно основному, id —
-  /// явно этому помощнику. У каждого чата свой и сохраняется вместе с
-  /// чатом ([ChatThread.addressee]). Обращение по имени («Нода, …») меняет его
-  /// так же, как нажатие на переключатель
-  /// ([AssistantController.addresseeAfter]): к кому обратились, тот и
-  /// продолжает. Смена настроек его не трогает.
-  String? get _addressee => _book.current.addressee;
-
-  set _addressee(String? value) => _book.setAddressee(_book.currentId, value);
 
   /// «Команда обрабатывается…» от помощника, который сейчас отвечает.
   ChatMessage? _working;
@@ -405,6 +376,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     _cubeTimer?.cancel();
     _docTimer?.cancel();
+    _docToastTimer?.cancel();
     _trainingTimer?.cancel();
     _tick?.cancel();
     // Несохранённые правки документа не теряем и при закрытии экрана.
@@ -490,8 +462,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         card: response.card,
         secureCard: response.secureCard,
       );
-
-  bool get _duo => _settings.personas.mode == AssistantMode.duo;
 
   // ------------------------------------------------------------- данные
 
@@ -739,12 +709,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (!mounted) return;
     }
     _cubeTimer?.cancel();
-    // Чат, адресат и голос фиксируются сейчас: ответ придёт в этот чат,
-    // даже если пользователь успеет открыть другой, а смена настроек во
-    // время ответа применится со следующего сообщения.
+    // Чат и голос фиксируются сейчас: ответ придёт в этот чат, даже если
+    // пользователь успеет открыть другой, а смена настроек во время ответа
+    // применится со следующего сообщения. Кому отвечать, решает помощник
+    // сам: ведущий роли, обращение по имени и продолжение разговора с тем,
+    // к кому обратились ([AssistantController.handle]).
     final chatId = _book.currentId;
     final chatTaskId = _book.current.taskId;
-    final addressee = _duo ? _addressee : null;
+    // Команда из режима «Документ»: ответ — в историю сессии, а на экране
+    // — короткое уведомление, документ остаётся открытым.
+    final fromDocument = _mode == AssistantViewMode.document;
     // Код входа из ссылки («#qr=…») в историю чата и команд не пишем.
     // Пароль, вставленный в чат (D12), — тоже: он скрыт до истории, списка
     // команд, «обрабатывается…» и маршрутизатора, а сам токен выброшен.
@@ -767,7 +741,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _working = _answer(
         widget.assistant.working(
           secret ? shown : text,
-          addressee: addressee,
           secretRedacted: secret,
         ),
         withStatus: false,
@@ -782,7 +755,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _saveDocument();
     final response = await widget.assistant.handle(
       secret ? shown : text,
-      addressee: addressee,
       chatTaskId: chatTaskId,
       secretRedacted: secret,
     );
@@ -808,15 +780,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _sending = false;
       _working = null;
       _workingChatId = null;
-      // Пока готовился ответ, адресата могли выбрать в поле: обращение
-      // по имени важнее, без него выбор остаётся.
-      _book.setAddressee(
-        chatId,
-        widget.assistant.addresseeAfter(
-          response,
-          current: _book.thread(chatId)?.addressee,
-        ),
-      );
       _cube = cubeStateFor(response.status);
       _book.append(chatId, reply);
       if (aboutTask &&
@@ -835,9 +798,51 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _cubeTimer = Timer(const Duration(milliseconds: 1600), () {
       if (mounted && !_sending) setState(() => _cube = CubeState.idle);
     });
+    if (fromDocument &&
+        _mode == AssistantViewMode.document &&
+        _section == AppSection.session &&
+        chatId == _book.currentId) {
+      _announceReply(reply, response);
+    }
     _scrollToLatest();
     _inputFocus.requestFocus();
     await _refresh();
+  }
+
+  /// Ответ на команду из режима «Документ» — коротким уведомлением над
+  /// полем ввода, поверх низа документа (не закрывает поле и кнопки под
+  /// ним): в ленте ответа сейчас не видно. Текст — тот же, что в ленте
+  /// (уже прошёл [SecretGuard] на входе и выходной фильтр помощника). Ответ
+  /// с карточкой (пароли, действие склада, список) или от навыка с
+  /// секретами в уведомление не попадает: «Ответ в диалоге».
+  void _announceReply(ChatMessage reply, AssistantResponse response) {
+    final sensitive = reply.secureCard != null ||
+        reply.card != null ||
+        reply.checklist != null ||
+        response.secureCard != null ||
+        response.intent.startsWith('passwords') ||
+        response.intent.startsWith('secret') ||
+        _sensitiveConnector(widget.assistant.session.lastConnectorId);
+    _docToastTimer?.cancel();
+    setState(() => _docToast = sensitive ? 'Ответ в диалоге' : reply.text);
+    _docToastTimer = Timer(const Duration(seconds: 4), _hideDocToast);
+  }
+
+  /// Уведомление об ответе в «Документе»: текст или `null` — не показано.
+  String? _docToast;
+  Timer? _docToastTimer;
+
+  void _hideDocToast() {
+    _docToastTimer?.cancel();
+    _docToastTimer = null;
+    if (mounted && _docToast != null) setState(() => _docToast = null);
+  }
+
+  /// Навык с секретами (пароли): его ответы не показываем уведомлением.
+  bool _sensitiveConnector(String? id) {
+    if (id == null) return false;
+    return widget.assistant.connectors
+        .any((ConnectorInfo info) => info.id == id && info.sensitive);
   }
 
   void _scrollToLatest() {
@@ -1046,10 +1051,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _switchChat(() => _book.openTask(task.id), mode: mode);
   }
 
+  /// Открывает чат [chatId] в «Диалоге». Тот же чат в «Документе» тоже
+  /// переключается на «Диалог»: в документе ленты нет, и карточка, ради
+  /// которой пришли (например, из «Сводки»), иначе не видна.
   void _openChat(String chatId) {
     if (chatId == _book.currentId) {
       _closeDrawers();
       _showSession();
+      if (_mode != AssistantViewMode.dialogue) {
+        _setMode(AssistantViewMode.dialogue);
+      }
       return;
     }
     _switchChat(() => _book.open(chatId), mode: AssistantViewMode.dialogue);
@@ -1100,6 +1111,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mode != null) _mode = mode;
       _messageKeys.clear();
       _highlightedCommand = null;
+      _docToast = null;
     });
     unawaited(_syncDocument());
     _scrollToLatest();
@@ -1108,7 +1120,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _closeDrawers() {
     final scaffold = _scaffoldKey.currentState;
     if (scaffold == null) return;
-    if (scaffold.isEndDrawerOpen) scaffold.closeEndDrawer();
     if (scaffold.isDrawerOpen) scaffold.closeDrawer();
   }
 
@@ -1304,7 +1315,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _setMode(AssistantViewMode mode) {
     unawaited(_saveDocument());
-    setState(() => _mode = mode);
+    _docToastTimer?.cancel();
+    setState(() {
+      _mode = mode;
+      _docToast = null;
+    });
   }
 
   Duration _motion(Duration duration) =>
@@ -1333,45 +1348,32 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // В «Мой Связной» колонки «Сегодня» нет (D-Desk-Summary): году
         // активности нужна ширина. Выбор пользователя не меняется.
         final today = _section != AppSection.myRelay && _todayShown(width);
-        final railRight = historyRailRight(
-          width: width,
-          sidebarWidth: sidebar ? sidebarWidth + 1 : 0,
-          panelWidth: today ? todayWidth + 1 : 0,
-          narrow: narrow,
-        );
         final drawerWidth = (width - 56).clamp(240.0, 316.0);
-        final endDrawerWidth = (width - 40).clamp(240.0, todayWidth);
-        // Окно стало широким при открытом выдвижном меню или «Сегодня»:
-        // убирать его сразу нельзя — у маршрута осталась бы запись «закрыть
-        // меню», и «Назад» перестал бы возвращать в сессию. Держим его ещё
-        // кадр и закрываем как обычно.
+        // Окно стало широким при открытом выдвижном меню: убирать его сразу
+        // нельзя — у маршрута осталась бы запись «закрыть меню», и «Назад»
+        // перестал бы возвращать в сессию. Держим его ещё кадр и закрываем
+        // как обычно.
         final keepDrawer = sidebar && _drawerOpen;
-        final keepEndDrawer = today && _endDrawerOpen;
-        if (keepDrawer || keepEndDrawer) {
+        if (keepDrawer) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final scaffold = _scaffoldKey.currentState;
-            if (scaffold == null) return;
-            if (keepDrawer && scaffold.isDrawerOpen) scaffold.closeDrawer();
-            if (keepEndDrawer && scaffold.isEndDrawerOpen) {
-              scaffold.closeEndDrawer();
+            if (scaffold != null && scaffold.isDrawerOpen) {
+              scaffold.closeDrawer();
             }
           });
         }
         return PopScope(
           // «Назад» на телефоне из разделов и «Мой Связной» — в сессию.
-          // Открытое меню или «Сегодня» «назад» только закрывает.
-          canPop:
-              _section == AppSection.session || _drawerOpen || _endDrawerOpen,
+          // Открытое меню «назад» только закрывает.
+          canPop: _section == AppSection.session || _drawerOpen,
           onPopInvokedWithResult: (bool didPop, Object? _) {
             if (!didPop) _goTo(AppSection.session);
           },
           child: Scaffold(
             key: _scaffoldKey,
             onDrawerChanged: (bool open) => setState(() => _drawerOpen = open),
-            onEndDrawerChanged: (bool open) =>
-                setState(() => _endDrawerOpen = open),
             backgroundColor: AssistantColors.background,
-            drawerEdgeDragWidth: 24,
+            drawerEdgeDragWidth: DrawerSwipe.edge,
             drawer: sidebar && !keepDrawer
                 ? null
                 : Drawer(
@@ -1379,63 +1381,31 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     backgroundColor: AssistantColors.sidebar,
                     child: SafeArea(child: _buildDrawer(wide: false)),
                   ),
-            endDrawer: today && !keepEndDrawer
-                ? null
-                : Drawer(
-                    width: endDrawerWidth,
-                    backgroundColor: AssistantColors.sidebar,
-                    child: SafeArea(child: _buildTodayPanel(wide: false)),
-                  ),
             body: SafeArea(
-              child: Stack(
+              child: Row(
                 children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      if (sidebar) ...<Widget>[
-                        SizedBox(
-                          width: sidebarWidth,
-                          child: _buildDrawer(wide: true),
-                        ),
-                        const VerticalDivider(width: 1),
-                      ],
-                      Expanded(
-                        child: _buildWorkspace(
-                          narrow: narrow,
-                          wide: wide,
-                          sidebar: sidebar,
-                          today: today,
-                        ),
-                      ),
-                      if (today) ...<Widget>[
-                        const VerticalDivider(width: 1),
-                        SizedBox(
-                          width: todayWidth,
-                          child: _buildTodayPanel(wide: true),
-                        ),
-                      ],
-                    ],
-                  ),
-                  // Хроника команд: вплотную справа к колонке сессии и
-                  // ровно по центру высоты всего экрана — зеркальная пара
-                  // кубику у ответа. Место под неё оставлено в колонке
-                  // (_chatColumn).
-                  if (_section == AppSection.session &&
-                      _mode == AssistantViewMode.dialogue)
-                    Positioned(
-                      top: 0,
-                      bottom: 0,
-                      right: railRight,
-                      child: HistoryRail(
-                        entries: _historyEntries,
-                        activeIndex: _highlightedCommand,
-                        onSelect: _jumpToCommand,
-                        compact: narrow,
-                        // Карточка при наведении — слева от хроники, над
-                        // сообщениями, а не над колонкой «Сегодня».
-                        cardInset:
-                            railRight + historyRailWidth(narrow: narrow) + 4,
-                      ),
+                  if (sidebar) ...<Widget>[
+                    SizedBox(
+                      width: sidebarWidth,
+                      child: _buildDrawer(wide: true),
                     ),
+                    const VerticalDivider(width: 1),
+                  ],
+                  Expanded(
+                    child: _buildWorkspace(
+                      narrow: narrow,
+                      wide: wide,
+                      sidebar: sidebar,
+                      today: today,
+                    ),
+                  ),
+                  if (today) ...<Widget>[
+                    const VerticalDivider(width: 1),
+                    SizedBox(
+                      width: todayWidth,
+                      child: _buildTodayPanel(),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1445,9 +1415,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Меню и «Сегодня» на телефоне открыты: «назад» закрывает их.
+  /// Меню на телефоне открыто: «назад» закрывает его.
   bool _drawerOpen = false;
-  bool _endDrawerOpen = false;
 
   /// Ctrl/Cmd+K — поиск по сессиям, где бы ни был фокус: обработчик
   /// клавиатуры, а не CallbackShortcuts, которые срабатывают только при
@@ -1635,7 +1604,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       );
 
-  /// «+ Сессия»: новая пустая сессия, режим «Диалог», курсор в поле ввода.
+  /// «+» в меню: новая пустая сессия, режим «Диалог», курсор в поле ввода.
   void _newSession() {
     unawaited(_saveDocument());
     // Выбор («её») прежнего чата сохраняется за ним, новая сессия
@@ -1681,7 +1650,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // ------------------------------------------------------------ «Сегодня»
 
-  Widget _buildTodayPanel({required bool wide}) {
+  /// Колонка «Сегодня» — только на компьютере. На телефоне её нет: дела
+  /// на сегодня, просроченные и ждущие отметки карточки — в «Мой Связной»
+  /// → «Сводка».
+  Widget _buildTodayPanel() {
     final now = _now;
     final passwords = widget.passwords;
     return TodayPanel(
@@ -1695,11 +1667,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onOpenTask: (Task task) => _openTaskChat(task),
       onToggleDone: _toggleDone,
       onAllTasks: () => _goTo(AppSection.tasks),
-      onClose: wide
-          ? () => setState(() => _todayOpen = false)
-          : () => _scaffoldKey.currentState?.closeEndDrawer(),
-      closeKey: wide ? const Key('today-collapse') : const Key('today-close'),
-      closeTooltip: wide ? 'Свернуть «Сегодня»' : 'Закрыть «Сегодня»',
+      onClose: () => setState(() => _todayOpen = false),
       pending: <TodayPending>[
         for (final pending in _book.pendingCards(now))
           _todayPending(pending.chatId, pending.message),
@@ -1764,22 +1732,29 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  void _toggleToday(bool wide) {
-    if (wide) {
-      final width = MediaQuery.sizeOf(context).width;
-      setState(() => _todayOpen = !_todayShown(width));
-    } else {
-      _scaffoldKey.currentState?.openEndDrawer();
-    }
-  }
+  /// «Показать «Сегодня»» в шапке (компьютер, колонка свёрнута).
+  Widget _todayShowButton() => Semantics(
+        label: 'Показать «Сегодня»',
+        button: true,
+        expanded: false,
+        excludeSemantics: true,
+        onTap: () => setState(() => _todayOpen = true),
+        child: IconButton(
+          key: const Key('today-show'),
+          tooltip: 'Показать «Сегодня»',
+          onPressed: () => setState(() => _todayOpen = true),
+          style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+          icon: const Icon(
+            Icons.view_sidebar_outlined,
+            color: AssistantColors.text,
+          ),
+        ),
+      );
 
   void _goTo(AppSection section) {
     unawaited(_saveDocument());
     setState(() => _section = section);
     if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
-      Navigator.of(context).pop();
-    }
-    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
       Navigator.of(context).pop();
     }
     if (section != AppSection.session) unawaited(_refresh());
@@ -1813,8 +1788,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ? selected
             : null;
     final now = _now;
-    final dueToday = todayTasks(_active, now);
-    final overdue = dueToday.where((Task t) => isOverdue(t, now)).length;
     final persona = _settings.personas.responder;
     final Widget? leading;
     if (inTaskChat || taskInFocus != null) {
@@ -1864,9 +1837,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final sessionTitle = current.kind == ChatKind.task
         ? (_findTask(current.taskId)?.title ?? 'Задача')
         : ChatBook.titleOf(current);
+    final history = _historyEntries;
     // Material, а не ColoredBox: на нём рисуются подсветка и всплески
     // нажатий у ListTile и кнопок во всех разделах.
-    return Material(
+    final workspace = Material(
       color: AssistantColors.workspace,
       child: Column(
         children: <Widget>[
@@ -1877,22 +1851,51 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             personaName: persona.russianName,
             onPersona: () => _openMyRelay(MyRelayTab.assistants),
             subtitle: wide ? 'сессия «$sessionTitle»' : null,
-            today: TodayButton(
-              count: dueToday.length,
-              overdue: overdue,
-              // Подпись «Сегодня» прячется только в тесноте: рядом
-              // заголовок задачи или экран уже 360 (D-Phone — с подписью).
-              compact: narrow &&
-                  (title != null || MediaQuery.sizeOf(context).width < 360),
-              expanded: wide ? today : null,
-              onPressed: () => _toggleToday(wide),
-            ),
+            // «Сегодня» — колонкой справа на компьютере; свёрнута — кнопка
+            // в шапке. На телефоне кнопки нет: это «Мой Связной» → «Сводка».
+            trailing: wide && !today ? _todayShowButton() : null,
+            // Хроника команд — под названием сессии, по центру: ширину
+            // ленты и поля ввода она не занимает. И в «Диалоге», и в
+            // «Документе».
+            below: inSession && history.isNotEmpty
+                ? HistoryRail(
+                    entries: history,
+                    activeIndex: _highlightedCommand,
+                    onSelect: _selectCommand,
+                    // Полосы по одной — только на широком окне (мышь); на
+                    // телефоне и планшете (палец) строка — одна кнопка
+                    // списка.
+                    compact: !wide,
+                  )
+                : null,
           ),
           const Divider(),
           Expanded(child: _buildSection()),
         ],
       ),
     );
+    // Свайп вправо по сессии открывает меню (телефон). Поле ввода внизу —
+    // вне жеста: там выделяют текст и двигают курсор.
+    return DrawerSwipe(
+      enabled: !sidebar && inSession,
+      onOpen: wide
+          ? () => setState(() => _sidebarOpen = true)
+          : () => _scaffoldKey.currentState?.openDrawer(),
+      child: workspace,
+    );
+  }
+
+  /// Нажатие на полосу хроники: в «Документе» сначала «Диалог», потом
+  /// переход к команде.
+  void _selectCommand(int index) {
+    if (_mode != AssistantViewMode.dialogue) {
+      _setMode(AssistantViewMode.dialogue);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_jumpToCommand(index));
+      });
+      return;
+    }
+    unawaited(_jumpToCommand(index));
   }
 
   Widget _buildMyRelay() {
@@ -2080,26 +2083,55 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 )
               : _mode == AssistantViewMode.dialogue
                   ? _buildDialogue()
-                  : DocumentView(
-                      task: _selectedTask,
-                      now: _now,
-                      titleController: _docTitle,
-                      projectController: _docProject,
-                      bodyController: _docBody,
-                      bodyFocus: _docBodyFocus,
-                      saveState: _docState,
-                      savedAt: _docSavedAt,
-                      onSaveNow: _saveDocument,
-                      onReopen: () {
-                        final task = _selectedTask;
-                        if (task != null) unawaited(_toggleDone(task));
-                      },
-                      onOpenTasks: () => _goTo(AppSection.tasks),
-                      answer: _latestAnswer(),
+                  : _withDocToast(
+                      DocumentView(
+                        task: _selectedTask,
+                        now: _now,
+                        titleController: _docTitle,
+                        projectController: _docProject,
+                        bodyController: _docBody,
+                        bodyFocus: _docBodyFocus,
+                        saveState: _docState,
+                        savedAt: _docSavedAt,
+                        onSaveNow: _saveDocument,
+                        onReopen: () {
+                          final task = _selectedTask;
+                          if (task != null) unawaited(_toggleDone(task));
+                        },
+                        onOpenTasks: () => _goTo(AppSection.tasks),
+                      ),
                     ),
         ),
-        if (_duo) _buildAddresseeSwitch(),
-        _buildBottomArea(height),
+        // Свайп вправо по полю ввода и кнопкам меню не открывает.
+        DrawerSwipeBlocker(child: _buildBottomArea(height)),
+      ],
+    );
+  }
+
+  /// Документ и, если есть, уведомление об ответе над его низом.
+  Widget _withDocToast(Widget document) {
+    final toast = _docToast;
+    return Stack(
+      children: <Widget>[
+        Positioned.fill(child: document),
+        if (toast != null)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 8,
+            child: _chatColumn(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: chatInset),
+                child: _DocToast(
+                  key: const Key('doc-reply-toast'),
+                  text: toast,
+                  onDialogue: () => _setMode(AssistantViewMode.dialogue),
+                  onClose: _hideDocToast,
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -2399,33 +2431,22 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Колонка чата: не шире [chatColumnWidth] плюс место под хронику
-  /// команд справа, по центру. Одна и та же для ленты сообщений, «Кому» и
-  /// нижней части, поэтому их края совпадают. Сама хроника лежит слоем
-  /// поверх экрана (см. build), чтобы стоять по центру высоты всего
-  /// экрана, а не области чата.
+  /// Колонка чата: не шире [chatColumnWidth], по центру. Одна и та же для
+  /// ленты сообщений и нижней части, поэтому их края совпадают. Хроника
+  /// команд — в шапке (SessionHeader.below) и ширину не занимает.
   Widget _chatColumn({
     required AlignmentGeometry alignment,
     required Widget child,
     double? maxHeight,
   }) {
-    final rail = historyRailWidth(
-      narrow: MediaQuery.sizeOf(context).width < narrowBreakpoint,
-    );
     return Align(
       alignment: alignment,
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: chatColumnWidth + rail,
+          maxWidth: chatColumnWidth,
           maxHeight: maxHeight ?? double.infinity,
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: <Widget>[
-            Expanded(child: child),
-            SizedBox(width: rail),
-          ],
-        ),
+        child: child,
       ),
     );
   }
@@ -2447,19 +2468,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         reduceMotion: _settings.reduceMotion,
         size: 14,
       );
-
-  Widget _latestAnswer() {
-    final index = _messages.lastIndexWhere((m) => !m.fromUser);
-    if (index < 0) return const SizedBox.shrink();
-    return _MessageRow(
-      message: _messages[index],
-      now: _now,
-      showTime: _settings.showTimestamps,
-      cube: _cubeWidget(),
-      onOpenTask: (_) {},
-      onToggleDone: (_) {},
-    );
-  }
 
   /// Нижняя часть: быстрые действия и поле ввода. Занимает не больше
   /// половины доступной высоты, чтобы лента сообщений не схлопнулась
@@ -2484,13 +2492,15 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           // не хватает — одна строка с прокруткой.
           minRoom:
               104 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0),
-          actions: compact
+          // В «Документе» — только поле ввода: ни быстрых действий, ни
+          // кнопок ролей.
+          actions: compact || _mode != AssistantViewMode.dialogue
               ? const SizedBox.shrink()
               : QuickActions(
-                  // Пустая сессия — крупные круглые кнопки, после первой
-                  // команды — ряд «пилюль».
-                  big: _mode == AssistantViewMode.dialogue &&
-                      !_messages.any((ChatMessage m) => m.fromUser),
+                  // «Задача», «Напомнить», «Пароль» — только в новой
+                  // сессии (крупные круглые кнопки); потом остаются лишь
+                  // кнопки выбранной задачи и ролей.
+                  big: !_messages.any((ChatMessage m) => m.fromUser),
                   hasSelection: selected != null && selected.isActive,
                   // Кнопки включённых ролей («Кладовщик»): пропадают, как
                   // только роль или её навык выключили.
@@ -2541,53 +2551,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               previousCommand: _previousCommand,
               nextCommand: _nextCommand,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// «Кому: Liorio | Noda» над нижней частью, вне её прокрутки: при узком
-  /// экране и крупном тексте поле ввода прокручивается, а переключатель
-  /// остаётся на виду и нажимается.
-  ///
-  /// Выбор в переключателе всегда важнее ведущего роли — и выбор
-  /// основного тоже: он запоминается как «основной»
-  /// ([AssistantController.mainAddressee]), а не по имени, поэтому после
-  /// смены основного в настройках отвечает новый основной. Выбранным
-  /// показан только тот, кто на самом деле ответит: если никого не
-  /// выбирали, а какую-то роль ведёт второй помощник, не выбран никто
-  /// («по роли»). Нажатие на уже выбранного тогда снимает выбор.
-  Widget _buildAddresseeSwitch() {
-    final main = _settings.personas.main;
-    final byRole = !widget.assistant.extensions.mainLeadsAll(
-      _settings.personas,
-    );
-    final shown = widget.assistant.shownAddressee(
-      _addressee,
-      settings: _settings.personas,
-    );
-    return _chatColumn(
-      alignment: Alignment.bottomCenter,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(chatInset, 4, chatInset, 0),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: _AddresseeSwitch(
-            main: main,
-            selected: shown,
-            onChanged: (Persona persona) => setState(() {
-              final explicit =
-                  AssistantController.isExplicitAddressee(_addressee);
-              if (byRole && explicit && shown?.id == persona.id) {
-                // Снять выбор: дальше отвечает ведущий роли.
-                _addressee = null;
-              } else {
-                _addressee = persona.id == main.id
-                    ? AssistantController.mainAddressee
-                    : persona.id;
-              }
-            }),
           ),
         ),
       ),
@@ -2980,7 +2943,7 @@ final class _MessageRow extends StatelessWidget {
           ),
       ],
     );
-    // Текст ответа начинается у левого края колонки — там же, где «Кому:»,
+    // Текст ответа начинается у левого края колонки — там же, где
     // быстрые действия и поле ввода; пузырь команды кончается у правого.
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
@@ -3261,89 +3224,66 @@ final class _SearchField extends StatelessWidget {
   }
 }
 
-/// Кому писать в дуэте: две кнопки с именами помощников над полем ввода.
-/// Выбор живёт только в этом чате; обращение по имени («Noda, …») важнее.
-final class _AddresseeSwitch extends StatelessWidget {
-  const _AddresseeSwitch({
-    required this.main,
-    required this.selected,
-    required this.onChanged,
+/// Уведомление об ответе на команду из «Документа»: текст ответа (не
+/// больше трёх строк) или «Ответ в диалоге», кнопка «Диалог» и крестик.
+final class _DocToast extends StatelessWidget {
+  const _DocToast({
+    super.key,
+    required this.text,
+    required this.onDialogue,
+    required this.onClose,
   });
 
-  final Persona main;
-
-  /// Кто ответит на сообщение без имени; `null` — ведущий роли, чей навык
-  /// заберёт фразу: тогда не выбран никто и рядом подпись «по роли».
-  final Persona? selected;
-  final ValueChanged<Persona> onChanged;
+  final String text;
+  final VoidCallback onDialogue;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
-    final order = <Persona>[main, Personas.other(main)];
-    final selected = this.selected;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Wrap(
-        key: const Key('addressee-switch'),
-        spacing: 8,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: <Widget>[
-          const Text('Кому:', style: technicalTextStyle),
-          for (final persona in order)
-            Semantics(
-              button: true,
-              selected: persona.id == selected?.id,
-              label: 'Кому: ${persona.russianName}',
-              onTap: () => onChanged(persona),
-              excludeSemantics: true,
-              child: InkWell(
-                key: Key('addressee-${persona.id}'),
-                onTap: () => onChanged(persona),
-                customBorder: const StadiumBorder(),
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 32),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: persona.id == selected?.id
-                        ? AssistantColors.bubble
-                        : Colors.transparent,
-                    border: Border.all(
-                      color: persona.id == selected?.id
-                          ? Color(persona.accentColor)
-                          : AssistantColors.borderSoft,
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      child: Material(
+        color: AssistantColors.raised,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          side: const BorderSide(color: AssistantColors.border),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    text,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.4,
+                      color: AssistantColors.textStrong,
                     ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      PersonaMark(persona: persona, size: 14),
-                      const SizedBox(width: 4),
-                      Text(
-                        persona.russianName,
-                        style: technicalTextStyle.copyWith(
-                          color: persona.id == selected?.id
-                              ? AssistantColors.textStrong
-                              : AssistantColors.muted,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ),
-            ),
-          if (selected == null)
-            const Tooltip(
-              message: 'Никто не выбран: отвечает тот, кто ведёт роль. '
-                  'Нажмите на помощника, чтобы писать ему.',
-              child: Text(
-                'по роли',
-                key: Key('addressee-by-role'),
-                style: technicalTextStyle,
+              TextButton(
+                key: const Key('doc-reply-dialogue'),
+                onPressed: onDialogue,
+                style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+                child: const Text('Диалог'),
               ),
-            ),
-        ],
+              IconButton(
+                tooltip: 'Скрыть',
+                onPressed: onClose,
+                style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+                icon: const Icon(Icons.close, size: 18),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

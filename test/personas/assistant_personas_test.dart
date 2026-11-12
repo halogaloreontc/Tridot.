@@ -113,7 +113,7 @@ void main() {
         'Не нашла активную задачу «Купить молоко».',
       );
       expect(
-        (await assistant.handle('заверши купить молоко')).message,
+        (await assistant.handle('Лиорио, заверши купить молоко')).message,
         'Не нашёл активную задачу «Купить молоко».',
       );
     });
@@ -164,111 +164,130 @@ void main() {
     });
   });
 
-  group('к кому обратились, тот и продолжает', () {
-    /// Разговор в одном чате: адресат после каждого ответа — как в
-    /// интерфейсе ([AssistantController.addresseeAfter]).
+  group('к кому обратились, тот и продолжает — тем же навыком', () {
+    /// Разговор в одном чате: интерфейс адресата не передаёт, продолжение
+    /// помнит сам помощник ([AssistantController.followUpPersonaId]).
     Future<List<AssistantResponse>> chat(
       AssistantController assistant,
       List<String> messages, {
-      List<String?>? addressees,
+      List<String?>? followUps,
     }) async {
-      String? addressee;
       final responses = <AssistantResponse>[];
       for (final message in messages) {
-        final response = await assistant.handle(message, addressee: addressee);
-        addressee = assistant.addresseeAfter(response, current: addressee);
-        addressees?.add(addressee);
-        responses.add(response);
+        responses.add(await assistant.handle(message));
+        followUps?.add(assistant.followUpPersonaId);
       }
       return responses;
     }
 
     test(
-        '«Нода, …» — дальше без имени отвечает Noda, «Лиорио, …» — снова Liorio',
-        () async {
+        '«Нода, …» — дальше тем же навыком отвечает Noda, другим — снова '
+        'основной', () async {
       final (assistant, tasks) = _assistant();
-      final addressees = <String?>[];
+      final followUps = <String?>[];
       final responses = await chat(
         assistant,
         <String>[
           'Нода, добавь задачу купить хлеб',
           'покажи задачи',
           '2+2',
+          'покажи задачи',
           'Лиорио, 3+3',
           'покажи задачи',
         ],
-        addressees: addressees,
+        followUps: followUps,
       );
       expect(
         responses.map((AssistantResponse r) => r.personaId),
-        <String>['noda', 'noda', 'noda', 'rio', 'rio'],
+        <String>['noda', 'noda', 'rio', 'rio', 'rio', 'rio'],
       );
       expect(
         responses.map((AssistantResponse r) => r.addressedPersonaId),
-        <String?>['noda', null, null, 'rio', null],
+        <String?>['noda', null, null, null, 'rio', null],
       );
-      expect(addressees, <String?>['noda', 'noda', 'noda', null, null]);
+      // Невидимого «закреплённого» адресата нет: другой навык — и Noda
+      // уже не продолжает. Основной, который ведёт всё, не продолжает
+      // «особо» — он и так отвечает.
+      expect(followUps, <String?>['noda', 'noda', null, null, null, null]);
       expect((await tasks.listActive()).single.title, 'Купить хлеб');
     });
 
-    test('обращение к основному — адресат снова «по умолчанию»', () async {
+    test('обращение к основному при чужой роли — продолжает основной',
+        () async {
       final (assistant, _) =
           _assistant(personas: const PersonaSettings(mainPersona: 'noda'));
-      final response = await assistant.handle('Нода, 2+2', addressee: 'rio');
+      final response = await assistant.handle('Нода, 2+2');
       expect(response.personaId, 'noda');
-      expect(assistant.addresseeAfter(response, current: 'rio'), isNull);
-      final rio = await assistant.handle('Лиорио, 2+2');
-      expect(assistant.addresseeAfter(rio), 'rio');
+      expect(assistant.followUpPersonaId, isNull, reason: 'основной ведёт всё');
+      await assistant.handle('Лиорио, 2+2');
+      expect(assistant.followUpPersonaId, 'rio');
+      expect((await assistant.handle('5+5')).personaId, 'rio');
+      expect((await assistant.handle('покажи задачи')).personaId, 'noda');
     });
 
-    test('без имени адресат не меняется', () async {
+    test('явный адресат (API) — на это сообщение, продолжения нет', () async {
       final (assistant, _) = _assistant();
       final response = await assistant.handle('2+2', addressee: 'noda');
+      expect(response.personaId, 'noda');
       expect(response.addressedPersonaId, isNull);
-      expect(assistant.addresseeAfter(response, current: 'noda'), 'noda');
-      expect(assistant.addresseeAfter(response), isNull);
+      expect(assistant.followUpPersonaId, isNull);
+      expect((await assistant.handle('3+3')).personaId, 'rio');
     });
 
-    test('«Нода» без команды — тоже обращение', () async {
+    test('«Нода» без команды — следующая фраза ей, любым навыком', () async {
       final (assistant, _) = _assistant();
-      final responses = await chat(assistant, <String>['Нода', '2+2']);
+      final responses = await chat(
+        assistant,
+        <String>['Нода', '2+2', '3+3', 'покажи задачи'],
+      );
       expect(responses.first.replyId, 'common.addressed');
-      expect(responses.last.personaId, 'noda');
+      expect(
+        responses.skip(1).map((AssistantResponse r) => r.personaId),
+        <String>['noda', 'noda', 'rio'],
+      );
     });
 
-    test('на «да» отвечает спросивший, даже если адресат сменился', () async {
+    test('на «да» отвечает спросивший', () async {
       final (assistant, tasks) = _assistant();
       await tasks.create(title: 'Купить хлеб');
       final question = await assistant.handle('Нода, я купил хлеб');
       expect(question.personaId, 'noda');
       expect(question.status, AssistantStatus.needsClarification);
       expect(assistant.session.pendingSpeaker, Personas.noda);
-      // Пользователь выбрал в поле Liorio и ответил «да».
+      // Даже если явно написали Liorio (API) — на «да» отвечает Noda.
       final yes = await assistant.handle('да', addressee: 'rio');
       expect(yes.personaId, 'noda');
       expect(yes.message, contains('Купить хлеб'));
       expect((await tasks.listActive()), isEmpty);
       expect(assistant.session.pendingSpeaker, isNull);
-      expect(
-        assistant.addresseeAfter(yes, current: 'rio'),
-        'rio',
-        reason: 'ответ на вопрос адресата не меняет',
-      );
     });
 
     test('«Лиорио, да» на вопрос Noda: действие то же, отвечает названный',
         () async {
       final (assistant, tasks) = _assistant();
       await tasks.create(title: 'Купить хлеб');
-      await assistant.handle('я купил хлеб', addressee: 'noda');
+      await assistant.handle('Нода, я купил хлеб');
       expect(assistant.session.pendingSpeaker, Personas.noda);
-      final yes = await assistant.handle('Лиорио, да', addressee: 'noda');
+      final yes = await assistant.handle('Лиорио, да');
       expect(yes.personaId, 'rio');
       expect((await tasks.listActive()), isEmpty);
-      expect(assistant.addresseeAfter(yes, current: 'noda'), isNull);
+      // Основной ведёт всё — продолжать нечего.
+      expect(assistant.followUpPersonaId, isNull);
     });
 
-    test('соло: имя — просто текст, адресат не закрепляется', () async {
+    test('смена чата снимает продолжение', () async {
+      final (assistant, _) = _assistant();
+      await assistant.handle('Нода, 2+2');
+      expect(assistant.followUpPersonaId, 'noda');
+      assistant.enterChat(sessionId: 's1');
+      expect(assistant.followUpPersonaId, isNull);
+      expect((await assistant.handle('3+3')).personaId, 'rio');
+      await assistant.handle('Нода, 2+2');
+      assistant.forgetChatSelections();
+      expect(assistant.followUpPersonaId, isNull);
+    });
+
+    test('соло: имя — просто текст, продолжения нет', () async {
       final (assistant, _) = _assistant(
         personas: const PersonaSettings(mode: AssistantMode.solo),
       );
@@ -278,7 +297,7 @@ void main() {
         <String>['rio', 'rio'],
       );
       expect(responses.first.addressedPersonaId, isNull);
-      expect(assistant.addresseeAfter(responses.first), isNull);
+      expect(assistant.followUpPersonaId, isNull);
     });
 
     test(

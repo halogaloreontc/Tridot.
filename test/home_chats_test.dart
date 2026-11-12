@@ -334,16 +334,8 @@ void main() {
 
     await _openFromTasks(tester, bread);
     expect(_history(tester), breadChat);
-    // Адресат чата задачи сохранён: Noda.
-    final noda = tester.widget<Semantics>(
-      find
-          .ancestor(
-            of: find.byKey(const Key('addressee-noda')),
-            matching: find.byType(Semantics),
-          )
-          .first,
-    );
-    expect(noda.properties.selected, isTrue);
+    // Выбора «Кому» нет: после перезапуска ни к кому не «приклеено».
+    expect(find.byKey(const Key('addressee-switch')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

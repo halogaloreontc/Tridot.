@@ -45,8 +45,8 @@ final class AssistantResponse {
   final PersonaSettingsChange? settingsChange;
 
   /// К кому пользователь обратился по имени в этом сообщении (только в
-  /// дуэте): «Нода, расскажи шутку», «спасибо, Нода», «Нода». Интерфейс
-  /// делает его адресатом чата (`AssistantController.addresseeAfter`):
+  /// дуэте): «Нода, расскажи шутку», «спасибо, Нода», «Нода». Помощник
+  /// продолжает разговор тем же навыком (`AssistantController._followUp`):
   /// «к кому обратились, тот и продолжает». `null` — по имени не обращались.
   final String? addressedPersonaId;
 

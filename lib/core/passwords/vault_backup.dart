@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../app_info.dart';
 import 'import_rules.dart';
 import 'secret_bytes.dart';
 import 'vault_errors.dart';
@@ -18,7 +19,7 @@ abstract final class VaultBackup {
   static const String extension = 'relaybak';
 
   /// Версия приложения внутри индекса копии (`app_version`).
-  static const String appVersion = '0.1.0';
+  static const String appVersion = AppInfo.version;
 
   /// `svyaznoy-paroli-2026-11-10.relaybak`.
   static String fileName(DateTime day) {

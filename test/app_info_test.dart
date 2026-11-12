@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
+import 'package:local_assistant/core/passwords/vault_backup.dart';
 
 /// Нативные обёртки не видят Dart-констант: название в них записано
 /// строкой. Тест держит их вместе с [AppInfo] (ADR-009).
@@ -19,6 +20,16 @@ void main() {
     expect(AppInfo.name, 'Связной');
     expect(AppInfo.latinName, 'Relay');
     expect(AppInfo.latinName, matches(RegExp(r'^[A-Za-z]+$')));
+  });
+
+  test('версия — как version: в pubspec.yaml', () {
+    final match = RegExp(r'^version:\s*(\S+)\+(\d+)\s*$', multiLine: true)
+        .firstMatch(_read('pubspec.yaml'));
+    expect(match, isNotNull);
+    expect(AppInfo.version, match!.group(1));
+    expect(AppInfo.build, int.parse(match.group(2)!));
+    // Копия паролей пишет ту же версию.
+    expect(VaultBackup.appVersion, AppInfo.version);
   });
 
   test('«Связной» склоняется как прилагательное', () {

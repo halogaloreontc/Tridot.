@@ -94,8 +94,9 @@ String sessionTimeLabel(DateTime at, DateTime now) {
   return '${at.day} ${months[at.month - 1]}';
 }
 
-/// Левая панель (макет «Д»): «Мой Связной», разделы, расширения,
-/// недавние сессии, внизу — поиск по сессиям и «+ Сессия».
+/// Левая панель (макет «Д»): шапка «Связной» с версией, «Мой Связной»,
+/// разделы, расширения, недавние сессии, внизу — поиск по сессиям и «+»
+/// (новая сессия).
 ///
 /// На телефоне — содержимое выдвижной панели, на широком экране —
 /// постоянная колонка ([wide]) с «Свернуть панель». Настроек здесь нет:
@@ -237,52 +238,34 @@ final class _RelayDrawerState extends State<RelayDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    // Выдвижная панель на телефоне: Scaffold не сжимает её под экранную
+    // клавиатуру, поэтому отступ снизу — на высоту клавиатуры, и поиск с
+    // «Отменой» стоит прямо над ней. Колонка на компьютере — без отступа.
+    final inset = widget.wide ? 0.0 : MediaQuery.viewInsetsOf(context).bottom;
+    // Клавиатура открыта для поиска: шапка, «Мой Связной» и разделы
+    // уступают место результатам.
+    final roomy = !(_searching && inset > 0);
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (widget.wide)
-          Padding(
-            padding: const EdgeInsets.only(left: 8, bottom: 4),
-            child: Row(
-              children: <Widget>[
-                const Expanded(
-                  child: Text(
-                    AppInfo.name,
-                    key: ValueKey<String>('app-name'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: AssistantColors.textStrong,
-                    ),
-                  ),
-                ),
-                if (widget.onCollapse != null)
-                  IconButton(
-                    key: const Key('sidebar-collapse'),
-                    tooltip: 'Свернуть панель',
-                    onPressed: widget.onCollapse,
-                    icon: const Icon(Icons.keyboard_double_arrow_left),
-                  ),
-              ],
-            ),
+        if (roomy) ...<Widget>[
+          _TitlePlate(onCollapse: widget.onCollapse),
+          _MyRelayCard(onTap: widget.onOpenMyRelay, wide: widget.wide),
+          const SizedBox(height: 8),
+          _Sections(
+            active: widget.activeSection,
+            onTasks: widget.onTasks,
+            onProjects: widget.onProjects,
+            onPlanning: widget.onPlanning,
           ),
-        _MyRelayCard(onTap: widget.onOpenMyRelay, wide: widget.wide),
-        const SizedBox(height: 8),
-        _Sections(
-          active: widget.activeSection,
-          onTasks: widget.onTasks,
-          onProjects: widget.onProjects,
-          onPlanning: widget.onPlanning,
-        ),
-        const SizedBox(height: 4),
+          const SizedBox(height: 4),
+        ],
         Expanded(
           child: ListView(
             key: const Key('drawer-scroll'),
             padding: EdgeInsets.zero,
             children: <Widget>[
-              if (widget.extensions.isNotEmpty) _buildExtensions(),
+              if (widget.extensions.isNotEmpty && roomy) _buildExtensions(),
               if (_searching && _query.text.trim().isNotEmpty)
                 ..._buildHits()
               else
@@ -297,7 +280,10 @@ final class _RelayDrawerState extends State<RelayDrawer> {
     return Material(
       key: const Key('app-sidebar'),
       color: AssistantColors.sidebar,
-      child: Padding(padding: const EdgeInsets.all(12), child: body),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(12, 12, 12, 12 + inset),
+        child: body,
+      ),
     );
   }
 
@@ -548,6 +534,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
   }
 }
 
+/// «+» — новая сессия: та же треть строки и высота, что у поиска.
 final class _NewSessionButton extends StatelessWidget {
   const _NewSessionButton({required this.onTap});
 
@@ -555,40 +542,86 @@ final class _NewSessionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Новая сессия',
-      onTap: onTap,
-      excludeSemantics: true,
-      child: Material(
-        color: AssistantColors.primary,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          key: const Key('new-session'),
-          onTap: onTap,
+    return Tooltip(
+      message: 'Новая сессия',
+      child: Semantics(
+        button: true,
+        label: 'Новая сессия',
+        onTap: onTap,
+        excludeSemantics: true,
+        child: Material(
+          color: AssistantColors.primary,
           borderRadius: BorderRadius.circular(12),
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(Icons.add, size: 16, color: AssistantColors.onPrimary),
-                SizedBox(width: 2),
-                Flexible(
-                  child: Text(
-                    'Сессия',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AssistantColors.onPrimary,
-                    ),
-                  ),
-                ),
-              ],
+          child: InkWell(
+            key: const Key('new-session'),
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: const Center(
+              child: Icon(
+                Icons.add,
+                size: 22,
+                color: AssistantColors.onPrimary,
+              ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Шапка панели: «Связной» и версия; на компьютере справа — «Свернуть
+/// панель».
+final class _TitlePlate extends StatelessWidget {
+  const _TitlePlate({required this.onCollapse});
+
+  final VoidCallback? onCollapse;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, bottom: 4),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Flexible(
+              child: Semantics(
+                header: true,
+                child: const Text(
+                  AppInfo.name,
+                  key: ValueKey<String>('app-name'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AssistantColors.textStrong,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Semantics(
+              label: 'Версия ${AppInfo.version}',
+              excludeSemantics: true,
+              child: const Text(
+                AppInfo.version,
+                key: ValueKey<String>('app-version'),
+                maxLines: 1,
+                style: technicalTextStyle,
+              ),
+            ),
+            const Spacer(),
+            if (onCollapse != null)
+              IconButton(
+                key: const Key('sidebar-collapse'),
+                tooltip: 'Свернуть панель',
+                onPressed: onCollapse,
+                icon: const Icon(Icons.keyboard_double_arrow_left),
+              ),
+          ],
         ),
       ),
     );

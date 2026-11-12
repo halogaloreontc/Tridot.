@@ -27,4 +27,11 @@ abstract final class AppInfo {
 
   /// Предложный падеж: «(в) Связном».
   static const String namePrepositional = 'Связном';
+
+  /// Версия для пользователя — как `version:` в pubspec.yaml до «+»
+  /// (тест держит их вместе). Видна в меню рядом с названием.
+  static const String version = '0.1.0';
+
+  /// Номер сборки — число после «+» в pubspec.yaml.
+  static const int build = 1;
 }

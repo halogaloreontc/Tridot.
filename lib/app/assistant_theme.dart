@@ -101,7 +101,7 @@ abstract final class AssistantColors {
   /// Кубик состояния в покое.
   static const cubeIdle = Color(0xFF8A9390);
 
-  /// Главная кнопка («+ Сессия», отправка, счётчик «Сегодня»).
+  /// Главная кнопка («+» — новая сессия, отправка).
   static const primary = Color(0xFFF5F7F6);
   static const onPrimary = Color(0xFF111312);
 

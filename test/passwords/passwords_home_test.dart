@@ -152,6 +152,28 @@ void main() {
     }
   }
 
+  testWidgets('ползунок длины в ленте не открывает меню свайпом',
+      (tester) async {
+    await setUpHome();
+    await pumpHome(tester);
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pumpAndSettle();
+    await send(tester, 'сгенерируй пароль');
+    final slider = find.byKey(const ValueKey<String>('generator-length'));
+    await tester.ensureVisible(slider);
+    await tester.pumpAndSettle();
+    final before = tester.widget<Slider>(slider).value;
+    final rect = tester.getRect(slider);
+    await tester.dragFrom(
+      Offset(rect.left + rect.width * 0.3, rect.center.dy),
+      const Offset(120, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<Slider>(slider).value, isNot(before));
+    expect(find.byKey(const Key('app-sidebar')), findsNothing);
+    await finish(tester);
+  });
+
   testWidgets('«забыл пароль от почты»: подсказка в карточке, не в истории',
       (WidgetTester tester) async {
     await setUpHome();
@@ -174,6 +196,39 @@ void main() {
     expect(canary(Canary.password), findsOneWidget);
     expect(find.textContaining('был показан'), findsOneWidget);
     await tester.pump(const Duration(seconds: 16));
+    expect(canary(Canary.password), findsNothing);
+    await expectHistoryClean();
+    expect(assistant.outboundLeaks, 0);
+    await finish(tester);
+  });
+
+  testWidgets(
+      'в «Документе» ответ навыка «Пароли» — не в уведомлении: '
+      '«Ответ в диалоге», карточка — в «Диалоге»', (WidgetTester tester) async {
+    await setUpHome();
+    await pumpHome(tester);
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+    await send(tester, 'забыл пароль от почты');
+    final toast = find.byKey(const Key('doc-reply-toast'));
+    expect(toast, findsOneWidget);
+    expect(
+      find.descendant(of: toast, matching: find.text('Ответ в диалоге')),
+      findsOneWidget,
+    );
+    for (final value in <String>[
+      Canary.hint,
+      Canary.password,
+      Canary.note,
+      Canary.master,
+    ]) {
+      expect(canary(value), findsNothing, reason: value);
+    }
+    expect(find.textContaining('Подсказка к «Почта»'), findsNothing);
+    // В «Диалоге» — карточка, как обычно.
+    await tester.tap(find.byKey(const Key('mode-dialogue')));
+    await tester.pumpAndSettle();
+    expect(find.text(Canary.hint), findsOneWidget);
     expect(canary(Canary.password), findsNothing);
     await expectHistoryClean();
     expect(assistant.outboundLeaks, 0);

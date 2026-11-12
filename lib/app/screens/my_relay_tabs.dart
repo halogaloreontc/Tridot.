@@ -11,7 +11,9 @@ import '../widgets/activity_grid.dart';
 import '../widgets/personas_section.dart';
 import '../widgets/task_tile.dart';
 
-/// Сколько дел показывает «Сейчас и дальше».
+/// Сколько дел показывает «Сейчас и дальше» сверх сегодняшних и
+/// просроченных: те видны все (на телефоне это единственное место, где
+/// виден весь список «Сегодня»).
 const int nextLimit = 5;
 
 /// Ширина, с которой сетка «Сводки» показывает год, а не 16 недель.
@@ -90,9 +92,35 @@ final class RelaySummary extends StatelessWidget {
   final VoidCallback onAllTasks;
   final bool approximate;
 
+  /// Строки «Сейчас и дальше»: все просроченные и сегодняшние (как в
+  /// колонке «Сегодня» на компьютере), затем ближайшие по сроку — не
+  /// больше [nextLimit].
+  static List<Task> rows(List<Task> tasks, DateTime now) {
+    final active = <Task>[
+      for (final task in tasks)
+        if (task.isActive && task.deletedAt == null) task,
+    ];
+    final today = todayTasks(active, now);
+    final seen = <String>{for (final task in today) task.id};
+    return <Task>[
+      ...today,
+      ...nextTasks(active, now)
+          .where((Task t) => !seen.contains(t.id))
+          .take(nextLimit),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final next = nextTasks(tasks, now).take(nextLimit).toList();
+    final next = rows(tasks, now);
+    final today = todayTasks(
+      <Task>[
+        for (final task in tasks)
+          if (task.isActive && task.deletedAt == null) task,
+      ],
+      now,
+    );
+    final overdue = today.where((Task t) => isOverdue(t, now)).length;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         // Компьютер (окно от 1000) — год мелкими клетками, как в
@@ -117,9 +145,23 @@ final class RelaySummary extends StatelessWidget {
               children: <Widget>[
                 Padding(
                   padding: const EdgeInsets.only(left: 4),
-                  child: Semantics(
-                    header: true,
-                    child: const Text('Сейчас и дальше', style: _heading),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Semantics(
+                        header: true,
+                        child: const Text('Сейчас и дальше', style: _heading),
+                      ),
+                      // Счётчик дня — тот же, что был у кнопки «Сегодня».
+                      Text(
+                        'сегодня: ${todaySummary(today.length, overdue)}',
+                        key: const Key('summary-today'),
+                        style: technicalTextStyle.copyWith(
+                          color: overdue > 0 ? AssistantColors.danger : null,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 TextButton(

@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 
-import '../../core/formatting/plural.dart';
 import '../assistant_theme.dart';
 
 /// Шапка сессии (макет «Д»): слева меню или «назад», в центре помощник
 /// («Лиорио ▾» → «Мой Связной», вкладка «Помощники») или заголовок, справа
-/// «Сегодня N».
+/// — необязательная кнопка ([trailing]; на компьютере — «Показать
+/// «Сегодня»», когда колонка свёрнута). Под строкой — хроника команд
+/// ([below]), по центру.
 ///
 /// Своего состояния нет: всё приходит параметрами и колбэками.
 final class SessionHeader extends StatelessWidget {
   const SessionHeader({
     super.key,
-    required this.today,
     this.leading,
+    this.trailing,
+    this.below,
     this.title,
     this.personaName,
     this.onPersona,
@@ -37,11 +39,28 @@ final class SessionHeader extends StatelessWidget {
   /// Широкий экран: помощник слева, без сетки 1fr / auto / 1fr.
   final bool wide;
 
-  /// Кнопка «Сегодня» справа.
-  final Widget today;
+  /// Кнопка справа; `null` — пусто.
+  final Widget? trailing;
+
+  /// Под строкой шапки, по центру: хроника команд. `null` — шапка только
+  /// в одну строку.
+  final Widget? below;
 
   @override
   Widget build(BuildContext context) {
+    final below = this.below;
+    // Всегда Column: появление хроники не пересоздаёт строку шапки.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _row(),
+        if (below != null) Center(child: below),
+      ],
+    );
+  }
+
+  Widget _row() {
     final center = title ??
         (personaName == null
             ? const SizedBox.shrink()
@@ -57,7 +76,7 @@ final class SessionHeader extends StatelessWidget {
                 leading!,
                 const SizedBox(width: 4),
               ],
-              // Помощник и подпись — по своей ширине слева, «Сегодня» —
+              // Помощник и подпись — по своей ширине слева, кнопка —
               // у правого края колонки (D-Desk).
               Expanded(
                 child: title != null
@@ -80,8 +99,10 @@ final class SessionHeader extends StatelessWidget {
                         ],
                       ),
               ),
-              const SizedBox(width: 8),
-              today,
+              if (trailing != null) ...<Widget>[
+                const SizedBox(width: 8),
+                trailing!,
+              ],
             ],
           ),
         ),
@@ -96,7 +117,7 @@ final class SessionHeader extends StatelessWidget {
         child: NavigationToolbar(
           leading: leading,
           middle: center,
-          trailing: today,
+          trailing: trailing,
           middleSpacing: 4,
         ),
       ),
@@ -151,158 +172,6 @@ final class _PersonaSwitch extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// «Сегодня N»: дела на сегодня и просроченные; красная точка — если
-/// что-то просрочено. На узком экране и при крупном шрифте подпись
-/// прячется, остаются иконка и число.
-final class TodayButton extends StatelessWidget {
-  const TodayButton({
-    super.key,
-    required this.count,
-    required this.overdue,
-    required this.onPressed,
-    this.compact = false,
-    this.expanded,
-  });
-
-  final int count;
-
-  /// Сколько из них просрочено.
-  final int overdue;
-  final VoidCallback onPressed;
-
-  /// Только иконка и число.
-  final bool compact;
-
-  /// Колонка «Сегодня» на широком экране открыта; `null` — это выдвижная
-  /// панель.
-  final bool? expanded;
-
-  /// «Сегодня: 3 дела, одно просрочено».
-  static String semanticLabel(int count, int overdue) {
-    final base = 'Сегодня: ${deeds(count)}';
-    if (overdue == 0) return base;
-    if (overdue == 1) return '$base, одно просрочено';
-    return '$base, просрочено $overdue';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scale = MediaQuery.textScalerOf(context).scale(1);
-    final hideLabel = compact || scale > 1.3;
-    return Semantics(
-      button: true,
-      expanded: expanded,
-      label: semanticLabel(count, overdue),
-      onTap: onPressed,
-      excludeSemantics: true,
-      child: InkWell(
-        key: const Key('today-button'),
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(22),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-          child: Center(
-            widthFactor: 1,
-            child: Container(
-              height: 36,
-              padding: EdgeInsets.fromLTRB(hideLabel ? 8 : 10, 0, 6, 0),
-              decoration: BoxDecoration(
-                color: expanded == true ? AssistantColors.raised : null,
-                border: Border.all(color: AssistantColors.border),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: MediaQuery.withClampedTextScaling(
-                maxScaleFactor: 1.3,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    const Icon(
-                      Icons.today_outlined,
-                      size: 16,
-                      color: AssistantColors.textStrong,
-                    ),
-                    if (!hideLabel) ...<Widget>[
-                      const SizedBox(width: 6),
-                      const Text(
-                        'Сегодня',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: AssistantColors.textStrong,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(width: 6),
-                    _Count(count: count, overdue: overdue > 0),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-final class _Count extends StatelessWidget {
-  const _Count({required this.count, required this.overdue});
-
-  final int count;
-  final bool overdue;
-
-  @override
-  Widget build(BuildContext context) {
-    return MediaQuery.withNoTextScaling(
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: <Widget>[
-          Container(
-            constraints: const BoxConstraints(minWidth: 20),
-            height: 20,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AssistantColors.primary,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '$count',
-              key: const Key('today-count'),
-              style: const TextStyle(
-                fontFamily: 'JetBrains Mono',
-                fontFamilyFallback: <String>['monospace'],
-                fontSize: 12,
-                height: 1,
-                fontWeight: FontWeight.w500,
-                color: AssistantColors.onPrimary,
-              ),
-            ),
-          ),
-          if (overdue)
-            Positioned(
-              top: -2,
-              right: -2,
-              child: Container(
-                key: const Key('today-overdue-dot'),
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AssistantColors.danger,
-                  border: Border.all(
-                    color: AssistantColors.workspace,
-                    width: 1.5,
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }

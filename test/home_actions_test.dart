@@ -25,6 +25,7 @@ import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
 import 'connectors/manifest/fixtures.dart';
+import 'support/home_nav.dart';
 
 final DateTime _now = DateTime(2026, 11, 10, 14, 30);
 final int _epoch = _now.millisecondsSinceEpoch ~/ 1000;
@@ -159,8 +160,12 @@ final class _Harness {
         _ => _json(400, <String, Object?>{'error': 'Неизвестное действие'}),
       };
 
-  Future<void> pump(WidgetTester tester, AppSettings start) async {
-    tester.view.physicalSize = const Size(1300, 900);
+  Future<void> pump(
+    WidgetTester tester,
+    AppSettings start, {
+    Size size = const Size(1300, 900),
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await settings.save(start);
@@ -243,6 +248,81 @@ void main() {
       after.lastWhere((ChatMessage m) => m.card != null).card!.state,
       ActionCardState.applied,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'телефон: ждущая карточка склада — в «Мой Связной» → «Сводка», '
+      'нажатие ведёт в сессию с ней', (tester) async {
+    final h = _Harness();
+    await h.pump(tester, _allowed, size: const Size(390, 844));
+    await _say(tester, 'перемести 3 венских стула из 215-1-1-1 в 215-3-2-1');
+    expect(find.byKey(const Key('action-confirm')), findsOneWidget);
+    expect(find.byKey(const Key('today-button')), findsNothing);
+    await openSummary(tester);
+    final pending = find.byWidgetPredicate(
+      (Widget w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('next-pending-'),
+    );
+    expect(pending, findsOneWidget);
+    expect(find.text('Перемещение ждёт подтверждения'), findsOneWidget);
+    await tester.ensureVisible(pending);
+    await tester.pumpAndSettle();
+    await tester.tap(pending);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('action-confirm')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      '«Документ»: ответ с карточкой — «Ответ в диалоге», карточка ждёт в '
+      '«Диалоге»', (tester) async {
+    final h = _Harness();
+    await h.pump(tester, _allowed, size: const Size(390, 844));
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+    await _say(tester, 'перемести 3 венских стула из 215-1-1-1 в 215-3-2-1');
+    final toast = find.byKey(const Key('doc-reply-toast'));
+    expect(
+      find.descendant(of: toast, matching: find.text('Ответ в диалоге')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('action-confirm')), findsNothing);
+    await tester.tap(find.byKey(const Key('doc-reply-dialogue')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('action-confirm')), findsOneWidget);
+    expect(h.actions, <String>['act_move_check']);
+  });
+
+  testWidgets(
+      'телефон: карточка из «Документа» — «Сводка» ведёт в «Диалог» той же '
+      'сессии, к «Подтвердить»', (tester) async {
+    final h = _Harness();
+    await h.pump(tester, _allowed, size: const Size(390, 844));
+    await tester.tap(find.byKey(const Key('mode-document')));
+    await tester.pumpAndSettle();
+    await _say(tester, 'перемести 3 венских стула из 215-1-1-1 в 215-3-2-1');
+    // Полоса ответа ушла сама.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('doc-reply-toast')), findsNothing);
+    expect(find.byKey(const Key('action-confirm')), findsNothing);
+
+    await openSummary(tester);
+    final pending = find.byWidgetPredicate(
+      (Widget w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('next-pending-'),
+    );
+    await tester.ensureVisible(pending);
+    await tester.pumpAndSettle();
+    await tester.tap(pending);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('action-confirm')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('action-confirm')));
+    await tester.pumpAndSettle();
+    expect(h.actions, <String>['act_move_check', 'act_move']);
     expect(tester.takeException(), isNull);
   });
 

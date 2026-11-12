@@ -277,26 +277,18 @@ void main() {
       expect(AssistantController.isExplicitAddressee('кто-то'), isFalse);
     });
 
-    test('переключатель не показывает выбранным того, кто не ответит',
-        () async {
-      final s = noda();
-      // Роль ведёт Noda, никого не выбрали: кто ответит, зависит от фразы.
-      expect(s.assistant.shownAddressee(null), isNull);
-      expect(s.assistant.shownAddressee(main), Personas.liorio);
-      expect(s.assistant.shownAddressee('noda'), Personas.noda);
-      // Все роли ведёт основной — он и показан: он и ответит.
+    test('без имени отвечает тот, кто ведёт роль, — или основной', () async {
+      // Все роли ведёт основной — он и отвечает на всё.
       final plain = _Setup();
-      expect(plain.assistant.shownAddressee(null), Personas.liorio);
       for (final text in <String>['64115', '2+2', 'привет']) {
         expect((await plain.say(text)).personaId, 'rio', reason: text);
       }
-      // «Личное» ведёт Noda — на задачи отвечает она: основной не показан.
+      // «Личное» ведёт Noda — на задачи отвечает она; явно основному — он.
       final personal = _Setup(
         choice: const ExtensionChoice(
           roleOwners: <String, String>{Roles.personalId: 'noda'},
         ),
       );
-      expect(personal.assistant.shownAddressee(null), isNull);
       expect((await personal.say('покажи задачи')).personaId, 'noda');
       expect(
         (await personal.say('покажи задачи', addressee: main)).personaId,
@@ -304,29 +296,49 @@ void main() {
       );
     });
 
-    test('к кому обратились, тот и продолжает — и основной при чужой роли',
-        () async {
+    test(
+        'к кому обратились, тот и продолжает тем же навыком — и основной '
+        'при чужой роли', () async {
       final s = noda();
-      String? addressee;
-      Future<AssistantResponse> turn(String text) async {
-        final response = await s.say(text, addressee: addressee);
-        addressee = s.assistant.addresseeAfter(response, current: addressee);
-        return response;
-      }
-
-      expect((await turn('Лиорио, где лежит 64115')).personaId, 'rio');
-      expect(addressee, main, reason: 'иначе «64115» забрала бы Noda');
-      expect((await turn('64115')).personaId, 'rio');
-      expect((await turn('Нода, 2+2')).personaId, 'noda');
-      expect(addressee, 'noda');
-      expect((await turn('64115')).personaId, 'noda');
-      // Все роли ведёт основной: обращение к нему — снова «никого».
-      final plain = _Setup();
-      final response = await plain.say('Лиорио, 2+2', addressee: 'noda');
+      expect((await s.say('Лиорио, где лежит 64115')).personaId, 'rio');
       expect(
-        plain.assistant.addresseeAfter(response, current: 'noda'),
-        isNull,
+        s.assistant.followUpPersonaId,
+        'rio',
+        reason: 'иначе «64115» забрала бы Noda',
       );
+      // Тот же навык склада — продолжает Liorio, и «обрабатывается…» —
+      // его голосом.
+      expect(s.assistant.working('а 64116?').personaId, 'rio');
+      expect((await s.say('64116')).personaId, 'rio');
+      // Другой навык — продолжение снято, склад снова у ведущей роли.
+      expect((await s.say('2+2')).personaId, 'rio');
+      expect(s.assistant.followUpPersonaId, isNull);
+      expect((await s.say('64115')).personaId, 'noda');
+      expect((await s.say('Нода, 2+2')).personaId, 'noda');
+      expect(s.assistant.followUpPersonaId, 'noda');
+      expect((await s.say('64115')).personaId, 'noda');
+      // Все роли ведёт основной: обращение к нему ничего не продолжает.
+      final plain = _Setup();
+      await plain.say('Лиорио, 2+2');
+      expect(plain.assistant.followUpPersonaId, isNull);
+    });
+
+    test(
+        'продолжение короткое: после ${AssistantController.followUpLimit} '
+        'фраз без имени — снова ведущий роли', () async {
+      final s = noda();
+      final who = <String?>[
+        (await s.say('Лиорио, где лежит 64115')).personaId,
+        for (var n = 64116; n <= 64120; n++)
+          (await s.say('где лежит $n')).personaId,
+      ];
+      // Обратились к Liorio — он и ещё две фразы того же навыка; дальше
+      // склад снова у Noda, хотя навык не менялся.
+      expect(who, <String?>['rio', 'rio', 'rio', 'noda', 'noda', 'noda']);
+      expect(s.assistant.followUpPersonaId, isNull);
+      // Новое обращение по имени — новое короткое продолжение.
+      expect((await s.say('Лиорио, где лежит 64121')).personaId, 'rio');
+      expect((await s.say('где лежит 64122')).personaId, 'rio');
     });
   });
 

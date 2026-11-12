@@ -291,7 +291,8 @@ final class ChatBook {
     return thread;
   }
 
-  /// Меняет «Кому:» чата [chatId].
+  /// Меняет сохранённого адресата чата [chatId] (старое поле: выбора
+  /// «Кому» в интерфейсе больше нет, и он его не пишет).
   void setAddressee(String chatId, String? addressee) {
     final thread = _chats[chatId];
     if (thread == null || thread.addressee == addressee) return;
@@ -329,7 +330,7 @@ final class ChatBook {
     return currentRemoved;
   }
 
-  /// «+ Сессия»: новая пустая сессия открывается сразу (прежний чат — в
+  /// «+» в меню: новая пустая сессия открывается сразу (прежний чат — в
   /// стек «назад»). Без приветствия; на диск — с первым сообщением. Если
   /// открытая сессия ещё пуста, открывается она же.
   Future<ChatThread> newSession() {
