@@ -66,6 +66,60 @@ void runChatStoreContract(
   Future<ChatStore> Function(ChatStore) reopen,
 ) {
   group('контракт ChatStore: $name', () {
+    test('erase: ни файла, ни архива, ни записи в индексе', () async {
+      final store = await create();
+      await store.save(_task('t1', <ChatMessage>[_message(1)]));
+      await store.save(_task('t2', <ChatMessage>[_message(2)]));
+      await store.flush();
+      // Один — в архив (как prune), оба — стереть.
+      await store.delete('task:t2');
+      await store.erase('task:t1');
+      await store.erase('task:t2');
+      await store.flush();
+      final again = await reopen(store);
+      expect(await again.loadIndex(), isEmpty);
+      expect(await again.loadMessages('task:t1'), isEmpty);
+      expect(
+        await again.loadMessages('task:t2'),
+        isEmpty,
+        reason: 'и из архива не возвращается',
+      );
+    });
+
+    test('erase отменяет отложенную запись того же чата', () async {
+      final store = await create();
+      await store.save(_task('t1', <ChatMessage>[_message(1)]));
+      await store.erase('task:t1');
+      await store.flush();
+      final again = await reopen(store);
+      expect(await again.loadIndex(), isEmpty);
+      expect(await again.loadMessages('task:t1'), isEmpty);
+    });
+
+    test('новые поля шапки: своё название, закрепление, превью', () async {
+      final store = await create();
+      final pinnedAt = _t0.add(const Duration(hours: 1));
+      await store.save(
+        ChatThread(
+          id: '${ChatThread.sessionPrefix}x',
+          kind: ChatKind.session,
+          createdAt: _t0,
+          title: 'добавь задачу',
+          customTitle: 'Отчёт за неделю',
+          pinnedAt: pinnedAt,
+          preview: 'Сводка готова',
+          lastPersonaId: 'noda',
+          messages: <ChatMessage>[_message(1)],
+        ),
+      );
+      await store.flush();
+      final meta = (await (await reopen(store)).loadIndex()).single;
+      expect(meta.customTitle, 'Отчёт за неделю');
+      expect(meta.pinnedAt, pinnedAt);
+      expect(meta.pinned, isTrue);
+      expect(meta.preview, 'Сводка готова');
+      expect(meta.lastPersonaId, 'noda');
+    });
     test('пусто при первом запуске', () async {
       final store = await create();
       expect(await store.loadIndex(), isEmpty);
@@ -196,6 +250,114 @@ void main() {
   );
 
   group('JsonChatStore на диске', () {
+    test('старый index.json без новых полей и битые новые поля читаются',
+        () async {
+      Directory(chats()).createSync(recursive: true);
+      File(p.join(chats(), 'index.json')).writeAsStringSync(
+        jsonEncode(<String, Object?>{
+          'schema_version': 1,
+          'chats': <Object?>[
+            <String, Object?>{
+              'id': 'session:old',
+              'kind': 'session',
+              'created_at': _t0.toIso8601String(),
+              'last_activity_at': _t0.toIso8601String(),
+              'title': 'старая сессия',
+              'count': 2,
+            },
+            <String, Object?>{
+              'id': 'session:bad',
+              'kind': 'session',
+              'created_at': _t0.toIso8601String(),
+              'title': 'битые поля',
+              'custom_title': 42,
+              'pinned_at': 'не дата',
+              'preview': <String>['x'],
+              'last_persona': false,
+              'count': 1,
+            },
+            <String, Object?>{
+              'id': 'session:blank',
+              'kind': 'session',
+              'created_at': _t0.toIso8601String(),
+              'custom_title': '   ',
+              'preview': '  первая\n строка  ',
+              'count': 1,
+            },
+          ],
+        }),
+      );
+      final index = {
+        for (final t in await JsonChatStore(chats()).loadIndex()) t.id: t,
+      };
+      expect(index.length, 3);
+      for (final id in <String>['session:old', 'session:bad']) {
+        final t = index[id]!;
+        expect(t.customTitle, isNull, reason: id);
+        expect(t.pinnedAt, isNull, reason: id);
+        expect(t.preview, isNull, reason: id);
+        expect(t.lastPersonaId, isNull, reason: id);
+      }
+      expect(index['session:old']!.title, 'старая сессия');
+      expect(index['session:blank']!.customTitle, isNull);
+      expect(index['session:blank']!.preview, 'первая строка');
+    });
+
+    test('у чата задачи своё название не читается', () {
+      final thread = ChatThread.fromMetaJson(<String, Object?>{
+        'id': 'task:t1',
+        'kind': 'task',
+        'task_id': 't1',
+        'created_at': _t0.toIso8601String(),
+        'custom_title': 'чужое',
+        'pinned_at': _t0.toIso8601String(),
+      })!;
+      expect(thread.customTitle, isNull);
+      expect(thread.pinned, isTrue, reason: 'закреплять чат задачи можно');
+    });
+
+    test('index.json потерян: шапки файлов сохраняют новые поля', () async {
+      final store = JsonChatStore(chats(), debounce: Duration.zero);
+      await store.save(
+        ChatThread(
+          id: '${ChatThread.sessionPrefix}y',
+          kind: ChatKind.session,
+          createdAt: _t0,
+          customTitle: 'Склад',
+          pinnedAt: _t0,
+          preview: 'Принято',
+          lastPersonaId: 'rio',
+          messages: <ChatMessage>[_message(1)],
+        ),
+      );
+      await store.flush();
+      File(p.join(chats(), 'index.json')).deleteSync();
+      final meta = (await JsonChatStore(chats()).loadIndex()).single;
+      expect(meta.customTitle, 'Склад');
+      expect(meta.pinnedAt, _t0);
+      expect(meta.preview, 'Принято');
+      expect(meta.lastPersonaId, 'rio');
+    });
+
+    test('erase стирает файл и архив с диска', () async {
+      final store = JsonChatStore(chats(), debounce: Duration.zero);
+      await store.save(_task('t1', <ChatMessage>[_message(1)]));
+      await store.save(_task('t2', <ChatMessage>[_message(2)]));
+      await store.flush();
+      await store.delete('task:t2');
+      await store.flush();
+      expect(File(store.archivePathOf('task:t2')).existsSync(), isTrue);
+      await store.erase('task:t1');
+      await store.erase('task:t2');
+      await store.flush();
+      expect(File(store.pathOf('task:t1')).existsSync(), isFalse);
+      expect(File(store.archivePathOf('task:t2')).existsSync(), isFalse);
+      final index = jsonDecode(
+        File(p.join(chats(), 'index.json')).readAsStringSync(),
+      ) as Map<String, Object?>;
+      expect(index['chats'], isEmpty);
+    });
+
     test('формат: index.json и файл на чат, без .tmp', () async {
       final store = JsonChatStore(chats());
       await store.save(_main(<ChatMessage>[_message(1)]));

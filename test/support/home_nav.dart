@@ -66,6 +66,7 @@ Finder drawerEntry(String title) => find.descendant(
 /// Открывает из меню сессию (или чат задачи) с названием [title].
 Future<void> openSessionTitled(WidgetTester tester, String title) async {
   await openDrawerIfNeeded(tester);
+  await expandDrawerGroups(tester);
   final entry = drawerEntry(title).first;
   await tester.ensureVisible(entry);
   await tester.pumpAndSettle();
@@ -104,3 +105,43 @@ Future<void> openToday(WidgetTester tester) async {
 
 /// «Мой Связной» → «Сводка»: на телефоне здесь всё, что было в «Сегодня».
 Future<void> openSummary(WidgetTester tester) => openMyRelay(tester);
+
+/// То же, что [finder], но без меню: в меню у сессии вторая строка —
+/// последний ответ помощника, и текст ответа виден там тоже.
+Finder outsideDrawer(Finder finder) => find.byElementPredicate(
+      (Element element) {
+        if (!finder.evaluate().contains(element)) return false;
+        var inDrawer = false;
+        element.visitAncestorElements((Element ancestor) {
+          if (ancestor.widget is RelayDrawer) {
+            inDrawer = true;
+            return false;
+          }
+          return true;
+        });
+        return !inDrawer;
+      },
+      description: '${finder.describeMatch(Plurality.many)} вне меню',
+    );
+
+/// Раскрывает свёрнутые группы меню («Вчера», «На неделе», «Ранее» на
+/// компьютере), чтобы их сессии можно было найти и нажать.
+Future<void> expandDrawerGroups(WidgetTester tester) async {
+  for (final id in RelayDrawer.collapsible) {
+    final toggle = find.byKey(Key('drawer-group-$id'));
+    if (toggle.evaluate().isEmpty) continue;
+    final expanded = find.descendant(
+      of: toggle,
+      matching: find.byIcon(Icons.keyboard_arrow_down),
+    );
+    final header = find.descendant(
+      of: toggle,
+      matching: find.byIcon(Icons.chevron_right),
+    );
+    if (expanded.evaluate().isNotEmpty || header.evaluate().isEmpty) continue;
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+  }
+}

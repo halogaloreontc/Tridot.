@@ -230,7 +230,7 @@ void main() {
     await _say(tester, 'да');
     expect(find.text('Перенесено 2 из 3'), findsOneWidget);
     expect(
-      find.textContaining('Перенёс на 7 ноября 2 задачи из 3'),
+      outsideDrawer(find.textContaining('Перенёс на 7 ноября 2 задачи из 3')),
       findsOneWidget,
     );
     expect((await h.task(h.ids[0])).dueAt, DateTime(2026, 11, 3));

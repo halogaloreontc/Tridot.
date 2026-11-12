@@ -38,6 +38,12 @@ abstract interface class ChatStore {
   /// снова найдёт её историю.
   Future<void> delete(String chatId);
 
+  /// Стереть чат [chatId] насовсем: файл, архив и запись в index.json
+  /// («Удалить» в меню сессии). В отличие от [delete], вернуть его нельзя:
+  /// пользователь сам попросил удалить. Отложенная запись этого чата
+  /// отменяется.
+  Future<void> erase(String chatId);
+
   /// Удалить все чаты вместе с архивом.
   Future<void> clearAll();
 
@@ -192,6 +198,13 @@ final class InMemoryChatStore implements ChatStore {
   }
 
   @override
+  Future<void> erase(String chatId) async {
+    _files.remove(chatId);
+    _archive.remove(chatId);
+    _index.remove(chatId);
+  }
+
+  @override
   Future<void> clearAll() async {
     _files.clear();
     _archive.clear();
@@ -219,6 +232,7 @@ final class InMemoryChatStore implements ChatStore {
 ///   индекса), при чтении индекса добавляется в него по своей шапке.
 /// - Чат удалённой задачи уходит в `archive/` ([delete]) и возвращается
 ///   оттуда, если задача снова появится.
+/// - «Удалить» в меню сессии стирает файл и архив насовсем ([erase]).
 /// - tasks.json и settings.json этот класс не трогает: у него своя папка.
 final class JsonChatStore implements ChatStore {
   JsonChatStore(
@@ -327,6 +341,10 @@ final class JsonChatStore implements ChatStore {
           lastActivityAt: meta.lastActivityAt,
           addressee: meta.addressee,
           title: meta.title,
+          customTitle: meta.customTitle,
+          pinnedAt: meta.pinnedAt,
+          preview: meta.preview,
+          lastPersonaId: meta.lastPersonaId,
           unread: meta.unread,
           loaded: false,
           storedCount: messages.length,
@@ -390,6 +408,21 @@ final class JsonChatStore implements ChatStore {
         // Не стирать: задача могла пропасть из-за потерянного tasks.json.
         await Directory(archiveDirectory).create(recursive: true);
         await file.rename(archivePathOf(chatId));
+      }
+      await _writeAtomic(indexPath, index);
+    });
+  }
+
+  @override
+  Future<void> erase(String chatId) {
+    // Сначала — из отложенных: иначе следующая запись вернула бы файл.
+    _dirty.remove(chatId);
+    _index.remove(chatId);
+    final index = ChatCodec.encodeIndex(_index.values);
+    return _enqueue(() async {
+      for (final path in <String>[pathOf(chatId), archivePathOf(chatId)]) {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
       }
       await _writeAtomic(indexPath, index);
     });

@@ -108,6 +108,15 @@ List<Task> _byDue(List<Task> tasks) {
   return <Task>[for (final (_, task) in indexed) task];
 }
 
+/// Сколько активных задач впереди: срок сегодня или позже, не
+/// просрочены — то, что повестка ([buildAgenda]) раскладывает по дням и в
+/// «Позже». Счётчик «Планирования» в меню.
+int upcomingCount(List<Task> tasks, DateTime now) => tasks
+    .where(
+      (Task t) => t.isActive && t.dueAt != null && !isOverdue(t, now),
+    )
+    .length;
+
 /// Раскладывает активные задачи по повестке на [days] календарных дней,
 /// начиная с сегодняшнего (по местному времени [now]).
 ///

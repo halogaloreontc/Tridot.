@@ -3,20 +3,116 @@
 // поиск по сессиям, который растягивается и прячет «+», «Отмена» и Esc,
 // встаёт над клавиатурой, подсветка совпадения. Секреты из карточек
 // «Паролей» поиск не находит.
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/shell/relay_drawer.dart';
+import 'package:local_assistant/app/widgets/personas_section.dart';
 import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/chats/chat_book.dart';
 import 'package:local_assistant/core/chats/chat_models.dart';
 import 'package:local_assistant/core/chats/chat_search.dart';
 import 'package:local_assistant/core/chats/chat_store.dart';
 import 'package:local_assistant/core/models/secure_card.dart';
+import 'package:local_assistant/core/personas/persona.dart';
 import 'package:local_assistant/core/services/clock.dart';
 
 final _now = DateTime(2026, 11, 9, 12, 40);
+
+final _groups = <SessionGroupEntry>[
+  const SessionGroupEntry(
+    id: 'today',
+    label: 'Сегодня',
+    entries: <SessionEntry>[
+      SessionEntry(
+        id: 'session:a',
+        title: 'Отметить приход 318',
+        time: '12:40',
+        itemKey: Key('chat-session:a'),
+        dotKey: Key('chat-unread-session:a'),
+        active: true,
+        canAct: true,
+        canRename: true,
+      ),
+    ],
+  ),
+  const SessionGroupEntry(
+    id: 'yesterday',
+    label: 'Вчера',
+    entries: <SessionEntry>[
+      SessionEntry(
+        id: 'session:1',
+        title: 'Сверить накладные',
+        time: '18:20',
+        itemKey: Key('chat-session:1'),
+        dotKey: Key('chat-unread-session:1'),
+        unread: true,
+        canAct: true,
+        canRename: true,
+      ),
+    ],
+  ),
+];
+
+SessionEntry _entry(
+  String id, {
+  String? title,
+  bool active = false,
+  bool pinned = false,
+  bool acts = true,
+  String? preview,
+  Persona? persona,
+}) =>
+    SessionEntry(
+      id: 'session:$id',
+      title: title ?? 'Сессия $id',
+      time: '12:00',
+      itemKey: Key('chat-session:$id'),
+      dotKey: Key('chat-unread-session:$id'),
+      active: active,
+      pinned: pinned,
+      canAct: acts,
+      canRename: acts,
+      preview: preview,
+      persona: persona,
+    );
+
+SessionGroupEntry _group(String id, String label, List<SessionEntry> e) =>
+    SessionGroupEntry(id: id, label: label, entries: e);
+
+final _rich = <SessionGroupEntry>[
+  _group('pinned', 'Закреплённые', <SessionEntry>[
+    _entry(
+      'p',
+      title: 'Еженедельный отчёт',
+      pinned: true,
+      preview: 'Сводка за неделю готова',
+      persona: Personas.noda,
+    ),
+  ]),
+  _group('today', 'Сегодня', <SessionEntry>[
+    _entry(
+      'a',
+      title: 'Отметить приход 318',
+      active: true,
+      preview: 'Принят, но не проведён ни в SV, ни в 1С',
+      persona: Personas.liorio,
+    ),
+  ]),
+  _group('yesterday', 'Вчера', <SessionEntry>[
+    _entry('1', title: 'Сверить накладные', preview: 'Расхождение в двух'),
+  ]),
+  _group('week', 'На неделе', <SessionEntry>[
+    _entry('w', preview: 'Пересчитано 412 позиций из 530'),
+  ]),
+  _group('earlier', 'Ранее', <SessionEntry>[
+    _entry('e', preview: 'Продление до марта'),
+    _entry('e2', preview: 'Добавила перчатки'),
+  ]),
+];
 
 final class _Calls {
   final List<String> log = <String>[];
@@ -29,6 +125,8 @@ Future<_Calls> _pump(
   Size size = const Size(316, 844),
   bool wide = false,
   VoidCallback? onCollapse,
+  List<SessionGroupEntry>? groups,
+  SectionCounts counts = const SectionCounts(),
 }) async {
   final calls = _Calls();
   tester.view.physicalSize = size;
@@ -44,24 +142,10 @@ Future<_Calls> _pump(
           wide: wide,
           onCollapse: onCollapse,
           reduceMotion: true,
-          sessions: <SessionEntry>[
-            const SessionEntry(
-              id: 'session:a',
-              title: 'Отметить приход 318',
-              time: '12:40',
-              itemKey: Key('chat-session:a'),
-              dotKey: Key('chat-unread-session:a'),
-              active: true,
-            ),
-            const SessionEntry(
-              id: 'session:1',
-              title: 'Сверить накладные',
-              time: 'вчера',
-              itemKey: Key('chat-session:1'),
-              dotKey: Key('chat-unread-session:1'),
-              unread: true,
-            ),
-          ],
+          groups: groups ?? _groups,
+          counts: counts,
+          onSessionAction: (String id, SessionAction action) =>
+              calls.log.add('${action.name}:$id'),
           extensions: extensions ??
               <ExtensionEntry>[
                 ExtensionEntry(
@@ -146,6 +230,23 @@ void main() {
       tester.getSize(find.byKey(const Key('chat-session:a'))).height,
       greaterThanOrEqualTo(44),
     );
+  });
+
+  testWidgets('«Мой Связной»: телефон — 88 px и 18/600, компьютер — 72 и 16',
+      (tester) async {
+    for (final wide in <bool>[false, true]) {
+      await _pump(tester, wide: wide, size: Size(wide ? 312 : 360, 900));
+      final card = find.byKey(const Key('drawer-my-relay'));
+      expect(
+        tester.getSize(card).height,
+        greaterThanOrEqualTo(wide ? 72 : 88),
+      );
+      final title = tester.widget<Text>(
+        find.descendant(of: card, matching: find.text(AppInfo.hubName)),
+      );
+      expect(title.style!.fontSize, wide ? 16 : 18);
+      expect(title.style!.fontWeight, FontWeight.w600);
+    }
   });
 
   testWidgets('дерево расширений сворачивается', (tester) async {
@@ -357,7 +458,7 @@ void main() {
     await tester.pump(RelayDrawer.searchDelay);
     await tester.pumpAndSettle();
     expect(find.text('Найдено в сессиях · 1'), findsOneWidget);
-    expect(find.text('Недавние сессии'), findsNothing);
+    expect(find.text('Сегодня'), findsNothing);
     // Справа — время сессии, а не имя помощника.
     expect(
       find.descendant(
@@ -401,17 +502,346 @@ void main() {
     await tester.tap(find.byKey(Key('search-hit-$s')));
     await tester.pumpAndSettle();
     expect(calls.log, <String>['hit:$s']);
-    expect(find.text('Недавние сессии'), findsOneWidget, reason: 'поиск снят');
+    expect(find.text('Сегодня'), findsOneWidget, reason: 'поиск снят');
   });
 
   testWidgets('320 px и шрифт 2x: без переполнения', (tester) async {
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    await _pump(tester, size: const Size(264, 640));
+    await _pump(
+      tester,
+      size: const Size(264, 640),
+      groups: _rich,
+      counts: const SectionCounts(tasks: 12, overdue: 3, projects: 4),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.longPress(find.byKey(const Key('chat-session:p')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+    await _pump(tester, size: const Size(312, 640), wide: true, groups: _rich);
     expect(tester.takeException(), isNull);
     await tester.tap(find.byKey(const Key('session-search')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('разделы: счётчики и «N просрочена» с верным числом',
+      (tester) async {
+    for (final (n, word) in <(int, String)>[
+      (1, 'просрочена'),
+      (2, 'просрочены'),
+      (5, 'просрочено'),
+      (21, 'просрочена'),
+    ]) {
+      await _pump(
+        tester,
+        counts: SectionCounts(tasks: 30, overdue: n, projects: 4, planning: 2),
+      );
+      expect(find.text('$n $word'), findsOneWidget, reason: '$n');
+      final alert =
+          tester.widget<Text>(find.byKey(const Key('nav-tasks-alert')));
+      expect(alert.style!.color, AssistantColors.danger);
+    }
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('nav-projects-count')),
+        matching: find.text('4'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsLabel('Задачи, 30, 21 просрочена'), findsOneWidget);
+    expect(find.bySemanticsLabel('Планирование, 2'), findsOneWidget);
+    // Нечего считать — без счётчика и без строки просрочки.
+    await _pump(tester, counts: const SectionCounts(tasks: 0));
+    expect(find.byKey(const Key('nav-tasks-count')), findsOneWidget);
+    expect(find.byKey(const Key('nav-tasks-alert')), findsNothing);
+    expect(find.byKey(const Key('nav-projects-count')), findsNothing);
+    expect(find.byKey(const Key('nav-planning-count')), findsNothing);
+    // Строки разделов — во всю ширину и не ниже 56.
+    final row = tester.getRect(find.byKey(const Key('nav-tasks')));
+    expect(row.height, greaterThanOrEqualTo(56));
+    expect(
+      tester.getRect(find.byKey(const Key('nav-projects'))).top,
+      greaterThan(row.bottom - 1),
+      reason: 'строкой под «Задачами», а не в ряд',
+    );
+  });
+
+  testWidgets('группы: закреплённые — только если есть; превью и знак',
+      (tester) async {
+    await _pump(tester, groups: _rich, size: const Size(360, 1400));
+    for (final key in <String>[
+      'drawer-group-pinned',
+      'drawer-group-today',
+      'drawer-group-yesterday',
+      'drawer-group-week',
+      'drawer-group-earlier',
+    ]) {
+      expect(find.byKey(Key(key)), findsOneWidget, reason: key);
+    }
+    expect(find.text('Закреплённые'), findsOneWidget);
+    expect(find.text('Сводка за неделю готова'), findsOneWidget);
+    // Знак того, кто ответил последним.
+    final mark = find.descendant(
+      of: find.byKey(const Key('chat-session:p')),
+      matching: find.byType(PersonaMark),
+    );
+    expect(tester.widget<PersonaMark>(mark).persona, Personas.noda);
+    // Порядок: «Мой Связной», разделы, закреплённые, дни, «Расширения».
+    double top(String key) => tester.getRect(find.byKey(Key(key))).top;
+    expect(top('drawer-my-relay'), lessThan(top('nav-tasks')));
+    expect(top('nav-planning'), lessThan(top('drawer-group-pinned')));
+    expect(top('drawer-group-pinned'), lessThan(top('drawer-group-today')));
+    expect(top('drawer-group-today'), lessThan(top('drawer-group-yesterday')));
+    expect(top('drawer-group-week'), lessThan(top('drawer-group-earlier')));
+    expect(top('drawer-group-earlier'), lessThan(top('drawer-extensions')));
+    // Строка сессии — не ниже 60, превью — одной строкой.
+    expect(
+      tester.getSize(find.byKey(const Key('chat-session:p'))).height,
+      greaterThanOrEqualTo(60),
+    );
+    // Края прокрутки гаснут.
+    expect(find.byKey(const Key('drawer-fade-top')), findsOneWidget);
+    expect(find.byKey(const Key('drawer-fade-bottom')), findsOneWidget);
+
+    await _pump(tester);
+    expect(find.text('Закреплённые'), findsNothing);
+    expect(find.byKey(const Key('drawer-group-week')), findsNothing);
+  });
+
+  testWidgets('компьютер: «Вчера», «На неделе», «Ранее» свёрнуты со счётом',
+      (tester) async {
+    await _pump(tester, groups: _rich, wide: true, size: const Size(312, 900));
+    expect(find.byKey(const Key('chat-session:p')), findsOneWidget);
+    expect(find.byKey(const Key('chat-session:a')), findsOneWidget);
+    expect(find.byKey(const Key('chat-session:1')), findsNothing);
+    expect(find.byKey(const Key('chat-session:w')), findsNothing);
+    expect(find.byKey(const Key('chat-session:e')), findsNothing);
+    expect(find.bySemanticsLabel('Ранее, 2'), findsOneWidget);
+    // «Расширения» видны без прокрутки.
+    expect(
+      find.byKey(const Key('drawer-extension-warehouse')).hitTestable(),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('drawer-group-earlier')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chat-session:e')), findsOneWidget);
+    expect(find.byKey(const Key('chat-session:e2')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('drawer-group-earlier')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chat-session:e')), findsNothing);
+    // Группа с открытой сессией раскрыта сама.
+    await _pump(
+      tester,
+      wide: true,
+      size: const Size(312, 900),
+      groups: <SessionGroupEntry>[
+        _group('week', 'На неделе', <SessionEntry>[_entry('w', active: true)]),
+      ],
+    );
+    expect(find.byKey(const Key('chat-session:w')), findsOneWidget);
+  });
+
+  testWidgets('долгое нажатие — меню «Ж2»: поднятая строка, пункты, Esc',
+      (tester) async {
+    final calls =
+        await _pump(tester, groups: _rich, size: const Size(360, 900));
+    final row = find.byKey(const Key('chat-session:a'));
+    final rowRect = tester.getRect(row);
+    await tester.longPress(row);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session-menu')), findsOneWidget);
+    expect(find.byKey(const Key('session-menu-dim')), findsOneWidget);
+    final lifted = tester.getRect(find.byKey(const Key('session-menu-lifted')));
+    expect(lifted.top, lessThan(rowRect.top), reason: 'строка приподнята');
+    final menu = tester.getRect(find.byKey(const Key('session-menu')));
+    expect(menu.top, greaterThan(rowRect.bottom), reason: 'меню под строкой');
+    expect(menu.right, moreOrLessEquals(rowRect.right, epsilon: 1));
+    // Тестовый шрифт шире настоящего: меню растёт под подписи, но не шире
+    // экрана. 236 с настоящими шрифтами — в session_hold_menu_test.
+    expect(menu.width, lessThanOrEqualTo(360 - 16));
+    for (final key in <String>[
+      'session-menu-rename',
+      'session-menu-pin',
+      'session-menu-delete',
+    ]) {
+      expect(
+        tester.getSize(find.byKey(Key(key))).height,
+        greaterThanOrEqualTo(44),
+        reason: key,
+      );
+    }
+    expect(find.text('Закрепить'), findsOneWidget);
+    final delete = tester.widget<Text>(
+      find.descendant(
+        of: find.byKey(const Key('session-menu-delete')),
+        matching: find.text('Удалить'),
+      ),
+    );
+    expect(delete.style!.color, AssistantColors.danger);
+    expect(
+      find.bySemanticsLabel('Действия с сессией «Отметить приход 318»'),
+      findsOneWidget,
+    );
+    // Esc — закрыть без действия.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session-menu')), findsNothing);
+    // Нажатие мимо — тоже.
+    await tester.longPress(row);
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(20, 880));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session-menu')), findsNothing);
+    expect(calls.log, isEmpty);
+    // Закреплённая — «Открепить»; выбор уходит хозяину.
+    await tester.longPress(find.byKey(const Key('chat-session:p')));
+    await tester.pumpAndSettle();
+    expect(find.text('Открепить'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('session-menu-pin')));
+    await tester.pumpAndSettle();
+    await tester.longPress(row);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('session-menu-delete')));
+    await tester.pumpAndSettle();
+    expect(calls.log, <String>['pin:session:p', 'delete:session:a']);
+  });
+
+  testWidgets('без действий: пустая сессия; чат задачи — без «Переименовать»',
+      (tester) async {
+    final calls = await _pump(
+      tester,
+      groups: <SessionGroupEntry>[
+        _group('today', 'Сегодня', <SessionEntry>[
+          _entry('new', acts: false),
+          const SessionEntry(
+            id: 'task:t1',
+            title: 'Позвонить поставщику',
+            time: '10:15',
+            itemKey: Key('chat-t1'),
+            dotKey: Key('chat-unread-t1'),
+            canAct: true,
+          ),
+        ]),
+      ],
+    );
+    await tester.longPress(find.byKey(const Key('chat-session:new')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session-menu')), findsNothing);
+    await tester.longPress(find.byKey(const Key('chat-t1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session-menu-rename')), findsNothing);
+    expect(find.byKey(const Key('session-menu-pin')), findsOneWidget);
+    // Системная «Назад» закрывает меню.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session-menu')), findsNothing);
+    expect(calls.log, isEmpty);
+  });
+
+  testWidgets('компьютер: «⋯» при наведении и правая кнопка — то же меню',
+      (tester) async {
+    final calls = await _pump(
+      tester,
+      groups: _rich,
+      wide: true,
+      size: const Size(312, 900),
+    );
+    final more = find.byKey(const Key('chat-more-session:a'));
+    expect(more, findsNothing);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(const Key('chat-session:a'))),
+    );
+    await tester.pumpAndSettle();
+    expect(more, findsOneWidget);
+    expect(find.byTooltip('Действия с сессией'), findsOneWidget);
+    expect(tester.getSize(more).height, greaterThanOrEqualTo(44));
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session-menu')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('session-menu-rename')));
+    await tester.pumpAndSettle();
+    // Правая кнопка мыши.
+    await tester.tap(
+      find.byKey(const Key('chat-session:p')),
+      buttons: kSecondaryButton,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session-menu')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('session-menu-delete')));
+    await tester.pumpAndSettle();
+    expect(calls.log, <String>['rename:session:a', 'delete:session:p']);
+  });
+
+  testWidgets('экранный диктор: действия с сессией — без долгого нажатия',
+      (tester) async {
+    final handle = tester.ensureSemantics();
+    final calls =
+        await _pump(tester, groups: _rich, size: const Size(360, 900));
+    final node = tester.getSemantics(find.byKey(const Key('chat-session:a')));
+    final data = node.getSemanticsData();
+    final labels = <String>[
+      for (final id in data.customSemanticsActionIds!)
+        CustomSemanticsAction.getAction(id)!.label!,
+    ];
+    expect(labels, <String>['Переименовать', 'Закрепить', 'Удалить']);
+    final owner = node.owner!;
+    final delete = data.customSemanticsActionIds!.firstWhere(
+      (int id) => CustomSemanticsAction.getAction(id)!.label == 'Удалить',
+    );
+    owner.performAction(node.id, SemanticsAction.customAction, delete);
+    await tester.pump();
+    expect(calls.log, <String>['delete:session:a']);
+    final pinned = tester
+        .getSemantics(find.byKey(const Key('chat-session:p')))
+        .getSemanticsData();
+    expect(
+      pinned.customSemanticsActionIds!
+          .map((int id) => CustomSemanticsAction.getAction(id)!.label),
+      contains('Открепить'),
+    );
+    handle.dispose();
+  });
+
+  test('подписи времени в группах (макет Ж1)', () {
+    final now = DateTime(2026, 11, 12, 14, 20);
+    expect(
+      sessionRowTimeLabel(DateTime(2026, 11, 12, 9, 5), now, 'today'),
+      '09:05',
+    );
+    expect(
+      sessionRowTimeLabel(DateTime(2026, 11, 11, 18, 20), now, 'yesterday'),
+      '18:20',
+    );
+    expect(sessionRowTimeLabel(DateTime(2026, 11, 10), now, 'week'), 'вт');
+    expect(
+      sessionRowTimeLabel(DateTime(2026, 11, 4), now, 'earlier'),
+      '4 нояб',
+    );
+    expect(
+      sessionRowTimeLabel(DateTime(2026, 10, 30), now, 'earlier'),
+      '30 окт',
+    );
+    expect(sessionRowTimeLabel(DateTime(2026, 11, 9), now, 'pinned'), 'пн');
+    expect(sessionRowTimeLabel(DateTime(2026, 10, 9), now, 'pinned'), '9 окт');
+    // Прошлый год: тот же день и месяц не сливаются с этим годом.
+    expect(
+      sessionRowTimeLabel(DateTime(2025, 11, 12), now, 'earlier'),
+      '12.11.25',
+    );
+    expect(
+      sessionRowTimeLabel(DateTime(2025, 11, 12), now, 'pinned'),
+      '12.11.25',
+    );
+    expect(
+      sessionRowTimeLabel(DateTime(2026, 11, 12, 9), now, 'earlier'),
+      isNot(sessionRowTimeLabel(DateTime(2025, 11, 12, 9), now, 'earlier')),
+    );
   });
 
   test('подписи времени', () {

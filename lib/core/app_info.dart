@@ -28,6 +28,11 @@ abstract final class AppInfo {
   /// Предложный падеж: «(в) Связном».
   static const String namePrepositional = 'Связном';
 
+  /// Раздел приложения с помощниками, сводкой и настройками: «Мой
+  /// Связной». Одна константа, чтобы смена названия была правкой в одном
+  /// месте.
+  static const String hubName = 'Мой $name';
+
   /// Версия для пользователя — как `version:` в pubspec.yaml до «+»
   /// (тест держит их вместе). Видна в меню рядом с названием.
   static const String version = '0.1.0';

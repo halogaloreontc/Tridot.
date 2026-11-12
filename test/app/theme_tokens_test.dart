@@ -47,6 +47,8 @@ void main() {
       (AssistantColors.heat1, 0xFF256E47),
       (AssistantColors.heat2, 0xFF33A267),
       (AssistantColors.heat3, 0xFF4FD18B),
+      (AssistantColors.scrimLight, 0x4D000000),
+      (AssistantColors.shadow, 0x99000000),
     ];
     for (final (color, argb) in expected) {
       expect(color.toARGB32(), argb, reason: '$color');

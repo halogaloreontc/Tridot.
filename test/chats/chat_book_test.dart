@@ -1044,5 +1044,355 @@ void main() {
       expect(memory.archivedIds, <String>[ChatThread.mainId]);
       expect(b.thread('main')!.title, 'Сверить накладные');
     });
+
+    test('«Удалить» перенесённой сессии стирает и архив «Главного»', () async {
+      final memory = InMemoryChatStore();
+      await memory.save(
+        ChatThread(
+          id: ChatThread.mainId,
+          kind: ChatKind.main,
+          createdAt: DateTime(2026, 11, 4, 12),
+          messages: <ChatMessage>[
+            ChatMessage(
+              id: 'm1',
+              author: ChatAuthor.user,
+              text: 'Сверить накладные',
+              timestamp: DateTime(2026, 11, 2, 9),
+            ),
+          ],
+        ),
+      );
+      final b = ChatBook(store: memory, clock: clock);
+      await b.load();
+      expect(memory.archivedIds, <String>[ChatThread.mainId]);
+      await b.remove(ChatThread.legacyMainSessionId);
+      await b.flush();
+      expect(memory.chatIds, isEmpty);
+      expect(memory.archivedIds, isEmpty, reason: 'переписки нет и в архиве');
+      final again = ChatBook(store: memory, clock: clock);
+      expect(await again.load(), isFalse);
+      expect(again.thread(ChatThread.legacyMainSessionId), isNull);
+    });
+
+    test('то же на диске: archive/main.json не остаётся', () async {
+      writeLegacy();
+      final b = await open();
+      final archived = File(p.join(chats(), 'archive', 'main.json'));
+      expect(archived.existsSync(), isTrue);
+      await b.remove(ChatThread.legacyMainSessionId);
+      await b.flush();
+      expect(archived.existsSync(), isFalse);
+      expect(
+        File(p.join(chats(), 'session-main.json')).existsSync(),
+        isFalse,
+      );
+    });
+  });
+
+  group('действия с сессией', () {
+    Future<(ChatBook, String)> session(String command) async {
+      final b = await book();
+      final id = b.currentId;
+      b
+        ..append(id, _say(b, command, clock.value))
+        ..append(id, _say(b, 'Готово', clock.value, user: false));
+      return (b, id);
+    }
+
+    test('переименовать: пробелы, лимит, пустое, своё название в поиске',
+        () async {
+      final (b, id) = await session('сверь приход 318');
+      expect(b.rename(id, '  Приход\n  318   ноябрь '), isTrue);
+      expect(b.thread(id)!.customTitle, 'Приход 318 ноябрь');
+      expect(ChatBook.titleOf(b.thread(id)!), 'Приход 318 ноябрь');
+      expect(b.rename(id, '   '), isFalse);
+      expect(b.rename(id, 'я' * 61), isFalse);
+      expect(b.rename(id, 'я' * 60), isTrue);
+      expect(b.rename(id, 'Склад: сверка'), isTrue);
+      final hits = await b.search('сверка');
+      expect(hits.single.title, 'Склад: сверка');
+      // То же, что первая команда, — своё название снимается.
+      expect(b.rename(id, 'сверь приход 318'), isTrue);
+      expect(b.thread(id)!.customTitle, isNull);
+    });
+
+    test('своё название и закрепление переживают перезапуск', () async {
+      final (b, id) = await session('сверь приход 318');
+      b
+        ..rename(id, 'Приход 318')
+        ..setPinned(id, true);
+      await b.flush();
+      final again = await book();
+      final t = again.thread(id)!;
+      expect(t.customTitle, 'Приход 318');
+      expect(t.pinned, isTrue);
+      expect(t.preview, 'Готово');
+      expect(t.lastPersonaId, 'rio');
+      expect(ChatBook.titleOf(t), 'Приход 318');
+    });
+
+    test('то же на диске: index.json и шапка файла', () async {
+      final dir = await Directory.systemTemp.createTemp('book_actions_');
+      addTearDown(() => dir.delete(recursive: true));
+      final disk = JsonChatStore(dir.path, debounce: Duration.zero);
+      final b = ChatBook(store: disk, clock: clock);
+      await b.load();
+      final id = b.currentId;
+      b
+        ..append(id, _say(b, 'сверь приход', clock.value))
+        ..append(id, _say(b, 'Принят', clock.value, user: false));
+      b
+        ..rename(id, 'Приход')
+        ..setPinned(id, true);
+      await b.flush();
+      final again = ChatBook(store: JsonChatStore(dir.path), clock: clock);
+      await again.load();
+      expect(again.thread(id)!.customTitle, 'Приход');
+      expect(again.thread(id)!.pinned, isTrue);
+      expect(again.thread(id)!.preview, 'Принят');
+    });
+
+    test('чат задачи и пустая сессия не переименовываются', () async {
+      final b = await book();
+      expect(b.rename(b.currentId, 'Пусто'), isFalse);
+      expect(b.setPinned(b.currentId, true), isFalse);
+      await b.openTask('t1');
+      b.append('task:t1', _say(b, 'готово', clock.value));
+      expect(b.rename('task:t1', 'Другое'), isFalse);
+      expect(b.setPinned('task:t1', true), isTrue);
+    });
+
+    test('закреплённые: отдельно, последний закреплённый сверху', () async {
+      final (b, first) = await session('первая');
+      await b.newSession();
+      final second = b.currentId;
+      b.append(second, _say(b, 'вторая', clock.value));
+      await b.newSession();
+      b.setPinned(first, true);
+      clock.value = clock.value.add(const Duration(minutes: 1));
+      b.setPinned(second, true);
+      expect(
+        b.pinned().map((ChatThread t) => t.id),
+        <String>[second, first],
+      );
+      final groups = b.groups(clock.value);
+      expect(
+        groups.pinned.map((ChatThread t) => t.id),
+        <String>[second, first],
+      );
+      expect(
+        groups.today.map((ChatThread t) => t.id),
+        <String>[b.currentId],
+        reason: 'закреплённые не повторяются, открытая пустая — на месте',
+      );
+      b.setPinned(first, false);
+      expect(b.pinned().single.id, second);
+      expect(b.groups(clock.value).today.map((t) => t.id), contains(first));
+    });
+
+    test('группы по местным датам: полночь и край недели', () {
+      final now = DateTime(2026, 11, 12, 0, 5);
+      expect(groupOf(DateTime(2026, 11, 12, 0, 1), now), SessionGroup.today);
+      expect(
+        groupOf(DateTime(2026, 11, 11, 23, 59), now),
+        SessionGroup.yesterday,
+      );
+      expect(groupOf(DateTime(2026, 11, 10, 12), now), SessionGroup.week);
+      expect(groupOf(DateTime(2026, 11, 6, 0, 1), now), SessionGroup.week);
+      expect(groupOf(DateTime(2026, 11, 5, 23, 59), now), SessionGroup.earlier);
+      expect(groupOf(DateTime(2025, 11, 12), now), SessionGroup.earlier);
+      // Через переход на летнее/зимнее время — те же календарные дни.
+      expect(
+        groupOf(DateTime(2026, 3, 28, 23), DateTime(2026, 3, 30, 1)),
+        SessionGroup.week,
+      );
+    });
+
+    test('groups раскладывает сессии по дням активности', () async {
+      final (b, today) = await session('сегодня');
+      await b.newSession();
+      final old = b.currentId;
+      b.append(
+        old,
+        _say(b, 'давно', clock.value.subtract(const Duration(days: 9))),
+      );
+      b.thread(old)!.lastActivityAt =
+          clock.value.subtract(const Duration(days: 9));
+      await b.newSession();
+      final groups = b.groups(clock.value);
+      expect(groups.today.map((t) => t.id), containsAll(<String>[today]));
+      expect(groups.earlier.map((t) => t.id), <String>[old]);
+      expect(groups.yesterday, isEmpty);
+      expect(groups.week, isEmpty);
+    });
+
+    test('удалить: из книги, хранилища и «назад»; задача остаётся', () async {
+      final (b, id) = await session('сверь приход');
+      await b.flush();
+      await b.openTask('t1');
+      b.append('task:t1', _say(b, 'по задаче', clock.value));
+      await b.open(id);
+      expect(await b.remove('task:t1'), isFalse);
+      expect(b.taskThread('t1'), isNull);
+      expect(store.chatIds, isNot(contains('task:t1')));
+      // Открытый — удалён: открыта пустая сессия, «назад» не ведёт в него.
+      expect(await b.remove(id), isTrue);
+      expect(b.current.messageCount, 0);
+      expect(b.current.isSession, isTrue);
+      await b.back();
+      expect(b.currentId, isNot(id));
+      await b.flush();
+      expect(store.chatIds, isEmpty);
+      expect(store.archivedIds, isEmpty, reason: 'не в архив, а насовсем');
+      // Чат задачи открывается снова — пустым, без старой истории.
+      final again = await b.openTask('t1');
+      expect(again.messages, isEmpty);
+      final reload = await book();
+      expect(reload.thread(id), isNull);
+      expect(reload.taskThread('t1'), isNull);
+    });
+
+    test('удалить чат, пока он читается: запись не возвращает файл', () async {
+      final (b, id) = await session('сверь приход');
+      await b.flush();
+      final again = await book();
+      // Чат не прочитан: rename откладывает запись до чтения.
+      expect(again.thread(id)!.loaded, isFalse);
+      again.rename(id, 'Новое');
+      final removing = again.remove(id);
+      await removing;
+      await again.flush();
+      expect(store.chatIds, isEmpty);
+      expect((await store.loadIndex()).map((t) => t.id), isNot(contains(id)));
+    });
+
+    test('превью: последний ответ, карточки и секреты — фразой', () async {
+      final b = await book();
+      final id = b.currentId;
+      b.append(id, _say(b, 'покажи пароль', clock.value));
+      expect(b.thread(id)!.preview, isNull, reason: 'команда — не превью');
+      b.append(
+        id,
+        _say(b, 'Пароль от почты показан', clock.value, user: false),
+        sensitive: true,
+      );
+      expect(b.thread(id)!.preview, 'Защищённая карточка');
+      b.append(
+        id,
+        ChatMessage(
+          id: b.newMessageId(),
+          author: ChatAuthor.persona,
+          personaId: 'noda',
+          text: 'Пароль CANARY-5d2c',
+          timestamp: clock.value,
+          secureCard: const SecureCardRequest(kind: SecureCardKind.reveal),
+        ),
+      );
+      expect(b.thread(id)!.preview, 'Защищённая карточка');
+      expect(b.thread(id)!.lastPersonaId, 'noda');
+      final reply = _say(b, 'Приход\nпринят', clock.value, user: false);
+      b.append(id, reply);
+      expect(b.thread(id)!.preview, 'Приход принят');
+      expect(b.thread(id)!.lastPersonaId, 'rio');
+      b.append(id, _say(b, 'спасибо', clock.value));
+      expect(b.thread(id)!.preview, 'Приход принят');
+      await b.flush();
+      final index = (await store.loadIndex()).single;
+      expect(index.preview, 'Приход принят');
+      expect(jsonEncode(index.metaJson()), isNot(contains('CANARY')));
+    });
+
+    test('превью для чатов прежних версий — из файла, только в памяти',
+        () async {
+      final (b, id) = await session('сверь приход');
+      await b.flush();
+      // Как старый index.json: без превью.
+      final legacy = ChatThread.fromMetaJson(
+        b.thread(id)!.metaJson()
+          ..remove('preview')
+          ..remove('last_persona'),
+      )!;
+      expect(legacy.preview, isNull);
+      final again = await book();
+      again.thread(id)!
+        ..preview = null
+        ..lastPersonaId = null;
+      final saves = store.saves;
+      expect(await again.backfillPreviews(), isTrue);
+      // Был ли старый ответ навыка с секретами, в файле не сказано: текст
+      // не пересказывается, а знак ответившего восстанавливается.
+      expect(again.thread(id)!.preview, isNull);
+      expect(again.thread(id)!.lastPersonaId, 'rio');
+      expect(again.thread(id)!.loaded, isFalse);
+      expect(store.saves, saves, reason: 'без записи');
+    });
+
+    test('старый ответ навыка «Пароли» не попадает во вторую строку', () async {
+      final (b, id) = await session('покажи пароль от почты');
+      b.append(
+        id,
+        _say(
+          b,
+          'Пароль от «Почта-Синтетика» был показан.',
+          clock.value,
+          user: false,
+        ),
+      );
+      await b.flush();
+      final again = await book();
+      again.thread(id)!
+        ..preview = null
+        ..lastPersonaId = null;
+      await again.backfillPreviews();
+      expect(again.thread(id)!.preview, isNull);
+      expect(
+        again.threads.map((ChatThread t) => t.preview ?? ''),
+        isNot(contains(contains('Почта-Синтетика'))),
+      );
+    });
+
+    test('старая карточка действия — нейтральная фраза', () async {
+      final b = await book();
+      final id = b.currentId;
+      b
+        ..append(id, _say(b, 'отметь приход', clock.value))
+        ..append(
+          id,
+          ChatMessage(
+            id: b.newMessageId(),
+            author: ChatAuthor.persona,
+            personaId: 'noda',
+            text: 'Отметка',
+            timestamp: clock.value,
+            card: ActionCard(
+              rid: 'dddddddddddddddd',
+              connectorId: 'warehouse',
+              kind: ActionKind.post,
+              login: 'ivanov',
+              name: 'Иван',
+              deadline: clock.value.add(const Duration(minutes: 5)),
+              lines: const <ActionCardLine>[],
+              commit: const <String, Object?>{'a': 1},
+              stamp: 'stamp',
+            ),
+          ),
+        );
+      await b.flush();
+      final again = await book();
+      again.thread(id)!.preview = null;
+      expect(await again.backfillPreviews(), isTrue);
+      expect(again.thread(id)!.preview, 'Карточка действия');
+      expect(again.thread(id)!.lastPersonaId, 'noda');
+    });
+
+    test('длина названия — в видимых знаках, как у поля ввода', () async {
+      final (b, id) = await session('сверь приход 318');
+      expect(b.rename(id, '📦' * 31), isTrue, reason: '31 знак из 60');
+      expect(b.thread(id)!.customTitle, '📦' * 31);
+      expect(b.rename(id, '👍🏽' * 60), isTrue);
+      expect(b.rename(id, '📦' * 61), isFalse);
+      expect(ChatThread.cleanCustomTitle('📦' * 70), '📦' * 60);
+      expect(ChatThread.titleLength('📦' * 70), 70);
+    });
   });
 }

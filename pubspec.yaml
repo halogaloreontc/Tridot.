@@ -9,6 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Длина названия сессии — в видимых знаках, как у TextField.maxLength
+  # (уже есть транзитивно у flutter).
+  characters: ^1.4.0
   path: ^1.9.1
   path_provider: ^2.1.5
   # Хранилище паролей (ADR-014): libsodium — Argon2id, XChaCha20-Poly1305,

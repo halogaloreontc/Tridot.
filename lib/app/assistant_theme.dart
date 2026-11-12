@@ -137,6 +137,12 @@ abstract final class AssistantColors {
 
   /// Затемнение под выдвижной панелью.
   static const scrim = Color(0x9E000000);
+
+  /// Лёгкое затемнение под меню действий с сессией (макет «Ж2»).
+  static const scrimLight = Color(0x4D000000);
+
+  /// Тень всплывающих меню и «поднятой» строки.
+  static const shadow = Color(0x99000000);
 }
 
 /// Метаданные: время, пути, подписи. 11 px — минимум для читаемости.

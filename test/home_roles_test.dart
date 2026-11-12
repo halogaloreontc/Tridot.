@@ -175,9 +175,11 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
     expect(
-      find.text(
-        'Склад ещё не подключён — Настройки → Роли → Кладовщик → '
-        'Подключить склад.',
+      outsideDrawer(
+        find.text(
+          'Склад ещё не подключён — Настройки → Роли → Кладовщик → '
+          'Подключить склад.',
+        ),
       ),
       findsOneWidget,
     );
@@ -212,12 +214,18 @@ void main() {
     expect(find.byKey(const Key('quick-Без фото')), findsOneWidget);
 
     await _say(tester, 'где лежит 64115');
-    expect(find.textContaining('Склад ещё не подключён'), findsOneWidget);
+    expect(
+      outsideDrawer(find.textContaining('Склад ещё не подключён')),
+      findsOneWidget,
+    );
 
     await _toggleStorekeeper(tester);
     expect((await store.load()).enabledRoles, isEmpty);
     expect(find.byKey(const Key('quick-Без фото')), findsNothing);
-    expect(find.textContaining('Склад ещё не подключён'), findsOneWidget);
+    expect(
+      outsideDrawer(find.textContaining('Склад ещё не подключён')),
+      findsOneWidget,
+    );
     expect(assistant.selectedTaskId, selected);
     expect(tester.takeException(), isNull);
   });

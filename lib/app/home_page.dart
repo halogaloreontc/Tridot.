@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show OrdinalSortKey;
 import 'package:flutter/services.dart';
 
+import '../core/app_info.dart';
 import '../core/chats/chat_book.dart';
 import '../core/chats/chat_models.dart';
 import '../core/chats/chat_search.dart';
@@ -42,6 +44,7 @@ import 'screens/storage_screen.dart';
 import 'shell/drawer_swipe.dart';
 import 'shell/quick_actions.dart';
 import 'shell/relay_drawer.dart';
+import 'shell/session_hold_menu.dart';
 import 'shell/session_header.dart';
 import 'shell/session_hero.dart';
 import 'shell/today_panel.dart';
@@ -68,7 +71,7 @@ extension AppSectionInfo on AppSection {
         AppSection.projects => 'Проекты',
         AppSection.tasks => 'Задачи',
         AppSection.planning => 'Планирование',
-        AppSection.myRelay => 'Мой Связной',
+        AppSection.myRelay => AppInfo.hubName,
       };
 }
 
@@ -86,7 +89,7 @@ const double todayOpenBreakpoint = 1280;
 const double narrowBreakpoint = 700;
 
 /// Ширина постоянного меню и колонки «Сегодня» на широком экране.
-const double sidebarWidth = 280;
+const double sidebarWidth = 312;
 const double todayWidth = 340;
 
 /// Подсказка пустой панели задач: пример команды без кавычек на своей
@@ -506,6 +509,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _messageKeys.clear();
     });
     _dailyChecks();
+    // Вторая строка в меню у чатов из прежних версий — из их файлов.
+    if (await _book.backfillPreviews() && mounted) setState(() {});
   }
 
   /// Вход в подключение сменился (новый вход, выход, ключ устарел):
@@ -768,7 +773,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _working = null;
       _workingChatId = null;
       _cube = cubeStateFor(response.status);
-      _book.append(chatId, reply);
+      _book.append(chatId, reply, sensitive: _sensitiveReply(response));
       if (aboutTask &&
           response.status == AssistantStatus.completed &&
           _book.taskThread(task.id) == null) {
@@ -806,10 +811,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final sensitive = reply.secureCard != null ||
         reply.card != null ||
         reply.checklist != null ||
-        response.secureCard != null ||
-        response.intent.startsWith('passwords') ||
-        response.intent.startsWith('secret') ||
-        _sensitiveConnector(widget.assistant.session.lastConnectorId);
+        _sensitiveReply(response);
     _docToastTimer?.cancel();
     setState(() => _docToast = sensitive ? 'Ответ в диалоге' : reply.text);
     _docToastTimer = Timer(const Duration(seconds: 4), _hideDocToast);
@@ -824,6 +826,15 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _docToastTimer = null;
     if (mounted && _docToast != null) setState(() => _docToast = null);
   }
+
+  /// Ответ навыка с секретами (пароли, секреты, навык с пометкой
+  /// `sensitive`): его текст не показываем ни уведомлением, ни второй
+  /// строкой сессии в меню (ADR-010).
+  bool _sensitiveReply(AssistantResponse response) =>
+      response.secureCard != null ||
+      response.intent.startsWith('passwords') ||
+      response.intent.startsWith('secret') ||
+      _sensitiveConnector(widget.assistant.session.lastConnectorId);
 
   /// Навык с секретами (пароли): его ответы не показываем уведомлением.
   bool _sensitiveConnector(String? id) {
@@ -1005,7 +1016,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final reply = _answer(response);
       setState(() {
         _cube = cubeStateFor(response!.status);
-        _book.append(chatId, reply);
+        _book.append(chatId, reply, sensitive: _sensitiveReply(response));
       });
       _cubeTimer?.cancel();
       _cubeTimer = Timer(const Duration(milliseconds: 1600), () {
@@ -1067,8 +1078,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _switchChat(
     Future<ChatThread> Function() open, {
     AssistantViewMode? mode,
+    bool closeDrawer = true,
   }) {
-    _closeDrawers();
+    if (closeDrawer) _closeDrawers();
     unawaited(_saveDocument());
     final wasLoaded = _book.loaded;
     final loading = open();
@@ -1335,7 +1347,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // В «Мой Связной» колонки «Сегодня» нет (D-Desk-Summary): году
         // активности нужна ширина. Выбор пользователя не меняется.
         final today = _section != AppSection.myRelay && _todayShown(width);
-        final drawerWidth = (width - 56).clamp(240.0, 316.0);
+        // Выдвижное меню (макет «Ж1»): до 360, справа остаётся полоса
+        // затемнения не уже 30 — по ней меню закрывается.
+        final drawerWidth = math.max(240.0, math.min(360.0, width - 30));
         // Окно стало широким при открытом выдвижном меню: убирать его сразу
         // нельзя — у маршрута осталась бы запись «закрыть меню», и «Назад»
         // перестал бы возвращать в сессию. Держим его ещё кадр и закрываем
@@ -1457,7 +1471,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         AppSection.planning => 'planning',
         _ => null,
       },
-      sessions: _sessionEntries(now),
+      groups: _sessionGroups(now),
+      counts: _sectionCounts(now),
       extensions: _extensionEntries(),
       onOpenMyRelay: () => _openMyRelay(MyRelayTab.summary),
       onTasks: () => _goTo(AppSection.tasks),
@@ -1465,6 +1480,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onPlanning: () => _goTo(AppSection.planning),
       onOpenSession: _openSessionEntry,
       onNewSession: _newSession,
+      onSessionAction: (String id, SessionAction action) =>
+          unawaited(_sessionAction(id, action)),
       search: (String query) => _book.search(
         query,
         titles: <String, String>{for (final task in _all) task.id: task.title},
@@ -1474,18 +1491,58 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// «Недавние сессии»: сессии и чаты задач с сообщениями.
-  List<SessionEntry> _sessionEntries(DateTime now) {
+  /// Счётчики разделов меню — только из того, что есть: открытые и
+  /// просроченные задачи, проекты с открытыми задачами, задачи со сроком
+  /// сегодня и дальше. Нечего считать — без счётчика.
+  SectionCounts _sectionCounts(DateTime now) {
+    final projects = <String>{
+      for (final task in _active)
+        if (task.project case final String project) project,
+    };
+    final planning = upcomingCount(_active, now);
+    return SectionCounts(
+      tasks: _active.length,
+      overdue: _active.where((Task t) => isOverdue(t, now)).length,
+      projects: projects.isEmpty ? null : projects.length,
+      planning: planning == 0 ? null : planning,
+    );
+  }
+
+  /// Группы меню: «Закреплённые», «Сегодня», «Вчера», «На неделе»,
+  /// «Ранее» (ChatBook.groups).
+  List<SessionGroupEntry> _sessionGroups(DateTime now) {
     final inSession = _section == AppSection.session;
-    return <SessionEntry>[
-      for (final thread in _book.sessions())
-        if (_sessionEntry(thread, now, inSession) case final SessionEntry e) e,
+    final groups = _book.groups(now);
+    SessionGroupEntry group(String id, String label, List<ChatThread> list) =>
+        SessionGroupEntry(
+          id: id,
+          label: label,
+          entries: <SessionEntry>[
+            for (final thread in list)
+              if (_sessionEntry(thread, now, inSession, id)
+                  case final SessionEntry e)
+                e,
+          ],
+        );
+    return <SessionGroupEntry>[
+      group('pinned', 'Закреплённые', groups.pinned),
+      group('today', 'Сегодня', groups.today),
+      group('yesterday', 'Вчера', groups.yesterday),
+      group('week', 'На неделе', groups.week),
+      group('earlier', 'Ранее', groups.earlier),
     ];
   }
 
-  SessionEntry? _sessionEntry(ChatThread thread, DateTime now, bool inSession) {
+  SessionEntry? _sessionEntry(
+    ChatThread thread,
+    DateTime now,
+    bool inSession,
+    String group,
+  ) {
     final active = inSession && _book.currentId == thread.id;
-    final time = sessionTimeLabel(thread.lastActivityAt, now);
+    final time = sessionRowTimeLabel(thread.lastActivityAt, now, group);
+    final persona = Personas.byId(thread.lastPersonaId);
+    final canAct = thread.messageCount > 0;
     switch (thread.kind) {
       // ChatKind.main в книге не бывает (переносится в сессию при чтении).
       case ChatKind.main:
@@ -1498,6 +1555,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           dotKey: Key('chat-unread-${thread.id}'),
           active: active,
           unread: thread.unread,
+          preview: thread.preview,
+          persona: persona,
+          pinned: thread.pinned,
+          canAct: canAct,
+          canRename: canAct,
         );
       case ChatKind.task:
         final task = _findTask(thread.taskId);
@@ -1511,7 +1573,50 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           active: active,
           unread: thread.unread,
           muted: task.status == TaskStatus.done,
+          preview: thread.preview,
+          persona: persona,
+          pinned: thread.pinned,
+          canAct: canAct,
         );
+    }
+  }
+
+  /// Действие из меню сессии: переименовать, закрепить, удалить.
+  Future<void> _sessionAction(String chatId, SessionAction action) async {
+    final thread = _book.thread(chatId);
+    if (thread == null) return;
+    final task = thread.kind == ChatKind.task ? _findTask(thread.taskId) : null;
+    final title = task?.title ?? ChatBook.titleOf(thread);
+    switch (action) {
+      case SessionAction.rename:
+        final name = await showRenameSessionDialog(context, current: title);
+        if (name == null || !mounted) return;
+        setState(() => _book.rename(thread.id, name));
+      case SessionAction.pin:
+        setState(() => _book.setPinned(thread.id, !thread.pinned));
+      case SessionAction.delete:
+        final confirmed = await showDeleteSessionDialog(
+          context,
+          title: title,
+          task: thread.kind == ChatKind.task,
+        );
+        if (!confirmed || !mounted) return;
+        final wasCurrent = await _book.remove(thread.id);
+        if (!mounted) return;
+        if (_workingChatId == thread.id) {
+          // Ответ в удалённую сессию пропадёт (ChatBook.append — false).
+          _workingChatId = null;
+        }
+        if (wasCurrent) {
+          // Открыта пустая сессия, как по «+»; меню остаётся открытым.
+          _switchChat(
+            _book.newSession,
+            mode: AssistantViewMode.dialogue,
+            closeDrawer: false,
+          );
+        } else {
+          setState(() {});
+        }
     }
   }
 
@@ -1530,10 +1635,35 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   List<ExtensionEntry> _extensionEntries() {
     final passwords = widget.passwords;
     return <ExtensionEntry>[
+      // Порядок как в макете «Ж1»: сначала подключения (Склад), потом
+      // Пароли.
+      for (final service in widget.connections)
+        if (widget.assistant.extensions.isEnabled(service.slot.id))
+          ExtensionEntry(
+            id: service.slot.id,
+            title: service.slot.title,
+            icon: Icons.inventory_2_outlined,
+            status: service.connected ? 'на связи' : 'нет связи',
+            statusColor: service.connected
+                ? AssistantColors.success
+                : AssistantColors.faint,
+            dot: true,
+            onTap: () {
+              _closeDrawers();
+              unawaited(_openConnection(service));
+            },
+          ),
       if (passwords != null && _passwordsEnabled)
         ExtensionEntry(
           id: AssistantController.passwordsId,
           title: 'Пароли',
+          icon: Icons.lock_outline,
+          dot: true,
+          // Открытое хранилище — повод обратить внимание: тёплая точка;
+          // запертое, выключенное и не созданное — приглушённая.
+          dotColor: passwords.state == VaultState.unlocked
+              ? AssistantColors.warning
+              : AssistantColors.faint,
           status: switch (passwords.state) {
             VaultState.notCreated => 'не создано',
             VaultState.locked => 'заперт',
@@ -1545,21 +1675,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             unawaited(_openPasswords());
           },
         ),
-      for (final service in widget.connections)
-        if (widget.assistant.extensions.isEnabled(service.slot.id))
-          ExtensionEntry(
-            id: service.slot.id,
-            title: service.slot.title,
-            status: service.connected ? 'на связи' : 'нет связи',
-            statusColor: service.connected
-                ? AssistantColors.success
-                : AssistantColors.faint,
-            dot: true,
-            onTap: () {
-              _closeDrawers();
-              unawaited(_openConnection(service));
-            },
-          ),
     ];
   }
 

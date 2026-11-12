@@ -1,3 +1,4 @@
+import 'package:characters/characters.dart';
 import '../models/action_card.dart';
 import '../models/assistant_types.dart';
 import '../models/bulk.dart';
@@ -224,6 +225,10 @@ final class ChatThread {
     this.parentTaskId,
     this.addressee,
     this.title,
+    this.customTitle,
+    this.pinnedAt,
+    this.preview,
+    this.lastPersonaId,
     this.unread = false,
     List<ChatMessage>? messages,
     this.loaded = true,
@@ -249,6 +254,10 @@ final class ChatThread {
   /// Название новой сессии, пока в ней нет команды.
   static const String untitledSession = 'Новая сессия';
 
+  /// Самое длинное название, которое пользователь может дать сессии
+  /// ([customTitle]).
+  static const int customTitleLimit = 60;
+
   final String id;
   final ChatKind kind;
 
@@ -272,6 +281,23 @@ final class ChatThread {
   /// `null` — команды ещё не было. У чатов задач не задаётся.
   String? title;
 
+  /// Название, которое дал пользователь («Переименовать»): важнее [title].
+  /// Только у сессий; `null` — не переименовывали.
+  String? customTitle;
+
+  /// Когда сессию закрепили; `null` — не закреплена.
+  DateTime? pinnedAt;
+
+  /// Одна строка из последнего ответа помощника для меню: копия уже
+  /// сохранённого (очищенного) текста или нейтральная фраза вместо
+  /// карточки «Паролей», действия, списка и ответов навыков с секретами
+  /// (ChatPreview, ADR-010). `null` — помощник ещё не отвечал.
+  String? preview;
+
+  /// Кто из помощников ответил последним (`rio`, `noda`); `null` — ещё
+  /// никто.
+  String? lastPersonaId;
+
   /// В чат пришло сообщение, пока он был закрыт (напоминание помощника,
   /// ответ на команду, отправленную перед уходом из чата).
   bool unread;
@@ -288,6 +314,9 @@ final class ChatThread {
 
   bool get isSession => kind == ChatKind.session;
 
+  /// Закреплена ([pinnedAt]).
+  bool get pinned => pinnedAt != null;
+
   /// Сколько сообщений в чате, даже если они ещё не прочитаны.
   int get messageCount =>
       loaded ? messages.length : _storedCount + messages.length;
@@ -302,12 +331,18 @@ final class ChatThread {
         'last_activity_at': lastActivityAt.toIso8601String(),
         if (addressee != null) 'addressee': addressee,
         if (title != null) 'title': title,
+        if (customTitle != null) 'custom_title': customTitle,
+        if (pinnedAt != null) 'pinned_at': pinnedAt!.toIso8601String(),
+        if (preview != null) 'preview': preview,
+        if (lastPersonaId != null) 'last_persona': lastPersonaId,
         if (unread) 'unread': true,
         'count': messageCount,
       };
 
   /// Чат по метаданным без сообщений ([loaded] = false). Повреждённые
-  /// метаданные — `null`.
+  /// метаданные — `null`. Поля, которых нет в старых файлах
+  /// (`custom_title`, `pinned_at`, `preview`, `last_persona`), читаются
+  /// осторожно: нет или не того типа — `null`.
   static ChatThread? fromMetaJson(Object? json) {
     if (json is! Map) return null;
     final id = json['id'];
@@ -330,6 +365,11 @@ final class ChatThread {
     final addressee = json['addressee'];
     final title = json['title'];
     final count = json['count'];
+    final custom = json['custom_title'];
+    final pinned = json['pinned_at'];
+    final preview = json['preview'];
+    final persona = json['last_persona'];
+    final session = kind == ChatKind.session;
     return ChatThread(
       id: id,
       kind: kind,
@@ -338,12 +378,34 @@ final class ChatThread {
       createdAt: created,
       lastActivityAt: DateTime.tryParse('${json['last_activity_at']}'),
       addressee: addressee is String ? addressee : null,
-      title: kind == ChatKind.session && title is String && title.isNotEmpty
-          ? title
+      title: session && title is String && title.isNotEmpty ? title : null,
+      customTitle:
+          session && custom is String ? cleanCustomTitle(custom) : null,
+      pinnedAt: pinned is String ? DateTime.tryParse(pinned) : null,
+      preview: preview is String && preview.trim().isNotEmpty
+          ? preview.replaceAll(RegExp(r'\s+'), ' ').trim()
           : null,
+      lastPersonaId: persona is String && persona.isNotEmpty ? persona : null,
       unread: json['unread'] == true,
       loaded: false,
       storedCount: count is int && count >= 0 ? count : 0,
     );
   }
+
+  /// Название от пользователя: пробелы схлопнуты, края обрезаны, не
+  /// длиннее [customTitleLimit] видимых знаков ([titleLength]). Пустое —
+  /// `null`.
+  static String? cleanCustomTitle(String text) {
+    final flat = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (flat.isEmpty) return null;
+    final chars = flat.characters;
+    return chars.length <= customTitleLimit
+        ? flat
+        : chars.take(customTitleLimit).toString().trimRight();
+  }
+
+  /// Длина названия в видимых знаках (графемах), как её считает поле
+  /// ввода с `maxLength`: эмодзи, флаг или буква с ударением — один знак,
+  /// а не две-четыре единицы UTF-16, и обрезка не режет знак пополам.
+  static int titleLength(String text) => text.characters.length;
 }

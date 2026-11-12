@@ -12,6 +12,10 @@ import 'package:local_assistant/app/passwords/passwords_screen.dart';
 import 'package:local_assistant/app/screens/my_relay_screen.dart';
 import 'package:local_assistant/core/chats/chat_store.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
+import 'package:local_assistant/core/connectors/http_transport.dart';
+import 'package:local_assistant/core/connectors/manifest/connection.dart';
+import 'package:local_assistant/core/connectors/manifest/connection_service.dart';
+import 'package:local_assistant/core/connectors/secret_store.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/extensions/extension_registry.dart';
 import 'package:local_assistant/core/passwords/vault.dart';
@@ -25,6 +29,7 @@ import 'package:local_assistant/core/settings/app_settings.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
+import '../connectors/manifest/fixtures.dart';
 import '../support/home_nav.dart';
 
 import 'vault_test_support.dart';
@@ -43,8 +48,12 @@ void main() {
   late InMemoryChatStore chats;
   late InMemorySettingsStore settings;
   String? copied;
+  List<ConnectionService> connections = const <ConnectionService>[];
 
-  Future<String> setUpHome({bool enabled = true}) async {
+  Future<String> setUpHome({
+    bool enabled = true,
+    bool warehouse = false,
+  }) async {
     final clock = FixedClock(DateTime(2026, 11, 10, 12));
     vault = testVault(InMemoryVaultStore(), crypto);
     await vault.load();
@@ -69,12 +78,31 @@ void main() {
       ),
     );
     tasks = TaskService(repository: InMemoryTaskRepository(), clock: clock);
+    // Склад без сети: проверка связи получает 503 («нет связи»).
+    final store = warehouseConnector(
+      path: actionsManifestPath,
+      transport: const _NoLink(),
+      record: connectedRecord(),
+      builtIn: builtInManifest(),
+    );
+    connections = <ConnectionService>[
+      if (warehouse)
+        ConnectionService(
+          connector: store,
+          transport: const _NoLink(),
+          secrets: InMemorySecretStore(),
+          store: InMemoryConnectionStore(),
+          clock: clock,
+          builtIn: builtInManifest(),
+        ),
+    ];
     final registry = ExtensionRegistry(
       connectors: <Connector>[
         TasksConnector(
           taskService: tasks,
           parser: ScenarioParser(clock: clock),
         ),
+        if (warehouse) store,
         PasswordsConnector(
           vault: kit.facade,
           canCopySecrets: kit.canCopySecrets,
@@ -95,6 +123,7 @@ void main() {
     await settings.save(
       AppSettings(
         enabledExtensions: <String>{if (enabled) PasswordsConnector.id},
+        enabledRoles: <String>{if (warehouse) Roles.storekeeperId},
       ),
     );
     return id;
@@ -114,6 +143,7 @@ void main() {
           settingsStore: settings,
           chatStore: chats,
           passwords: kit,
+          connections: connections,
         ),
       ),
     );
@@ -461,4 +491,51 @@ void main() {
     expect(find.byType(PasswordsScreen), findsOneWidget);
     await finish(tester);
   });
+
+  testWidgets('боковая панель: точка «Паролей» — тёплая, пока открыто',
+      (WidgetTester tester) async {
+    await setUpHome();
+    await pumpHome(tester);
+    Color dot() => (tester
+            .widget<Container>(
+              find.byKey(const Key('drawer-extension-dot-passwords')),
+            )
+            .decoration! as BoxDecoration)
+        .color!;
+    final status = find.byKey(const Key('drawer-extension-status-passwords'));
+    await tester.ensureVisible(status);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Text>(status).data, 'открыт');
+    expect(dot(), AssistantColors.warning);
+    vault.lock();
+    await tester.pump();
+    expect(tester.widget<Text>(status).data, 'заперт');
+    expect(dot(), AssistantColors.faint);
+    await finish(tester);
+  });
+
+  testWidgets('«Расширения»: Склад — первым, Пароли — под ним (макет «Ж1»)',
+      (WidgetTester tester) async {
+    await setUpHome(warehouse: true);
+    await pumpHome(tester);
+    final store = find.byKey(const Key('drawer-extension-warehouse'));
+    final vaultRow = find.byKey(const Key('drawer-extension-passwords'));
+    await tester.ensureVisible(vaultRow);
+    await tester.pumpAndSettle();
+    expect(store, findsOneWidget);
+    expect(
+      tester.getTopLeft(store).dy,
+      lessThan(tester.getTopLeft(vaultRow).dy),
+    );
+    await finish(tester);
+  });
+}
+
+/// Сети нет: склад отвечает 503, приложение показывает «нет связи».
+final class _NoLink implements HttpTransport {
+  const _NoLink();
+
+  @override
+  Future<HttpResponseData> send(HttpRequestData request) async =>
+      const HttpResponseData(statusCode: 503, body: '{}');
 }

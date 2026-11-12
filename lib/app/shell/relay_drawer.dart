@@ -1,15 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/app_info.dart';
 import '../../core/chats/chat_search.dart';
+import '../../core/formatting/plural.dart';
 import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
 import '../widgets/personas_section.dart';
+import 'session_hold_menu.dart';
 
-/// Строка «Недавних сессий» в меню.
+export 'session_hold_menu.dart' show SessionAction;
+
+/// Строка сессии (или чата задачи) в меню.
 final class SessionEntry {
   const SessionEntry({
     required this.id,
@@ -20,12 +25,17 @@ final class SessionEntry {
     this.active = false,
     this.unread = false,
     this.muted = false,
+    this.preview,
+    this.persona,
+    this.pinned = false,
+    this.canAct = false,
+    this.canRename = false,
   });
 
   final String id;
   final String title;
 
-  /// «12:40», «вчера», «пн», «9 нояб.».
+  /// «12:40», «вт», «4 нояб».
   final String time;
   final Key itemKey;
   final Key dotKey;
@@ -38,10 +48,63 @@ final class SessionEntry {
 
   /// Приглушённая (выполненная задача).
   final bool muted;
+
+  /// Вторая строка: последний ответ помощника одной строкой (уже
+  /// очищенный) или нейтральная фраза вместо карточки; `null` — без неё.
+  final String? preview;
+
+  /// Кто ответил последним: его знак слева; `null` — ещё никто.
+  final Persona? persona;
+
+  /// Закреплена.
+  final bool pinned;
+
+  /// Есть действия: «Закрепить», «Удалить» (у пустой новой сессии нет).
+  final bool canAct;
+
+  /// Можно переименовать (сессия; у чата задачи название — задачи).
+  final bool canRename;
 }
 
-/// Строка расширения в дереве «Расширения»: «Пароли · заперт»,
-/// «Склад · на связи».
+/// Группа строк в меню: «Закреплённые», «Сегодня», «Вчера», «На неделе»,
+/// «Ранее».
+final class SessionGroupEntry {
+  const SessionGroupEntry({
+    required this.id,
+    required this.label,
+    required this.entries,
+  });
+
+  /// `pinned`, `today`, `yesterday`, `week`, `earlier`.
+  final String id;
+  final String label;
+  final List<SessionEntry> entries;
+}
+
+/// Счётчики разделов справа. `null` — без счётчика (данных нет).
+final class SectionCounts {
+  const SectionCounts({
+    this.tasks,
+    this.overdue = 0,
+    this.projects,
+    this.planning,
+  });
+
+  /// Открытые задачи.
+  final int? tasks;
+
+  /// Из них просрочены: вторая строка «N просрочена» у «Задач».
+  final int overdue;
+
+  /// Проекты с открытыми задачами.
+  final int? projects;
+
+  /// Задачи со сроком сегодня и дальше.
+  final int? planning;
+}
+
+/// Строка расширения в «Расширениях»: «Пароли · заперт», «Склад · на
+/// связи».
 final class ExtensionEntry {
   const ExtensionEntry({
     required this.id,
@@ -50,6 +113,8 @@ final class ExtensionEntry {
     required this.onTap,
     this.statusColor = AssistantColors.muted,
     this.dot = false,
+    this.dotColor,
+    this.icon,
   });
 
   final String id;
@@ -57,8 +122,14 @@ final class ExtensionEntry {
   final String status;
   final Color statusColor;
 
-  /// Точка состояния перед подписью (подключения).
+  /// Точка состояния перед подписью.
   final bool dot;
+
+  /// Цвет точки; `null` — как у подписи.
+  final Color? dotColor;
+
+  /// Значок слева; `null` — без значка.
+  final IconData? icon;
   final VoidCallback onTap;
 }
 
@@ -68,15 +139,9 @@ String sessionTimeLabel(DateTime at, DateTime now) {
   final day = DateTime(at.year, at.month, at.day);
   final today = DateTime(now.year, now.month, now.day);
   final diff = today.difference(day).inDays;
-  if (diff <= 0) {
-    return '${at.hour.toString().padLeft(2, '0')}:'
-        '${at.minute.toString().padLeft(2, '0')}';
-  }
+  if (diff <= 0) return _clock(at);
   if (diff == 1) return 'вчера';
-  if (diff < 7) {
-    const week = <String>['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
-    return week[at.weekday - 1];
-  }
+  if (diff < 7) return _weekday(at);
   const months = <String>[
     'янв.',
     'февр.',
@@ -94,17 +159,73 @@ String sessionTimeLabel(DateTime at, DateTime now) {
   return '${at.day} ${months[at.month - 1]}';
 }
 
-/// Левая панель (макет «Д»): шапка «Связной» с версией, «Мой Связной»,
-/// разделы, расширения, недавние сессии, внизу — поиск по сессиям и «+»
-/// (новая сессия).
+/// Подпись времени строки сессии под заголовком группы (макет Ж1):
+/// «Сегодня» и «Вчера» — «18:20» (день уже в заголовке), «На неделе» —
+/// «вт», «Ранее» — «4 нояб», «30 окт», прошлый год — «12.11.25».
+/// Закреплённые — как [sessionTimeLabel], но без точки после месяца.
+String sessionRowTimeLabel(DateTime at, DateTime now, String group) {
+  final local = at.toLocal();
+  switch (group) {
+    case 'today':
+    case 'yesterday':
+      return _clock(local);
+    case 'week':
+      return _weekday(local);
+    case 'earlier':
+      return _olderDate(local, now.toLocal());
+  }
+  final label = sessionTimeLabel(local, now.toLocal());
+  return label.endsWith('.') ? _olderDate(local, now.toLocal()) : label;
+}
+
+/// Дата старой сессии: в этом году — «12 нояб», в другом — «12.11.25»,
+/// чтобы сессии разных лет не выглядели одинаково.
+String _olderDate(DateTime at, DateTime now) {
+  if (at.year == now.year) return _dayMonth(at);
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${two(at.day)}.${two(at.month)}.${two(at.year % 100)}';
+}
+
+String _clock(DateTime at) => '${at.hour.toString().padLeft(2, '0')}:'
+    '${at.minute.toString().padLeft(2, '0')}';
+
+String _weekday(DateTime at) =>
+    const <String>['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'][at.weekday - 1];
+
+String _dayMonth(DateTime at) {
+  const months = <String>[
+    'янв',
+    'февр',
+    'мар',
+    'апр',
+    'мая',
+    'июн',
+    'июл',
+    'авг',
+    'сент',
+    'окт',
+    'нояб',
+    'дек',
+  ];
+  return '${at.day} ${months[at.month - 1]}';
+}
+
+/// Левая панель (макет «Ж1»): сверху — «Связной» с версией, внизу — поиск
+/// по сессиям и «+» (новая сессия); между ними прокручиваются «Мой
+/// Связной», разделы со счётчиками, закреплённые сессии, сессии по дням и
+/// «Расширения». Края прокрутки мягко гаснут.
+///
+/// Долгое нажатие на сессию (на компьютере — «⋯» и правая кнопка) — меню
+/// «Ж2»: «Переименовать», «Закрепить», «Удалить» ([onSessionAction]).
 ///
 /// На телефоне — содержимое выдвижной панели, на широком экране —
-/// постоянная колонка ([wide]) с «Свернуть панель». Настроек здесь нет:
+/// постоянная колонка ([wide]) с «Свернуть панель»; там «Вчера», «На
+/// неделе» и «Ранее» свёрнуты в заголовки со счётом. Настроек здесь нет:
 /// они в «Мой Связной».
 final class RelayDrawer extends StatefulWidget {
   const RelayDrawer({
     super.key,
-    required this.sessions,
+    required this.groups,
     required this.extensions,
     required this.onOpenMyRelay,
     required this.onTasks,
@@ -115,6 +236,8 @@ final class RelayDrawer extends StatefulWidget {
     required this.search,
     required this.onOpenHit,
     required this.timeLabel,
+    this.onSessionAction,
+    this.counts = const SectionCounts(),
     this.wide = false,
     this.onCollapse,
     this.searchFocus,
@@ -122,7 +245,8 @@ final class RelayDrawer extends StatefulWidget {
     this.activeSection,
   });
 
-  final List<SessionEntry> sessions;
+  /// Группы сессий по порядку; пустые не показываются.
+  final List<SessionGroupEntry> groups;
   final List<ExtensionEntry> extensions;
   final VoidCallback onOpenMyRelay;
   final VoidCallback onTasks;
@@ -130,6 +254,11 @@ final class RelayDrawer extends StatefulWidget {
   final VoidCallback onPlanning;
   final ValueChanged<String> onOpenSession;
   final VoidCallback onNewSession;
+
+  /// Выбрано действие с сессией (id, действие).
+  final void Function(String id, SessionAction action)? onSessionAction;
+
+  final SectionCounts counts;
 
   /// Поиск по сессиям ([ChatBook.search]).
   final Future<List<ChatSearchHit>> Function(String query) search;
@@ -151,6 +280,18 @@ final class RelayDrawer extends StatefulWidget {
   /// Задержка поиска после ввода.
   static const Duration searchDelay = Duration(milliseconds: 200);
 
+  /// С этого числа сессий в меню «Вчера», «На неделе» и «Ранее» на
+  /// компьютере свёрнуты: «Расширения» видны без прокрутки. Меньше —
+  /// всё раскрыто (сворачивать нечего).
+  static const int foldFrom = 6;
+
+  /// Группы, которые на компьютере сворачиваются в заголовок со счётом.
+  static const Set<String> collapsible = <String>{
+    'yesterday',
+    'week',
+    'earlier',
+  };
+
   @override
   State<RelayDrawer> createState() => _RelayDrawerState();
 }
@@ -164,6 +305,9 @@ final class _RelayDrawerState extends State<RelayDrawer> {
   int _generation = 0;
   List<ChatSearchHit>? _hits;
   String _hitsFor = '';
+
+  /// Группы, которые пользователь сам раскрыл (`true`) или свернул.
+  final Map<String, bool> _folded = <String, bool>{};
 
   FocusNode get _focus => widget.searchFocus ?? (_ownFocus ??= FocusNode());
 
@@ -231,10 +375,12 @@ final class _RelayDrawerState extends State<RelayDrawer> {
     });
   }
 
-  Duration get _motion => widget.reduceMotion ||
-          MediaQuery.maybeDisableAnimationsOf(context) == true
-      ? Duration.zero
-      : const Duration(milliseconds: 240);
+  bool get _still =>
+      widget.reduceMotion ||
+      MediaQuery.maybeDisableAnimationsOf(context) == true;
+
+  Duration get _motion =>
+      _still ? Duration.zero : const Duration(milliseconds: 240);
 
   @override
   Widget build(BuildContext context) {
@@ -245,80 +391,177 @@ final class _RelayDrawerState extends State<RelayDrawer> {
     // Клавиатура открыта для поиска: шапка, «Мой Связной» и разделы
     // уступают место результатам.
     final roomy = !(_searching && inset > 0);
+    final showHits = _searching && _query.text.trim().isNotEmpty;
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         if (roomy) ...<Widget>[
           _TitlePlate(onCollapse: widget.onCollapse),
-          _MyRelayCard(onTap: widget.onOpenMyRelay, wide: widget.wide),
-          const SizedBox(height: 8),
-          _Sections(
-            active: widget.activeSection,
-            onTasks: widget.onTasks,
-            onProjects: widget.onProjects,
-            onPlanning: widget.onPlanning,
+          const Divider(
+            height: 1,
+            thickness: 1,
+            color: AssistantColors.divider,
           ),
-          const SizedBox(height: 4),
         ],
         Expanded(
-          child: ListView(
-            key: const Key('drawer-scroll'),
-            padding: EdgeInsets.zero,
+          child: Stack(
             children: <Widget>[
-              if (widget.extensions.isNotEmpty && roomy) _buildExtensions(),
-              if (_searching && _query.text.trim().isNotEmpty)
-                ..._buildHits()
-              else
-                ..._buildSessions(),
+              Positioned.fill(
+                child: ListView(
+                  key: const Key('drawer-scroll'),
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+                  children: <Widget>[
+                    if (roomy) ...<Widget>[
+                      _MyRelayCard(
+                        onTap: widget.onOpenMyRelay,
+                        wide: widget.wide,
+                      ),
+                      const SizedBox(height: 8),
+                      _Sections(
+                        active: widget.activeSection,
+                        counts: widget.counts,
+                        wide: widget.wide,
+                        onTasks: widget.onTasks,
+                        onProjects: widget.onProjects,
+                        onPlanning: widget.onPlanning,
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(10, 6, 10, 0),
+                        child: Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: AssistantColors.divider,
+                        ),
+                      ),
+                    ],
+                    if (showHits)
+                      ..._buildHits()
+                    else ...<Widget>[
+                      ..._buildGroups(),
+                      if (widget.extensions.isNotEmpty) _buildExtensions(),
+                    ],
+                  ],
+                ),
+              ),
+              const Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                height: 14,
+                child: _Fade(key: Key('drawer-fade-top'), down: true),
+              ),
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 24,
+                child: _Fade(key: Key('drawer-fade-bottom'), down: false),
+              ),
             ],
           ),
         ),
-        const SizedBox(height: 8),
-        _buildBottomRow(context),
+        DecoratedBox(
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: AssistantColors.divider)),
+          ),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(12, 10, 12, 12 + inset),
+            child: _buildBottomRow(context),
+          ),
+        ),
       ],
     );
     return Material(
       key: const Key('app-sidebar'),
       color: AssistantColors.sidebar,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(12, 12, 12, 12 + inset),
-        child: body,
-      ),
+      child: body,
     );
   }
 
+  List<Widget> _buildGroups() {
+    final widgets = <Widget>[];
+    var first = true;
+    final total = widget.groups
+        .fold(0, (int n, SessionGroupEntry g) => n + g.entries.length);
+    final foldByDefault = total >= RelayDrawer.foldFrom;
+    for (final group in widget.groups) {
+      if (group.entries.isEmpty) continue;
+      final folds = widget.wide && RelayDrawer.collapsible.contains(group.id);
+      if (folds) {
+        final open = _folded[group.id] ??
+            (!foldByDefault || group.entries.any((SessionEntry e) => e.active));
+        widgets.add(
+          _GroupToggle(
+            key: Key('drawer-group-${group.id}'),
+            label: group.label,
+            count: group.entries.length,
+            open: open,
+            onTap: () => setState(() => _folded[group.id] = !open),
+          ),
+        );
+        if (!open) continue;
+      } else {
+        widgets.add(
+          _ListHeader(
+            group.label,
+            key: Key('drawer-group-${group.id}'),
+            icon: group.id == 'pinned' ? Icons.push_pin_outlined : null,
+            top: first ? 8 : 18,
+          ),
+        );
+      }
+      first = false;
+      for (final entry in group.entries) {
+        widgets.add(
+          _SessionRow(
+            entry: entry,
+            wide: widget.wide,
+            reduceMotion: _still,
+            onTap: () => widget.onOpenSession(entry.id),
+            onAction: widget.onSessionAction == null
+                ? null
+                : (SessionAction action) =>
+                    widget.onSessionAction!(entry.id, action),
+          ),
+        );
+      }
+    }
+    return widgets;
+  }
+
   Widget _buildExtensions() {
+    void toggle() => setState(() => _extensionsOpen = !_extensionsOpen);
     return Column(
       key: const Key('drawer-extensions'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        const SizedBox(height: 10),
         Semantics(
           header: true,
           button: true,
           expanded: _extensionsOpen,
           label: 'Расширения',
-          onTap: () => setState(() => _extensionsOpen = !_extensionsOpen),
+          onTap: toggle,
           excludeSemantics: true,
           child: InkWell(
             key: const Key('drawer-extensions-toggle'),
-            onTap: () => setState(() => _extensionsOpen = !_extensionsOpen),
+            onTap: toggle,
             borderRadius: BorderRadius.circular(10),
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 44),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Row(
                   children: <Widget>[
+                    const Expanded(
+                      child: Text('Расширения', style: _groupStyle),
+                    ),
                     Icon(
                       _extensionsOpen
                           ? Icons.keyboard_arrow_down
                           : Icons.keyboard_arrow_right,
-                      size: 16,
-                      color: AssistantColors.muted,
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text('Расширения', style: technicalTextStyle),
+                      size: 18,
+                      color: AssistantColors.icon,
                     ),
                   ],
                 ),
@@ -330,21 +573,21 @@ final class _RelayDrawerState extends State<RelayDrawer> {
           Stack(
             children: <Widget>[
               const Positioned(
-                left: 14,
-                top: 2,
-                bottom: 2,
+                left: 19,
+                top: 6,
+                bottom: 6,
                 child: SizedBox(
                   width: 1,
-                  child: ColoredBox(color: AssistantColors.border),
+                  child: ColoredBox(color: AssistantColors.borderSoft),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(left: 20),
+                padding: const EdgeInsets.only(left: 18),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
                     for (final entry in widget.extensions)
-                      _ExtensionRow(entry: entry),
+                      _ExtensionRow(entry: entry, wide: widget.wide),
                   ],
                 ),
               ),
@@ -353,15 +596,6 @@ final class _RelayDrawerState extends State<RelayDrawer> {
       ],
     );
   }
-
-  List<Widget> _buildSessions() => <Widget>[
-        const _ListHeader('Недавние сессии'),
-        for (final entry in widget.sessions)
-          _SessionRow(
-            entry: entry,
-            onTap: () => widget.onOpenSession(entry.id),
-          ),
-      ];
 
   List<Widget> _buildHits() {
     final hits = _hits;
@@ -534,6 +768,33 @@ final class _RelayDrawerState extends State<RelayDrawer> {
   }
 }
 
+/// Мягкий край прокрутки: цвет панели → прозрачный.
+final class _Fade extends StatelessWidget {
+  const _Fade({super.key, required this.down});
+
+  /// Сверху вниз (верхний край) или снизу вверх (нижний).
+  final bool down;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = <Color>[
+      AssistantColors.sidebar,
+      AssistantColors.sidebar.withAlpha(0),
+    ];
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: down ? Alignment.topCenter : Alignment.bottomCenter,
+            end: down ? Alignment.bottomCenter : Alignment.topCenter,
+            colors: colors,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// «+» — новая сессия: та же треть строки и высота, что у поиска.
 final class _NewSessionButton extends StatelessWidget {
   const _NewSessionButton({required this.onTap});
@@ -570,8 +831,42 @@ final class _NewSessionButton extends StatelessWidget {
   }
 }
 
-/// Шапка панели: «Связной» и версия; на компьютере справа — «Свернуть
-/// панель».
+/// Знак «Связного»: два кружка, соединённые линией.
+final class _RelayGlyph extends StatelessWidget {
+  const _RelayGlyph();
+
+  @override
+  Widget build(BuildContext context) => const ExcludeSemantics(
+        child: SizedBox.square(
+          dimension: 22,
+          child: CustomPaint(painter: _RelayGlyphPainter()),
+        ),
+      );
+}
+
+final class _RelayGlyphPainter extends CustomPainter {
+  const _RelayGlyphPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final k = size.width / 24;
+    final paint = Paint()
+      ..color = AssistantColors.textStrong
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6 * k
+      ..strokeCap = StrokeCap.round;
+    canvas
+      ..drawCircle(Offset(6 * k, 12 * k), 2.5 * k, paint)
+      ..drawCircle(Offset(18 * k, 12 * k), 2.5 * k, paint)
+      ..drawLine(Offset(8.5 * k, 12 * k), Offset(15.5 * k, 12 * k), paint);
+  }
+
+  @override
+  bool shouldRepaint(_RelayGlyphPainter oldDelegate) => false;
+}
+
+/// Шапка панели: знак, «Связной» и версия; на компьютере справа —
+/// «Свернуть панель».
 final class _TitlePlate extends StatelessWidget {
   const _TitlePlate({required this.onCollapse});
 
@@ -580,46 +875,62 @@ final class _TitlePlate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 8, bottom: 4),
+      padding: EdgeInsets.fromLTRB(20, 4, onCollapse == null ? 20 : 8, 4),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
+        constraints: const BoxConstraints(minHeight: 52),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            Flexible(
-              child: Semantics(
-                header: true,
-                child: const Text(
-                  AppInfo.name,
-                  key: ValueKey<String>('app-name'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AssistantColors.textStrong,
+            const _RelayGlyph(),
+            const SizedBox(width: 10),
+            // Название сжимается последним: версия — своей ширины рядом.
+            Expanded(
+              child: Row(
+                children: <Widget>[
+                  Flexible(
+                    child: Semantics(
+                      header: true,
+                      child: const Text(
+                        AppInfo.name,
+                        key: ValueKey<String>('app-name'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                          color: AssistantColors.textStrong,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Semantics(
+                      label: 'Версия ${AppInfo.version}',
+                      excludeSemantics: true,
+                      child: Text(
+                        AppInfo.version,
+                        key: const ValueKey<String>('app-version'),
+                        maxLines: 1,
+                        style: technicalTextStyle.copyWith(
+                          fontSize: 13,
+                          color: AssistantColors.faint,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 6),
-            Semantics(
-              label: 'Версия ${AppInfo.version}',
-              excludeSemantics: true,
-              child: const Text(
-                AppInfo.version,
-                key: ValueKey<String>('app-version'),
-                maxLines: 1,
-                style: technicalTextStyle,
-              ),
-            ),
-            const Spacer(),
             if (onCollapse != null)
               IconButton(
                 key: const Key('sidebar-collapse'),
                 tooltip: 'Свернуть панель',
                 onPressed: onCollapse,
-                icon: const Icon(Icons.keyboard_double_arrow_left),
+                color: AssistantColors.icon,
+                icon: const Icon(Icons.view_sidebar_outlined, size: 20),
               ),
           ],
         ),
@@ -628,7 +939,7 @@ final class _TitlePlate extends StatelessWidget {
   }
 }
 
-/// Карточка «Мой Связной»: знаки Л и Н внахлёст, название, шеврон.
+/// Карточка «Мой Связной»: знаки помощников внахлёст, название, шеврон.
 final class _MyRelayCard extends StatelessWidget {
   const _MyRelayCard({required this.onTap, required this.wide});
 
@@ -637,46 +948,49 @@ final class _MyRelayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = wide ? 32.0 : 36.0;
+    final size = wide ? 34.0 : 36.0;
     return Semantics(
       button: true,
-      label: 'Мой Связной',
+      label: AppInfo.hubName,
       onTap: onTap,
       excludeSemantics: true,
       child: Material(
         color: AssistantColors.raised,
         shape: RoundedRectangleBorder(
           side: const BorderSide(color: AssistantColors.borderSoft),
-          borderRadius: BorderRadius.circular(wide ? 14 : 16),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: InkWell(
           key: const Key('drawer-my-relay'),
           onTap: onTap,
-          borderRadius: BorderRadius.circular(wide ? 14 : 16),
+          borderRadius: BorderRadius.circular(16),
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: wide ? 72 : 80),
+            constraints: BoxConstraints(minHeight: wide ? 72 : 88),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+              padding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: wide ? 10 : 12,
+              ),
               child: Row(
                 children: <Widget>[
                   RelayAvatars(size: size),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Мой Связной',
+                      AppInfo.hubName,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: wide ? 16 : 17,
+                        fontSize: wide ? 16 : 18,
                         fontWeight: FontWeight.w600,
                         height: 1.3,
                         color: AssistantColors.textStrong,
                       ),
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.chevron_right,
-                    size: 20,
+                    size: wide ? 18 : 20,
                     color: AssistantColors.icon,
                   ),
                 ],
@@ -728,77 +1042,74 @@ final class RelayAvatars extends StatelessWidget {
   }
 }
 
+/// Разделы строками во всю ширину: значок в скруглённом квадрате,
+/// название, справа — счётчик.
 final class _Sections extends StatelessWidget {
   const _Sections({
     required this.active,
+    required this.counts,
+    required this.wide,
     required this.onTasks,
     required this.onProjects,
     required this.onPlanning,
   });
 
   final String? active;
+  final SectionCounts counts;
+  final bool wide;
   final VoidCallback onTasks;
   final VoidCallback onProjects;
   final VoidCallback onPlanning;
 
   @override
   Widget build(BuildContext context) {
-    final items = <(String, String, IconData, VoidCallback)>[
-      ('tasks', 'Задачи', Icons.task_alt, onTasks),
-      ('projects', 'Проекты', Icons.tag, onProjects),
-      ('planning', 'Планирование', Icons.calendar_today_outlined, onPlanning),
+    final overdue = counts.overdue;
+    final items = <(String, String, IconData, int?, String?, VoidCallback)>[
+      (
+        'tasks',
+        'Задачи',
+        Icons.checklist,
+        counts.tasks,
+        overdue > 0
+            ? '$overdue ${ruPlural(overdue, 'просрочена', 'просрочены', 'просрочено')}'
+            : null,
+        onTasks,
+      ),
+      (
+        'projects',
+        'Проекты',
+        Icons.folder_outlined,
+        counts.projects,
+        null,
+        onProjects,
+      ),
+      (
+        'planning',
+        'Планирование',
+        Icons.calendar_today_outlined,
+        counts.planning,
+        null,
+        onPlanning,
+      ),
     ];
     return Semantics(
       container: true,
       label: 'Разделы',
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          for (final (index, (id, label, icon, onTap)) in items.indexed) ...[
-            if (index > 0) const SizedBox(width: 6),
-            Expanded(
-              child: Semantics(
-                button: true,
-                selected: active == id,
-                label: label,
-                onTap: onTap,
-                excludeSemantics: true,
-                child: InkWell(
-                  key: Key('nav-$id'),
-                  onTap: onTap,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    constraints: const BoxConstraints(minHeight: 52),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: active == id ? AssistantColors.raised : null,
-                      border: Border.all(color: AssistantColors.divider),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        Icon(icon, size: 18),
-                        const SizedBox(height: 2),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              height: 1.3,
-                              color: AssistantColors.text,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+          for (final (index, (id, label, icon, count, alert, onTap))
+              in items.indexed) ...<Widget>[
+            if (index > 0) const SizedBox(height: 2),
+            _SectionRow(
+              id: id,
+              label: label,
+              icon: icon,
+              count: count,
+              alert: alert,
+              selected: active == id,
+              wide: wide,
+              onTap: onTap,
             ),
           ],
         ],
@@ -807,11 +1118,173 @@ final class _Sections extends StatelessWidget {
   }
 }
 
+final class _SectionRow extends StatelessWidget {
+  const _SectionRow({
+    required this.id,
+    required this.label,
+    required this.icon,
+    required this.count,
+    required this.alert,
+    required this.selected,
+    required this.wide,
+    required this.onTap,
+  });
+
+  final String id;
+  final String label;
+  final IconData icon;
+  final int? count;
+
+  /// Вторая строка цветом опасности: «1 просрочена».
+  final String? alert;
+  final bool selected;
+  final bool wide;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final box = wide ? 32.0 : 36.0;
+    final semantics = <String>[
+      label,
+      if (count != null) '$count',
+      if (alert != null) alert!,
+    ].join(', ');
+    // Просрочка — счётчик заметнее (рамка и текст ярче).
+    final loud = alert != null;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: semantics,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: InkWell(
+        key: Key('nav-$id'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          constraints: BoxConstraints(minHeight: wide ? 50 : 56),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? AssistantColors.raised : null,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: box,
+                height: box,
+                decoration: BoxDecoration(
+                  color: AssistantColors.raised,
+                  border: Border.all(color: AssistantColors.borderSoft),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  icon,
+                  size: wide ? 18 : 20,
+                  color: AssistantColors.icon,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: wide ? 15 : 16,
+                        fontWeight: FontWeight.w500,
+                        height: 1.35,
+                        color: AssistantColors.textStrong,
+                      ),
+                    ),
+                    if (alert != null)
+                      Text(
+                        alert!,
+                        key: Key('nav-$id-alert'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          height: 1.3,
+                          color: AssistantColors.danger,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (count != null) ...<Widget>[
+                const SizedBox(width: 10),
+                DecoratedBox(
+                  key: Key('nav-$id-count'),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: loud
+                          ? AssistantColors.border
+                          : AssistantColors.borderSoft,
+                    ),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: SizedBox(
+                    height: 26,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minWidth: 28),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Center(
+                          widthFactor: 1,
+                          child: MediaQuery.withNoTextScaling(
+                            child: Text(
+                              '$count',
+                              maxLines: 1,
+                              style: technicalTextStyle.copyWith(
+                                fontSize: 13,
+                                height: 1.2,
+                                fontWeight: FontWeight.w500,
+                                color: loud
+                                    ? AssistantColors.textStrong
+                                    : AssistantColors.muted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const TextStyle _groupStyle = TextStyle(
+  fontSize: 14,
+  fontWeight: FontWeight.w600,
+  height: 1.3,
+  letterSpacing: .14,
+  color: AssistantColors.muted,
+);
+
 final class _ListHeader extends StatelessWidget {
-  const _ListHeader(this.text, {super.key, this.live = false});
+  const _ListHeader(
+    this.text, {
+    super.key,
+    this.live = false,
+    this.icon,
+    this.top = 8,
+  });
 
   final String text;
   final bool live;
+  final IconData? icon;
+  final double top;
 
   @override
   Widget build(BuildContext context) {
@@ -819,17 +1292,86 @@ final class _ListHeader extends StatelessWidget {
       header: true,
       liveRegion: live,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 8, 8, 2),
-        child: Text(text, style: technicalTextStyle),
+        padding: EdgeInsets.fromLTRB(10, top, 10, 6),
+        child: Row(
+          children: <Widget>[
+            if (icon != null) ...<Widget>[
+              Icon(icon, size: 14, color: AssistantColors.muted),
+              const SizedBox(width: 6),
+            ],
+            Flexible(child: Text(text, style: _groupStyle)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Свёрнутая на компьютере группа: «Вчера 2 ›».
+final class _GroupToggle extends StatelessWidget {
+  const _GroupToggle({
+    super.key,
+    required this.label,
+    required this.count,
+    required this.open,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final bool open;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Semantics(
+        header: true,
+        button: true,
+        expanded: open,
+        label: '$label, $count',
+        onTap: onTap,
+        excludeSemantics: true,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: <Widget>[
+                  Expanded(child: Text(label, style: _groupStyle)),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$count',
+                    style: technicalTextStyle.copyWith(
+                      fontSize: 13,
+                      color: AssistantColors.faint,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    open ? Icons.keyboard_arrow_down : Icons.chevron_right,
+                    size: 16,
+                    color: AssistantColors.icon,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
 final class _ExtensionRow extends StatelessWidget {
-  const _ExtensionRow({required this.entry});
+  const _ExtensionRow({required this.entry, required this.wide});
 
   final ExtensionEntry entry;
+  final bool wide;
 
   @override
   Widget build(BuildContext context) {
@@ -841,44 +1383,252 @@ final class _ExtensionRow extends StatelessWidget {
       child: InkWell(
         key: Key('drawer-extension-${entry.id}'),
         onTap: entry.onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44),
+          constraints: BoxConstraints(minHeight: wide ? 46 : 52),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                final half = constraints.maxWidth.isFinite
+                    ? constraints.maxWidth / 2
+                    : double.infinity;
+                return Row(
+                  children: <Widget>[
+                    if (entry.icon != null) ...<Widget>[
+                      Icon(entry.icon, size: 18, color: AssistantColors.icon),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      child: Text(
+                        entry.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: wide ? 15 : 16,
+                          height: 1.35,
+                          color: AssistantColors.textStrong,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Состояние прижато к правому краю строки (как в макете «Ж1»)
+                    // и занимает не больше половины ширины: длинная подпись
+                    // обрезается многоточием, а не сдвигает точку к середине.
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: half),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          if (entry.dot) ...<Widget>[
+                            Container(
+                              key: Key('drawer-extension-dot-${entry.id}'),
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: entry.dotColor ?? entry.statusColor,
+                              ),
+                            ),
+                            const SizedBox(width: 7),
+                          ],
+                          Flexible(
+                            child: Text(
+                              entry.status,
+                              key: Key('drawer-extension-status-${entry.id}'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: technicalTextStyle.copyWith(
+                                fontSize: 13,
+                                color: entry.statusColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Строка сессии: знак ответившего, название, время, вторая строка —
+/// последний ответ. Долгое нажатие и правая кнопка — меню действий; на
+/// компьютере при наведении или фокусе справа ещё и «⋯».
+final class _SessionRow extends StatefulWidget {
+  const _SessionRow({
+    required this.entry,
+    required this.wide,
+    required this.reduceMotion,
+    required this.onTap,
+    required this.onAction,
+  });
+
+  final SessionEntry entry;
+  final bool wide;
+  final bool reduceMotion;
+  final VoidCallback onTap;
+  final ValueChanged<SessionAction>? onAction;
+
+  @override
+  State<_SessionRow> createState() => _SessionRowState();
+}
+
+final class _SessionRowState extends State<_SessionRow> {
+  bool _hover = false;
+  bool _focused = false;
+  bool _held = false;
+
+  SessionEntry get _entry => widget.entry;
+
+  bool get _acts => _entry.canAct && widget.onAction != null;
+
+  /// Фокус строки: после меню он возвращается сюда, а не в начало панели
+  /// («⋯», с которого открыли меню, к тому времени уже скрыт).
+  final FocusNode _rowFocus = FocusNode(debugLabel: 'session-row');
+
+  @override
+  void dispose() {
+    _rowFocus.dispose();
+    super.dispose();
+  }
+
+  void _restoreFocus() {
+    if (!mounted) return;
+    _rowFocus.requestFocus();
+    // Навигатор после закрытия маршрута возвращает фокус сам — на кнопку,
+    // которой уже нет; ставим его на строку ещё раз после кадра.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _rowFocus.context != null) _rowFocus.requestFocus();
+    });
+  }
+
+  Future<void> _openMenu() async {
+    final onAction = widget.onAction;
+    if (!_acts || onAction == null) return;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return;
+    final rect = box.localToGlobal(Offset.zero) & box.size;
+    unawaited(HapticFeedback.mediumImpact());
+    setState(() => _held = true);
+    final action = await showSessionHoldMenu(
+      context,
+      rowRect: rect,
+      title: _entry.title,
+      pinned: _entry.pinned,
+      canRename: _entry.canRename,
+      reduceMotion: widget.reduceMotion,
+      liftedRow: SessionRowBody(entry: _entry, wide: widget.wide),
+    );
+    if (!mounted) return;
+    setState(() => _held = false);
+    _restoreFocus();
+    if (action != null) onAction(action);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = _entry;
+    final label = 'Сессия «${entry.title}»';
+    final onAction = widget.onAction;
+    final showMore = widget.wide && _acts && (_hover || _focused);
+    final row = InkWell(
+      key: entry.itemKey,
+      focusNode: _rowFocus,
+      onTap: widget.onTap,
+      onLongPress: _acts ? _openMenu : null,
+      onSecondaryTap: _acts ? _openMenu : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: entry.active ? AssistantColors.raised : null,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Opacity(
+          // Строка «поднята» в меню действий: на месте — пусто.
+          opacity: _held ? 0 : 1,
+          child:
+              SessionRowBody(entry: entry, wide: widget.wide, more: showMore),
+        ),
+      ),
+    );
+    // Фокус на строке или на её «⋯»: кнопка видна, пока фокус внутри.
+    // С клавиатуры меню открывают Shift+F10 и клавиша меню — и в узкой
+    // панели, где «⋯» нет.
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        if (_acts) ...<ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.f10, shift: true): _openMenu,
+          const SingleActivator(LogicalKeyboardKey.contextMenu): _openMenu,
+        },
+      },
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (bool focus) => setState(() => _focused = focus),
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _hover = true),
+          onExit: (_) => setState(() => _hover = false),
+          child: Tooltip(
+            message:
+                entry.unread ? '${entry.title} — новое сообщение' : entry.title,
+            waitDuration: const Duration(milliseconds: 600),
+            child: Stack(
               children: <Widget>[
-                Expanded(
-                  child: Text(
-                    entry.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AssistantColors.text),
-                  ),
+                Semantics(
+                  button: true,
+                  selected: entry.active,
+                  label: <String>[
+                    label,
+                    if (entry.pinned) 'закреплена',
+                    if (entry.unread) 'новое сообщение',
+                    if (entry.preview != null) entry.preview!,
+                  ].join(', '),
+                  onTap: widget.onTap,
+                  onLongPress: _acts ? _openMenu : null,
+                  customSemanticsActions: !_acts || onAction == null
+                      ? null
+                      : <CustomSemanticsAction, VoidCallback>{
+                          if (entry.canRename)
+                            const CustomSemanticsAction(label: 'Переименовать'):
+                                () => onAction(SessionAction.rename),
+                          CustomSemanticsAction(
+                            label: entry.pinned ? 'Открепить' : 'Закрепить',
+                          ): () => onAction(SessionAction.pin),
+                          const CustomSemanticsAction(label: 'Удалить'): () =>
+                              onAction(SessionAction.delete),
+                        },
+                  excludeSemantics: true,
+                  child: row,
                 ),
-                const SizedBox(width: 12),
-                if (entry.dot) ...<Widget>[
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: entry.statusColor,
+                if (showMore)
+                  Positioned(
+                    right: 2,
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: IconButton(
+                        key: Key('chat-more-${entry.id}'),
+                        tooltip: 'Действия с сессией',
+                        onPressed: _openMenu,
+                        iconSize: 20,
+                        color: AssistantColors.icon,
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(44, 44),
+                          backgroundColor: entry.active
+                              ? AssistantColors.raised
+                              : AssistantColors.sidebar,
+                        ),
+                        icon: const Icon(Icons.more_horiz),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 6),
-                ],
-                Flexible(
-                  child: Text(
-                    entry.status,
-                    key: Key('drawer-extension-status-${entry.id}'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: technicalTextStyle.copyWith(
-                      color: entry.statusColor,
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -888,66 +1638,119 @@ final class _ExtensionRow extends StatelessWidget {
   }
 }
 
-final class _SessionRow extends StatelessWidget {
-  const _SessionRow({required this.entry, required this.onTap});
+/// Содержимое строки сессии без жестов: в списке и «поднятой» над меню
+/// действий.
+final class SessionRowBody extends StatelessWidget {
+  const SessionRowBody({
+    super.key,
+    required this.entry,
+    required this.wide,
+    this.more = false,
+  });
 
   final SessionEntry entry;
-  final VoidCallback onTap;
+  final bool wide;
+
+  /// Справа — место под «⋯» (время скрыто).
+  final bool more;
 
   @override
   Widget build(BuildContext context) {
-    final color = entry.active
-        ? AssistantColors.textStrong
-        : entry.muted
-            ? AssistantColors.muted
-            : AssistantColors.text;
-    final label = 'Сессия «${entry.title}»';
-    return Tooltip(
-      message: entry.unread ? '${entry.title} — новое сообщение' : entry.title,
-      child: Semantics(
-        button: true,
-        selected: entry.active,
-        label: entry.unread ? '$label, новое сообщение' : label,
-        onTap: onTap,
-        excludeSemantics: true,
-        child: InkWell(
-          key: entry.itemKey,
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 44),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: entry.active ? AssistantColors.raised : null,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    entry.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: color),
-                  ),
+    final mark = wide ? 26.0 : 28.0;
+    final persona = entry.persona;
+    final titleColor =
+        entry.muted ? AssistantColors.muted : AssistantColors.textStrong;
+    final time = Text(
+      entry.time,
+      maxLines: 1,
+      style: technicalTextStyle.copyWith(
+        fontSize: 13,
+        color: AssistantColors.faint,
+      ),
+    );
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: wide ? 58 : 64),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 10, vertical: wide ? 7 : 8),
+        child: Row(
+          children: <Widget>[
+            if (persona != null)
+              PersonaMark(persona: persona, size: mark)
+            else
+              // Ещё никто не отвечал (новая сессия): вместо пустой рамки —
+              // тихий знак «новое», ширина колонки та же.
+              SizedBox(
+                width: mark,
+                height: mark,
+                child: Icon(
+                  Icons.edit_outlined,
+                  size: mark * 0.7,
+                  color: AssistantColors.faint,
                 ),
-                if (entry.unread) ...<Widget>[
-                  const SizedBox(width: 8),
-                  Container(
-                    key: entry.dotKey,
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: AssistantColors.textStrong,
-                      shape: BoxShape.circle,
-                    ),
+              ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          entry.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: wide ? 15 : 16,
+                            fontWeight: FontWeight.w500,
+                            height: 1.35,
+                            color: titleColor,
+                          ),
+                        ),
+                      ),
+                      if (entry.unread) ...<Widget>[
+                        const SizedBox(width: 8),
+                        Container(
+                          key: entry.dotKey,
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: AssistantColors.textStrong,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 10),
+                      // «⋯» встаёт на место времени: ширина строки не
+                      // прыгает.
+                      Visibility(
+                        visible: !more,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        maintainState: true,
+                        child: time,
+                      ),
+                    ],
                   ),
+                  if (entry.preview != null) ...<Widget>[
+                    const SizedBox(height: 1),
+                    Text(
+                      entry.preview!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: wide ? 13 : 14,
+                        height: 1.4,
+                        color: AssistantColors.muted,
+                      ),
+                    ),
+                  ],
                 ],
-                const SizedBox(width: 12),
-                Text(entry.time, style: technicalTextStyle),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -977,7 +1780,7 @@ final class _HitRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: Container(
           constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -993,7 +1796,7 @@ final class _HitRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // Время сессии, как в «Недавних сессиях» (12:40, вчера).
+                  // Время сессии, как в списке сессий (12:40, вчера).
                   Text(time, style: technicalTextStyle),
                 ],
               ),

@@ -126,6 +126,11 @@ void main() {
       final sidebar = find.byKey(const Key('app-sidebar'));
       final left =
           sidebar.evaluate().isEmpty ? 0.0 : tester.getRect(sidebar).right;
+      // Меню колонкой — 312 (макет «Ж1»).
+      if (sidebar.evaluate().isNotEmpty) {
+        expect(tester.getSize(sidebar).width, sidebarWidth, reason: label);
+        expect(sidebarWidth, 312);
+      }
       final right =
           panel.evaluate().isEmpty ? size.width : tester.getRect(panel).left;
       final centre = (left + right) / 2;
@@ -179,6 +184,25 @@ void main() {
       expect(tester.getRect(bubble).right, moreOrLessEquals(composer.right));
     });
   }
+
+  testWidgets('выдвижное меню: до 360, справа полоса не уже 30',
+      (tester) async {
+    for (final (width, drawer) in <(double, double)>[
+      (390, 360),
+      (430, 360),
+      (320, 290),
+    ]) {
+      await _pump(tester, Size(width, 844));
+      tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byKey(const Key('app-sidebar'))).width,
+        drawer,
+        reason: '$width',
+      );
+      expect(tester.takeException(), isNull);
+    }
+  });
 
   testWidgets('карточка хроники при наведении — под хроникой, над лентой',
       (tester) async {

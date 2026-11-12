@@ -146,7 +146,7 @@ void main() {
       'Проекты',
       'Задачи',
       'Планирование',
-      'Недавние сессии',
+      'Сегодня',
       'Новая сессия',
     ]) {
       expect(find.text(title), findsWidgets, reason: title);
@@ -208,7 +208,9 @@ void main() {
     await _say(tester, AssistantController.exampleCommand);
 
     expect(
-      find.text('Создал задачу «Позвонить клиенту» на завтра в 11:00.'),
+      outsideDrawer(
+        find.text('Создал задачу «Позвонить клиенту» на завтра в 11:00.'),
+      ),
       findsOneWidget,
     );
     expect(find.byKey(const Key('selected-task-strip')), findsOneWidget);
@@ -433,7 +435,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
-    expect(find.text('Активных задач пока нет.'), findsOneWidget);
+    expect(
+      outsideDrawer(find.text('Активных задач пока нет.')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('«+» показывает диски и шаблоны команд', (tester) async {
@@ -838,13 +843,16 @@ void main() {
       final h = await _pump(tester, settings: store, calculator: true);
 
       await _say(tester, '2+2');
-      expect(find.text('2 + 2 = 4'), findsOneWidget);
+      expect(outsideDrawer(find.text('2 + 2 = 4')), findsOneWidget);
       await _say(tester, 'Добавь задачу купить хлеб');
       final selected = h.assistant.selectedTaskId;
       expect(selected, isNotNull);
       // Задачи ждут «да» на свой вопрос.
       await _say(tester, 'я купил хлеб');
-      expect(find.textContaining('Отметить «Купить хлеб»'), findsOneWidget);
+      expect(
+        outsideDrawer(find.textContaining('Отметить «Купить хлеб»')),
+        findsOneWidget,
+      );
       await tester.enterText(
         find.byKey(const Key('assistant-input')),
         'черновик',
@@ -855,7 +863,11 @@ void main() {
 
       expect(h.assistant.extensions.isEnabled('calc'), isFalse);
       expect((await store.load()).disabledExtensions, <String>{'calc'});
-      expect(find.text('2 + 2 = 4'), findsOneWidget, reason: 'история');
+      expect(
+        outsideDrawer(find.text('2 + 2 = 4')),
+        findsOneWidget,
+        reason: 'история',
+      );
       expect(find.text('Добавь задачу купить хлеб'), findsWidgets);
       expect(h.assistant.selectedTaskId, selected, reason: 'выбор');
       expect(find.byKey(const Key('selected-task-strip')), findsOneWidget);
@@ -878,7 +890,7 @@ void main() {
       await toggleCalculator(tester);
       expect((await store.load()).disabledExtensions, isEmpty);
       await _say(tester, '3+3');
-      expect(find.text('3 + 3 = 6'), findsOneWidget);
+      expect(outsideDrawer(find.text('3 + 3 = 6')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

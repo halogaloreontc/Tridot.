@@ -731,6 +731,180 @@ void main() {
     expect(await exit, AppExitResponse.exit);
     expect(exited, isTrue);
   });
+
+  group('действия с сессией из меню', () {
+    Future<void> hold(WidgetTester tester, Finder row) async {
+      await openDrawerIfNeeded(tester);
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.longPress(row);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'переименовать: своё название в меню, поиске и после '
+        'перезапуска', (tester) async {
+      final store = InMemoryChatStore();
+      await _pump(tester, chats: store, size: const Size(390, 844));
+      await _say(tester, '2+2');
+      final id = onlySessionId(store.chatIds);
+      final row = find.byKey(Key('chat-$id'));
+      await hold(tester, row);
+      await tester.tap(find.byKey(const Key('session-menu-rename')));
+      await tester.pumpAndSettle();
+      final field = find.byKey(const Key('rename-field'));
+      expect(tester.widget<TextField>(field).controller!.text, '2+2');
+      await tester.enterText(field, '   ');
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('rename-save')))
+            .onPressed,
+        isNull,
+        reason: 'пустое не сохраняется',
+      );
+      await tester.enterText(field, '  Счёт   на складе ');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('rename-save')));
+      await tester.pumpAndSettle();
+      expect(drawerEntry('Счёт на складе'), findsOneWidget);
+      expect(drawerEntry('2+2'), findsNothing);
+      // Меню осталось открытым.
+      expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('session-search')));
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('session-search')), 'складе');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(find.byKey(Key('search-hit-$id')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('session-search-cancel')));
+      await tester.pumpAndSettle();
+
+      // Перезапуск: новый экран над тем же хранилищем.
+      await _pump(
+        tester,
+        chats: store,
+        size: const Size(390, 844),
+        key: UniqueKey(),
+      );
+      await openDrawerIfNeeded(tester);
+      expect(drawerEntry('Счёт на складе'), findsOneWidget);
+    });
+
+    testWidgets('закрепить: «Закреплённые» сверху, открепить — обратно',
+        (tester) async {
+      final store = InMemoryChatStore();
+      await _pump(tester, chats: store);
+      await _say(tester, '2+2');
+      final first = onlySessionId(store.chatIds);
+      await tapInDrawer(tester, const Key('new-session'));
+      await _say(tester, '3+3');
+      expect(find.byKey(const Key('drawer-group-pinned')), findsNothing);
+      await hold(tester, find.byKey(Key('chat-$first')));
+      expect(find.text('Закрепить'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('session-menu-pin')));
+      await tester.pumpAndSettle();
+      final pinned = find.byKey(const Key('drawer-group-pinned'));
+      expect(pinned, findsOneWidget);
+      expect(
+        tester.getRect(find.byKey(Key('chat-$first'))).top,
+        lessThan(
+          tester.getRect(find.byKey(const Key('drawer-group-today'))).top,
+        ),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      final saved = (await store.loadIndex())
+          .singleWhere((ChatThread t) => t.id == first);
+      expect(saved.pinned, isTrue);
+      // Правая кнопка мыши на компьютере — то же меню.
+      await tester.tap(find.byKey(Key('chat-$first')), buttons: 2);
+      await tester.pumpAndSettle();
+      expect(find.text('Открепить'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('session-menu-pin')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('drawer-group-pinned')), findsNothing);
+    });
+
+    testWidgets('удалить открытую: открыта новая пустая, меню не закрылось',
+        (tester) async {
+      final store = InMemoryChatStore();
+      await _pump(tester, chats: store, size: const Size(390, 844));
+      await _say(tester, '2+2');
+      final id = onlySessionId(store.chatIds);
+      await hold(tester, find.byKey(Key('chat-$id')));
+      await tester.tap(find.byKey(const Key('session-menu-delete')));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<Text>(find.byKey(const Key('delete-text'))).data,
+        'Удалить сессию «2+2»? Это нельзя отменить.',
+      );
+      // «Отмена» — ничего не удалено.
+      await tester.tap(find.byKey(const Key('delete-cancel')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(Key('chat-$id')), findsOneWidget);
+      await hold(tester, find.byKey(Key('chat-$id')));
+      await tester.tap(find.byKey(const Key('session-menu-delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(Key('chat-$id')), findsNothing);
+      expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
+      expect(store.chatIds, isEmpty);
+      expect(store.archivedIds, isEmpty);
+      await tester.tapAt(const Offset(380, 400));
+      await tester.pumpAndSettle();
+      expect(_history(tester), isEmpty, reason: 'открыта пустая сессия');
+      expect(find.byKey(const Key('session-hero')), findsOneWidget);
+    });
+
+    testWidgets('удалили сессию, где создали задачу: ссылки «из сессии» нет',
+        (tester) async {
+      final store = InMemoryChatStore();
+      final h = await _pump(tester, chats: store);
+      await _say(tester, 'Добавь задачу «Купить хлеб»');
+      final bread = await h.byTitle('Купить хлеб');
+      final id =
+          store.chatIds.singleWhere((String c) => c.startsWith('session:'));
+      await _openFromTasks(tester, bread);
+      expect(find.byKey(const Key('chat-origin-link')), findsOneWidget);
+      await hold(tester, find.byKey(Key('chat-$id')));
+      await tester.tap(find.byKey(const Key('session-menu-delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(_headerTitle(tester), 'Купить хлеб', reason: 'чат задачи открыт');
+      expect(find.byKey(const Key('chat-origin-link')), findsNothing);
+      expect(_history(tester), isNotEmpty, reason: 'копии в чате задачи целы');
+    });
+
+    testWidgets('удалить переписку задачи: задача остаётся, чат — пустой',
+        (tester) async {
+      final store = InMemoryChatStore();
+      final h = await _pump(tester, chats: store);
+      await _say(tester, 'Добавь задачу «Купить хлеб»');
+      final bread = await h.byTitle('Купить хлеб');
+      final row = find.byKey(Key('chat-${bread.id}'));
+      await hold(tester, row);
+      expect(find.byKey(const Key('session-menu-rename')), findsNothing);
+      await tester.tap(find.byKey(const Key('session-menu-delete')));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<Text>(find.byKey(const Key('delete-text'))).data,
+        'Удалить сессию «Купить хлеб»? Это нельзя отменить. '
+        'Задача останется.',
+      );
+      await tester.tap(find.byKey(const Key('delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(row, findsNothing);
+      expect((await h.byTitle('Купить хлеб')).isActive, isTrue);
+      expect(store.chatIds, isNot(contains('task:${bread.id}')));
+      // Ссылка из сессии на чат задачи по-прежнему открывает его — пустым.
+      await _openFromTasks(tester, bread);
+      expect(_headerTitle(tester), 'Купить хлеб');
+      expect(_history(tester), isEmpty);
+    });
+  });
 }
 
 /// Хранилище, у которого запись заканчивается по команде теста.
@@ -751,6 +925,9 @@ final class _GatedStore implements ChatStore {
 
   @override
   Future<void> delete(String chatId) => _inner.delete(chatId);
+
+  @override
+  Future<void> erase(String chatId) => _inner.erase(chatId);
 
   @override
   Future<void> clearAll() => _inner.clearAll();

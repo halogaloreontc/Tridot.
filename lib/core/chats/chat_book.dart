@@ -1,14 +1,57 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:characters/characters.dart';
+
 import '../models/action_card.dart';
 import '../services/clock.dart';
 import 'chat_models.dart';
+import 'chat_preview.dart';
 import 'chat_search.dart';
 import 'chat_store.dart';
 
 /// Карточка действия, которая ждёт «Подтвердить»: где она и какая.
 typedef PendingCard = ({String chatId, String messageId, ChatMessage message});
+
+/// Группа сессии в меню по дню последней активности.
+enum SessionGroup {
+  /// Сегодня.
+  today,
+
+  /// Вчера.
+  yesterday,
+
+  /// 2–6 дней назад: «На неделе».
+  week,
+
+  /// 7 дней назад и раньше.
+  earlier,
+}
+
+/// Группа для времени [at] относительно [now] — по местным календарным
+/// датам, а не по 24 часам: в 00:05 вчерашний вечер — уже «Вчера».
+SessionGroup groupOf(DateTime at, DateTime now) {
+  final a = at.toLocal();
+  final n = now.toLocal();
+  // Через полдень: переход на летнее время не сдвигает разницу в днях.
+  final days = DateTime(n.year, n.month, n.day, 12)
+      .difference(DateTime(a.year, a.month, a.day, 12))
+      .inHours;
+  final diff = (days / 24).round();
+  if (diff <= 0) return SessionGroup.today;
+  if (diff == 1) return SessionGroup.yesterday;
+  if (diff < 7) return SessionGroup.week;
+  return SessionGroup.earlier;
+}
+
+/// Сессии меню по группам: закреплённые отдельно, остальные — по дню.
+typedef SessionGroups = ({
+  List<ChatThread> pinned,
+  List<ChatThread> today,
+  List<ChatThread> yesterday,
+  List<ChatThread> week,
+  List<ChatThread> earlier,
+});
 
 /// Все чаты приложения: сессии и чаты задач, какой открыт и куда ведёт
 /// «назад» (ADR-010, ADR-015).
@@ -55,8 +98,9 @@ final class ChatBook {
   /// Сколько чатов задач показывает боковое меню.
   static const int recentLimit = 5;
 
-  /// Сколько сессий показывает меню в «Недавних сессиях».
-  static const int sessionsLimit = 20;
+  /// Сколько сессий показывает меню (все группы вместе, без
+  /// закреплённых).
+  static const int sessionsLimit = 50;
 
   /// Длина названия сессии из первой команды.
   static const int titleLimit = 40;
@@ -201,6 +245,7 @@ final class ChatBook {
       unread: meta.unread,
       messages: messages,
     );
+    _notePreview(session);
     _chats[id] = session;
     // Сначала новая сессия на диске, потом — архив старого файла.
     await _store.save(session);
@@ -336,11 +381,26 @@ final class ChatBook {
   /// Добавляет [message] в чат [chatId]. Если чат сейчас не открыт и пишет
   /// помощник, чат отмечается непрочитанным ([notify]). Чата нет (задачу
   /// удалили) — сообщение пропадает, возвращается `false`.
-  bool append(String chatId, ChatMessage message, {bool notify = true}) {
+  ///
+  /// Ответ помощника становится второй строкой сессии в меню
+  /// ([ChatThread.preview]); [sensitive] — ответ навыка с секретами
+  /// (пароли): вместо текста — [ChatPreview.secure].
+  bool append(
+    String chatId,
+    ChatMessage message, {
+    bool notify = true,
+    bool sensitive = false,
+  }) {
     final thread = _chats[chatId];
     if (thread == null) return false;
     thread.messages.add(message);
     _trim(thread);
+    final preview = ChatPreview.of(message, sensitive: sensitive);
+    if (preview != null) {
+      thread
+        ..preview = preview
+        ..lastPersonaId = message.personaId ?? thread.lastPersonaId;
+    }
     if (thread.isSession && thread.title == null && message.fromUser) {
       final title = sessionTitle(message.text);
       if (title.isNotEmpty) thread.title = title;
@@ -363,9 +423,148 @@ final class ChatBook {
     final index =
         thread.messages.indexWhere((ChatMessage m) => m.id == messageId);
     if (index < 0) return false;
+    final old = thread.messages[index];
     thread.messages[index] = message;
+    final lastReply = thread.messages
+        .lastIndexWhere((ChatMessage m) => m.author == ChatAuthor.persona);
+    // Заменили последний ответ: строка в меню — по новому, но защищённая
+    // остаётся защищённой (признак секретов в сообщении не хранится).
+    if (lastReply == index && thread.preview != ChatPreview.secure) {
+      final secure = old.secureCard != null;
+      thread.preview =
+          ChatPreview.of(message, sensitive: secure) ?? thread.preview;
+    }
     _save(thread);
     return true;
+  }
+
+  /// Превью и последний ответивший по сообщениям чата [thread] из прежних
+  /// версий (перенос прежнего «Главного», [backfillPreviews]).
+  ///
+  /// В файле не сказано, был ли ответ навыка с секретами (признак живёт
+  /// только при [append], а карточка «Паролей» не сохраняется): текст
+  /// старого ответа может назвать запись хранилища («Пароль от «…» был
+  /// показан»). Поэтому из старого файла берётся только нейтральная фраза
+  /// для карточки действия или списка, а у текстового ответа второй строки
+  /// нет — она появится со следующим ответом (ADR-010).
+  static void _notePreview(ChatThread thread, [List<ChatMessage>? stored]) {
+    final messages = stored ?? thread.messages;
+    for (var i = messages.length - 1; i >= 0; i--) {
+      final message = messages[i];
+      if (message.author != ChatAuthor.persona) continue;
+      thread.lastPersonaId = message.personaId ?? thread.lastPersonaId;
+      if (message.card != null || message.checklist != null) {
+        thread.preview = ChatPreview.of(message);
+      }
+      return;
+    }
+  }
+
+  /// Вторая строка для чатов из прежних версий (в index.json её нет):
+  /// по последнему ответу помощника из файла — знак ответившего и
+  /// нейтральная фраза карточки, текст не пересказывается
+  /// ([_notePreview]). Только в памяти — на диск это попадёт со следующей
+  /// записью чата. Не больше [limit] чатов, свежие первыми. Возвращает
+  /// `true`, если что-то добавилось.
+  Future<bool> backfillPreviews({int limit = sessionsLimit}) async {
+    final todo = <ChatThread>[
+      for (final thread in _chats.values)
+        if (!thread.loaded &&
+            thread.preview == null &&
+            thread.messageCount > thread.messages.length)
+          thread,
+    ]..sort(
+        (ChatThread a, ChatThread b) =>
+            b.lastActivityAt.compareTo(a.lastActivityAt),
+      );
+    var changed = false;
+    for (final thread in todo.take(limit)) {
+      List<ChatMessage> stored;
+      try {
+        stored = await _store.loadMessages(thread.id);
+      } on Object {
+        continue;
+      }
+      if (thread.preview != null || !identical(_chats[thread.id], thread)) {
+        continue;
+      }
+      final persona = thread.lastPersonaId;
+      _notePreview(thread, <ChatMessage>[...stored, ...thread.messages]);
+      changed =
+          changed || thread.preview != null || thread.lastPersonaId != persona;
+    }
+    return changed;
+  }
+
+  /// «Переименовать»: своё название сессии [chatId] вместо первой команды.
+  /// Пробелы схлопываются, края обрезаются; пустое или длиннее
+  /// [ChatThread.customTitleLimit] — `false`. То же, что название по первой
+  /// команде, — своё название снимается. Чаты задач и пустые сессии не
+  /// переименовываются (у задачи название — её собственное).
+  bool rename(String chatId, String title) {
+    final thread = _chats[chatId];
+    if (thread == null || !thread.isSession || thread.messageCount == 0) {
+      return false;
+    }
+    final flat = title.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (flat.isEmpty ||
+        ChatThread.titleLength(flat) > ChatThread.customTitleLimit) {
+      return false;
+    }
+    final custom =
+        flat == (thread.title ?? ChatThread.untitledSession) ? null : flat;
+    if (thread.customTitle != custom) {
+      thread.customTitle = custom;
+      _save(thread);
+    }
+    return true;
+  }
+
+  /// «Закрепить» / «Открепить» чат [chatId]: закреплённые стоят в меню
+  /// отдельно, сверху ([pinned]). Пустой чат не закрепляется (его нет на
+  /// диске).
+  bool setPinned(String chatId, bool pinned) {
+    final thread = _chats[chatId];
+    if (thread == null || thread.messageCount == 0) return false;
+    if (thread.pinned == pinned) return true;
+    thread.pinnedAt = pinned ? _clock.now() : null;
+    _save(thread);
+    return true;
+  }
+
+  /// Закреплённые чаты: последний закреплённый — сверху.
+  List<ChatThread> pinned() => <ChatThread>[
+        for (final thread in _chats.values)
+          if (thread.pinned && thread.messageCount > 0) thread,
+      ]..sort(
+          (ChatThread a, ChatThread b) => b.pinnedAt!.compareTo(a.pinnedAt!),
+        );
+
+  /// «Удалить» в меню: чат [chatId] стирается из книги и хранилища
+  /// насовсем ([ChatStore.erase]), без архива. У чата задачи удаляется
+  /// только переписка — сама задача остаётся, и её чат при следующем
+  /// открытии начнётся пустым. Удалили открытый — открыта пустая сессия.
+  /// Возвращает `true`, если удалён открытый чат.
+  Future<bool> remove(String chatId) async {
+    final id = resolve(chatId);
+    final thread = _chats.remove(id);
+    if (thread == null) return false;
+    _back.removeWhere((String b) => b == id);
+    final wasCurrent = id == _currentId;
+    if (wasCurrent) _currentId = _emptySessionId();
+    // Чтение файла ещё идёт: стирать — после него, иначе отложенная запись
+    // (она проверяет, что чат ещё в книге) или чтение из архива вернули бы
+    // файл.
+    final loading = _loading[id];
+    if (loading != null) await loading;
+    await _store.erase(id);
+    if (id == ChatThread.legacyMainSessionId) {
+      // Сессия из прежнего «Главного»: его файл перенос убрал в архив
+      // (`archive/main.json`) — там та же переписка. «Удалить» стирает и
+      // его, иначе удалённое осталось бы на диске.
+      await _store.erase(ChatThread.mainId);
+    }
+    return wasCurrent;
   }
 
   /// Задачу [taskId] создали в чате [fromChatId] командой [command] с
@@ -452,18 +651,19 @@ final class ChatBook {
       switch (thread.kind) {
         ChatKind.main ||
         ChatKind.session =>
-          thread.title ?? ChatThread.untitledSession,
+          thread.customTitle ?? thread.title ?? ChatThread.untitledSession,
         ChatKind.task => taskTitle ?? 'Задача',
       };
 
   /// Название сессии из команды: до [titleLimit] знаков, с «…».
   static String sessionTitle(String command) {
     final flat = command.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (flat.length <= titleLimit) return flat;
-    return '${flat.substring(0, titleLimit - 1).trimRight()}…';
+    final chars = flat.characters;
+    if (chars.length <= titleLimit) return flat;
+    return '${chars.take(titleLimit - 1).toString().trimRight()}…';
   }
 
-  /// «Недавние сессии» в меню: сессии и чаты задач с сообщениями, свежие
+  /// Сессии меню: сессии и чаты задач с сообщениями, свежие
   /// сверху. Открытый чат — всегда в списке.
   List<ChatThread> sessions({int limit = sessionsLimit}) {
     final list = <ChatThread>[
@@ -476,6 +676,39 @@ final class ChatBook {
     final shown = list.take(limit).toList();
     if (!shown.contains(current)) shown.add(current);
     return shown;
+  }
+
+  /// Меню по группам ([SessionGroup]): закреплённые — отдельно
+  /// ([pinned]), остальные [sessions] — по дню последней активности.
+  /// Открытый чат — всегда в своей группе.
+  SessionGroups groups(DateTime now, {int limit = sessionsLimit}) {
+    final pinned = this.pinned();
+    final rest = <SessionGroup, List<ChatThread>>{
+      for (final group in SessionGroup.values) group: <ChatThread>[],
+    };
+    final list = <ChatThread>[
+      for (final thread in _chats.values)
+        if ((thread.messageCount > 0 || thread.id == _currentId) &&
+            !pinned.contains(thread))
+          thread,
+    ]..sort(
+        (ChatThread a, ChatThread b) =>
+            b.lastActivityAt.compareTo(a.lastActivityAt),
+      );
+    final shown = list.take(limit).toList();
+    if (!pinned.contains(current) && !shown.contains(current)) {
+      shown.add(current);
+    }
+    for (final thread in shown) {
+      rest[groupOf(thread.lastActivityAt, now)]!.add(thread);
+    }
+    return (
+      pinned: pinned,
+      today: rest[SessionGroup.today]!,
+      yesterday: rest[SessionGroup.yesterday]!,
+      week: rest[SessionGroup.week]!,
+      earlier: rest[SessionGroup.earlier]!,
+    );
   }
 
   /// Сколько чатов с хотя бы одной своей командой пользователя (среди

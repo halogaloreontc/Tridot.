@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_info.dart';
 import '../assistant_theme.dart';
 import '../shell/relay_drawer.dart';
 
@@ -141,7 +142,7 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
                       Semantics(
                         header: true,
                         child: Text(
-                          'Мой Связной',
+                          AppInfo.hubName,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(

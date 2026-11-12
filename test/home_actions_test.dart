@@ -346,7 +346,10 @@ void main() {
     final saved = await h.settings.load();
     expect(saved.roleActions, isEmpty);
     await _say(tester, 'проведи приход 318 в 1с');
-    expect(find.textContaining('Действия выключены'), findsOneWidget);
+    expect(
+      outsideDrawer(find.textContaining('Действия выключены')),
+      findsOneWidget,
+    );
     expect(h.actions, isEmpty);
   });
 
