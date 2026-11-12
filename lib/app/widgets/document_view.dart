@@ -70,7 +70,7 @@ final class DocumentView extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Выберите задачу в списке или создайте её командой в чате.',
+            'Выберите задачу в списке или создайте её командой в сессии.',
             textAlign: TextAlign.center,
             style: technicalTextStyle,
           ),

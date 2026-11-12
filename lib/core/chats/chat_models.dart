@@ -3,8 +3,9 @@ import '../models/assistant_types.dart';
 import '../models/bulk.dart';
 import '../models/secure_card.dart';
 
-/// Какой это чат: главный или чат одной задачи.
-enum ChatKind { main, task }
+/// Какой это чат: главный, чат одной задачи или отдельная сессия
+/// («+ Сессия» в меню, ADR-015).
+enum ChatKind { main, task, session }
 
 /// Кто написал сообщение.
 enum ChatAuthor {
@@ -202,7 +203,8 @@ final class ChatMessage {
   }
 }
 
-/// Чат: главный (`main`) или чат задачи (`task:<id задачи>`).
+/// Чат: главный (`main`), чат задачи (`task:<id задачи>`) или сессия
+/// (`session:<микросекунды>_<случайное>`).
 ///
 /// Метаданные (id, вид, задача, адресат, время, «не прочитано», число
 /// сообщений) лежат в `chats/index.json` и в шапке файла чата; сообщения —
@@ -217,6 +219,7 @@ final class ChatThread {
     this.taskId,
     this.parentTaskId,
     this.addressee,
+    this.title,
     this.unread = false,
     List<ChatMessage>? messages,
     this.loaded = true,
@@ -230,6 +233,12 @@ final class ChatThread {
 
   /// Id чата задачи [taskId].
   static String taskChatId(String taskId) => 'task:$taskId';
+
+  /// Префикс id сессии.
+  static const String sessionPrefix = 'session:';
+
+  /// Название новой сессии, пока в ней нет команды.
+  static const String untitledSession = 'Новая сессия';
 
   final String id;
   final ChatKind kind;
@@ -248,6 +257,10 @@ final class ChatThread {
   /// «Кому:» этого чата; `null` — основной помощник.
   String? addressee;
 
+  /// Название сессии: первая команда пользователя (уже без секретов);
+  /// `null` — команды ещё не было. У главного и чатов задач не задаётся.
+  String? title;
+
   /// В чат пришло сообщение, пока он был закрыт (напоминание помощника,
   /// ответ на команду, отправленную перед уходом из чата).
   bool unread;
@@ -264,6 +277,8 @@ final class ChatThread {
 
   bool get isMain => kind == ChatKind.main;
 
+  bool get isSession => kind == ChatKind.session;
+
   /// Сколько сообщений в чате, даже если они ещё не прочитаны.
   int get messageCount =>
       loaded ? messages.length : _storedCount + messages.length;
@@ -277,6 +292,7 @@ final class ChatThread {
         'created_at': createdAt.toIso8601String(),
         'last_activity_at': lastActivityAt.toIso8601String(),
         if (addressee != null) 'addressee': addressee,
+        if (title != null) 'title': title,
         if (unread) 'unread': true,
         'count': messageCount,
       };
@@ -297,8 +313,13 @@ final class ChatThread {
         (taskId is! String || id != taskChatId(taskId))) {
       return null;
     }
+    if (kind == ChatKind.session &&
+        (!id.startsWith(sessionPrefix) || id.length == sessionPrefix.length)) {
+      return null;
+    }
     final parent = json['parent_task_id'];
     final addressee = json['addressee'];
+    final title = json['title'];
     final count = json['count'];
     return ChatThread(
       id: id,
@@ -308,6 +329,9 @@ final class ChatThread {
       createdAt: created,
       lastActivityAt: DateTime.tryParse('${json['last_activity_at']}'),
       addressee: addressee is String ? addressee : null,
+      title: kind == ChatKind.session && title is String && title.isNotEmpty
+          ? title
+          : null,
       unread: json['unread'] == true,
       loaded: false,
       storedCount: count is int && count >= 0 ? count : 0,

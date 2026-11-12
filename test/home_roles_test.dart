@@ -16,6 +16,8 @@ import 'package:local_assistant/core/skills/calculator/calculator_connector.dart
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
+import 'support/home_nav.dart';
+
 import 'connectors/fakes.dart';
 import 'connectors/manifest/fixtures.dart';
 
@@ -99,15 +101,13 @@ Future<void> _say(WidgetTester tester, String text) async {
 }
 
 Future<void> _toggleStorekeeper(WidgetTester tester) async {
-  await tester.tap(find.byKey(const Key('nav-settings')));
-  await tester.pumpAndSettle();
+  await openSettings(tester);
   final tile = find.byKey(const ValueKey<String>('role-storekeeper'));
   await tester.ensureVisible(tile);
   await tester.pumpAndSettle();
   await tester.tap(tile);
   await tester.pumpAndSettle();
-  await tester.tap(find.byKey(const Key('nav-tasks')));
-  await tester.pumpAndSettle();
+  await backToSession(tester);
 }
 
 String _input(WidgetTester tester) => tester
@@ -182,7 +182,7 @@ void main() {
       'Где лежит…',
       'Что пришло сегодня',
       'Без фото',
-      'Покажи задачи',
+      'Задача',
     ]) {
       expect(find.byKey(Key('quick-$label')), findsOneWidget, reason: label);
     }
@@ -295,15 +295,13 @@ void main() {
       await tester.tap(find.byKey(const Key('addressee-rio')));
       await tester.pump();
       // Основной сменился в настройках: выбран и отвечает новый основной.
-      await tester.tap(find.byKey(const Key('nav-settings')));
-      await tester.pumpAndSettle();
+      await openMyRelay(tester, 'assistants');
       final main = find.byKey(const ValueKey<String>('main-persona-noda'));
       await tester.ensureVisible(main);
       await tester.pumpAndSettle();
       await tester.tap(main);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('nav-tasks')));
-      await tester.pumpAndSettle();
+      await backToSession(tester);
       expect(assistant.personas.main.id, 'noda');
       expect(_addressee(tester), 'noda');
       await _say(tester, '2+2');
@@ -358,7 +356,7 @@ void main() {
     ]) {
       expect(find.byKey(Key('quick-$label')), findsNothing, reason: label);
     }
-    expect(find.byKey(const Key('quick-Покажи задачи')), findsOneWidget);
+    expect(find.byKey(const Key('quick-Задача')), findsOneWidget);
     await _say(tester, 'кто ты');
     expect(find.textContaining('со складом'), findsNothing);
     expect(_transport.requests, isEmpty);
@@ -366,7 +364,7 @@ void main() {
 
   group('кнопки роли на узком экране и крупном шрифте', () {
     const roleChips = <String>['Где лежит…', 'Что пришло сегодня', 'Без фото'];
-    const taskChips = <String>['Покажи задачи', 'Новая задача'];
+    const taskChips = <String>['Задача', 'Напомнить'];
 
     Future<InMemorySettingsStore> storekeeper() async {
       final store = InMemorySettingsStore();
@@ -411,7 +409,14 @@ void main() {
           .position;
       expect(position.maxScrollExtent, greaterThan(0));
       expect(
-        find.descendant(of: strip, matching: find.byType(OutlinedButton)),
+        find.descendant(
+          of: strip,
+          matching: find.byWidgetPredicate(
+            (Widget w) =>
+                w.key is ValueKey<String> &&
+                (w.key! as ValueKey<String>).value.startsWith('quick-'),
+          ),
+        ),
         findsNWidgets(roleChips.length + taskChips.length),
       );
       // Все кнопки в одной строке: ни одна не уехала под «Кому:».
@@ -424,7 +429,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(_input(tester), 'Где лежит ');
       // До остальных — прокруткой строки.
-      for (final label in <String>['Без фото', 'Новая задача']) {
+      for (final label in <String>['Без фото', 'Напомнить']) {
         await tester.dragUntilVisible(
           find.byKey(Key('quick-$label')).hitTestable(),
           strip,
@@ -514,7 +519,7 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(find.byKey(const Key('quick-strip')), findsOneWidget);
-      final first = find.byKey(const Key('quick-Покажи задачи'));
+      final first = find.byKey(const Key('quick-Задача'));
       expect(first.hitTestable(), findsOneWidget);
       expect(
         tester.getRect(first).top,

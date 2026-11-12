@@ -201,7 +201,7 @@ class _StorageScreenState extends State<StorageScreen> {
                         ),
                       ),
                       _InfoRow(
-                        label: 'Чаты',
+                        label: 'Сессии',
                         child: Text(
                           '${widget.chatCount} · '
                           '${info.chatsLocation ?? 'только в памяти'}',

@@ -26,6 +26,8 @@ import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 import 'package:local_assistant/core/storage/task_repository.dart';
 
+import 'support/home_nav.dart';
+
 final class _Clock implements Clock {
   _Clock(this.value);
 
@@ -117,11 +119,17 @@ Future<void> _say(WidgetTester tester, String text) async {
   await tester.pumpAndSettle();
 }
 
-/// Задача в панели «Активные».
+/// Задача на экране «Задачи».
 Finder _inPanel(Task task) => find.descendant(
       of: find.byKey(const Key('tasks-panel')),
       matching: find.byKey(ValueKey<String>('task-${task.id}')),
     );
+
+/// Открыть задачу с экрана «Задачи» (меню → «Задачи» → задача).
+Future<void> _openFromTasks(WidgetTester tester, Task task) async {
+  await tapInDrawer(tester, const Key('nav-tasks'));
+  await _tap(tester, _inPanel(task));
+}
 
 Future<void> _tap(WidgetTester tester, Finder finder) async {
   await tester.ensureVisible(finder);
@@ -149,8 +157,8 @@ List<String> _history(WidgetTester tester) {
 
 /// Перечитать задачи, созданные в обход чата: уход из раздела и возврат.
 Future<void> _reload(WidgetTester tester) async {
-  await _tap(tester, find.byKey(const Key('nav-overview')));
-  await _tap(tester, find.byKey(const Key('nav-tasks')));
+  await tapInDrawer(tester, const Key('nav-projects'));
+  await tapInDrawer(tester, const Key('chat-main'));
 }
 
 String? _headerTitle(WidgetTester tester) {
@@ -175,7 +183,7 @@ void main() {
     await _say(tester, 'покажи задачи');
     final mainHistory = _history(tester);
 
-    await _tap(tester, _inPanel(bread));
+    await _openFromTasks(tester, bread);
     expect(find.byKey(const Key('task-chat-header')), findsOneWidget);
     expect(_headerTitle(tester), 'Купить хлеб');
     expect(_headerStatus(tester), 'В работе');
@@ -198,13 +206,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('задача из «Обзора» открывается чатом в режиме «Диалог»', (
+  testWidgets('задача из «Планирования» открывается чатом в режиме «Диалог»', (
     tester,
   ) async {
     final h = await _pump(tester);
     final report =
         await h.tasks.create(title: 'Отчёт', dueAt: DateTime(2026, 11, 5, 10));
-    await _tap(tester, find.byKey(const Key('nav-overview')));
+    await _tap(tester, find.byKey(const Key('nav-planning')));
     await _tap(tester, find.byKey(ValueKey<String>('task-${report.id}')));
     expect(_headerTitle(tester), 'Отчёт');
     expect(find.byKey(const Key('assistant-composer')), findsOneWidget);
@@ -217,7 +225,7 @@ void main() {
     final h = await _pump(tester);
     final bread = await h.tasks.create(title: 'Купить хлеб');
     await _reload(tester);
-    await _tap(tester, _inPanel(bread));
+    await _openFromTasks(tester, bread);
 
     await _tap(tester, find.byKey(const Key('task-chat-done')));
     expect((await h.byTitle('Купить хлеб')).status, TaskStatus.done);
@@ -255,7 +263,7 @@ void main() {
     expect(_headerTitle(tester), 'Купить хлеб');
     expect(_history(tester), main.sublist(1), reason: 'команда и ответ');
     expect(find.byKey(const Key('chat-origin-link')), findsOneWidget);
-    expect(find.text('из чата «Главный»'), findsOneWidget);
+    expect(find.text('из сессии «Главный»'), findsOneWidget);
 
     // Новая задача из чата задачи получает свой чат с родителем.
     await _say(tester, 'добавь задачу купить масло');
@@ -266,7 +274,7 @@ void main() {
       find.byKey(ValueKey<String>('open-task-chat-${butter.id}')),
     );
     expect(_headerTitle(tester), 'Купить масло');
-    expect(find.text('из чата «Купить хлеб»'), findsOneWidget);
+    expect(find.text('из сессии «Купить хлеб»'), findsOneWidget);
 
     // «Назад» — в чат «Купить хлеб», затем в главный.
     await _tap(tester, find.byKey(const Key('task-back')));
@@ -304,7 +312,7 @@ void main() {
     expect(find.byType(BulkChecklistCard), findsOneWidget);
     final main = _history(tester);
     final bread = await h.byTitle('Купить хлеб');
-    await _tap(tester, _inPanel(bread));
+    await _openFromTasks(tester, bread);
     await _say(tester, 'Нода, на завтра');
     final breadChat = _history(tester);
     expect(breadChat.last, startsWith('noda: '));
@@ -324,7 +332,7 @@ void main() {
     );
     expect(card.checklist.state, BulkChecklistState.expired);
 
-    await _tap(tester, _inPanel(bread));
+    await _openFromTasks(tester, bread);
     expect(_history(tester), breadChat);
     // Адресат чата задачи сохранён: Noda.
     final noda = tester.widget<Semantics>(
@@ -350,8 +358,8 @@ void main() {
     final report = await h.byTitle('Отчёт');
     await h.tasks.complete(report.id);
     await repository.save(bread.copyWith(deletedAt: DateTime(2026, 11, 4)));
-    await _tap(tester, find.byKey(const Key('nav-overview')));
-    await _tap(tester, find.byKey(const Key('nav-tasks')));
+    await _tap(tester, find.byKey(const Key('nav-projects')));
+    await _tap(tester, find.byKey(const Key('chat-main')));
     final store = h.chats as InMemoryChatStore;
     expect(store.chatIds, isNot(contains(ChatThread.taskChatId(bread.id))));
     expect(store.chatIds, contains(ChatThread.taskChatId(report.id)));
@@ -385,7 +393,7 @@ void main() {
     // Новый день, а открыт чат задачи: напоминание уходит в главный, у
     // него точка «новое сообщение».
     clock.value = DateTime(2026, 11, 6, 9);
-    await _tap(tester, find.byKey(const Key('nav-overview')));
+    await _tap(tester, find.byKey(const Key('nav-projects')));
     await _tap(tester, find.byKey(Key('chat-${bread.id}')));
     expect(_headerTitle(tester), 'Купить хлеб');
     expect(find.byKey(const Key('chat-unread-main')), findsOneWidget);
@@ -400,12 +408,14 @@ void main() {
     final bread = await h.tasks.create(title: 'Купить хлеб');
     final report = await h.tasks.create(title: 'Отчёт');
     await _reload(tester);
-    await _tap(tester, _inPanel(bread));
+    await _openFromTasks(tester, bread);
     repository.delay = const Duration(seconds: 2);
     await tester.enterText(find.byKey(const Key('assistant-input')), 'готово');
     await tester.testTextInput.receiveAction(TextInputAction.send);
     await tester.pump();
     // Пока ответ готовится, пользователь открыл другой чат.
+    await tester.tap(find.byKey(const Key('nav-tasks')));
+    await tester.pump();
     await tester.tap(_inPanel(report));
     await tester.pump();
     expect(_headerTitle(tester), 'Отчёт');
@@ -516,19 +526,19 @@ void main() {
     });
   }
 
-  testWidgets('свёрнутое меню (900 px): чаты задач значками с точкой', (
+  testWidgets('меню колонкой (1000 px): сессия задачи с точкой', (
     tester,
   ) async {
     final repository = _SlowRepository();
     final h = await _pump(
       tester,
-      size: const Size(900, 700),
+      size: const Size(1000, 700),
       repository: repository,
     );
     await _say(tester, 'добавь задачу купить хлеб');
     final bread = await h.byTitle('Купить хлеб');
     final item = find.byKey(Key('chat-${bread.id}'));
-    expect(item, findsOneWidget, reason: 'чат задачи виден в узкой полосе');
+    expect(item, findsOneWidget, reason: 'сессия задачи видна в меню');
     await _tap(tester, item);
     expect(_headerTitle(tester), 'Купить хлеб');
 

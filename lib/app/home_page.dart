@@ -2,26 +2,29 @@ import 'dart:async';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../core/app_info.dart';
 import '../core/chats/chat_book.dart';
 import '../core/chats/chat_models.dart';
+import '../core/chats/chat_search.dart';
 import '../core/chats/chat_store.dart';
 import '../core/connectors/login_link.dart';
 import '../core/connectors/manifest/connection_service.dart';
 import '../core/connectors/manifest/connection.dart';
 import '../core/formatting/due_format.dart';
+import '../core/models/action_card.dart';
 import '../core/models/assistant_types.dart';
 import '../core/models/bulk.dart';
 import '../core/models/secure_card.dart';
 import '../core/models/task.dart';
 import '../core/passwords/secret_guard.dart';
+import '../core/passwords/vault.dart';
 import '../core/replies/reply_library.dart';
 import '../core/scenario/assistant_controller.dart';
 import '../core/services/clock.dart';
 import '../core/services/task_service.dart';
-import '../core/extensions/extension_registry.dart';
 import '../core/settings/app_settings.dart';
+import '../core/stats/relay_stats.dart';
 import '../core/storage/storage_info.dart';
 import 'assistant_theme.dart';
 import 'passwords/entry_screens.dart';
@@ -29,16 +32,23 @@ import 'passwords/generator_view.dart';
 import 'passwords/passwords_kit.dart';
 import 'passwords/passwords_screen.dart';
 import 'passwords/secure_card_view.dart';
-import 'screens/overview_screen.dart';
+import 'screens/my_relay_screen.dart';
+import 'screens/my_relay_tabs.dart';
 import 'screens/planning_screen.dart';
 import 'screens/projects_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/storage_screen.dart';
+import 'shell/quick_actions.dart';
+import 'shell/relay_drawer.dart';
+import 'shell/session_header.dart';
+import 'shell/session_hero.dart';
+import 'shell/today_panel.dart';
 import 'widgets/action_card_view.dart';
 import 'widgets/bulk_checklist_card.dart';
-import 'widgets/chat_list.dart';
 import 'widgets/command_composer.dart';
+import 'widgets/connection_screen.dart';
 import 'widgets/document_view.dart';
+import 'widgets/extensions_section.dart';
 import 'widgets/history_rail.dart';
 import 'widgets/personas_section.dart';
 import 'widgets/quick_dock.dart';
@@ -46,38 +56,40 @@ import 'widgets/status_cube.dart';
 import 'widgets/task_chat_header.dart';
 import 'widgets/task_tile.dart';
 
-/// Разделы бокового меню.
-enum AppSection { overview, projects, tasks, planning, storage, settings }
+/// Разделы оболочки «Д»: сессия (главный экран), задачи, проекты,
+/// планирование и «Мой Связной».
+enum AppSection { session, tasks, projects, planning, myRelay }
 
 extension AppSectionInfo on AppSection {
   String get title => switch (this) {
-        AppSection.overview => 'Обзор',
+        AppSection.session => 'Сессия',
         AppSection.projects => 'Проекты',
         AppSection.tasks => 'Задачи',
         AppSection.planning => 'Планирование',
-        AppSection.storage => 'Хранилище',
-        AppSection.settings => 'Настройки',
-      };
-
-  IconData get icon => switch (this) {
-        AppSection.overview => Icons.grid_view,
-        AppSection.projects => Icons.tag,
-        AppSection.tasks => Icons.task_alt,
-        AppSection.planning => Icons.calendar_today_outlined,
-        AppSection.storage => Icons.storage_outlined,
-        AppSection.settings => Icons.settings_outlined,
+        AppSection.myRelay => 'Мой Связной',
       };
 }
 
-/// Ширина, ниже которой боковое меню прячется в выдвижную панель.
+/// Ширина, начиная с которой меню стоит постоянной колонкой слева, а
+/// «Сегодня» — колонкой справа (три колонки, макет D-Desk). Уже — меню и
+/// «Сегодня» выдвигаются: кнопками в шапке и жестом от края экрана.
+const double wideBreakpoint = 1000;
+
+/// Ширина, начиная с которой колонка «Сегодня» открыта сразу; уже — она
+/// свёрнута, пока её не откроют кнопкой «Сегодня».
+const double todayOpenBreakpoint = 1280;
+
+/// Ширина, ниже которой хроника команд узкая.
 const double narrowBreakpoint = 700;
 
-/// Ширина, начиная с которой панель задач стоит колонкой рядом с чатом.
-const double panelBreakpoint = 1200;
+/// Ширина постоянного меню и колонки «Сегодня» на широком экране.
+const double sidebarWidth = 280;
+const double todayWidth = 340;
 
 /// Подсказка пустой панели задач: пример команды без кавычек на своей
 /// строке, чтобы он не рвался посередине.
-const String emptyTasksHint = 'Напишите в чате, например:\nзавтра купить хлеб';
+const String emptyTasksHint =
+    'Напишите в сессии, например:\nзавтра купить хлеб';
 
 /// Наибольшая ширина колонки чата (сообщения, «Кому», быстрые действия и
 /// поле ввода) без хроники команд.
@@ -93,7 +105,7 @@ double historyRailWidth({required bool narrow}) => narrow ? 24 : 32;
 
 /// Сколько от правого края окна до правого края хроники команд. Хроника
 /// стоит вплотную к колонке чата, а колонка (вместе с хроникой) — по
-/// центру области между боковым меню и панелью задач.
+/// центру области между меню и колонкой «Сегодня».
 double historyRailRight({
   required double width,
   required double sidebarWidth,
@@ -144,6 +156,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _input = TextEditingController();
   final FocusNode _inputFocus = FocusNode();
+
+  /// Растёт после каждого чтения задач: открытые поверх маршруты
+  /// («Данные и резервная копия») перестраиваются по нему.
+  final ValueNotifier<int> _dataRevision = ValueNotifier<int>(0);
   final ScrollController _chatScroll = ScrollController();
 
   final TextEditingController _docTitle = TextEditingController();
@@ -212,7 +228,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String _draftBeforeRecall = '';
   int? _highlightedCommand;
 
-  AppSection _section = AppSection.tasks;
+  AppSection _section = AppSection.session;
+  MyRelayTab _myRelayTab = MyRelayTab.summary;
+
+  /// Сообщения непрочитанных чатов для точной активности в «Мой
+  /// Связной»: читаются один раз при первом открытии. `null` — ещё нет.
+  Map<String, List<ChatMessage>>? _storedChats;
+  bool _readingStored = false;
   AssistantViewMode _mode = AssistantViewMode.dialogue;
   AppSettings _settings = const AppSettings();
 
@@ -222,9 +244,18 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Object? _loadError;
   bool _loaded = false;
   bool _sending = false;
-  bool _panelOpen = true;
 
-  /// Строка поиска по задачам в верхней строке (фильтрует панель задач).
+  /// Колонка «Сегодня» на широком экране: `null` — пользователь не
+  /// выбирал (открыта от [todayOpenBreakpoint]).
+  bool? _todayOpen;
+
+  /// Меню колонкой слева на широком экране («Свернуть панель»).
+  bool _sidebarOpen = true;
+
+  /// Фокус поиска по сессиям в меню (Ctrl K).
+  final FocusNode _sessionSearch = FocusNode();
+
+  /// Строка поиска по задачам на экране «Задачи».
   final TextEditingController _taskSearch = TextEditingController();
   String _taskQuery = '';
   CubeState _cube = CubeState.idle;
@@ -248,6 +279,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_onHardwareKey);
     for (final controller in <TextEditingController>[
       _docTitle,
       _docProject,
@@ -361,6 +393,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onHardwareKey);
+    _dataRevision.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.passwords?.removeListener(_onPasswordsChanged);
     if (widget.passwords?.onSettings == _onPasswordsSettings) {
@@ -386,6 +420,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     _input.dispose();
     _taskSearch.dispose();
+    _sessionSearch.dispose();
     _inputFocus.dispose();
     _chatScroll.dispose();
     _docTitle.dispose();
@@ -500,7 +535,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// «Разрешить действия» снимается сразу у ролей этого подключения
   /// (ADR-013) — разрешение привязано к входу.
   void _onSessionChanged() {
-    if (!mounted || !_settingsLoaded) return;
+    if (!mounted) return;
+    // «на связи» / «нет связи» в меню и «Сегодня».
+    setState(() {});
+    if (!_settingsLoaded) return;
     final pruned = _prunedActions(_settings, drop: true);
     if (pruned != null) _changeSettings(pruned);
   }
@@ -565,6 +603,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _loadError != null) {
       return;
     }
+    _maybeFirstSeen();
     // Пока готовится ответ, напоминание не вклиниваем между командой и
     // ответом: после ответа _send вызовет _refresh → _maybeNotice.
     if (_sending) return;
@@ -586,6 +625,21 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _changeSettings(_settings.copyWith(noticeDay: today));
   }
 
+  /// Первый день с Связным для «Вместе N дней»: самая ранняя дата из
+  /// задач и сессий или сегодня. Записывается один раз.
+  void _maybeFirstSeen() {
+    if (_settings.firstSeenDay != null) return;
+    var first = _now;
+    for (final task in _all) {
+      if (task.createdAt.isBefore(first)) first = task.createdAt;
+    }
+    final chats = _book.earliestActivity;
+    if (chats != null && chats.isBefore(first)) first = chats;
+    _changeSettings(
+      _settings.copyWith(firstSeenDay: AppSettings.dayKey(first.toLocal())),
+    );
+  }
+
   Future<void> _refresh() async {
     final creations = _chatCreations;
     var chatRemoved = false;
@@ -600,6 +654,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _completed = completed;
         _loadError = null;
         _loaded = true;
+        _dataRevision.value++;
         // Чаты удалённых задач удаляются; выполненных — остаются. Пока
         // список читался, могли создать чат новой задачи: тогда не трогаем.
         if (_book.loaded && creations == _chatCreations) {
@@ -803,8 +858,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         offset: cursor < 0 ? text.length : cursor,
       ),
     );
-    if (_section != AppSection.tasks) {
-      setState(() => _section = AppSection.tasks);
+    if (_section != AppSection.session) {
+      setState(() => _section = AppSection.session);
     }
     _inputFocus.requestFocus();
   }
@@ -867,14 +922,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  /// «Очистить историю чатов»: чаты задач удаляются, главный начинается с
-  /// приветствия. Задачи не меняются.
+  /// «Очистить историю сессий»: сессии и чаты задач удаляются, главный
+  /// начинается с приветствия. Задачи не меняются.
   void _clearChat() {
     // Вопрос со списком снимается, отменить прежние массовые изменения
     // из чата больше нельзя.
     widget.assistant.clearConversation();
     unawaited(_book.clearAll());
-    widget.assistant.enterChat();
+    widget.assistant
+      ..forgetChatSelections()
+      ..enterChat();
     setState(() {
       _book.append(ChatThread.mainId, _welcome());
       _pristineWelcome = false;
@@ -882,6 +939,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _commands.clear();
       _commandCursor = null;
       _highlightedCommand = null;
+      // Чатов на диске больше нет: активность — по тому, что в памяти.
+      _storedChats = <String, List<ChatMessage>>{};
     });
   }
 
@@ -975,8 +1034,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// переключает документ на диалог). Повторное нажатие на задачу открытого
   /// чата ничего не меняет.
   void _openTaskChat(Task task, {AssistantViewMode? mode}) {
-    if (_book.current.taskId == task.id && _section == AppSection.tasks) {
+    if (_book.current.taskId == task.id) {
+      // Тот же чат: только вернуться в сессию из раздела — контекст
+      // помощника (ожидание ответа, «её») не сбрасывается.
       _closeDrawers();
+      _showSession();
       if (mode != null && mode != _mode) _setMode(mode);
       return;
     }
@@ -985,11 +1047,18 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _openChat(String chatId) {
-    if (chatId == _book.currentId && _section == AppSection.tasks) {
+    if (chatId == _book.currentId) {
       _closeDrawers();
+      _showSession();
       return;
     }
     _switchChat(() => _book.open(chatId), mode: AssistantViewMode.dialogue);
+  }
+
+  void _showSession() {
+    if (_section == AppSection.session) return;
+    unawaited(_saveDocument());
+    setState(() => _section = AppSection.session);
   }
 
   /// «Назад» из чата задачи: к предыдущему чату, иначе в главный.
@@ -1021,9 +1090,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Открыт другой чат: контекст помощника («её», ожидание вопроса),
   /// документ и лента — по нему.
   void _onChatChanged({AssistantViewMode? mode}) {
-    widget.assistant.enterChat(taskId: _book.current.taskId);
+    final current = _book.current;
+    widget.assistant.enterChat(
+      taskId: current.taskId,
+      sessionId: current.isSession ? current.id : null,
+    );
     setState(() {
-      _section = AppSection.tasks;
+      _section = AppSection.session;
       if (mode != null) _mode = mode;
       _messageKeys.clear();
       _highlightedCommand = null;
@@ -1101,14 +1174,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ..showSnackBar(
         SnackBar(content: Text(text), duration: const Duration(seconds: 3)),
       );
-  }
-
-  void _openTasksPanel(bool wide) {
-    if (wide) {
-      setState(() => _panelOpen = !_panelOpen);
-    } else {
-      _scaffoldKey.currentState?.openEndDrawer();
-    }
   }
 
   // ------------------------------------------------------------ документ
@@ -1249,205 +1314,463 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // --------------------------------------------------------------- вёрстка
 
+  /// Колонка «Сегодня» открыта на широком экране: выбор пользователя, а
+  /// пока не выбирал — открыта от [todayOpenBreakpoint].
+  bool _todayShown(double width) =>
+      width >= wideBreakpoint && (_todayOpen ?? width >= todayOpenBreakpoint);
+
+  /// Меню стоит колонкой слева.
+  bool _sidebarShown(double width) => width >= wideBreakpoint && _sidebarOpen;
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final width = constraints.maxWidth;
         final narrow = width < narrowBreakpoint;
-        final wide = width >= panelBreakpoint;
-        final sidebarExpanded = width >= 1100;
+        final wide = width >= wideBreakpoint;
+        final sidebar = _sidebarShown(width);
+        // В «Мой Связной» колонки «Сегодня» нет (D-Desk-Summary): году
+        // активности нужна ширина. Выбор пользователя не меняется.
+        final today = _section != AppSection.myRelay && _todayShown(width);
         final railRight = historyRailRight(
           width: width,
-          sidebarWidth: narrow ? 0 : (sidebarExpanded ? 232 : 64),
-          panelWidth: wide && _panelOpen ? 321 : 0,
+          sidebarWidth: sidebar ? sidebarWidth + 1 : 0,
+          panelWidth: today ? todayWidth + 1 : 0,
           narrow: narrow,
         );
-        return Scaffold(
-          key: _scaffoldKey,
-          backgroundColor: AssistantColors.background,
-          drawer: narrow
-              ? Drawer(
-                  backgroundColor: AssistantColors.sidebar,
-                  child: SafeArea(child: _buildSidebar(expanded: true)),
-                )
-              : null,
-          endDrawer: wide
-              ? null
-              : Drawer(
-                  backgroundColor: AssistantColors.panel,
-                  child: SafeArea(child: _buildTasksPanel()),
-                ),
-          body: SafeArea(
-            child: Stack(
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    if (!narrow) _buildSidebar(expanded: sidebarExpanded),
-                    Expanded(
-                      child: _buildWorkspace(narrow: narrow, wide: wide),
-                    ),
-                  ],
-                ),
-                // Хроника команд: вплотную справа к колонке чата и ровно по
-                // центру высоты всего экрана — зеркальная пара кубику у
-                // ответа. Место под неё оставлено в колонке (_chatColumn).
-                if (_section == AppSection.tasks &&
-                    _mode == AssistantViewMode.dialogue)
-                  Positioned(
-                    top: 0,
-                    bottom: 0,
-                    right: railRight,
-                    child: HistoryRail(
-                      entries: _historyEntries,
-                      activeIndex: _highlightedCommand,
-                      onSelect: _jumpToCommand,
-                      compact: narrow,
-                      // Карточка при наведении — слева от хроники, над
-                      // сообщениями, а не над панелью задач.
-                      cardInset:
-                          railRight + historyRailWidth(narrow: narrow) + 4,
-                    ),
+        final drawerWidth = (width - 56).clamp(240.0, 316.0);
+        final endDrawerWidth = (width - 40).clamp(240.0, todayWidth);
+        // Окно стало широким при открытом выдвижном меню или «Сегодня»:
+        // убирать его сразу нельзя — у маршрута осталась бы запись «закрыть
+        // меню», и «Назад» перестал бы возвращать в сессию. Держим его ещё
+        // кадр и закрываем как обычно.
+        final keepDrawer = sidebar && _drawerOpen;
+        final keepEndDrawer = today && _endDrawerOpen;
+        if (keepDrawer || keepEndDrawer) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final scaffold = _scaffoldKey.currentState;
+            if (scaffold == null) return;
+            if (keepDrawer && scaffold.isDrawerOpen) scaffold.closeDrawer();
+            if (keepEndDrawer && scaffold.isEndDrawerOpen) {
+              scaffold.closeEndDrawer();
+            }
+          });
+        }
+        return PopScope(
+          // «Назад» на телефоне из разделов и «Мой Связной» — в сессию.
+          // Открытое меню или «Сегодня» «назад» только закрывает.
+          canPop:
+              _section == AppSection.session || _drawerOpen || _endDrawerOpen,
+          onPopInvokedWithResult: (bool didPop, Object? _) {
+            if (!didPop) _goTo(AppSection.session);
+          },
+          child: Scaffold(
+            key: _scaffoldKey,
+            onDrawerChanged: (bool open) => setState(() => _drawerOpen = open),
+            onEndDrawerChanged: (bool open) =>
+                setState(() => _endDrawerOpen = open),
+            backgroundColor: AssistantColors.background,
+            drawerEdgeDragWidth: 24,
+            drawer: sidebar && !keepDrawer
+                ? null
+                : Drawer(
+                    width: drawerWidth,
+                    backgroundColor: AssistantColors.sidebar,
+                    child: SafeArea(child: _buildDrawer(wide: false)),
                   ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSidebar({required bool expanded}) {
-    final width = expanded ? 232.0 : 64.0;
-    final items = <AppSection>[
-      AppSection.overview,
-      AppSection.projects,
-      AppSection.tasks,
-      AppSection.planning,
-      AppSection.storage,
-    ];
-    return Container(
-      key: const Key('app-sidebar'),
-      width: width,
-      color: AssistantColors.sidebar,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Padding(
-            padding: EdgeInsets.fromLTRB(expanded ? 24 : 0, 20, 16, 16),
-            child: Row(
-              mainAxisAlignment:
-                  expanded ? MainAxisAlignment.start : MainAxisAlignment.center,
-              children: <Widget>[
-                const _BrandMark(),
-                if (expanded) ...<Widget>[
-                  const SizedBox(width: 12),
-                  // При крупном шрифте в выдвижной панели название
-                  // сокращается, а не вылезает за край.
-                  const Flexible(
-                    child: Text(
-                      AppInfo.name,
-                      key: ValueKey<String>('app-name'),
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AssistantColors.textStrong,
-                      ),
-                    ),
+            endDrawer: today && !keepEndDrawer
+                ? null
+                : Drawer(
+                    width: endDrawerWidth,
+                    backgroundColor: AssistantColors.sidebar,
+                    child: SafeArea(child: _buildTodayPanel(wide: false)),
                   ),
-                ],
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: <Widget>[
-                _buildChatList(expanded: expanded),
-                for (final section in items)
-                  _NavItem(
-                    section: section,
-                    expanded: expanded,
-                    active: _section == section,
-                    badge: section == AppSection.tasks && _active.isNotEmpty
-                        ? '${_active.length}'
-                        : null,
-                    onTap: () => _goTo(section),
-                  ),
-              ],
-            ),
-          ),
-          _NavItem(
-            section: AppSection.settings,
-            expanded: expanded,
-            active: _section == AppSection.settings,
-            onTap: () => _goTo(AppSection.settings),
-          ),
-          const SizedBox(height: 8),
-          const Divider(),
-          Tooltip(
-            message: widget.storage.location ?? widget.storage.label,
-            child: InkWell(
-              key: const Key('storage-footer'),
-              onTap: () => _goTo(AppSection.storage),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  mainAxisAlignment: expanded
-                      ? MainAxisAlignment.start
-                      : MainAxisAlignment.center,
-                  children: <Widget>[
-                    const Icon(Icons.save_outlined, size: 18),
-                    if (expanded) ...<Widget>[
-                      const SizedBox(width: 10),
+            body: SafeArea(
+              child: Stack(
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      if (sidebar) ...<Widget>[
+                        SizedBox(
+                          width: sidebarWidth,
+                          child: _buildDrawer(wide: true),
+                        ),
+                        const VerticalDivider(width: 1),
+                      ],
                       Expanded(
-                        child: Text(
-                          widget.storage.canBackup
-                              ? 'Сохраняется на этом устройстве'
-                              : 'Только в памяти',
-                          style: technicalTextStyle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        child: _buildWorkspace(
+                          narrow: narrow,
+                          wide: wide,
+                          sidebar: sidebar,
+                          today: today,
                         ),
                       ),
+                      if (today) ...<Widget>[
+                        const VerticalDivider(width: 1),
+                        SizedBox(
+                          width: todayWidth,
+                          child: _buildTodayPanel(wide: true),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
+                  ),
+                  // Хроника команд: вплотную справа к колонке сессии и
+                  // ровно по центру высоты всего экрана — зеркальная пара
+                  // кубику у ответа. Место под неё оставлено в колонке
+                  // (_chatColumn).
+                  if (_section == AppSection.session &&
+                      _mode == AssistantViewMode.dialogue)
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      right: railRight,
+                      child: HistoryRail(
+                        entries: _historyEntries,
+                        activeIndex: _highlightedCommand,
+                        onSelect: _jumpToCommand,
+                        compact: narrow,
+                        // Карточка при наведении — слева от хроники, над
+                        // сообщениями, а не над колонкой «Сегодня».
+                        cardInset:
+                            railRight + historyRailWidth(narrow: narrow) + 4,
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  /// «Главный» и последние чаты задач в боковом меню.
-  Widget _buildChatList({required bool expanded}) {
-    final inChats = _section == AppSection.tasks;
-    return ChatList(
-      expanded: expanded,
-      mainActive: inChats && _book.current.isMain,
-      mainUnread: _book.main.unread,
-      entries: <ChatListEntry>[
-        for (final thread in _book.recent())
-          if (_findTask(thread.taskId) case final Task task)
-            ChatListEntry(
-              taskId: task.id,
-              title: task.title,
-              done: task.status == TaskStatus.done,
-              unread: thread.unread,
-              active: inChats && _book.currentId == thread.id,
+  /// Меню и «Сегодня» на телефоне открыты: «назад» закрывает их.
+  bool _drawerOpen = false;
+  bool _endDrawerOpen = false;
+
+  /// Ctrl/Cmd+K — поиск по сессиям, где бы ни был фокус: обработчик
+  /// клавиатуры, а не CallbackShortcuts, которые срабатывают только при
+  /// фокусе внутри HomePage. Пока поверх открыт другой экран — не
+  /// срабатывает.
+  bool _onHardwareKey(KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.keyK ||
+        !mounted) {
+      return false;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    if (!keyboard.isControlPressed && !keyboard.isMetaPressed) return false;
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return false;
+    _focusSessionSearch(MediaQuery.sizeOf(context).width >= wideBreakpoint);
+    return true;
+  }
+
+  /// Ctrl K: курсор в поиск по сессиям (меню открывается, если закрыто).
+  void _focusSessionSearch(bool wide) {
+    if (wide) {
+      if (_sidebarOpen) {
+        // Меню уже стоит колонкой: поле на месте, кадр не нужен.
+        _sessionSearch.requestFocus();
+        return;
+      }
+      setState(() => _sidebarOpen = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _sessionSearch.requestFocus();
+      });
+      return;
+    }
+    _scaffoldKey.currentState?.openDrawer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _sessionSearch.requestFocus();
+    });
+  }
+
+  // ----------------------------------------------------------------- меню
+
+  Widget _buildDrawer({required bool wide}) {
+    final now = _now;
+    return RelayDrawer(
+      wide: wide,
+      onCollapse: wide ? () => setState(() => _sidebarOpen = false) : null,
+      searchFocus: _sessionSearch,
+      reduceMotion: _settings.reduceMotion,
+      activeSection: switch (_section) {
+        AppSection.tasks => 'tasks',
+        AppSection.projects => 'projects',
+        AppSection.planning => 'planning',
+        _ => null,
+      },
+      sessions: _sessionEntries(now),
+      extensions: _extensionEntries(),
+      onOpenMyRelay: () => _openMyRelay(MyRelayTab.summary),
+      onTasks: () => _goTo(AppSection.tasks),
+      onProjects: () => _goTo(AppSection.projects),
+      onPlanning: () => _goTo(AppSection.planning),
+      onOpenSession: _openSessionEntry,
+      onNewSession: _newSession,
+      search: (String query) => _book.search(
+        query,
+        titles: <String, String>{for (final task in _all) task.id: task.title},
+      ),
+      onOpenHit: (ChatSearchHit hit) => _openSessionEntry(hit.chatId),
+      timeLabel: (DateTime at) => sessionTimeLabel(at, _now),
+    );
+  }
+
+  /// «Недавние сессии»: главный, сессии и чаты задач с сообщениями.
+  List<SessionEntry> _sessionEntries(DateTime now) {
+    final inSession = _section == AppSection.session;
+    return <SessionEntry>[
+      for (final thread in _book.sessions())
+        if (_sessionEntry(thread, now, inSession) case final SessionEntry e) e,
+    ];
+  }
+
+  SessionEntry? _sessionEntry(ChatThread thread, DateTime now, bool inSession) {
+    final active = inSession && _book.currentId == thread.id;
+    final time = sessionTimeLabel(thread.lastActivityAt, now);
+    switch (thread.kind) {
+      case ChatKind.main:
+        return SessionEntry(
+          id: thread.id,
+          title: ChatBook.titleOf(thread),
+          time: time,
+          itemKey: const Key('chat-main'),
+          dotKey: const Key('chat-unread-main'),
+          active: active,
+          unread: thread.unread,
+        );
+      case ChatKind.session:
+        return SessionEntry(
+          id: thread.id,
+          title: ChatBook.titleOf(thread),
+          time: time,
+          itemKey: Key('chat-${thread.id}'),
+          dotKey: Key('chat-unread-${thread.id}'),
+          active: active,
+          unread: thread.unread,
+        );
+      case ChatKind.task:
+        final task = _findTask(thread.taskId);
+        if (task == null) return null;
+        return SessionEntry(
+          id: thread.id,
+          title: task.title,
+          time: time,
+          itemKey: Key('chat-${task.id}'),
+          dotKey: Key('chat-unread-${task.id}'),
+          active: active,
+          unread: thread.unread,
+          muted: task.status == TaskStatus.done,
+        );
+    }
+  }
+
+  void _openSessionEntry(String chatId) {
+    final thread = _book.thread(chatId);
+    final task =
+        thread?.kind == ChatKind.task ? _findTask(thread!.taskId) : null;
+    if (task != null) {
+      _openTaskChat(task, mode: AssistantViewMode.dialogue);
+    } else {
+      _openChat(chatId);
+    }
+  }
+
+  /// Дерево «Расширения»: только включённые расширения со своим экраном.
+  List<ExtensionEntry> _extensionEntries() {
+    final passwords = widget.passwords;
+    return <ExtensionEntry>[
+      if (passwords != null && _passwordsEnabled)
+        ExtensionEntry(
+          id: AssistantController.passwordsId,
+          title: 'Пароли',
+          status: switch (passwords.state) {
+            VaultState.notCreated => 'не создано',
+            VaultState.locked => 'заперт',
+            VaultState.unlocked => 'открыт',
+            VaultState.disabled => 'выключен',
+          },
+          onTap: () {
+            _closeDrawers();
+            unawaited(_openPasswords());
+          },
+        ),
+      for (final service in widget.connections)
+        if (widget.assistant.extensions.isEnabled(service.slot.id))
+          ExtensionEntry(
+            id: service.slot.id,
+            title: service.slot.title,
+            status: service.connected ? 'на связи' : 'нет связи',
+            statusColor: service.connected
+                ? AssistantColors.success
+                : AssistantColors.faint,
+            dot: true,
+            onTap: () {
+              _closeDrawers();
+              unawaited(_openConnection(service));
+            },
+          ),
+    ];
+  }
+
+  Future<void> _openConnection(ConnectionService service) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => ConnectionScreen(
+            service: service,
+            onEnabledChanged: (bool value) {
+              if (!mounted) return;
+              _changeSettings(
+                connectionChanged(
+                  widget.assistant.extensions,
+                  _settings,
+                  service.slot.id,
+                  connected: value,
+                ),
+              );
+            },
+          ),
+        ),
+      );
+
+  /// «+ Сессия»: новая пустая сессия, режим «Диалог», курсор в поле ввода.
+  void _newSession() {
+    unawaited(_saveDocument());
+    // Выбор («её») прежнего чата сохраняется за ним, новая сессия
+    // начинается без выбора (AssistantController.enterChat).
+    _switchChat(_book.newSession, mode: AssistantViewMode.dialogue);
+    _inputFocus.requestFocus();
+  }
+
+  void _openMyRelay(MyRelayTab tab) {
+    unawaited(_saveDocument());
+    _closeDrawers();
+    setState(() {
+      _section = AppSection.myRelay;
+      _myRelayTab = tab;
+    });
+    unawaited(_readStoredChats());
+  }
+
+  /// Один раз читает непрочитанные чаты: активность по сессиям точная, а
+  /// не по index.json. Состояние книги не меняется.
+  Future<void> _readStoredChats() async {
+    if (_storedChats != null || _readingStored) return;
+    _readingStored = true;
+    await _chatsReady;
+    final stored = await _book.readStored();
+    _readingStored = false;
+    if (!mounted) return;
+    setState(() => _storedChats = stored);
+  }
+
+  RelayStats _relayStats() {
+    final firstSeen = _settings.firstSeenDay;
+    return RelayStats.compute(
+      tasks: _all,
+      sessionDays: _book.activityDays(
+        stored: _storedChats ?? const <String, List<ChatMessage>>{},
+      ),
+      sessions: _book.sessionCount,
+      firstSeen: firstSeen == null ? null : DateTime.tryParse(firstSeen),
+      now: _now,
+    );
+  }
+
+  // ------------------------------------------------------------ «Сегодня»
+
+  Widget _buildTodayPanel({required bool wide}) {
+    final now = _now;
+    final passwords = widget.passwords;
+    return TodayPanel(
+      now: now,
+      tasks: todayTasks(_active, now),
+      selectedId: _selectedTask?.id,
+      loading: !_loaded,
+      error: _loadError,
+      onRetry: _refresh,
+      emptyHint: _active.isEmpty ? emptyTasksHint : null,
+      onOpenTask: (Task task) => _openTaskChat(task),
+      onToggleDone: _toggleDone,
+      onAllTasks: () => _goTo(AppSection.tasks),
+      onClose: wide
+          ? () => setState(() => _todayOpen = false)
+          : () => _scaffoldKey.currentState?.closeEndDrawer(),
+      closeKey: wide ? const Key('today-collapse') : const Key('today-close'),
+      closeTooltip: wide ? 'Свернуть «Сегодня»' : 'Закрыть «Сегодня»',
+      pending: <TodayPending>[
+        for (final pending in _book.pendingCards(now))
+          _todayPending(pending.chatId, pending.message),
+      ],
+      sections: <TodaySection>[
+        TodaySection(
+          id: 'projects',
+          label: 'Проекты',
+          onTap: () => _goTo(AppSection.projects),
+        ),
+        TodaySection(
+          id: 'planning',
+          label: 'Планирование',
+          onTap: () => _goTo(AppSection.planning),
+        ),
+        if (passwords != null && _passwordsEnabled)
+          TodaySection(
+            id: 'passwords',
+            label: 'Пароли',
+            semantics: passwords.isUnlocked
+                ? 'Пароли, сейф открыт'
+                : 'Пароли, сейф заперт',
+            onTap: () {
+              _closeDrawers();
+              unawaited(_openPasswords());
+            },
+          ),
+        for (final service in widget.connections)
+          if (widget.assistant.extensions.isEnabled(service.slot.id))
+            TodaySection(
+              id: service.slot.id,
+              label: service.slot.title,
+              semantics: '${service.slot.title}, '
+                  '${service.connected ? 'на связи' : 'нет связи'}',
+              dot: service.connected
+                  ? AssistantColors.success
+                  : AssistantColors.faint,
+              onTap: () {
+                _closeDrawers();
+                unawaited(_openConnection(service));
+              },
             ),
       ],
-      onOpenMain: () => _openChat(ChatThread.mainId),
-      onOpenTask: (String taskId) {
-        final task = _findTask(taskId);
-        if (task != null) {
-          _openTaskChat(task, mode: AssistantViewMode.dialogue);
-        }
-      },
     );
+  }
+
+  TodayPending _todayPending(String chatId, ChatMessage message) {
+    final card = message.card!;
+    final persona = Personas.byId(message.personaId);
+    final what = switch (card.kind) {
+      ActionKind.post => 'Отметка прихода ждёт подтверждения',
+      ActionKind.move => 'Перемещение ждёт подтверждения',
+    };
+    return TodayPending(
+      id: card.id,
+      title: what,
+      subtitle: <String>[
+        if (persona != null) persona.russianName,
+        widget.assistant.extensions.skillTitle(card.connectorId).toLowerCase(),
+      ].join(' · '),
+      onTap: () => _openSessionEntry(chatId),
+    );
+  }
+
+  void _toggleToday(bool wide) {
+    if (wide) {
+      final width = MediaQuery.sizeOf(context).width;
+      setState(() => _todayOpen = !_todayShown(width));
+    } else {
+      _scaffoldKey.currentState?.openEndDrawer();
+    }
   }
 
   void _goTo(AppSection section) {
@@ -1456,7 +1779,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
       Navigator.of(context).pop();
     }
-    if (section != AppSection.tasks) unawaited(_refresh());
+    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
+      Navigator.of(context).pop();
+    }
+    if (section != AppSection.session) unawaited(_refresh());
   }
 
   /// Выход из выбранной задачи в главном чате: выбор снимается, режим —
@@ -1471,113 +1797,202 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _inputFocus.requestFocus();
   }
 
-  Widget _buildWorkspace({required bool narrow, required bool wide}) {
+  Widget _buildWorkspace({
+    required bool narrow,
+    required bool wide,
+    required bool sidebar,
+    required bool today,
+  }) {
+    if (_section == AppSection.myRelay) return _buildMyRelay();
     final selected = _selectedTask;
-    final chatTaskId =
-        _section == AppSection.tasks ? _book.current.taskId : null;
+    final inSession = _section == AppSection.session;
+    final chatTaskId = inSession ? _book.current.taskId : null;
     final inTaskChat = chatTaskId != null;
-    final taskInFocus = !inTaskChat &&
-            _section == AppSection.tasks &&
-            selected != null &&
-            selected.isActive
-        ? selected
-        : null;
+    final taskInFocus =
+        !inTaskChat && inSession && selected != null && selected.isActive
+            ? selected
+            : null;
+    final now = _now;
+    final dueToday = todayTasks(_active, now);
+    final overdue = dueToday.where((Task t) => isOverdue(t, now)).length;
+    final persona = _settings.personas.responder;
+    final Widget? leading;
+    if (inTaskChat || taskInFocus != null) {
+      // В чате задачи слева — «назад» к предыдущему чату, при выбранной
+      // задаче в главном — снять выбор; на телефоне он заменяет меню
+      // (меню открывается и жестом от левого края).
+      leading = IconButton(
+        key: const Key('task-back'),
+        tooltip: inTaskChat ? 'Назад' : 'Назад к сессии',
+        onPressed: inTaskChat ? _goBack : _exitTask,
+        style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+        icon: const Icon(Icons.chevron_left, size: 22),
+      );
+    } else if (!sidebar) {
+      leading = IconButton(
+        key: const Key('menu-button'),
+        tooltip: 'Меню',
+        onPressed: wide
+            ? () => setState(() => _sidebarOpen = true)
+            : () => _scaffoldKey.currentState?.openDrawer(),
+        style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+        icon: const Icon(Icons.menu, color: AssistantColors.text),
+      );
+    } else {
+      leading = null;
+    }
+    final Widget? title;
+    if (inTaskChat) {
+      title = _buildTaskChatHeader(chatTaskId, narrow: narrow);
+    } else if (taskInFocus != null) {
+      title = _TaskCrumb(
+        task: taskInFocus,
+        now: now,
+        narrow: narrow,
+        onOpenDocument: () => _setMode(AssistantViewMode.document),
+        onOpenChat: () => _openTaskChat(
+          taskInFocus,
+          mode: AssistantViewMode.dialogue,
+        ),
+      );
+    } else if (!inSession) {
+      title = _SectionTitle(title: _section.title);
+    } else {
+      title = null;
+    }
+    final current = _book.current;
+    final sessionTitle = current.kind == ChatKind.task
+        ? (_findTask(current.taskId)?.title ?? 'Задача')
+        : ChatBook.titleOf(current);
     // Material, а не ColoredBox: на нём рисуются подсветка и всплески
     // нажатий у ListTile и кнопок во всех разделах.
     return Material(
       color: AssistantColors.workspace,
       child: Column(
         children: <Widget>[
-          SizedBox(
-            height: 56,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: narrow ? 4 : 16),
-              child: Row(
-                children: <Widget>[
-                  // В чате задачи слева — «назад» к предыдущему чату, при
-                  // выбранной задаче в главном — снять выбор; на телефоне
-                  // он заменяет меню.
-                  if (inTaskChat || taskInFocus != null)
-                    IconButton(
-                      key: const Key('task-back'),
-                      tooltip: inTaskChat ? 'Назад' : 'Назад к общему чату',
-                      onPressed: inTaskChat ? _goBack : _exitTask,
-                      style: narrow
-                          ? null
-                          : IconButton.styleFrom(
-                              fixedSize: const Size(36, 36),
-                              minimumSize: const Size(36, 36),
-                              padding: EdgeInsets.zero,
-                              side: const BorderSide(
-                                color: AssistantColors.border,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                      icon: const Icon(Icons.chevron_left, size: 22),
-                    )
-                  else if (narrow)
-                    IconButton(
-                      key: const Key('menu-button'),
-                      tooltip: 'Меню',
-                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                      icon: const Icon(Icons.menu),
-                    ),
-                  SizedBox(width: narrow ? 4 : 12),
-                  // Заголовок занимает всё свободное место, поэтому поиск и
-                  // кнопка панели прижаты к правому краю.
-                  Expanded(
-                    child: inTaskChat
-                        ? _buildTaskChatHeader(chatTaskId, narrow: narrow)
-                        : taskInFocus == null
-                            ? _SectionTitle(
-                                title: _section.title,
-                                subtitle: _section == AppSection.tasks &&
-                                        _active.isNotEmpty &&
-                                        !narrow
-                                    ? '${_active.length} активных'
-                                    : null,
-                              )
-                            : _TaskCrumb(
-                                task: taskInFocus,
-                                now: _now,
-                                narrow: narrow,
-                                onOpenDocument: () =>
-                                    _setMode(AssistantViewMode.document),
-                                onOpenChat: () => _openTaskChat(
-                                  taskInFocus,
-                                  mode: AssistantViewMode.dialogue,
-                                ),
-                              ),
-                  ),
-                  if (_section == AppSection.tasks && !narrow) ...<Widget>[
-                    _SearchField(
-                      controller: _taskSearch,
-                      onChanged: (String value) {
-                        setState(() => _taskQuery = value.trim().toLowerCase());
-                        if (!wide && value.isNotEmpty) _openTasksPanel(wide);
-                      },
-                    ),
-                    const SizedBox(width: 12),
-                  ],
-                  if (_section == AppSection.tasks)
-                    _PanelToggle(
-                      wide: wide,
-                      open: wide && _panelOpen,
-                      count: _active.length,
-                      onPressed: () => _openTasksPanel(wide),
-                    ),
-                ],
-              ),
+          SessionHeader(
+            wide: wide || title != null,
+            leading: leading,
+            title: title,
+            personaName: persona.russianName,
+            onPersona: () => _openMyRelay(MyRelayTab.assistants),
+            subtitle: wide ? 'сессия «$sessionTitle»' : null,
+            today: TodayButton(
+              count: dueToday.length,
+              overdue: overdue,
+              // Подпись «Сегодня» прячется только в тесноте: рядом
+              // заголовок задачи или экран уже 360 (D-Phone — с подписью).
+              compact: narrow &&
+                  (title != null || MediaQuery.sizeOf(context).width < 360),
+              expanded: wide ? today : null,
+              onPressed: () => _toggleToday(wide),
             ),
           ),
           const Divider(),
-          Expanded(child: _buildSection(wide: wide)),
+          Expanded(child: _buildSection()),
         ],
       ),
     );
   }
+
+  Widget _buildMyRelay() {
+    final now = _now;
+    final stats = _relayStats();
+    final approximate = !_book.activityExact(
+      _storedChats ?? const <String, List<ChatMessage>>{},
+    );
+    return MyRelayScreen(
+      tab: _myRelayTab,
+      onTabChanged: (MyRelayTab tab) => setState(() => _myRelayTab = tab),
+      onBack: () => _goTo(AppSection.session),
+      stats: stats.line,
+      summary: RelaySummary(
+        activity: stats.activityByDay,
+        approximate: approximate,
+        tasks: _active,
+        now: now,
+        pending: <TodayPending>[
+          for (final pending in _book.pendingCards(now))
+            _todayPending(pending.chatId, pending.message),
+        ],
+        onOpenTask: (Task task) =>
+            _openTaskChat(task, mode: AssistantViewMode.dialogue),
+        onAllTasks: () => _goTo(AppSection.tasks),
+      ),
+      activity: RelayActivity(
+        activity: stats.activityByDay,
+        approximate: approximate,
+        completed: _completed,
+        now: now,
+        onReopen: (Task task) => unawaited(_reopenFromActivity(task)),
+      ),
+      assistants: RelayAssistants(
+        settings: _settings,
+        onChanged: _changeSettings,
+        registry: widget.assistant.extensions,
+        onOpenRoles: () => setState(() => _myRelayTab = MyRelayTab.settings),
+      ),
+      settings: SettingsScreen(
+        settings: _settings,
+        onChanged: _changeSettings,
+        onClearChat: _clearChat,
+        messageCount: _book.totalMessages,
+        extensions: widget.assistant.extensions,
+        connections: widget.connections,
+        passwords: widget.passwords,
+        showTitle: false,
+        includePersonas: false,
+        onOpenStorage: () => unawaited(
+          Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(
+              builder: (BuildContext context) => Scaffold(
+                backgroundColor: AssistantColors.workspace,
+                appBar: AppBar(
+                  backgroundColor: AssistantColors.workspace,
+                  title: const Text('Данные и резервная копия'),
+                ),
+                // Маршрут не перестраивается вместе с HomePage: список
+                // архива и счётчики обновляются по [_dataRevision].
+                body: ValueListenableBuilder<int>(
+                  valueListenable: _dataRevision,
+                  builder: (BuildContext context, int _, Widget? __) =>
+                      _buildStorage(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _reopenFromActivity(Task task) async {
+    String message;
+    try {
+      await widget.tasks.reopen(task.id);
+      await _refresh();
+      message = '«${task.title}» снова в работе';
+    } on Object catch (error) {
+      message = 'Не удалось: $error';
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _buildStorage() => StorageScreen(
+        info: widget.storage,
+        activeCount: _active.length,
+        completed: _completed,
+        now: _now,
+        chatCount:
+            _book.threads.where((ChatThread t) => t.messageCount > 0).length,
+        onReopen: (Task task) async {
+          await widget.tasks.reopen(task.id);
+          await _refresh();
+        },
+      );
 
   Widget _buildTaskChatHeader(String taskId, {required bool narrow}) {
     final task = _findTask(taskId);
@@ -1601,7 +2016,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildSection({required bool wide}) {
+  Widget _buildSection() {
     final now = _now;
     final selectedId = _selectedTask?.id;
     // Задача из списков открывается своим чатом, в режиме «Диалог»;
@@ -1609,15 +2024,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     void open(Task task) =>
         _openTaskChat(task, mode: AssistantViewMode.dialogue);
     switch (_section) {
-      case AppSection.overview:
-        return OverviewScreen(
-          tasks: _all,
-          now: now,
-          selectedId: selectedId,
-          onOpenTask: open,
-          onToggleDone: _toggleDone,
-          onGoToTasks: () => _goTo(AppSection.tasks),
-        );
       case AppSection.projects:
         return ProjectsScreen(
           tasks: _active,
@@ -1634,74 +2040,63 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           onOpenTask: open,
           onToggleDone: _toggleDone,
         );
-      case AppSection.storage:
-        return StorageScreen(
-          info: widget.storage,
-          activeCount: _active.length,
-          completed: _completed,
-          now: now,
-          chatCount:
-              _book.threads.where((ChatThread t) => t.messageCount > 0).length,
-          onReopen: (Task task) async {
-            await widget.tasks.reopen(task.id);
-            await _refresh();
-          },
-        );
-      case AppSection.settings:
-        return SettingsScreen(
-          settings: _settings,
-          onChanged: _changeSettings,
-          onClearChat: _clearChat,
-          messageCount: _book.totalMessages,
-          extensions: widget.assistant.extensions,
-          connections: widget.connections,
-          passwords: widget.passwords,
-        );
       case AppSection.tasks:
-        return _buildTasksWorkspace(wide: wide);
+        return _buildTasksPanel(withSearch: true);
+      case AppSection.session:
+      case AppSection.myRelay:
+        return LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) =>
+              _buildConversationColumn(constraints.maxHeight),
+        );
     }
   }
 
-  Widget _buildTasksWorkspace({required bool wide}) {
-    return Row(
-      children: <Widget>[
-        Expanded(
-          child: LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) =>
-                _buildConversationColumn(constraints.maxHeight, wide),
-          ),
-        ),
-        if (wide && _panelOpen) ...<Widget>[
-          const VerticalDivider(width: 1),
-          SizedBox(width: 320, child: _buildTasksPanel()),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildConversationColumn(double height, bool wide) {
+  Widget _buildConversationColumn(double height) {
+    final current = _book.current;
+    final hero = _mode == AssistantViewMode.dialogue &&
+        current.isSession &&
+        current.messageCount == 0 &&
+        !_sending;
     return Column(
       children: <Widget>[
         Expanded(
-          child: _mode == AssistantViewMode.dialogue
-              ? _buildDialogue()
-              : DocumentView(
-                  task: _selectedTask,
-                  now: _now,
-                  titleController: _docTitle,
-                  projectController: _docProject,
-                  bodyController: _docBody,
-                  bodyFocus: _docBodyFocus,
-                  saveState: _docState,
-                  savedAt: _docSavedAt,
-                  onSaveNow: _saveDocument,
-                  onReopen: () {
-                    final task = _selectedTask;
-                    if (task != null) unawaited(_toggleDone(task));
-                  },
-                  onOpenTasks: () => _openTasksPanel(wide),
-                  answer: _latestAnswer(),
-                ),
+          child: hero
+              ? SessionHero(
+                  persona: _settings.personas.responder,
+                  note: _settings.personas.mode == AssistantMode.duo
+                      ? SessionHero.noteFor(
+                          <(String, Persona)>[
+                            for (final role
+                                in widget.assistant.extensions.activeRoles)
+                              (
+                                role.title,
+                                widget.assistant.extensions
+                                    .ownerOf(role.id, _settings.personas),
+                              ),
+                          ],
+                          _settings.personas.main,
+                        )
+                      : null,
+                )
+              : _mode == AssistantViewMode.dialogue
+                  ? _buildDialogue()
+                  : DocumentView(
+                      task: _selectedTask,
+                      now: _now,
+                      titleController: _docTitle,
+                      projectController: _docProject,
+                      bodyController: _docBody,
+                      bodyFocus: _docBodyFocus,
+                      saveState: _docState,
+                      savedAt: _docSavedAt,
+                      onSaveNow: _saveDocument,
+                      onReopen: () {
+                        final task = _selectedTask;
+                        if (task != null) unawaited(_toggleDone(task));
+                      },
+                      onOpenTasks: () => _goTo(AppSection.tasks),
+                      answer: _latestAnswer(),
+                    ),
         ),
         if (_duo) _buildAddresseeSwitch(),
         _buildBottomArea(height),
@@ -1817,16 +2212,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final link = message.link;
     if (link == null || link.chatId == _book.currentId) return (null, null);
     if (link.chatId == ChatThread.mainId) {
-      return ('из чата «Главный»', const Key('chat-origin-link'));
+      return ('из сессии «Главный»', const Key('chat-origin-link'));
     }
     final task = _findTask(link.taskId);
     if (task == null) return (null, null);
     final current = _book.current;
     // Копия в чате задачи ведёт в чат задачи-родителя.
     if (!current.isMain && current.parentTaskId == task.id) {
-      return ('из чата «${task.title}»', const Key('chat-origin-link'));
+      return ('из сессии «${task.title}»', const Key('chat-origin-link'));
     }
-    return ('Открыть чат задачи', Key('open-task-chat-${task.id}'));
+    return ('Открыть сессию задачи', Key('open-task-chat-${task.id}'));
   }
 
   void _followLink(ChatLink link) {
@@ -1938,6 +2333,43 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       widget.passwords != null &&
       widget.assistant.extensions.isEnabled(AssistantController.passwordsId);
 
+  /// «Пароль» в быстрых действиях: те же три действия, что в «+».
+  Future<void> _openPasswordActions() async {
+    final action = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: AssistantColors.raised,
+      showDragHandle: true,
+      builder: (BuildContext context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            for (final (index, label, icon) in <(int, String, IconData)>[
+              (0, 'Найти пароль', Icons.key_outlined),
+              (1, 'Сгенерировать пароль', Icons.password),
+              (2, 'Добавить запись', Icons.add_moderator_outlined),
+            ])
+              ListTile(
+                key: Key('password-action-$index'),
+                minTileHeight: 52,
+                leading: Icon(icon),
+                title: Text(label),
+                onTap: () => Navigator.of(context).pop(index),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 0:
+        await _openPasswords();
+      case 1:
+        await _openGenerator();
+      case 2:
+        await _openPasswords(add: true);
+    }
+  }
+
   Future<void> _openGenerator() async {
     final passwords = widget.passwords;
     if (passwords == null) return;
@@ -2048,9 +2480,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         padding: padding,
         child: QuickDock(
           budget: maxHeight - padding.vertical,
+          // Крупный шрифт — кнопкам нужно больше места на две строки;
+          // не хватает — одна строка с прокруткой.
+          minRoom:
+              104 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0),
           actions: compact
               ? const SizedBox.shrink()
-              : _QuickActions(
+              : QuickActions(
+                  // Пустая сессия — крупные круглые кнопки, после первой
+                  // команды — ряд «пилюль».
+                  big: _mode == AssistantViewMode.dialogue &&
+                      !_messages.any((ChatMessage m) => m.fromUser),
                   hasSelection: selected != null && selected.isActive,
                   // Кнопки включённых ролей («Кладовщик»): пропадают, как
                   // только роль или её навык выключили.
@@ -2058,6 +2498,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   sending: _sending,
                   onSend: _send,
                   onTemplate: _applyTemplate,
+                  onPassword: _passwordsEnabled ? _openPasswordActions : null,
                 ),
           composer: SingleChildScrollView(
             reverse: true,
@@ -2153,7 +2594,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildTasksPanel() {
+  /// Экран «Задачи»: группы активных задач и поиск по ним.
+  Widget _buildTasksPanel({bool withSearch = false}) {
     final Widget body;
     if (!_loaded) {
       body = const Center(child: CircularProgressIndicator());
@@ -2248,6 +2690,15 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ],
             ),
           ),
+          if (withSearch)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: _SearchField(
+                controller: _taskSearch,
+                onChanged: (String value) =>
+                    setState(() => _taskQuery = value.trim().toLowerCase()),
+              ),
+            ),
           Expanded(child: body),
         ],
       ),
@@ -2285,97 +2736,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 }
 
 // ------------------------------------------------------------------ части
-
-final class _NavItem extends StatelessWidget {
-  const _NavItem({
-    required this.section,
-    required this.expanded,
-    required this.active,
-    required this.onTap,
-    this.badge,
-  });
-
-  final AppSection section;
-  final bool expanded;
-  final bool active;
-  final VoidCallback onTap;
-  final String? badge;
-
-  @override
-  Widget build(BuildContext context) {
-    final decoration = BoxDecoration(
-      color: active ? AssistantColors.raised : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-    );
-    final icon = Icon(
-      section.icon,
-      size: 18,
-      color: active ? AssistantColors.textStrong : AssistantColors.muted,
-    );
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 8, vertical: 3),
-      child: Tooltip(
-        message: section.title,
-        child: Semantics(
-          button: true,
-          selected: active,
-          label: section.title,
-          excludeSemantics: true,
-          child: InkWell(
-            key: Key('nav-${section.name}'),
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              height: 40,
-              padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0),
-              decoration: decoration,
-              child: expanded
-                  ? Row(
-                      children: <Widget>[
-                        icon,
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            section.title,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: active
-                                  ? AssistantColors.textStrong
-                                  : AssistantColors.text,
-                            ),
-                          ),
-                        ),
-                        if (badge != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            decoration: BoxDecoration(
-                              color: AssistantColors.bubble,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              badge!,
-                              style: technicalTextStyle.copyWith(
-                                color: AssistantColors.text,
-                                height: 20 / 12,
-                              ),
-                            ),
-                          ),
-                      ],
-                    )
-                  : Center(
-                      child: _CountBadge(
-                        count: int.tryParse(badge ?? '') ?? 0,
-                        child: icon,
-                      ),
-                    ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 final class _DaySeparator extends StatelessWidget {
   const _DaySeparator({required this.label});
@@ -2421,6 +2781,7 @@ final class _ChatLinkChip extends StatelessWidget {
     return Semantics(
       button: true,
       label: label,
+      onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
@@ -2520,7 +2881,7 @@ final class _MessageRow extends StatelessWidget {
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
-                    author.name,
+                    author.russianName,
                     overflow: TextOverflow.ellipsis,
                     style: technicalTextStyle.copyWith(
                       color: Color(author.accentColor),
@@ -2635,31 +2996,24 @@ final class _MessageRow extends StatelessWidget {
 }
 
 final class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, this.subtitle});
+  const _SectionTitle({required this.title});
 
   final String title;
-  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: <Widget>[
-        Flexible(
-          child: Text(
-            title,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AssistantColors.textStrong,
-            ),
-          ),
+    return Semantics(
+      header: true,
+      child: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: AssistantColors.textStrong,
         ),
-        if (subtitle != null) ...<Widget>[
-          const SizedBox(width: 8),
-          Text(subtitle!, style: technicalTextStyle),
-        ],
-      ],
+      ),
     );
   }
 }
@@ -2702,7 +3056,7 @@ final class _TaskCrumb extends StatelessWidget {
     );
     final chatButton = IconButton(
       key: const Key('open-task-chat'),
-      tooltip: 'Открыть чат задачи',
+      tooltip: 'Открыть сессию задачи',
       onPressed: onOpenChat,
       iconSize: 16,
       icon: const Icon(Icons.forum_outlined),
@@ -2817,194 +3171,6 @@ final class _TaskCrumb extends StatelessWidget {
   }
 }
 
-final class _QuickActions extends StatefulWidget {
-  const _QuickActions({
-    required this.hasSelection,
-    required this.sending,
-    required this.onSend,
-    required this.onTemplate,
-    this.roleChips = const <RoleChip>[],
-  });
-
-  final bool hasSelection;
-
-  /// Кнопки включённых ролей: отправить сразу или вставить шаблон.
-  final List<RoleChip> roleChips;
-
-  final bool sending;
-  final Future<void> Function([String? preset]) onSend;
-  final ValueChanged<String> onTemplate;
-
-  @override
-  State<_QuickActions> createState() => _QuickActionsState();
-}
-
-final class _QuickActionsState extends State<_QuickActions> {
-  final ScrollController _rows = ScrollController();
-  final ScrollController _strip = ScrollController();
-
-  @override
-  void dispose() {
-    _rows.dispose();
-    _strip.dispose();
-    super.dispose();
-  }
-
-  static IconData _icon(String name) => switch (name) {
-        'search' => Icons.search,
-        'inbox' => Icons.move_to_inbox_outlined,
-        'photo' => Icons.no_photography_outlined,
-        'key' => Icons.key_outlined,
-        'lock' => Icons.lock_outline,
-        'password' => Icons.password,
-        'shield' => Icons.shield_outlined,
-        _ => Icons.chat_bubble_outline,
-      };
-
-  Widget _button((String, IconData, VoidCallback?) item) {
-    final (label, icon, action) = item;
-    return OutlinedButton.icon(
-      key: Key('quick-$label'),
-      onPressed: action,
-      icon: Icon(icon, size: 16),
-      label: Text(label, style: const TextStyle(fontSize: 12), maxLines: 1),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AssistantColors.text,
-        side: const BorderSide(color: AssistantColors.border),
-        // Та же высота и форма, что у «Кому:» над ними: на
-        // настольной плотности кнопки иначе становятся ниже.
-        minimumSize: const Size(0, 32),
-        visualDensity: VisualDensity.standard,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        shape: const StadiumBorder(),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final sending = widget.sending;
-    final onSend = widget.onSend;
-    final onTemplate = widget.onTemplate;
-    final tasks = <(String, IconData, VoidCallback?)>[
-      (
-        'Покажи задачи',
-        Icons.checklist,
-        sending ? null : () => onSend('Покажи задачи'),
-      ),
-      (
-        'Новая задача',
-        Icons.add,
-        () => onTemplate('Добавь задачу «|» на завтра'),
-      ),
-      if (widget.hasSelection) ...<(String, IconData, VoidCallback?)>[
-        (
-          'Перенести',
-          Icons.update,
-          () => onTemplate('Перенеси её на завтра в |'),
-        ),
-        (
-          'Заверши её',
-          Icons.check,
-          sending ? null : () => onSend('Заверши её'),
-        ),
-      ],
-    ];
-    final roles = <(String, IconData, VoidCallback?)>[
-      for (final chip in widget.roleChips)
-        (
-          chip.label,
-          _icon(chip.icon),
-          switch (chip.action) {
-            RoleChipAction.send => sending ? null : () => onSend(chip.text),
-            RoleChipAction.insert => () => onTemplate(chip.text),
-          },
-        ),
-    ];
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        if (QuickDock.isTight(constraints)) {
-          // Узкий экран и крупный шрифт: строк не уместить. Одна строка с
-          // горизонтальной прокруткой и видимой полосой; кнопки ролей —
-          // первыми, они нужнее всего тому, кто роль включил.
-          final items = <(String, IconData, VoidCallback?)>[...roles, ...tasks];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Scrollbar(
-              controller: _strip,
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                key: const Key('quick-strip'),
-                controller: _strip,
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  children: <Widget>[
-                    for (final (index, item) in items.indexed)
-                      Padding(
-                        padding: EdgeInsets.only(left: index == 0 ? 0 : 8),
-                        child: _button(item),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
-        // Перенос строк вместо горизонтальной прокрутки: все действия
-        // видны. Не уместились в отведённую высоту — прокручиваются в
-        // ней, полоса прокрутки видна.
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Scrollbar(
-            controller: _rows,
-            thumbVisibility: true,
-            child: SingleChildScrollView(
-              controller: _rows,
-              child: SizedBox(
-                width: double.infinity,
-                child: Wrap(
-                  key: const Key('quick-rows'),
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: <Widget>[
-                    for (final item in <(String, IconData, VoidCallback?)>[
-                      ...tasks,
-                      ...roles,
-                    ])
-                      _button(item),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Счётчик рядом с иконкой: смещён за её край, чтобы не закрывать значок,
-/// и не растёт вместе с крупным шрифтом.
-final class _CountBadge extends StatelessWidget {
-  const _CountBadge({required this.count, required this.child});
-
-  final int count;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Badge(
-      isLabelVisible: count > 0,
-      offset: const Offset(12, -8),
-      backgroundColor: AssistantColors.textStrong,
-      textColor: AssistantColors.background,
-      label: MediaQuery.withNoTextScaling(child: Text('$count')),
-      child: child,
-    );
-  }
-}
-
 /// Содержимое документа задачи в момент отправки на запись.
 @immutable
 final class _DocSnapshot {
@@ -3027,50 +3193,7 @@ final class _DocSnapshot {
   int get hashCode => Object.hash(id, title, project, body);
 }
 
-/// Знак приложения: кубик 3×3 в шахматном порядке.
-final class _BrandMark extends StatelessWidget {
-  const _BrandMark();
-
-  @override
-  Widget build(BuildContext context) {
-    return ExcludeSemantics(
-      child: SizedBox(
-        width: 20,
-        height: 20,
-        child: Column(
-          children: <Widget>[
-            for (var row = 0; row < 3; row++) ...<Widget>[
-              if (row > 0) const SizedBox(height: 2),
-              Expanded(
-                child: Row(
-                  children: <Widget>[
-                    for (var column = 0; column < 3; column++) ...<Widget>[
-                      if (column > 0) const SizedBox(width: 2),
-                      // Container без потомка занимает всю ячейку; пустой
-                      // DecoratedBox схлопнулся бы в ноль по высоте.
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: (row * 3 + column).isEven
-                                ? AssistantColors.textStrong
-                                : AssistantColors.border,
-                            borderRadius: BorderRadius.circular(1),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Поиск по задачам в верхней строке: фильтрует панель задач.
+/// Поиск по задачам на экране «Задачи».
 final class _SearchField extends StatelessWidget {
   const _SearchField({required this.controller, required this.onChanged});
 
@@ -3080,9 +3203,9 @@ final class _SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 280, minWidth: 160),
+      constraints: const BoxConstraints(maxWidth: 480, minWidth: 160),
       child: SizedBox(
-        height: 36,
+        height: 44,
         child: TextField(
           key: const Key('task-search'),
           controller: controller,
@@ -3138,43 +3261,6 @@ final class _SearchField extends StatelessWidget {
   }
 }
 
-/// Кнопка панели задач: на широком экране скрывает и показывает колонку,
-/// на узком — открывает выдвижную панель, а число задач стоит рядом.
-final class _PanelToggle extends StatelessWidget {
-  const _PanelToggle({
-    required this.wide,
-    required this.open,
-    required this.count,
-    required this.onPressed,
-  });
-
-  final bool wide;
-  final bool open;
-  final int count;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      key: const Key('tasks-toggle'),
-      onPressed: onPressed,
-      tooltip: wide && open ? 'Скрыть панель задач' : 'Панель задач',
-      style: IconButton.styleFrom(
-        fixedSize: const Size(40, 40),
-        minimumSize: const Size(40, 40),
-        padding: EdgeInsets.zero,
-        backgroundColor: open ? AssistantColors.raised : Colors.transparent,
-        side: const BorderSide(color: AssistantColors.border),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      icon: _CountBadge(
-        count: wide ? 0 : count,
-        child: const Icon(Icons.view_sidebar_outlined, size: 18),
-      ),
-    );
-  }
-}
-
 /// Кому писать в дуэте: две кнопки с именами помощников над полем ввода.
 /// Выбор живёт только в этом чате; обращение по имени («Noda, …») важнее.
 final class _AddresseeSwitch extends StatelessWidget {
@@ -3208,7 +3294,8 @@ final class _AddresseeSwitch extends StatelessWidget {
             Semantics(
               button: true,
               selected: persona.id == selected?.id,
-              label: 'Писать ${persona.name}',
+              label: 'Кому: ${persona.russianName}',
+              onTap: () => onChanged(persona),
               excludeSemantics: true,
               child: InkWell(
                 key: Key('addressee-${persona.id}'),
@@ -3234,7 +3321,7 @@ final class _AddresseeSwitch extends StatelessWidget {
                       PersonaMark(persona: persona, size: 14),
                       const SizedBox(width: 4),
                       Text(
-                        persona.name,
+                        persona.russianName,
                         style: technicalTextStyle.copyWith(
                           color: persona.id == selected?.id
                               ? AssistantColors.textStrong

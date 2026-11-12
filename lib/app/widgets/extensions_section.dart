@@ -204,7 +204,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
         backgroundColor: AssistantColors.raised,
         title: Text('Удалить пак «${info.title}»?'),
         content: const Text(
-          'Его записи пропадут. Задачи и история чата останутся.',
+          'Его записи пропадут. Задачи и история сессий останутся.',
         ),
         actions: <Widget>[
           TextButton(
@@ -317,7 +317,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
           padding: EdgeInsets.symmetric(horizontal: 8),
           child: Text(
             'Настройте ${AppInfo.name} под себя: включайте только нужное. '
-            'Изменения применяются сразу, задачи и чат не сбрасываются.',
+            'Изменения применяются сразу, задачи и сессии не сбрасываются.',
             style: technicalTextStyle,
           ),
         ),

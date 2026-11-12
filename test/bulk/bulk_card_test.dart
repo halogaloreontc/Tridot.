@@ -17,6 +17,8 @@ import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
+import '../support/home_nav.dart';
+
 /// Карточка массовой команды в чате: галочки, счётчик, применение, отмена,
 /// узкий экран с крупным шрифтом и широкий экран.
 final _clock = FixedClock(DateTime(2026, 11, 4, 12)); // среда
@@ -224,9 +226,8 @@ void main() {
     await _say(tester, 'перенеси всё на выходные');
     await _tap(tester, find.byKey(ValueKey<String>('bulk-item-${h.ids[0]}')));
 
-    // Через экран настроек: режим, обращение и эмодзи.
-    await tester.tap(find.byKey(const Key('nav-settings')));
-    await tester.pumpAndSettle();
+    // Через «Мой Связной → Помощники»: режим, обращение и эмодзи.
+    await openMyRelay(tester, 'assistants');
     for (final key in <String>[
       'assistant-mode-solo',
       'address-ty',
@@ -239,8 +240,7 @@ void main() {
       await tester.pumpAndSettle();
     }
     expect(h.assistant.personas.mode, AssistantMode.solo);
-    await tester.tap(find.byKey(const Key('nav-tasks')));
-    await tester.pumpAndSettle();
+    await backToSession(tester);
     expect(_applyLabel(tester), 'Перенести (2)');
     expect(h.assistant.pendingChecklist, isNotNull);
     await _tap(tester, _apply());
@@ -251,8 +251,7 @@ void main() {
     final h = await _pump(tester);
     await _say(tester, 'перенеси всё на выходные');
     final checklist = h.assistant.pendingChecklist!;
-    await tester.tap(find.byKey(const Key('nav-settings')));
-    await tester.pumpAndSettle();
+    await openSettings(tester);
     final clear = find.byKey(const ValueKey<String>('clear-chat'));
     await tester.ensureVisible(clear);
     await tester.pumpAndSettle();

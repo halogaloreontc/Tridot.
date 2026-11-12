@@ -170,7 +170,7 @@ final class _MarkState extends State<_Mark> {
     return switch (widget.age) {
       0 => (16 * scale, AssistantColors.success),
       1 => (14 * scale, AssistantColors.muted),
-      2 || 3 => (12 * scale, const Color(0xFF5E655F)),
+      2 || 3 => (12 * scale, AssistantColors.faint),
       _ => (8 * scale, AssistantColors.border),
     };
   }

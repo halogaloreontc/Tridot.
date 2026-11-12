@@ -24,6 +24,8 @@ import 'package:local_assistant/core/settings/app_settings.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
+import '../support/home_nav.dart';
+
 import 'vault_test_support.dart';
 
 void main() {
@@ -295,15 +297,11 @@ void main() {
       (WidgetTester tester) async {
     await setUpHome();
     await pumpHome(tester);
-    await tester.tap(find.byKey(const Key('nav-settings')).first);
-    await tester.pumpAndSettle();
+    await openSettings(tester);
     final status =
         find.byKey(const ValueKey<String>('extension-status-passwords'));
-    await tester.scrollUntilVisible(
-      status,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await tester.ensureVisible(status);
+    await tester.pumpAndSettle();
     expect(
       tester.widget<Text>(status).data,
       startsWith('Открыто до'),

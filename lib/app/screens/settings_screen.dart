@@ -12,7 +12,8 @@ import '../widgets/roles_section.dart';
 import '../widgets/task_tile.dart';
 
 /// Экран «Настройки»: поведение интерфейса, помощники, роли, расширения,
-/// история чата, о приложении.
+/// история сессий, данные, о приложении. В оболочке «Д» — вкладка
+/// «Мой Связной → Настройки» (без заголовка, помощники — своей вкладкой).
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
     super.key,
@@ -23,13 +24,25 @@ class SettingsScreen extends StatelessWidget {
     this.extensions,
     this.connections = const <ConnectionService>[],
     this.passwords,
+    this.showTitle = true,
+    this.includePersonas = true,
+    this.onOpenStorage,
   });
+
+  /// Заголовок «Настройки» над экраном.
+  final bool showTitle;
+
+  /// Раздел «Помощники» на этом экране (иначе он своей вкладкой).
+  final bool includePersonas;
+
+  /// «Данные и резервная копия»; `null` — строки нет.
+  final VoidCallback? onOpenStorage;
 
   final AppSettings settings;
   final ValueChanged<AppSettings> onChanged;
   final VoidCallback onClearChat;
 
-  /// Сообщений в чате; приветствие помощника тоже считается.
+  /// Сообщений во всех сессиях; приветствие помощника тоже считается.
   final int messageCount;
 
   /// Навыки, подключения и паки; `null` — раздел «Расширения» не показан.
@@ -49,9 +62,9 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AssistantColors.raised,
-        title: const Text('Очистить историю чатов?'),
+        title: const Text('Очистить историю сессий?'),
         content: const Text(
-          'Сообщения всех чатов, в том числе чатов задач, будут удалены. '
+          'Сообщения всех сессий, в том числе сессий задач, будут удалены. '
           'Задачи останутся на месте.',
         ),
         actions: <Widget>[
@@ -88,12 +101,13 @@ class SettingsScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Text(
-                'Настройки',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  color: AssistantColors.textStrong,
+              if (showTitle)
+                Text(
+                  'Настройки',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: AssistantColors.textStrong,
+                  ),
                 ),
-              ),
               const SectionLabel('Интерфейс'),
               SwitchListTile(
                 key: const ValueKey<String>('setting-reduce-motion'),
@@ -115,11 +129,12 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: (value) =>
                     onChanged(settings.copyWith(showTimestamps: value)),
               ),
-              PersonasSection(
-                settings: settings,
-                onChanged: onChanged,
-                registry: extensions,
-              ),
+              if (includePersonas)
+                PersonasSection(
+                  settings: settings,
+                  onChanged: onChanged,
+                  registry: extensions,
+                ),
               if (extensions case final ExtensionRegistry registry
                   when registry.roles.isNotEmpty)
                 RolesSection(
@@ -136,7 +151,7 @@ class SettingsScreen extends StatelessWidget {
                   connections: connections,
                   passwords: passwords,
                 ),
-              const SectionLabel('Чат'),
+              const SectionLabel('Сессии'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Column(
@@ -151,7 +166,7 @@ class SettingsScreen extends StatelessWidget {
                       ),
                       onPressed: canClear ? () => _confirmClear(context) : null,
                       icon: const Icon(Icons.delete_sweep_outlined, size: 18),
-                      label: const Text('Очистить историю чатов'),
+                      label: const Text('Очистить историю сессий'),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -163,6 +178,21 @@ class SettingsScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              if (onOpenStorage != null) ...<Widget>[
+                const SectionLabel('Данные'),
+                ListTile(
+                  key: const ValueKey<String>('settings-storage'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  minTileHeight: 48,
+                  leading: const Icon(Icons.save_outlined),
+                  title: const Text(
+                    'Данные и резервная копия',
+                    style: switchTitle,
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: onOpenStorage,
+                ),
+              ],
               const SectionLabel('О приложении'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),

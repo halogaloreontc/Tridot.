@@ -1,25 +1,33 @@
 import 'package:flutter/material.dart';
 
+import '../core/personas/persona_palette.dart';
+
+/// Тема приложения из токенов [AssistantColors] (палитра «П1», ADR-015).
 final class AssistantTheme {
   const AssistantTheme._();
 
   static ThemeData dark() {
     const scheme = ColorScheme.dark(
-      surface: Color(0xFF151715),
-      onSurface: Color(0xFFC9CECA),
-      primary: Color(0xFFC4C9C5),
-      onPrimary: Color(0xFF171917),
-      outline: Color(0xFF303431),
+      surface: AssistantColors.workspace,
+      onSurface: AssistantColors.text,
+      primary: AssistantColors.primary,
+      onPrimary: AssistantColors.onPrimary,
+      secondary: AssistantColors.textStrong,
+      onSecondary: AssistantColors.onPrimary,
+      error: AssistantColors.danger,
+      onError: AssistantColors.onPrimary,
+      outline: AssistantColors.border,
+      outlineVariant: AssistantColors.borderSoft,
     );
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      scaffoldBackgroundColor: const Color(0xFF0D0F0E),
-      canvasColor: const Color(0xFF151715),
+      scaffoldBackgroundColor: AssistantColors.background,
+      canvasColor: AssistantColors.workspace,
       fontFamily: 'Inter',
       dividerTheme: const DividerThemeData(
-        color: Color(0xFF242824),
-        thickness: .5,
+        color: AssistantColors.divider,
+        thickness: 1,
         space: 0,
       ),
       textTheme: const TextTheme(
@@ -27,35 +35,104 @@ final class AssistantTheme {
         bodySmall: TextStyle(fontSize: 11, height: 1.45),
         titleLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
       ),
-      iconTheme: const IconThemeData(color: Color(0xFF858C87), size: 18),
+      iconTheme: const IconThemeData(color: AssistantColors.icon, size: 18),
+      drawerTheme: const DrawerThemeData(
+        scrimColor: AssistantColors.scrim,
+        shape: RoundedRectangleBorder(),
+        endShape: RoundedRectangleBorder(),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (Set<WidgetState> states) => states.contains(WidgetState.selected)
+              ? AssistantColors.workspace
+              : AssistantColors.icon,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (Set<WidgetState> states) => states.contains(WidgetState.selected)
+              ? AssistantColors.success
+              : AssistantColors.raised,
+        ),
+        trackOutlineColor: WidgetStateProperty.resolveWith(
+          (Set<WidgetState> states) => states.contains(WidgetState.selected)
+              ? AssistantColors.success
+              : AssistantColors.border,
+        ),
+      ),
       snackBarTheme: const SnackBarThemeData(
         // Плавающее уведомление не прячет под собой поле ввода целиком.
         behavior: SnackBarBehavior.floating,
-        backgroundColor: Color(0xFF242824),
-        contentTextStyle: TextStyle(color: Color(0xFFC9CECA)),
+        backgroundColor: AssistantColors.divider,
+        contentTextStyle: TextStyle(color: AssistantColors.text),
       ),
     );
   }
 }
 
-/// Палитра тёмной темы. Экраны берут цвета отсюда, а не задают свои.
+/// Палитра «П1» тёмной темы — единственный источник цветов. Экраны берут
+/// цвета отсюда, а не задают свои.
 abstract final class AssistantColors {
-  static const background = Color(0xFF0D0F0E);
-  static const sidebar = Color(0xFF000000);
-  static const workspace = Color(0xFF151715);
-  static const panel = Color(0xFF101210);
-  static const raised = Color(0xFF1C1F1C);
-  static const bubble = Color(0xFF292D29);
-  static const border = Color(0xFF3B403B);
-  static const borderSoft = Color(0xFF2A2E2A);
-  static const text = Color(0xFFC9CECA);
-  static const textStrong = Color(0xFFE5E7E6);
+  /// Фон окна под колонками (совпадает с [panel]).
+  static const background = Color(0xFF0F1110);
+  static const sidebar = Color(0xFF0B0C0C);
+  static const workspace = Color(0xFF131514);
+  static const panel = Color(0xFF0F1110);
+  static const raised = Color(0xFF1C1F1E);
+  static const bubble = Color(0xFF2A2F2D);
+  static const border = Color(0xFF46504B);
+  static const borderSoft = Color(0xFF303633);
 
-  /// Приглушённый текст: контраст около 6:1 на [workspace].
-  static const muted = Color(0xFF9AA19C);
-  static const success = Color(0xFF86A98E);
+  /// Рамка поля в фокусе (раскрытый поиск по сессиям).
+  static const borderFocus = Color(0xFF8A9390);
+
+  /// Тонкие разделители: шапка, края колонок.
+  static const divider = Color(0xFF262A28);
+  static const text = Color(0xFFDDE2DF);
+  static const textStrong = Color(0xFFF5F7F6);
+
+  /// Приглушённый текст: контраст около 8:1 на [workspace].
+  static const muted = Color(0xFFAEB6B1);
+
+  /// Иконки по умолчанию.
+  static const icon = Color(0xFFA0A9A3);
+
+  /// Ещё тише [muted]: рамки галочек, «нет связи», подписи хроники.
+  static const faint = Color(0xFF838C86);
+
+  /// Кубик состояния в покое.
+  static const cubeIdle = Color(0xFF8A9390);
+
+  /// Главная кнопка («+ Сессия», отправка, счётчик «Сегодня»).
+  static const primary = Color(0xFFF5F7F6);
+  static const onPrimary = Color(0xFF111312);
+
+  /// «На связи», выполнено.
+  static const success = Color(0xFF4FD18B);
   static const warning = Color(0xFFB8A47C);
-  static const danger = Color(0xFFC98C8C);
+
+  /// Просрочено, ошибка.
+  static const danger = Color(0xFFFF6B6B);
+
+  /// Лиорио: акцент и фон знака.
+  static const liorio = Color(PersonaPalette.liorio);
+  static const liorioBg = Color(PersonaPalette.liorioBg);
+
+  /// Нода: акцент и фон знака.
+  static const noda = Color(PersonaPalette.noda);
+  static const nodaBg = Color(PersonaPalette.nodaBg);
+
+  /// Совпадение в результатах поиска — цвета Ноды, как `mark` в макете
+  /// D-Phone-Menu-Search.
+  static const mark = noda;
+  static const markBg = nodaBg;
+
+  /// Уровни сетки активности: нет, мало, средне, много.
+  static const heat0 = Color(0xFF262A28);
+  static const heat1 = Color(0xFF256E47);
+  static const heat2 = Color(0xFF33A267);
+  static const heat3 = Color(0xFF4FD18B);
+
+  /// Затемнение под выдвижной панелью.
+  static const scrim = Color(0x9E000000);
 }
 
 /// Метаданные: время, пути, подписи. 11 px — минимум для читаемости.

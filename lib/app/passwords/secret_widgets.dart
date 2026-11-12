@@ -361,7 +361,7 @@ class _SecretRevealTextState extends State<SecretRevealText>
         TextSpan(
           text: char,
           style: isDigit
-              ? base.copyWith(color: const Color(0xFF8FB3D9))
+              ? base.copyWith(color: AssistantColors.liorio)
               : isLetter
                   ? base
                   : base.copyWith(color: AssistantColors.warning),

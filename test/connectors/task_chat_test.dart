@@ -176,6 +176,30 @@ void main() {
     expect((await f.get(cheese)).dueAt, isNull);
   });
 
+  test('выбор («её») у каждой сессии свой и не переходит в главный', () async {
+    final f = await _fixture();
+    f.assistant.enterChat(sessionId: 'session:a');
+    final created = await f.say('добавь задачу купить сыр');
+    final cheese = created.task!.id;
+    expect(f.assistant.selectedTaskId, cheese);
+
+    f.assistant.enterChat();
+    expect(f.assistant.selectedTaskId, isNull, reason: 'главный');
+    final done = await f.say('заверши её');
+    expect(done.status, AssistantStatus.needsClarification);
+    expect((await f.get(cheese)).status, isNot(TaskStatus.done));
+
+    f.assistant.enterChat(sessionId: 'session:b');
+    expect(f.assistant.selectedTaskId, isNull, reason: 'другая сессия');
+
+    f.assistant.enterChat(sessionId: 'session:a');
+    expect(f.assistant.selectedTaskId, cheese, reason: 'своя сессия');
+
+    f.assistant.forgetChatSelections();
+    f.assistant.enterChat(sessionId: 'session:a');
+    expect(f.assistant.selectedTaskId, isNull);
+  });
+
   test('новая задача из чата задачи: цель чата не меняется', () async {
     final f = await _fixture();
     final created = await f.say('добавь задачу купить сыр', chat: f.bread.id);

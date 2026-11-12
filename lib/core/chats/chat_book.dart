@@ -1,9 +1,14 @@
 import 'dart:async';
 import 'dart:math';
 
+import '../models/action_card.dart';
 import '../services/clock.dart';
 import 'chat_models.dart';
+import 'chat_search.dart';
 import 'chat_store.dart';
+
+/// Карточка действия, которая ждёт «Подтвердить»: где она и какая.
+typedef PendingCard = ({String chatId, String messageId, ChatMessage message});
 
 /// Все чаты приложения: главный и чаты задач, какой открыт и куда ведёт
 /// «назад» (ADR-010).
@@ -18,6 +23,9 @@ import 'chat_store.dart';
 ///   пишется.
 /// - Сообщения чата задачи читаются при первом открытии.
 /// - Чат удалённой задачи удаляется ([prune]); выполненной — остаётся.
+/// - Сессия ([newSession], ADR-015) — отдельный разговор без задачи:
+///   пустая на диск не пишется, [prune] её не трогает, название — первая
+///   команда.
 final class ChatBook {
   ChatBook({required ChatStore store, Clock clock = const SystemClock()})
       : _store = store,
@@ -34,6 +42,12 @@ final class ChatBook {
 
   /// Сколько чатов задач показывает боковое меню.
   static const int recentLimit = 5;
+
+  /// Сколько сессий показывает меню в «Недавних сессиях».
+  static const int sessionsLimit = 20;
+
+  /// Длина названия сессии из первой команды.
+  static const int titleLimit = 40;
 
   final ChatStore _store;
   final Clock _clock;
@@ -224,6 +238,10 @@ final class ChatBook {
     if (thread == null) return false;
     thread.messages.add(message);
     _trim(thread);
+    if (thread.isSession && thread.title == null && message.fromUser) {
+      final title = sessionTitle(message.text);
+      if (title.isNotEmpty) thread.title = title;
+    }
     if (message.timestamp.isAfter(thread.lastActivityAt)) {
       thread.lastActivityAt = message.timestamp;
     }
@@ -290,12 +308,14 @@ final class ChatBook {
   }
 
   /// Удаляет чаты задач, которых больше нет ([liveTaskIds] — все задачи,
-  /// кроме удалённых). Возвращает `true`, если удалён открытый чат (тогда
+  /// кроме удалённых). Сессии и главный не трогает. Возвращает `true`, если удалён открытый чат (тогда
   /// открыт главный).
   bool prune(Set<String> liveTaskIds) {
     final dead = <String>[
       for (final thread in _chats.values)
-        if (!thread.isMain && !liveTaskIds.contains(thread.taskId)) thread.id,
+        if (thread.kind == ChatKind.task &&
+            !liveTaskIds.contains(thread.taskId))
+          thread.id,
     ];
     if (dead.isEmpty) return false;
     var currentRemoved = false;
@@ -309,11 +329,273 @@ final class ChatBook {
     return currentRemoved;
   }
 
+  /// «+ Сессия»: новая пустая сессия открывается сразу (прежний чат — в
+  /// стек «назад»). Без приветствия; на диск — с первым сообщением. Если
+  /// открытая сессия ещё пуста, открывается она же.
+  Future<ChatThread> newSession() {
+    if (!_loaded) return ready.then((_) => newSession());
+    final current = this.current;
+    if (current.isSession && current.messageCount == 0) {
+      return Future<ChatThread>.value(current);
+    }
+    final now = _clock.now();
+    final id = '${ChatThread.sessionPrefix}${now.microsecondsSinceEpoch}_'
+        '${_random.nextInt(1 << 20).toRadixString(16)}';
+    _chats[id] = ChatThread(id: id, kind: ChatKind.session, createdAt: now);
+    return open(id);
+  }
+
+  /// Название чата для меню и поиска: «Главный», сессия — первая команда
+  /// или «Новая сессия». Чату задачи название даёт задача ([taskTitle]).
+  static String titleOf(ChatThread thread, {String? taskTitle}) =>
+      switch (thread.kind) {
+        ChatKind.main => 'Главный',
+        ChatKind.session => thread.title ?? ChatThread.untitledSession,
+        ChatKind.task => taskTitle ?? 'Задача',
+      };
+
+  /// Название сессии из команды: до [titleLimit] знаков, с «…».
+  static String sessionTitle(String command) {
+    final flat = command.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (flat.length <= titleLimit) return flat;
+    return '${flat.substring(0, titleLimit - 1).trimRight()}…';
+  }
+
+  /// «Недавние сессии» в меню: главный, сессии и чаты задач с
+  /// сообщениями, свежие сверху. Открытый чат — всегда в списке.
+  List<ChatThread> sessions({int limit = sessionsLimit}) {
+    final list = <ChatThread>[
+      for (final thread in _chats.values)
+        if (thread.isMain || thread.messageCount > 0 || thread.id == _currentId)
+          thread,
+    ]..sort(
+        (ChatThread a, ChatThread b) =>
+            b.lastActivityAt.compareTo(a.lastActivityAt),
+      );
+    final shown = list.take(limit).toList();
+    if (!shown.contains(current)) shown.add(current);
+    return shown;
+  }
+
+  /// Сколько чатов с хотя бы одной своей командой пользователя (среди
+  /// прочитанных) или с сообщениями (среди непрочитанных). Копия команды в
+  /// чате новой задачи ([onTaskCreated]) — не своя: она уже посчитана в
+  /// чате, где её написали. Непрочитанный чат задачи без своих сообщений
+  /// поверх этих двух копий не считается.
+  int get sessionCount => _chats.values.where((ChatThread t) {
+        final messages = t.messages;
+        for (var i = 0; i < messages.length; i++) {
+          if (messages[i].fromUser && !isCopiedCommand(messages, i)) {
+            return true;
+          }
+        }
+        return !t.loaded && _storedHasOwn(t);
+      }).length;
+
+  /// Сколько сообщений непрочитанного чата [thread] лежит только на диске.
+  static int _storedCount(ChatThread thread) =>
+      thread.loaded ? 0 : thread.messageCount - thread.messages.length;
+
+  /// На диске у непрочитанного чата, вероятно, есть свои команды: у чата
+  /// задачи — сверх двух копий из [onTaskCreated].
+  static bool _storedHasOwn(ChatThread thread) =>
+      _storedCount(thread) > (thread.kind == ChatKind.task ? 2 : 0);
+
+  /// Команда [messages]`[i]` — копия из [onTaskCreated]: за ней идёт копия
+  /// ответа со ссылкой на исходное сообщение ([ChatLink.messageId]).
+  /// Исходный ответ ссылается на чат задачи без сообщения.
+  static bool isCopiedCommand(List<ChatMessage> messages, int i) {
+    if (!messages[i].fromUser || i + 1 >= messages.length) return false;
+    final next = messages[i + 1];
+    return !next.fromUser && next.link?.messageId != null;
+  }
+
+  /// Карточки действий, которые ждут «Подтвердить» и ещё могут уйти на
+  /// запись, — из прочитанных чатов, последняя версия каждой карточки.
+  List<PendingCard> pendingCards(DateTime now) {
+    final found = <String, PendingCard>{};
+    for (final thread in _chats.values) {
+      for (final message in thread.messages) {
+        final ActionCard? card = message.card;
+        if (card == null) continue;
+        if (card.canSend(now)) {
+          found[card.id] = (
+            chatId: thread.id,
+            messageId: message.id,
+            message: message,
+          );
+        } else {
+          found.remove(card.id);
+        }
+      }
+    }
+    return found.values.toList(growable: false);
+  }
+
+  /// Поиск по сессиям: названия чатов и тексты сообщений, без регистра,
+  /// «ё» = «е». Сообщения с карточкой «Паролей» и карточками действий
+  /// пропускаются. Состояние книги не меняется: непрочитанные чаты
+  /// читаются из хранилища только для поиска. [titles] — названия чатов
+  /// задач по id задачи.
+  Future<List<ChatSearchHit>> search(
+    String query, {
+    Map<String, String> titles = const <String, String>{},
+    int limit = 50,
+  }) async {
+    final needle = ChatSearch.fold(query.trim());
+    if (needle.isEmpty) return const <ChatSearchHit>[];
+    final hits = <ChatSearchHit>[];
+    final threads = List<ChatThread>.of(_chats.values)
+      ..sort(
+        (ChatThread a, ChatThread b) =>
+            b.lastActivityAt.compareTo(a.lastActivityAt),
+      );
+    for (final thread in threads) {
+      if (hits.length >= limit) break;
+      final title = titleOf(thread, taskTitle: titles[thread.taskId]);
+      final titleAt = ChatSearch.fold(title).indexOf(needle);
+      List<ChatMessage> messages;
+      if (thread.loaded) {
+        messages = List<ChatMessage>.of(thread.messages);
+      } else {
+        try {
+          messages = <ChatMessage>[
+            ...await _store.loadMessages(thread.id),
+            ...thread.messages,
+          ];
+        } on Object {
+          messages = List<ChatMessage>.of(thread.messages);
+        }
+      }
+      ChatSearchHit? hit;
+      for (final message in messages.reversed) {
+        if (message.secureCard != null || message.card != null) continue;
+        final at = ChatSearch.fold(message.text).indexOf(needle);
+        if (at < 0) continue;
+        final (snippet, start, end) =
+            ChatSearch.snippet(message.text, at, at + needle.length);
+        hit = ChatSearchHit(
+          chatId: thread.id,
+          title: title,
+          personaId: message.fromUser ? null : message.personaId,
+          messageId: message.id,
+          at: message.timestamp,
+          snippet: snippet,
+          matchStart: start,
+          matchEnd: end,
+        );
+        break;
+      }
+      if (hit == null && titleAt >= 0) {
+        hit = ChatSearchHit(
+          chatId: thread.id,
+          title: title,
+          at: thread.lastActivityAt,
+          snippet: title,
+          matchStart: titleAt,
+          matchEnd: titleAt + needle.length,
+        );
+      }
+      if (hit != null) hits.add(hit);
+    }
+    return hits;
+  }
+
+  /// Дни, когда в сессиях писали команды: локальная дата в полночь →
+  /// число команд пользователя. Прочитанные чаты считаются по сообщениям,
+  /// непрочитанные — по [stored] (сообщения с диска по id чата), а если
+  /// их там нет — приблизительно: день создания и день последней
+  /// активности по index.json, по одной отметке.
+  Map<DateTime, int> activityDays({
+    Map<String, List<ChatMessage>> stored = const <String, List<ChatMessage>>{},
+  }) {
+    final result = <DateTime, int>{};
+    void mark(DateTime at) {
+      final local = at.toLocal();
+      final day = DateTime(local.year, local.month, local.day);
+      result[day] = (result[day] ?? 0) + 1;
+    }
+
+    void markOwn(List<ChatMessage> messages) {
+      for (var i = 0; i < messages.length; i++) {
+        // Копия команды в чате новой задачи уже отмечена там, где её
+        // написали.
+        if (messages[i].fromUser && !isCopiedCommand(messages, i)) {
+          mark(messages[i].timestamp);
+        }
+      }
+    }
+
+    for (final thread in _chats.values) {
+      final fromDisk = stored[thread.id];
+      final List<ChatMessage>? messages = thread.loaded
+          ? thread.messages
+          : fromDisk == null
+              ? null
+              : <ChatMessage>[...fromDisk, ...thread.messages];
+      if (messages != null) {
+        markOwn(messages);
+        continue;
+      }
+      // Новые сообщения в памяти — точно, сохранённые — по index.json.
+      markOwn(thread.messages);
+      if (_storedHasOwn(thread)) {
+        mark(thread.createdAt);
+        final first = thread.createdAt.toLocal();
+        final last = thread.lastActivityAt.toLocal();
+        if (first.year != last.year ||
+            first.month != last.month ||
+            first.day != last.day) {
+          mark(thread.lastActivityAt);
+        }
+      }
+    }
+    return result;
+  }
+
+  /// Сообщения с диска всех непрочитанных чатов — для точной
+  /// [activityDays]. Состояние книги не меняется; чат, который не
+  /// прочитался, пропускается (останется приблизительным).
+  Future<Map<String, List<ChatMessage>>> readStored() async {
+    final result = <String, List<ChatMessage>>{};
+    for (final thread in List<ChatThread>.of(_chats.values)) {
+      if (thread.loaded || thread.messageCount == 0) continue;
+      try {
+        result[thread.id] = await _store.loadMessages(thread.id);
+      } on Object {
+        // Битый файл: этот чат считается по index.json.
+      }
+    }
+    return result;
+  }
+
+  /// Все ли чаты с сообщениями прочитаны или есть в [stored].
+  bool activityExact(Map<String, List<ChatMessage>> stored) =>
+      _chats.values.every(
+        (ChatThread t) =>
+            t.loaded || t.messageCount == 0 || stored.containsKey(t.id),
+      );
+
+  /// Самая ранняя дата чатов с сообщениями; `null` — таких нет.
+  DateTime? get earliestActivity {
+    DateTime? best;
+    for (final thread in _chats.values) {
+      if (thread.messageCount == 0) continue;
+      var at = thread.createdAt;
+      if (thread.messages.isNotEmpty &&
+          thread.messages.first.timestamp.isBefore(at)) {
+        at = thread.messages.first.timestamp;
+      }
+      if (best == null || at.isBefore(best)) best = at;
+    }
+    return best;
+  }
+
   /// Чаты задач с сообщениями, свежие сверху.
   List<ChatThread> recent({int limit = recentLimit}) {
     final list = <ChatThread>[
       for (final thread in _chats.values)
-        if (!thread.isMain && thread.messageCount > 0) thread,
+        if (thread.kind == ChatKind.task && thread.messageCount > 0) thread,
     ]..sort(
         (ChatThread a, ChatThread b) =>
             b.lastActivityAt.compareTo(a.lastActivityAt),
@@ -321,7 +603,7 @@ final class ChatBook {
     return list.take(limit).toList(growable: false);
   }
 
-  /// «Очистить историю чатов»: чаты задач удаляются, главный пустеет,
+  /// «Очистить историю сессий»: чаты задач и сессии удаляются, главный пустеет,
   /// открыт главный. Приветствие добавляет интерфейс.
   Future<void> clearAll() {
     _chats.removeWhere((String id, ChatThread t) => !t.isMain);

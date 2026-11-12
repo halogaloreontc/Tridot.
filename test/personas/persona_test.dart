@@ -160,11 +160,14 @@ void main() {
           jokes: JokeFrequency.off,
         ),
         noticeDay: '2026-11-06',
+        firstSeenDay: '2026-10-15',
       );
       final json = jsonDecode(jsonEncode(settings.toJson()));
       final back = AppSettings.fromJson(json as Map<String, dynamic>);
       expect(back.personas, settings.personas);
       expect(back.noticeDay, '2026-11-06');
+      expect(back.firstSeenDay, '2026-10-15');
+      expect(json['first_seen_day'], '2026-10-15');
       expect(json['address'], 'ty');
       expect(json['assistant_mode'], 'solo');
     });
@@ -184,6 +187,7 @@ void main() {
         'emoji': 'нет',
         'jokes': 'always',
         'notice_day': 'вчера',
+        'first_seen_day': 'давно',
         'show_timestamps': false,
       });
       expect(settings.personas.mode, AssistantMode.duo);
@@ -197,6 +201,7 @@ void main() {
       expect(settings.personas.emoji, isTrue);
       expect(settings.personas.jokes, JokeFrequency.rare);
       expect(settings.noticeDay, isNull);
+      expect(settings.firstSeenDay, isNull);
       expect(settings.showTimestamps, isFalse, reason: 'остальное читается');
       // Стиль — не словарь.
       expect(

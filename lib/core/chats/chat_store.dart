@@ -123,12 +123,15 @@ abstract final class ChatCodec {
   static bool _knownVersion(Object? version) =>
       version is int && version >= 1 && version <= schemaVersion;
 
-  /// Имя файла чата: `main.json`, `task-<id задачи>.json`. Символы кроме
-  /// латиницы, цифр, «_» и «-» заменяются на «_».
+  /// Имя файла чата: `main.json`, `task-<id задачи>.json`,
+  /// `session-<x>.json`. Символы кроме латиницы, цифр, «_» и «-»
+  /// заменяются на «_».
   static String fileName(String chatId) {
     final base = chatId.startsWith('task:')
         ? 'task-${chatId.substring('task:'.length)}'
-        : chatId;
+        : chatId.startsWith(ChatThread.sessionPrefix)
+            ? 'session-${chatId.substring(ChatThread.sessionPrefix.length)}'
+            : chatId;
     return '${base.replaceAll(RegExp('[^A-Za-z0-9_-]'), '_')}.json';
   }
 }
@@ -320,6 +323,7 @@ final class JsonChatStore implements ChatStore {
           createdAt: meta.createdAt,
           lastActivityAt: meta.lastActivityAt,
           addressee: meta.addressee,
+          title: meta.title,
           unread: meta.unread,
           loaded: false,
           storedCount: messages.length,

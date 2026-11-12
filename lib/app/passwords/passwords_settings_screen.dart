@@ -197,11 +197,11 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
               _flag(
                 'Подсказки можно хранить в истории',
                 'Выключено: подсказка видна только во временной карточке, '
-                    'в историю чата не пишется.',
+                    'в историю сессии не пишется.',
                 VaultPrefs.hintsInHistory,
               ),
               _flag(
-                'Показывать логин целиком в чате',
+                'Показывать логин целиком в сессии',
                 'Выключено: в ответах логин в маске (iv***@mail.ru), '
                     'целиком — только в карточке.',
                 VaultPrefs.loginInReplies,
@@ -209,7 +209,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
               const Padding(
                 padding: EdgeInsets.fromLTRB(8, 4, 8, 0),
                 child: Text(
-                  'Пароли и заметки в историю не попадают никогда: в чате '
+                  'Пароли и заметки в историю не попадают никогда: в сессии '
                   'остаются только названия, логин в маске и факты вроде '
                   '«пароль был показан». «Очистить историю» хранилище не '
                   'трогает.',

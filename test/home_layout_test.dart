@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
+import 'package:local_assistant/app/shell/quick_actions.dart';
 import 'package:local_assistant/app/widgets/status_cube.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
@@ -28,6 +29,7 @@ const _sizes = <Size>[
   Size(1728, 1117),
   Size(1150, 800),
   Size(900, 700),
+  Size(390, 844),
 ];
 
 Future<TaskService> _pump(WidgetTester tester, Size size) async {
@@ -101,11 +103,11 @@ void main() {
       expect(tester.takeException(), isNull);
 
       final window = Offset.zero & size;
-      final panel = find.byKey(const Key('tasks-panel'));
-      if (size.width >= panelBreakpoint) {
+      final panel = find.byKey(const Key('today-panel'));
+      if (size.width >= todayOpenBreakpoint) {
         _expectInside(tester.getRect(panel), window, 'панель задач');
       } else {
-        expect(panel, findsNothing, reason: 'узкое окно: панель в шторке');
+        expect(panel, findsNothing, reason: 'узкое окно: «Сегодня» свёрнута');
       }
 
       final composer = tester.getRect(
@@ -114,15 +116,26 @@ void main() {
       final addressee = tester.getRect(
         find.byKey(const Key('addressee-switch')),
       );
-      final quick =
-          tester.getRect(find.byKey(const Key('quick-Покажи задачи')));
+      final quick = tester.getRect(find.byKey(const Key('quick-Задача')));
       final rail = tester.getRect(find.byKey(const Key('history-rail')));
       _expectInside(composer, window, 'поле ввода');
       _expectInside(rail, window, 'хроника');
 
-      // Один левый край у «Кому:», быстрых действий и поля ввода.
+      // Один левый край у «Кому:» и поля ввода; «пилюли» на широкой
+      // колонке — группой по центру поля (D-Desk), на узкой — от края.
       expect(addressee.left, moreOrLessEquals(composer.left));
-      expect(quick.left, moreOrLessEquals(composer.left));
+      if (composer.width >= QuickActions.fillLimit) {
+        final group = tester.getRect(
+          find.byKey(const Key('quick-pills-centered')),
+        );
+        expect(
+          group.center.dx,
+          moreOrLessEquals(composer.center.dx, epsilon: 1),
+        );
+        expect(quick.left, greaterThan(composer.left));
+      } else {
+        expect(quick.left, moreOrLessEquals(composer.left));
+      }
 
       // Текст ответа начинается там же; кубик — в строке автора, а не
       // отдельным значком левее текста.
@@ -145,7 +158,7 @@ void main() {
       // Хроника — справа от колонки, вплотную, и не под полем ввода.
       expect(rail.left, greaterThanOrEqualTo(composer.right - .5));
       expect(rail.left - composer.right, lessThan(chatInset + 1));
-      if (size.width >= panelBreakpoint) {
+      if (size.width >= todayOpenBreakpoint) {
         expect(rail.right, lessThanOrEqualTo(tester.getRect(panel).left));
       }
     });
@@ -169,7 +182,7 @@ void main() {
         find.textContaining('Нажмите, чтобы перейти', findRichText: true),
       );
       final rail = tester.getRect(find.byKey(const Key('history-rail')));
-      final panel = tester.getRect(find.byKey(const Key('tasks-panel')));
+      final panel = tester.getRect(find.byKey(const Key('today-panel')));
       expect(card.width, greaterThan(100), reason: 'карточка не схлопнулась');
       expect(card.width, lessThanOrEqualTo(340));
       expect(card.right, lessThanOrEqualTo(rail.left));
@@ -199,10 +212,10 @@ void main() {
     expect(hint, findsOneWidget);
     expect(emptyTasksHint, isNot(contains('«')));
     expect(emptyTasksHint, isNot(contains('…')));
-    final panel = tester.getRect(find.byKey(const Key('tasks-panel')));
+    final panel = tester.getRect(find.byKey(const Key('today-panel')));
     _expectInside(tester.getRect(hint), panel, 'подсказка');
     // Пример целиком на своей строке: две строки текста, не три.
-    final lineHeight = tester.getRect(find.text('Активных задач нет')).height;
+    final lineHeight = tester.getRect(find.text('На сегодня дел нет')).height;
     expect(tester.getRect(hint).height, lessThan(lineHeight * 3));
   });
 
@@ -235,15 +248,20 @@ void main() {
       ),
     );
     await _say(tester, 'Покажи задачи');
-    final title = tester.getRect(find.text('Активные'));
+    final title = tester.getRect(
+      find.descendant(
+        of: find.byKey(const Key('today-panel')),
+        matching: find.text('Сегодня'),
+      ),
+    );
     final summary = tester.getRect(
-      find.byKey(const Key('tasks-panel-summary')),
+      find.byKey(const Key('today-summary')),
     );
     // Одна строка заголовка: высота меньше двух строк счётчика.
     expect(title.height, lessThan(summary.height * 2));
     _expectInside(
       summary,
-      tester.getRect(find.byKey(const Key('tasks-panel'))),
+      tester.getRect(find.byKey(const Key('today-panel'))),
       'счётчик',
     );
     expect(tester.takeException(), isNull);

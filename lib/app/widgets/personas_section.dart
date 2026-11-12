@@ -84,7 +84,7 @@ class _PersonasSectionState extends State<PersonasSection> {
           hint: duo
               ? 'Основной отвечает на всё, второй пишет первым — '
                   'например, о просроченных задачах. Написать можно любому: '
-                  '«Noda, …» или выбор в поле ввода.'
+                  '«Нода, …» или выбор в поле ввода.'
               : 'Один помощник отвечает на всё и сам пишет первым.',
           children: <Widget>[
             _Choice(
@@ -111,7 +111,7 @@ class _PersonasSectionState extends State<PersonasSection> {
                 key: ValueKey<String>(
                   '${duo ? 'main' : 'solo'}-persona-${persona.id}',
                 ),
-                label: persona.name,
+                label: persona.russianName,
                 accent: Color(persona.accentColor),
                 selected:
                     (duo ? personas.main : personas.solo).id == persona.id,
@@ -219,7 +219,7 @@ class _PersonaStyle extends StatelessWidget {
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  'Стиль ${persona.name}',
+                  '${persona.russianName}: стиль',
                   style: const TextStyle(color: AssistantColors.text),
                 ),
               ),
@@ -247,7 +247,7 @@ class _PersonaStyle extends StatelessWidget {
               padding: const EdgeInsets.only(top: 6),
               child: Text(
                 'Стиль «$style» сейчас выключен или удалён — '
-                '${persona.name} говорит нейтрально.',
+                '${persona.russianName} говорит нейтрально.',
                 key: ValueKey<String>('style-missing-${persona.id}'),
                 style: technicalTextStyle.copyWith(
                   color: AssistantColors.warning,
@@ -345,10 +345,22 @@ class _Choice extends StatelessWidget {
 
 /// Метка помощника: буква имени в кружке его цвета.
 class PersonaMark extends StatelessWidget {
-  const PersonaMark({super.key, required this.persona, this.size = 18});
+  const PersonaMark({
+    super.key,
+    required this.persona,
+    this.size = 18,
+    this.round = false,
+    this.ring,
+  });
 
   final Persona persona;
   final double size;
+
+  /// Круглый знак (аватары «Мой Связной»), иначе — скруглённый квадрат.
+  final bool round;
+
+  /// Обводка вокруг круглого знака цветом фона под ним: знаки внахлёст.
+  final Color? ring;
 
   @override
   Widget build(BuildContext context) {
@@ -358,18 +370,19 @@ class PersonaMark extends StatelessWidget {
         dimension: size,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: accent.withValues(alpha: .18),
-            border: Border.all(color: accent),
+            shape: round ? BoxShape.circle : BoxShape.rectangle,
+            borderRadius: round ? null : BorderRadius.circular(size * .3),
+            color: Color(persona.accentBackground),
+            border: ring == null ? null : Border.all(color: ring!, width: 2),
           ),
-          // Буква не растёт с крупным шрифтом: кружок фиксированного
+          // Буква не растёт с крупным шрифтом: знак фиксированного
           // размера.
           child: Center(
             child: MediaQuery.withNoTextScaling(
               child: Text(
-                persona.initial,
+                persona.russianInitial,
                 style: TextStyle(
-                  fontSize: size * .55,
+                  fontSize: size * .5,
                   height: 1,
                   fontWeight: FontWeight.w600,
                   color: accent,

@@ -176,11 +176,11 @@ final class _CommandComposerState extends State<CommandComposer> {
         final voice = !hasText && !widget.sending;
         return Container(
           key: const Key('assistant-composer'),
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: AssistantColors.raised,
             border: Border.all(color: AssistantColors.border),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -191,7 +191,9 @@ final class _CommandComposerState extends State<CommandComposer> {
                 key: const Key('assistant-input'),
                 controller: widget.controller,
                 focusNode: widget.focusNode,
-                minLines: 1,
+                // Две строки, как в макете «Д»: высота поля не прыгает,
+                // когда текст переносится на вторую строку.
+                minLines: 2,
                 maxLines: 6,
                 textInputAction: TextInputAction.send,
                 textCapitalization: TextCapitalization.sentences,
@@ -203,9 +205,11 @@ final class _CommandComposerState extends State<CommandComposer> {
                   color: AssistantColors.textStrong,
                 ),
                 decoration: const InputDecoration(
-                  hintText: 'Напишите или скажите команду…',
+                  hintText: 'Спросить, найти или поручить…',
+                  hintMaxLines: 1,
+                  hintStyle: TextStyle(color: AssistantColors.muted),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.fromLTRB(4, 6, 4, 10),
+                  contentPadding: EdgeInsets.fromLTRB(6, 4, 6, 8),
                   isDense: true,
                 ),
               ),
@@ -290,9 +294,9 @@ final class _CommandComposerState extends State<CommandComposer> {
                             : widget.onSend,
                     tooltip: voice ? 'Голосовой режим' : 'Отправить',
                     style: IconButton.styleFrom(
-                      fixedSize: const Size(40, 40),
-                      backgroundColor: const Color(0xFFC4C9C5),
-                      foregroundColor: const Color(0xFF171917),
+                      fixedSize: const Size(44, 44),
+                      backgroundColor: AssistantColors.primary,
+                      foregroundColor: AssistantColors.onPrimary,
                       disabledBackgroundColor: AssistantColors.raised,
                       disabledForegroundColor: AssistantColors.muted,
                     ),
@@ -310,8 +314,16 @@ final class _CommandComposerState extends State<CommandComposer> {
                   // Две строки: сверху ввод, снизу «+», переключатель режимов
                   // ровно посередине и микрофон или отправка. На широком поле
                   // у иконок режимов есть подписи, на узком — только иконки.
-                  final scale = MediaQuery.textScalerOf(context).scale(1);
-                  final labels = constraints.maxWidth >= 300 + 120 * scale;
+                  // Подписи — если помещаются целиком: «+» и микрофон по
+                  // 44, капсула (отступ 2 и рамка 1 с каждой стороны), у
+                  // каждой половины поля 24, иконка 17, зазор 6 и подпись по
+                  // её реальной ширине. На телефоне 390 — с подписями
+                  // (D-Phone), на 320 и при крупном шрифте — только иконки.
+                  final labels = constraints.maxWidth >=
+                      2 * 44 +
+                          6 +
+                          2 * (24 + 17 + 6) +
+                          _ModeSwitch.labelsWidth(context);
                   return Row(
                     children: <Widget>[
                       Expanded(
@@ -351,8 +363,8 @@ final class _RoundIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 40,
-      height: 40,
+      width: 44,
+      height: 44,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(color: AssistantColors.border),
@@ -374,6 +386,27 @@ final class _ModeSwitch extends StatelessWidget {
   final AssistantViewMode mode;
   final ValueChanged<AssistantViewMode> onChanged;
   final bool labels;
+
+  /// Ширина обеих подписей при текущем шрифте и его масштабе.
+  static double labelsWidth(BuildContext context) {
+    var total = 0.0;
+    for (final label in const <String>['Диалог', 'Документ']) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: DefaultTextStyle.of(context).style.merge(
+                const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+        ),
+        textDirection: TextDirection.ltr,
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      total += painter.width;
+      painter.dispose();
+    }
+    return total;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -419,6 +452,7 @@ final class _ModeSwitch extends StatelessWidget {
         button: true,
         selected: active,
         label: 'Режим: $label',
+        onTap: () => onChanged(value),
         excludeSemantics: true,
         child: InkWell(
           key: Key(key),
@@ -426,7 +460,7 @@ final class _ModeSwitch extends StatelessWidget {
           borderRadius: BorderRadius.circular(999),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
-            constraints: const BoxConstraints(minHeight: 40, minWidth: 40),
+            constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
             alignment: Alignment.center,
             padding: EdgeInsets.symmetric(horizontal: labels ? 12 : 8),
             decoration: BoxDecoration(

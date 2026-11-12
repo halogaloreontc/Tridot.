@@ -23,6 +23,7 @@ final class AppSettings {
     this.passwordsSeenRev,
     this.passwordsVaultExisted = false,
     this.passwordsTrainingDue,
+    this.firstSeenDay,
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -51,6 +52,7 @@ final class AppSettings {
       passwordsSeenRev: _rev(json['passwords.seen_rev']),
       passwordsVaultExisted: json['passwords.vault_existed'] == true,
       passwordsTrainingDue: _day(json['passwords.training_due']),
+      firstSeenDay: _day(json['first_seen_day']),
     );
   }
 
@@ -183,6 +185,12 @@ final class AppSettings {
   /// записей. Не чаще раза в день и трёх раз в неделю.
   final String? passwordsTrainingDue;
 
+  /// Служебное: первый день с Связным (`2026-10-15`) — для «Вместе N
+  /// дней» в «Мой Связной». Записывается один раз: самая ранняя дата из
+  /// задач и сессий или день первого запуска. «Очистить историю» его не
+  /// трогает.
+  final String? firstSeenDay;
+
   AppSettings copyWith({
     bool? reduceMotion,
     bool? showTimestamps,
@@ -197,6 +205,7 @@ final class AppSettings {
     int? passwordsSeenRev,
     bool? passwordsVaultExisted,
     String? passwordsTrainingDue,
+    String? firstSeenDay,
   }) =>
       AppSettings(
         reduceMotion: reduceMotion ?? this.reduceMotion,
@@ -213,6 +222,7 @@ final class AppSettings {
         passwordsVaultExisted:
             passwordsVaultExisted ?? this.passwordsVaultExisted,
         passwordsTrainingDue: passwordsTrainingDue ?? this.passwordsTrainingDue,
+        firstSeenDay: firstSeenDay ?? this.firstSeenDay,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -240,6 +250,7 @@ final class AppSettings {
         if (passwordsVaultExisted) 'passwords.vault_existed': true,
         if (passwordsTrainingDue != null)
           'passwords.training_due': passwordsTrainingDue,
+        if (firstSeenDay != null) 'first_seen_day': firstSeenDay,
       };
 }
 

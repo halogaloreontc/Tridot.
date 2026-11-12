@@ -66,10 +66,11 @@ final class AssistantController {
     session
       ..replies = this.extensions.replyLibrary
       ..extensions = this.extensions
-      // Задачу завершили в её чате: в главном она больше не «её».
+      // Задачу завершили в её чате: в главном и в сессиях она больше не
+      // «её».
       ..onForget = (String connectorId, String itemId) {
-        if (connectorId == TasksConnector.id && _mainSelection == itemId) {
-          _mainSelection = null;
+        if (connectorId == TasksConnector.id) {
+          _selections.removeWhere((String? _, String id) => id == itemId);
         }
       };
     this.extensions.addListener(_onExtensionsChanged);
@@ -159,9 +160,17 @@ final class AssistantController {
   /// Чат, открытый в интерфейсе: задача чата или `null` — главный.
   String? _viewChatTaskId;
 
-  /// Выбор («её») главного чата, пока открыт чат задачи: при возврате в
-  /// главный он восстанавливается.
-  String? _mainSelection;
+  /// Чат без задачи, открытый в интерфейсе: id сессии, `null` — главный.
+  String? _viewSessionId;
+
+  /// Чат без задачи, чей выбор сейчас в [session]; не важен, пока открыт
+  /// чат задачи.
+  String? _appliedSessionId;
+
+  /// Выбор («её») каждого чата без задачи (главный — ключ `null`), пока
+  /// открыт другой чат: при возврате он восстанавливается. Сессии —
+  /// отдельные разговоры: задача, выбранная в одной, не «её» в другой.
+  final Map<String?, String> _selections = <String?, String>{};
 
   /// Сколько сообщений сейчас обрабатывается.
   int _inFlight = 0;
@@ -172,16 +181,17 @@ final class AssistantController {
   /// Задача чата, открытого в интерфейсе; `null` — главный.
   String? get chatTaskId => _viewChatTaskId;
 
-  /// Интерфейс открыл другой чат: чат задачи [taskId] или главный
-  /// (`null`). Вопрос, который ждал ответа, снимается (его карточка в
+  /// Интерфейс открыл другой чат: чат задачи [taskId], сессию
+  /// [sessionId] или главный (оба `null`). Вопрос, который ждал ответа, снимается (его карточка в
   /// покинутом чате устаревает): «да» в другом чате не применит чужой
   /// вопрос. Отмена массовых изменений («Отменить») остаётся. В чате задачи
-  /// «её» — эта задача; в главном — прежний выбор главного чата.
+  /// «её» — эта задача; в главном и в сессии — прежний выбор этого чата.
   ///
   /// Если ответ ещё готовится, смена применится после него: контекст
   /// сообщения не меняется посреди ответа.
-  void enterChat({String? taskId}) {
+  void enterChat({String? taskId, String? sessionId}) {
     _viewChatTaskId = taskId;
+    _viewSessionId = taskId == null ? sessionId : null;
     _awaitingAnswer = false;
     session.takePendingConfirmation()?.onDropped?.call();
     if (_inFlight > 0) {
@@ -193,15 +203,32 @@ final class AssistantController {
 
   void _applyChat() {
     final target = _viewChatTaskId;
-    if (session.chatTaskId == null) _mainSelection = selectedTaskId;
+    if (session.chatTaskId == null) {
+      final selected = selectedTaskId;
+      if (selected == null) {
+        _selections.remove(_appliedSessionId);
+      } else {
+        _selections[_appliedSessionId] = selected;
+      }
+    }
     session.chatTaskId = target;
     if (target != null) {
       selectTask(target);
-    } else if (_mainSelection != null) {
-      selectTask(_mainSelection!);
+      return;
+    }
+    _appliedSessionId = _viewSessionId;
+    final restored = _selections[_appliedSessionId];
+    if (restored != null) {
+      selectTask(restored);
     } else {
       clearSelection();
     }
+  }
+
+  /// Забывает выбор («её») всех чатов: история сессий очищена.
+  void forgetChatSelections() {
+    _selections.clear();
+    clearSelection();
   }
 
   /// Кто ответит на [message]: в дуэте обращение по имени («Noda, …»)

@@ -967,7 +967,7 @@ class _ListViewState extends State<_ListView> {
                       child: Text(
                         vault.entries.isEmpty
                             ? 'Записей пока нет. Нажмите «Добавить» или '
-                                'напишите в чате: «запомни пароль от почты».'
+                                'напишите в сессии: «запомни пароль от почты».'
                             : 'Ничего не нашлось.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: AssistantColors.muted),

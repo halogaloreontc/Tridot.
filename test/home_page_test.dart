@@ -16,6 +16,8 @@ import 'package:local_assistant/core/skills/calculator/calculator_connector.dart
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 import 'package:local_assistant/core/storage/task_repository.dart';
 
+import 'support/home_nav.dart';
+
 final class _BrokenRepository implements TaskRepository {
   @override
   Future<List<Task>> list() async => throw const FormatException('битый файл');
@@ -135,24 +137,31 @@ void main() {
     expect(find.byKey(const Key('history-rail')), findsOneWidget);
     expect(find.byKey(const Key('assistant-composer')), findsOneWidget);
     for (final title in <String>[
-      'Обзор',
+      'Мой Связной',
       'Проекты',
       'Задачи',
       'Планирование',
-      'Хранилище',
-      'Настройки',
+      'Недавние сессии',
+      'Главный',
     ]) {
       expect(find.text(title), findsWidgets, reason: title);
     }
+    // Шестерёнки настроек в меню нет: настройки — в «Мой Связной».
+    expect(find.byKey(const Key('nav-settings')), findsNothing);
 
-    for (final section in AppSection.values) {
-      await tester.tap(find.byKey(Key('nav-${section.name}')));
+    for (final (key, chat) in <(String, bool)>[
+      ('nav-tasks', false),
+      ('nav-projects', false),
+      ('nav-planning', false),
+      ('drawer-my-relay', false),
+      ('chat-main', true),
+    ]) {
+      await tester.tap(find.byKey(Key(key)));
       await tester.pumpAndSettle();
-      final composer = find.byKey(const Key('assistant-composer'));
       expect(
-        composer,
-        section == AppSection.tasks ? findsOneWidget : findsNothing,
-        reason: section.name,
+        find.byKey(const Key('assistant-composer')),
+        chat ? findsOneWidget : findsNothing,
+        reason: key,
       );
     }
     expect(tester.takeException(), isNull);
@@ -238,12 +247,12 @@ void main() {
     expect(await h.tasks.listActive(), isEmpty);
     expect(find.byKey(const Key('selected-task-strip')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('quick-Новая задача')));
+    await tester.tap(find.byKey(const Key('quick-Задача')));
     await tester.pump();
     final field = tester.widget<TextField>(
       find.byKey(const Key('assistant-input')),
     );
-    expect(field.controller!.text, 'Добавь задачу «» на завтра');
+    expect(field.controller!.text, 'Добавь задачу «»');
     expect(field.controller!.selection.baseOffset, 'Добавь задачу «'.length);
   });
 
@@ -255,6 +264,7 @@ void main() {
         await service.create(title: 'Отчёт', dueAt: DateTime(2026, 11, 5, 10));
     await service.create(title: 'Старое', dueAt: DateTime(2026, 11, 3, 9));
     await _pump(tester, service: service);
+    await tapInDrawer(tester, const Key('nav-tasks'));
 
     expect(find.byKey(const Key('tasks-panel')), findsOneWidget);
     expect(find.text('Просрочено · 1'), findsOneWidget);
@@ -270,13 +280,16 @@ void main() {
     expect(await _status(service, report.id), TaskStatus.planned);
   });
 
-  testWidgets('на ноутбуке список задач открывается кнопкой', (tester) async {
+  testWidgets('на ноутбуке «Сегодня» открывается кнопкой', (tester) async {
     await _pump(tester, size: _laptop);
-    expect(find.byKey(const Key('tasks-panel')), findsNothing);
+    expect(find.byKey(const Key('today-panel')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('tasks-toggle')));
+    await tester.tap(find.byKey(const Key('today-button')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('tasks-panel')), findsOneWidget);
+    expect(find.byKey(const Key('today-panel')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('today-collapse')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('today-panel')), findsNothing);
   });
 
   testWidgets('ошибка загрузки задач видна и даёт повторить', (tester) async {
@@ -347,12 +360,16 @@ void main() {
   testWidgets('настройки скрывают время сообщений', (tester) async {
     final store = InMemorySettingsStore();
     await _pump(tester, settings: store);
-    expect(find.text('12:00'), findsWidgets);
+    Finder time() => find.descendant(
+          of: find.byKey(const Key('chat-list')),
+          matching: find.text('12:00'),
+        );
+    expect(time(), findsWidgets);
 
     await store.save(const AppSettings(showTimestamps: false));
     await tester.pumpWidget(const SizedBox());
     await _pump(tester, settings: store);
-    expect(find.text('12:00'), findsNothing);
+    expect(time(), findsNothing);
   });
 
   testWidgets('нет переполнения на узком экране и крупном шрифте',
@@ -439,6 +456,9 @@ void main() {
       (await service.listAll()).firstWhere((Task t) => t.title == title);
 
   Future<void> openTask(WidgetTester tester, Task task) async {
+    await openDrawerIfNeeded(tester);
+    await tester.tap(find.byKey(const Key('nav-tasks')));
+    await tester.pump();
     await tester.tap(find.byKey(ValueKey<String>('task-${task.id}')));
     await tester.pump();
   }
@@ -618,12 +638,13 @@ void main() {
     expect((await byTitle(service, 'Beta')).description, '');
   });
 
-  testWidgets('поиск в верхней строке фильтрует панель задач', (tester) async {
+  testWidgets('поиск на экране «Задачи» фильтрует список', (tester) async {
     final service =
         TaskService(repository: InMemoryTaskRepository(), clock: _clock);
     await service.create(title: 'Отчёт за квартал', tags: <String>['работа']);
     await service.create(title: 'Купить краску', tags: <String>['дача']);
     await _pump(tester, service: service);
+    await tapInDrawer(tester, const Key('nav-tasks'));
 
     await tester.enterText(find.byKey(const Key('task-search')), 'краск');
     await tester.pumpAndSettle();
@@ -698,29 +719,27 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('кнопка панели прижата к правому краю, знак виден',
+  testWidgets('«Сегодня» прижата к правому краю, «Мой Связной» в меню',
       (tester) async {
     for (final size in <Size>[_desktop, _phone]) {
       await tester.pumpWidget(const SizedBox());
       await _pump(tester, size: size);
-      final toggle = tester.getRect(find.byKey(const Key('tasks-toggle')));
+      final today = tester.getRect(find.byKey(const Key('today-button')));
       expect(
-        size.width - toggle.right,
+        size.width - (size == _desktop ? 341 : 0) - today.right,
         lessThan(48),
         reason: 'ширина ${size.width}',
       );
     }
     await tester.pumpWidget(const SizedBox());
     await _pump(tester);
-    final cells = find.descendant(
-      of: find.byKey(const Key('app-sidebar')),
-      matching: find.byType(Container),
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('app-sidebar')),
+        matching: find.byKey(const Key('drawer-my-relay')),
+      ),
+      findsOneWidget,
     );
-    final visible = tester
-        .widgetList<Container>(cells)
-        .map((c) => tester.getSize(find.byWidget(c)))
-        .where((s) => s.width > 2 && s.height > 2 && s.width < 10);
-    expect(visible.length, 9, reason: 'девять клеток знака');
   });
 
   testWidgets('кнопка «назад» выводит из чата по задаче в общий чат',
@@ -785,15 +804,13 @@ void main() {
 
   group('расширения включаются и выключаются без сброса', () {
     Future<void> toggleCalculator(WidgetTester tester) async {
-      await tester.tap(find.byKey(const Key('nav-settings')));
-      await tester.pumpAndSettle();
+      await openSettings(tester);
       final tile = find.byKey(const ValueKey<String>('extension-calc'));
       await tester.ensureVisible(tile);
       await tester.pumpAndSettle();
       await tester.tap(tile);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('nav-tasks')));
-      await tester.pumpAndSettle();
+      await backToSession(tester);
     }
 
     testWidgets('история, выбор, черновик и ожидание задач целы',
@@ -859,8 +876,7 @@ void main() {
 
     testWidgets('задачи выключить нельзя', (tester) async {
       await _pump(tester, calculator: true);
-      await tester.tap(find.byKey(const Key('nav-settings')));
-      await tester.pumpAndSettle();
+      await openSettings(tester);
       final tile = tester.widget<SwitchListTile>(
         find.byKey(const ValueKey<String>('extension-tasks')),
       );

@@ -18,6 +18,8 @@ import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 import 'package:local_assistant/core/storage/task_repository.dart';
 
+import 'support/home_nav.dart';
+
 /// Часы, которые тест переводит сам: смена дня при открытом приложении.
 final class _MutableClock implements Clock {
   _MutableClock(this.value);
@@ -105,15 +107,12 @@ Future<void> _say(WidgetTester tester, String text) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _openSettings(WidgetTester tester) async {
-  await tester.tap(find.byKey(const Key('nav-settings')));
-  await tester.pumpAndSettle();
-}
+/// Настройки помощников: «Мой Связной» → «Помощники».
+Future<void> _openSettings(WidgetTester tester) =>
+    openMyRelay(tester, 'assistants');
 
-Future<void> _openTasks(WidgetTester tester) async {
-  await tester.tap(find.byKey(const Key('nav-tasks')));
-  await tester.pumpAndSettle();
-}
+/// Обратно в сессию.
+Future<void> _openTasks(WidgetTester tester) => backToSession(tester);
 
 Future<void> _tapSetting(WidgetTester tester, String key) async {
   final target = find.byKey(ValueKey<String>(key));
@@ -234,7 +233,8 @@ void main() {
     testWidgets('приветствие и ответы подписаны помощником', (tester) async {
       await _pump(tester, settings: InMemorySettingsStore());
       expect(_history(tester).single, startsWith('rio: Я готов к работе.'));
-      expect(find.text('Liorio'), findsWidgets);
+      expect(find.text('Лиорио'), findsWidgets);
+      expect(find.text('Liorio'), findsNothing, reason: 'имена кириллицей');
 
       await _say(tester, 'Добавь задачу купить хлеб');
       await _say(tester, 'Noda, покажи задачи');
@@ -247,17 +247,18 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('подпись Liorio с меткой «L», название Связной в меню',
+    testWidgets('подпись «Лиорио» с меткой «Л», название Связной в меню',
         (tester) async {
       await _pump(tester, settings: InMemorySettingsStore());
       final author = find.byKey(const ValueKey<String>('message-author-rio'));
       expect(author, findsOneWidget);
       expect(
-        find.descendant(of: author, matching: find.text('Liorio')),
+        find.descendant(of: author, matching: find.text('Лиорио')),
         findsOneWidget,
       );
+      // Знак и подпись помощника — кириллицей, как в макете «Д».
       expect(
-        find.descendant(of: author, matching: find.text('L')),
+        find.descendant(of: author, matching: find.text('Л')),
         findsOneWidget,
       );
       expect(find.text('Rio'), findsNothing);
@@ -413,7 +414,7 @@ void main() {
       await _pump(tester, settings: InMemorySettingsStore());
       await _say(tester, 'Нода, 2+2');
       expect(_addressee(tester), 'noda');
-      await _openSettings(tester);
+      await openSettings(tester);
       await _tapSetting(tester, 'clear-chat');
       await tester
           .tap(find.byKey(const ValueKey<String>('clear-chat-confirm')));
@@ -874,11 +875,14 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(find.byKey(const Key('nav-settings')));
+      await tester.tap(find.byKey(const Key('drawer-my-relay')));
       await tester.pump();
+      await tester.tap(find.byKey(const Key('my-relay-tab-assistants')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       await _tapSetting(tester, 'main-persona-noda');
       await _tapSetting(tester, 'style-rio-business');
-      await tester.tap(find.byKey(const Key('nav-tasks')));
+      await tester.tap(find.byKey(const Key('chat-main')));
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
 

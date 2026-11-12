@@ -348,7 +348,7 @@ class _RolesSectionState extends State<RolesSection> {
                           key: ValueKey<String>(
                             'role-owner-${role.id}-${persona.id}',
                           ),
-                          label: Text(persona.name),
+                          label: Text(persona.russianName),
                           selected: owner.id == persona.id,
                           showCheckmark: false,
                           onSelected: (_) => _set(

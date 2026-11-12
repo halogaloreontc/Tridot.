@@ -72,9 +72,9 @@ final class StatusCube extends StatelessWidget {
       case CubeState.clarification when _clarification.contains(index):
         return AssistantColors.warning;
       case CubeState.working:
-        return const Color(0xFF62686D);
+        return AssistantColors.cubeIdle;
       default:
-        return const Color(0xFF34393E);
+        return AssistantColors.borderSoft;
     }
   }
 

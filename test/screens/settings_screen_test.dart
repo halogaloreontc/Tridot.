@@ -579,4 +579,38 @@ void main() {
       );
     });
   });
+
+  testWidgets(
+      'вкладка «Мой Связной → Настройки»: без заголовка и помощников, '
+      'с «Данными» и «Сессиями»', (tester) async {
+    var storage = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AssistantTheme.dark(),
+        home: Scaffold(
+          body: SettingsScreen(
+            settings: const AppSettings(),
+            onChanged: (_) {},
+            onClearChat: () {},
+            messageCount: 5,
+            showTitle: false,
+            includePersonas: false,
+            onOpenStorage: () => storage++,
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Настройки'), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('main-persona-noda')),
+      findsNothing,
+    );
+    expect(find.text('Сессии'), findsOneWidget);
+    expect(find.text('Очистить историю сессий'), findsOneWidget);
+    final row = find.byKey(const ValueKey<String>('settings-storage'));
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    await tester.tap(row);
+    expect(storage, 1);
+  });
 }

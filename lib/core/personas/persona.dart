@@ -1,4 +1,5 @@
 import '../replies/reply_library.dart';
+import 'persona_palette.dart';
 
 /// Личность помощника: Liorio или Noda (docs/PLANS.md, «Liorio и Noda»).
 ///
@@ -13,6 +14,7 @@ final class Persona {
     this.inflectedForms = const <String>[],
     required this.gender,
     required this.accentColor,
+    required this.accentBackground,
     required this.description,
   });
 
@@ -54,11 +56,17 @@ final class Persona {
   /// Цвет метки у ответов, ARGB. Ядро без Flutter: цвет — число.
   final int accentColor;
 
+  /// Фон знака помощника (буква на нём — [accentColor]), ARGB.
+  final int accentBackground;
+
   /// Одна строка для настроек.
   final String description;
 
   /// Буква на метке у ответа.
   String get initial => name.substring(0, 1);
+
+  /// Буква кириллицей — на знаке помощника в оболочке «Д»: «Л», «Н».
+  String get russianInitial => russianName.substring(0, 1);
 }
 
 /// Встроенные личности.
@@ -71,7 +79,8 @@ abstract final class Personas {
     russianName: 'Лиорио',
     nicknames: <String>['lio', 'лио'],
     gender: ReplyGender.male,
-    accentColor: 0xFF8FB3D9,
+    accentColor: PersonaPalette.liorio,
+    accentBackground: PersonaPalette.liorioBg,
     description: 'Спокойный и собранный, говорит о себе в мужском роде.',
   );
 
@@ -82,7 +91,8 @@ abstract final class Personas {
     nicknames: <String>['нодочка', 'нодь'],
     inflectedForms: <String>['ноды', 'ноде', 'ноду', 'нодой', 'нодочку'],
     gender: ReplyGender.female,
-    accentColor: 0xFFD9A3C4,
+    accentColor: PersonaPalette.noda,
+    accentBackground: PersonaPalette.nodaBg,
     description: 'Живая и внимательная, говорит о себе в женском роде.',
   );
 
