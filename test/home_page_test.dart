@@ -133,7 +133,11 @@ void main() {
     await _pump(tester);
 
     expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
-    expect(find.byKey(const Key('status-cube')), findsOneWidget);
+    // Пустая сессия — она же приветствие: сообщений нет, кубик появится с
+    // первым ответом.
+    expect(find.byKey(const Key('session-hero')), findsOneWidget);
+    expect(find.byKey(const Key('status-cube')), findsNothing);
+    expect(find.text('Главный'), findsNothing);
     // Хроника команд появляется с первой командой.
     expect(find.byKey(const Key('history-rail')), findsNothing);
     expect(find.byKey(const Key('assistant-composer')), findsOneWidget);
@@ -143,7 +147,7 @@ void main() {
       'Задачи',
       'Планирование',
       'Недавние сессии',
-      'Главный',
+      'Новая сессия',
     ]) {
       expect(find.text(title), findsWidgets, reason: title);
     }
@@ -155,7 +159,8 @@ void main() {
       ('nav-projects', false),
       ('nav-planning', false),
       ('drawer-my-relay', false),
-      ('chat-main', true),
+      // «+» из раздела — в ту же пустую сессию.
+      ('new-session', true),
     ]) {
       await tester.tap(find.byKey(Key(key)));
       await tester.pumpAndSettle();
@@ -198,14 +203,8 @@ void main() {
     );
   });
 
-  testWidgets('пример из приветствия создаёт и выбирает задачу',
-      (tester) async {
+  testWidgets('пример команды создаёт и выбирает задачу', (tester) async {
     await _pump(tester);
-    expect(
-      find.textContaining(AssistantController.exampleCommand),
-      findsOneWidget,
-    );
-
     await _say(tester, AssistantController.exampleCommand);
 
     expect(
@@ -373,11 +372,14 @@ void main() {
           of: find.byKey(const Key('chat-list')),
           matching: find.text('12:00'),
         );
+    await _say(tester, 'Покажи задачи');
     expect(time(), findsWidgets);
 
     await store.save(const AppSettings(showTimestamps: false));
     await tester.pumpWidget(const SizedBox());
     await _pump(tester, settings: store);
+    await _say(tester, 'Покажи задачи');
+    expect(find.byKey(const Key('chat-list')), findsOneWidget);
     expect(time(), findsNothing);
   });
 
@@ -582,11 +584,16 @@ void main() {
     for (var i = 0; i < 15; i++) {
       await _say(tester, 'Покажи задачи $i');
     }
-    expect(find.text('Покажи задачи 0'), findsNothing);
+    // В ленте, а не название сессии в меню.
+    Finder first() => find.descendant(
+          of: find.byKey(const Key('chat-list')),
+          matching: find.text('Покажи задачи 0'),
+        );
+    expect(first(), findsNothing);
 
     await tester.tap(find.byKey(const Key('history-0')));
     await tester.pumpAndSettle();
-    expect(find.text('Покажи задачи 0'), findsOneWidget);
+    expect(first(), findsOneWidget);
   });
 
   testWidgets('стрелки не стирают черновик', (tester) async {

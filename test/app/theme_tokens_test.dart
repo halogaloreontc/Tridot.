@@ -28,6 +28,7 @@ void main() {
       (AssistantColors.bubble, 0xFF2A2F2D),
       (AssistantColors.divider, 0xFF262A28),
       (AssistantColors.borderSoft, 0xFF303633),
+      (AssistantColors.railPill, 0xD90F1110),
       (AssistantColors.border, 0xFF46504B),
       (AssistantColors.text, 0xFFDDE2DF),
       (AssistantColors.textStrong, 0xFFF5F7F6),

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../assistant_theme.dart';
@@ -17,9 +18,9 @@ final class HistoryEntry {
   final String? result;
 }
 
-/// Хроника команд: строка коротких вертикальных полос под названием
-/// сессии, по центру шапки. Ширину колонки чата и поля ввода она не
-/// занимает.
+/// Хроника команд: строка коротких вертикальных полос поверх ленты сверху
+/// по центру, под шапкой ([HistoryRailPill]). Ширину колонки чата и поля
+/// ввода она не занимает.
 ///
 /// Полосы «живые»: старые короче и тусклее, свежие длиннее и светлее,
 /// последняя — цвета успешного кубика.
@@ -43,6 +44,7 @@ final class HistoryRail extends StatelessWidget {
     required this.onSelect,
     this.activeIndex,
     this.compact = false,
+    this.inPill = false,
   });
 
   final List<HistoryEntry> entries;
@@ -52,8 +54,22 @@ final class HistoryRail extends StatelessWidget {
   /// Узкий экран: вся строка — одна кнопка, открывающая список команд.
   final bool compact;
 
+  /// На подложке ([HistoryRailPill]): по центру стоит сама подложка, поэтому
+  /// пустое место слева под симметрию с кнопкой списка не нужно.
+  final bool inPill;
+
   /// Высота строки — она же высота цели нажатия.
   static const double height = 44;
+
+  /// Отступ подложки хроники от шапки.
+  static const double overlayTop = 6;
+
+  /// Промежуток между подложкой и первым сообщением.
+  static const double overlayGap = 6;
+
+  /// Отступ ленты и документа сверху, пока хроника видна: под ней ничего
+  /// не прячется.
+  static const double overlayInset = overlayTop + height + overlayGap;
 
   /// Наименьшая ширина и высота цели нажатия пальцем.
   static const double minTarget = 44;
@@ -123,8 +139,8 @@ final class HistoryRail extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             // Пустое место слева той же ширины, что и кнопка справа: полосы
-            // остаются по центру шапки.
-            const SizedBox(width: minTarget),
+            // остаются по центру. На подложке — только небольшой отступ.
+            SizedBox(width: inPill ? 12 : minTarget),
             Flexible(child: marks),
             Tooltip(
               message: 'Хроника команд',
@@ -257,6 +273,133 @@ final class HistoryRail extends StatelessWidget {
   }
 }
 
+/// [HistoryRail] на полупрозрачной подложке-«таблетке» с мягкой рамкой:
+/// так она читается поверх сообщений. Высота — [HistoryRail.height], цели
+/// нажатия не меньше [HistoryRail.minTarget].
+///
+/// Подложка лежит над лентой (или документом) и забирает себе касания в
+/// своём прямоугольнике. Чтобы над ней не было «мёртвой» зоны, колесо
+/// мыши, жест тачпада и вертикальное перетаскивание пальцем передаются в
+/// [scrollController] — ленту под ней, с той же инерцией, что у самой
+/// ленты. Нажатия по полосам и кнопке списка остаются у хроники.
+final class HistoryRailPill extends StatefulWidget {
+  const HistoryRailPill({
+    super.key,
+    required this.entries,
+    required this.onSelect,
+    this.activeIndex,
+    this.compact = false,
+    this.scrollController,
+  });
+
+  final List<HistoryEntry> entries;
+  final ValueChanged<int> onSelect;
+  final int? activeIndex;
+  final bool compact;
+
+  /// Прокрутка того, что под подложкой; `null` — ничего не передаётся.
+  final ScrollController? scrollController;
+
+  @override
+  State<HistoryRailPill> createState() => _HistoryRailPillState();
+}
+
+final class _HistoryRailPillState extends State<HistoryRailPill> {
+  Drag? _drag;
+
+  ScrollPosition? get _position {
+    final controller = widget.scrollController;
+    if (controller == null || controller.positions.length != 1) return null;
+    return controller.position;
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final position = _position;
+    if (position == null) return;
+    // Тот же разбор, что у Scrollable: колесо достаётся одному получателю.
+    GestureBinding.instance.pointerSignalResolver.register(event,
+        (PointerSignalEvent event) {
+      final current = _position;
+      if (current == null || event is! PointerScrollEvent) return;
+      var delta = event.scrollDelta.dy;
+      if (axisDirectionIsReversed(current.axisDirection)) delta = -delta;
+      if (delta != 0) current.pointerScroll(delta);
+    });
+  }
+
+  void _onDragStart(DragStartDetails details) {
+    final position = _position;
+    if (position == null) return;
+    _drag = position.drag(details, () => _drag = null);
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) => _drag?.update(details);
+
+  void _onDragEnd(DragEndDetails details) {
+    _drag?.end(details);
+    _drag = null;
+  }
+
+  void _onDragCancel() {
+    _drag?.cancel();
+    _drag = null;
+  }
+
+  @override
+  void didUpdateWidget(HistoryRailPill oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scrollController != widget.scrollController) {
+      _onDragCancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    _onDragCancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pill = DecoratedBox(
+      key: const Key('history-rail-pill'),
+      decoration: BoxDecoration(
+        color: AssistantColors.railPill,
+        border: Border.all(color: AssistantColors.borderSoft),
+        borderRadius: BorderRadius.circular(HistoryRail.height / 2),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: SizedBox(
+          height: HistoryRail.height,
+          child: HistoryRail(
+            entries: widget.entries,
+            onSelect: widget.onSelect,
+            activeIndex: widget.activeIndex,
+            compact: widget.compact,
+            inPill: true,
+          ),
+        ),
+      ),
+    );
+    if (widget.scrollController == null) return pill;
+    return Listener(
+      onPointerSignal: _onPointerSignal,
+      child: GestureDetector(
+        // Перетаскивают тем же, чем саму ленту (палец, перо, тачпад; мышью
+        // ленту не тянут).
+        supportedDevices: ScrollConfiguration.of(context).dragDevices,
+        onVerticalDragStart: _onDragStart,
+        onVerticalDragUpdate: _onDragUpdate,
+        onVerticalDragEnd: _onDragEnd,
+        onVerticalDragCancel: _onDragCancel,
+        child: pill,
+      ),
+    );
+  }
+}
+
 final class _Mark extends StatefulWidget {
   const _Mark({
     super.key,
@@ -329,7 +472,7 @@ final class _MarkState extends State<_Mark> {
     if (widget.compact) return mark;
     return Tooltip(
       key: Key('history-tip-${widget.entry.timestamp}-${widget.age}'),
-      // Карточка — под строкой, над сообщениями; поля не пускают её за
+      // Карточка — под хроникой, над сообщениями; поля не пускают её за
       // края окна.
       preferBelow: true,
       verticalOffset: HistoryRail.height / 2 + 4,

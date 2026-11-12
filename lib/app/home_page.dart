@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show OrdinalSortKey;
 import 'package:flutter/services.dart';
 
 import '../core/chats/chat_book.dart';
@@ -145,6 +146,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final ValueNotifier<int> _dataRevision = ValueNotifier<int>(0);
   final ScrollController _chatScroll = ScrollController();
 
+  /// Прокрутка «Документа»: её двигает и хроника команд над ним.
+  final ScrollController _docScroll = ScrollController();
+
   final TextEditingController _docTitle = TextEditingController();
   final TextEditingController _docProject = TextEditingController();
   final TextEditingController _docBody = TextEditingController();
@@ -153,10 +157,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late final SettingsStore _settingsStore =
       widget.settingsStore ?? InMemorySettingsStore();
 
-  /// Все чаты: главный и чаты задач (ADR-010).
+  /// Все чаты: сессии и чаты задач (ADR-010, ADR-015). При старте открыта
+  /// новая пустая сессия.
   late final ChatBook _book = ChatBook(
     store: widget.chatStore ?? InMemoryChatStore(),
     clock: widget.clock,
+    // Название сессии из старой истории «Главного» — без секретов, как и
+    // название из новой команды (_send).
+    redactTitle: (String text) => SecretGuard.redact(
+      LoginLinks.redact(text),
+      known: widget.assistant.knownSecret,
+    ).text,
   );
 
   /// Сообщения открытого чата.
@@ -172,19 +183,12 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// до создания, не удаляет новый чат ([_refresh], [ChatBook.prune]).
   int _chatCreations = 0;
 
-  /// В главном чате только приветствие, показанное до загрузки настроек: его
-  /// можно произнести голосом основного помощника из настроек.
-  bool _pristineWelcome = true;
-
   /// Настройки загружены: до этого помощник не пишет первым.
   bool _settingsLoaded = false;
 
   /// Загрузка настроек: сообщение, отправленное раньше, ждёт её, чтобы
   /// ответить голосом из настроек, а не голосом по умолчанию.
   late final Future<void> _settingsReady;
-
-  /// День, за который уже проверены просроченные задачи.
-  String? _noticeChecked;
 
   /// «Команда обрабатывается…» от помощника, который сейчас отвечает.
   ChatMessage? _working;
@@ -258,7 +262,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ]) {
       controller.addListener(_onDocumentEdited);
     }
-    _book.resetMain(<ChatMessage>[_welcome()]);
+    // Первая пустая сессия — свой выбор («её») с самого начала: при
+    // возврате в неё из чата задачи он восстановится.
+    widget.assistant.enterChat(sessionId: _book.currentId);
     for (final connection in widget.connections) {
       connection.addSessionListener(_onSessionChanged);
     }
@@ -310,27 +316,31 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Timer? _trainingTimer;
   bool _trainingAsked = false;
 
+  /// Пора потренировать пароль: строка в пустой сессии
+  /// ([SessionHero.onTraining]). Сообщение в чат — только по нажатию.
+  bool _trainingReady = false;
+
   /// Тренировка памяти паролей (5.8) — через «заметку дня», не в первые
   /// 30 с после запуска, не чаще раза в день и трёх раз в неделю. В
   /// `settings.json` — только дата.
   void _scheduleTrainingNotice() {
-    if (_trainingTimer != null || _trainingAsked || !_passwordsEnabled) {
+    if (_trainingTimer != null ||
+        _trainingAsked ||
+        _trainingReady ||
+        !_passwordsEnabled) {
       return;
     }
     _trainingTimer = Timer(const Duration(seconds: 30), () {
       _trainingTimer = null;
-      unawaited(_maybeTrainingNotice());
+      _checkTraining();
     });
   }
 
-  Future<void> _maybeTrainingNotice() async {
+  /// Срок тренировки настал: в пустой сессии появляется строка о ней.
+  void _checkTraining() {
     final passwords = widget.passwords;
     if (!mounted || passwords == null || !_passwordsEnabled) return;
-    if (_trainingAsked) return;
-    if (_sending || _bulkBusy) {
-      _scheduleTrainingNotice();
-      return;
-    }
+    if (_trainingAsked || _trainingReady) return;
     final today = AppSettings.dayKey(_now);
     final due = _settings.passwordsTrainingDue;
     if (due == null || due.compareTo(today) > 0) return;
@@ -338,17 +348,18 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         !passwords.facade.trainingDue(passwords.vault.clock.now())) {
       return;
     }
+    setState(() => _trainingReady = true);
+  }
+
+  /// Нажата строка «Пора потренировать пароль»: это команда человека —
+  /// «Потренируй меня» уходит в открытую сессию обычным путём (сессия
+  /// получает название и сохраняется, как после любой команды; вопрос и
+  /// карточка — от «Паролей», карточка только в памяти). Заперто — сначала
+  /// карточка открытия, после неё тренировка. Следующая — через 3 дня.
+  Future<void> _startTraining() async {
+    if (_trainingAsked || _sending || _bulkBusy) return;
     _trainingAsked = true;
-    final response = await widget.assistant.secureCardAction(
-      const SecureCardRequest(kind: SecureCardKind.training),
-      SecureCardCommand.notice,
-      personaId: widget.assistant.personas.notifier.id,
-    );
-    if (!mounted || response == null) return;
-    setState(() {
-      _pristineWelcome = false;
-      _book.append(ChatThread.mainId, _answer(response));
-    });
+    setState(() => _trainingReady = false);
     _changeSettings(
       _settings.copyWith(
         passwordsTrainingDue: AppSettings.dayKey(
@@ -356,6 +367,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       ),
     );
+    await _send('Потренируй меня');
   }
 
   void _onPasswordsChanged() {
@@ -395,6 +407,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _sessionSearch.dispose();
     _inputFocus.dispose();
     _chatScroll.dispose();
+    _docScroll.dispose();
     _docTitle.dispose();
     _docProject.dispose();
     _docBody.dispose();
@@ -438,10 +451,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   static const Duration _exitFlushLimit = Duration(seconds: 3);
 
-  /// Приветствие основного помощника.
-  ChatMessage _welcome() =>
-      _answer(widget.assistant.welcome(), withStatus: false);
-
   /// Ответ помощника в историю: готовый текст и автор. Смена стиля или
   /// помощника потом его не переписывает.
   /// [withStatus] — показывать ли «Уточните»/«Ошибка» по статусу ответа
@@ -482,23 +491,21 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _settings = settings;
       _settingsLoaded = true;
-      // Приветствие до загрузки настроек звучало голосом по умолчанию.
-      if (_pristineWelcome) _book.resetMain(<ChatMessage>[_welcome()]);
     });
-    _maybeNotice();
+    _dailyChecks();
   }
 
-  /// Чаты с диска. Если в главном есть сохранённые сообщения, они
-  /// заменяют приветствие; чаты задач читаются при открытии.
+  /// Чаты с диска: метаданные сразу, сообщения — при открытии. Открытой
+  /// остаётся новая пустая сессия (прежний «Главный» переносится в
+  /// обычную сессию, ChatBook.load).
   Future<void> _loadChats() async {
-    final restored = await _book.load();
+    await _book.load();
     if (!mounted) return;
     setState(() {
       _chatsLoaded = true;
-      if (restored) _pristineWelcome = false;
       _messageKeys.clear();
     });
-    _maybeNotice();
+    _dailyChecks();
   }
 
   /// Вход в подключение сменился (новый вход, выход, ключ устарел):
@@ -561,11 +568,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     unawaited(_settingsStore.save(settings));
   }
 
-  /// Второй помощник (в соло — единственный) пишет первым о просроченных
-  /// задачах: при открытии и при смене дня, не чаще раза в день. День
-  /// запоминается в настройках, поэтому ни перезапуск, ни смена настроек
-  /// помощников сообщение не повторяют.
-  void _maybeNotice() {
+  /// Проверки при открытии и при смене дня: первый день для «Вместе N
+  /// дней» и срок тренировки паролей. Сам помощник в сессии не пишет: о
+  /// просроченных говорит строка в пустой сессии ([SessionHero.overdue]).
+  void _dailyChecks() {
     if (!mounted ||
         !_settingsLoaded ||
         !_chatsLoaded ||
@@ -574,25 +580,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
     _maybeFirstSeen();
-    // Пока готовится ответ, напоминание не вклиниваем между командой и
-    // ответом: после ответа _send вызовет _refresh → _maybeNotice.
-    if (_sending) return;
-    final now = _now;
-    final today = AppSettings.dayKey(now);
     _scheduleTrainingNotice();
-    if (_noticeChecked == today) return;
-    _noticeChecked = today;
-    if (_settings.noticeDay == today) return;
-    final overdue = _active.where((Task t) => isOverdue(t, now)).toList();
-    final notice = widget.assistant.overdueNotice(overdue);
-    if (notice == null) return;
-    // Напоминание — в главный чат; если открыт другой, у главного точка
-    // «не прочитано» в меню.
-    setState(() {
-      _pristineWelcome = false;
-      _book.append(ChatThread.mainId, _answer(notice));
-    });
-    _changeSettings(_settings.copyWith(noticeDay: today));
   }
 
   /// Первый день с Связным для «Вместе N дней»: самая ранняя дата из
@@ -643,7 +631,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     await _syncDocument();
     _scheduleTick();
-    _maybeNotice();
+    _dailyChecks();
   }
 
   /// Перерисовка к полуночи и к сроку ближайшей задачи со временем, чтобы
@@ -666,14 +654,14 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _tick = Timer(next.difference(now) + const Duration(seconds: 1), () {
       if (!mounted) return;
       setState(() {});
-      // Новый день: свежий список задач, и второй помощник может написать
-      // о просроченных (_refresh → _maybeNotice).
+      // Новый день: свежий список задач и строка о просроченных в пустой
+      // сессии (_refresh → _dailyChecks).
       unawaited(_refresh());
     });
   }
 
   /// Задача, с которой работает помощник: в чате задачи — она сама, в
-  /// главном — выбранная («её»).
+  /// сессии — выбранная («её»).
   Task? get _selectedTask =>
       _findTask(_book.current.taskId ?? widget.assistant.selectedTaskId);
 
@@ -736,7 +724,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
     setState(() {
       _sending = true;
-      _pristineWelcome = false;
       _cube = CubeState.working;
       _working = _answer(
         widget.assistant.working(
@@ -927,8 +914,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  /// «Очистить историю сессий»: сессии и чаты задач удаляются, главный
-  /// начинается с приветствия. Задачи не меняются.
+  /// «Очистить историю сессий»: сессии и чаты задач удаляются, открыта
+  /// новая пустая сессия. Задачи не меняются.
   void _clearChat() {
     // Вопрос со списком снимается, отменить прежние массовые изменения
     // из чата больше нельзя.
@@ -936,10 +923,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     unawaited(_book.clearAll());
     widget.assistant
       ..forgetChatSelections()
-      ..enterChat();
+      ..enterChat(sessionId: _book.currentId);
     setState(() {
-      _book.append(ChatThread.mainId, _welcome());
-      _pristineWelcome = false;
+      _mode = AssistantViewMode.dialogue;
+      _docToast = null;
       _messageKeys.clear();
       _commands.clear();
       _commandCursor = null;
@@ -1072,7 +1059,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => _section = AppSection.session);
   }
 
-  /// «Назад» из чата задачи: к предыдущему чату, иначе в главный.
+  /// «Назад» из чата задачи: к предыдущему чату, иначе в пустую сессию.
   void _goBack() => _switchChat(_book.back);
 
   /// Переключение сразу: сообщения незагруженного чата появятся, когда
@@ -1487,7 +1474,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// «Недавние сессии»: главный, сессии и чаты задач с сообщениями.
+  /// «Недавние сессии»: сессии и чаты задач с сообщениями.
   List<SessionEntry> _sessionEntries(DateTime now) {
     final inSession = _section == AppSection.session;
     return <SessionEntry>[
@@ -1500,16 +1487,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final active = inSession && _book.currentId == thread.id;
     final time = sessionTimeLabel(thread.lastActivityAt, now);
     switch (thread.kind) {
+      // ChatKind.main в книге не бывает (переносится в сессию при чтении).
       case ChatKind.main:
-        return SessionEntry(
-          id: thread.id,
-          title: ChatBook.titleOf(thread),
-          time: time,
-          itemKey: const Key('chat-main'),
-          dotKey: const Key('chat-unread-main'),
-          active: active,
-          unread: thread.unread,
-        );
       case ChatKind.session:
         return SessionEntry(
           id: thread.id,
@@ -1760,7 +1739,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (section != AppSection.session) unawaited(_refresh());
   }
 
-  /// Выход из выбранной задачи в главном чате: выбор снимается, режим —
+  /// Выход из выбранной задачи в сессии: выбор снимается, режим —
   /// «Диалог», курсор в поле ввода — можно сразу создавать новую задачу.
   void _exitTask() {
     unawaited(_saveDocument());
@@ -1792,7 +1771,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final Widget? leading;
     if (inTaskChat || taskInFocus != null) {
       // В чате задачи слева — «назад» к предыдущему чату, при выбранной
-      // задаче в главном — снять выбор; на телефоне он заменяет меню
+      // задаче в сессии — снять выбор; на телефоне он заменяет меню
       // (меню открывается и жестом от левого края).
       leading = IconButton(
         key: const Key('task-back'),
@@ -1837,7 +1816,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final sessionTitle = current.kind == ChatKind.task
         ? (_findTask(current.taskId)?.title ?? 'Задача')
         : ChatBook.titleOf(current);
-    final history = _historyEntries;
     // Material, а не ColoredBox: на нём рисуются подсветка и всплески
     // нажатий у ListTile и кнопок во всех разделах.
     final workspace = Material(
@@ -1850,27 +1828,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             title: title,
             personaName: persona.russianName,
             onPersona: () => _openMyRelay(MyRelayTab.assistants),
-            subtitle: wide ? 'сессия «$sessionTitle»' : null,
+            // У пустой сессии названия ещё нет — подпись не нужна.
+            subtitle: wide && current.messageCount > 0
+                ? 'сессия «$sessionTitle»'
+                : null,
             // «Сегодня» — колонкой справа на компьютере; свёрнута — кнопка
             // в шапке. На телефоне кнопки нет: это «Мой Связной» → «Сводка».
             trailing: wide && !today ? _todayShowButton() : null,
-            // Хроника команд — под названием сессии, по центру: ширину
-            // ленты и поля ввода она не занимает. И в «Диалоге», и в
-            // «Документе».
-            below: inSession && history.isNotEmpty
-                ? HistoryRail(
-                    entries: history,
-                    activeIndex: _highlightedCommand,
-                    onSelect: _selectCommand,
-                    // Полосы по одной — только на широком окне (мышь); на
-                    // телефоне и планшете (палец) строка — одна кнопка
-                    // списка.
-                    compact: !wide,
-                  )
-                : null,
           ),
           const Divider(),
-          Expanded(child: _buildSection()),
+          Expanded(child: _buildSection(wide: wide)),
         ],
       ),
     );
@@ -2019,7 +1986,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildSection() {
+  Widget _buildSection({required bool wide}) {
     final now = _now;
     final selectedId = _selectedTask?.id;
     // Задача из списков открывается своим чатом, в режиме «Диалог»;
@@ -2049,58 +2016,116 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case AppSection.myRelay:
         return LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) =>
-              _buildConversationColumn(constraints.maxHeight),
+              _buildConversationColumn(constraints.maxHeight, wide: wide),
         );
     }
   }
 
-  Widget _buildConversationColumn(double height) {
+  Widget _buildConversationColumn(double height, {required bool wide}) {
     final current = _book.current;
     final hero = _mode == AssistantViewMode.dialogue &&
         current.isSession &&
         current.messageCount == 0 &&
         !_sending;
+    final history = hero ? const <HistoryEntry>[] : _historyEntries;
+    final rail = history.isNotEmpty;
+    final now = _now;
+    final overdue =
+        hero ? _active.where((Task t) => isOverdue(t, now)).length : 0;
+    final Widget content = hero
+        ? SessionHero(
+            persona: _settings.personas.responder,
+            notifier: _settings.personas.notifier,
+            overdue: overdue,
+            onOverdue: () => _openMyRelay(MyRelayTab.summary),
+            onTraining: _trainingReady && _passwordsEnabled
+                ? () => unawaited(_startTraining())
+                : null,
+            note: _settings.personas.mode == AssistantMode.duo
+                ? SessionHero.noteFor(
+                    <(String, Persona)>[
+                      for (final role
+                          in widget.assistant.extensions.activeRoles)
+                        (
+                          role.title,
+                          widget.assistant.extensions
+                              .ownerOf(role.id, _settings.personas),
+                        ),
+                    ],
+                    _settings.personas.main,
+                  )
+                : null,
+          )
+        : _mode == AssistantViewMode.dialogue
+            ? _buildDialogue(topInset: rail ? HistoryRail.overlayInset : 0)
+            : _withDocToast(
+                DocumentView(
+                  topInset: rail ? HistoryRail.overlayInset : 0,
+                  scrollController: _docScroll,
+                  task: _selectedTask,
+                  now: _now,
+                  titleController: _docTitle,
+                  projectController: _docProject,
+                  bodyController: _docBody,
+                  bodyFocus: _docBodyFocus,
+                  saveState: _docState,
+                  savedAt: _docSavedAt,
+                  onSaveNow: _saveDocument,
+                  onReopen: () {
+                    final task = _selectedTask;
+                    if (task != null) unawaited(_toggleDone(task));
+                  },
+                  onOpenTasks: () => _goTo(AppSection.tasks),
+                ),
+              );
     return Column(
       children: <Widget>[
         Expanded(
-          child: hero
-              ? SessionHero(
-                  persona: _settings.personas.responder,
-                  note: _settings.personas.mode == AssistantMode.duo
-                      ? SessionHero.noteFor(
-                          <(String, Persona)>[
-                            for (final role
-                                in widget.assistant.extensions.activeRoles)
-                              (
-                                role.title,
-                                widget.assistant.extensions
-                                    .ownerOf(role.id, _settings.personas),
-                              ),
-                          ],
-                          _settings.personas.main,
-                        )
-                      : null,
-                )
-              : _mode == AssistantViewMode.dialogue
-                  ? _buildDialogue()
-                  : _withDocToast(
-                      DocumentView(
-                        task: _selectedTask,
-                        now: _now,
-                        titleController: _docTitle,
-                        projectController: _docProject,
-                        bodyController: _docBody,
-                        bodyFocus: _docBodyFocus,
-                        saveState: _docState,
-                        savedAt: _docSavedAt,
-                        onSaveNow: _saveDocument,
-                        onReopen: () {
-                          final task = _selectedTask;
-                          if (task != null) unawaited(_toggleDone(task));
-                        },
-                        onOpenTasks: () => _goTo(AppSection.tasks),
+          // Хроника команд — поверх ленты (или документа) сверху по
+          // центру, под шапкой: шапка остаётся одной строкой, ширину ленты
+          // и поля ввода хроника не занимает. Ленте и документу сверху
+          // добавлен отступ высотой с хронику — первое сообщение ею не
+          // закрыто.
+          child: Stack(
+            children: <Widget>[
+              // Экранный диктор читает хронику перед лентой: у обоих свой
+              // узел и порядок, а не по положению на экране (на широком
+              // окне лента начинается выше хроники).
+              Positioned.fill(
+                child: Semantics(
+                  container: true,
+                  sortKey: const OrdinalSortKey(1),
+                  child: content,
+                ),
+              ),
+              if (rail)
+                Positioned(
+                  top: HistoryRail.overlayTop,
+                  left: 0,
+                  right: 0,
+                  child: Semantics(
+                    container: true,
+                    sortKey: const OrdinalSortKey(0),
+                    child: Center(
+                      child: HistoryRailPill(
+                        entries: history,
+                        activeIndex: _highlightedCommand,
+                        onSelect: _selectCommand,
+                        // Полосы по одной — только на широком окне (мышь);
+                        // на телефоне и планшете (палец) — одна кнопка
+                        // списка.
+                        compact: !wide,
+                        // Колесо и перетаскивание над хроникой двигают то,
+                        // что под ней.
+                        scrollController: _mode == AssistantViewMode.dialogue
+                            ? _chatScroll
+                            : _docScroll,
                       ),
                     ),
+                  ),
+                ),
+            ],
+          ),
         ),
         // Свайп вправо по полю ввода и кнопкам меню не открывает.
         DrawerSwipeBlocker(child: _buildBottomArea(height)),
@@ -2136,7 +2161,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildChat(double viewportHeight) {
+  Widget _buildChat(double viewportHeight, {double topInset = 0}) {
     final rows = <Widget>[];
     DateTime? day;
     final latestAnswer = _messages.lastIndexWhere((m) => !m.fromUser);
@@ -2230,46 +2255,62 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           key: const Key('chat-list'),
           controller: _chatScroll,
           reverse: true,
-          padding: const EdgeInsets.fromLTRB(chatInset, 16, chatInset, 16),
+          // Сверху — место под хронику команд поверх ленты: самое старое
+          // сообщение при прокрутке до конца остаётся под ней, а не за ней.
+          padding: EdgeInsets.fromLTRB(
+            chatInset,
+            topInset > 0 ? topInset : 16,
+            chatInset,
+            16,
+          ),
           children: rows.reversed.toList(),
         ),
       ),
     );
   }
 
-  /// Подпись и ключ ссылки под сообщением или `(null, null)`: «Открыть чат
-  /// задачи» в главном чате, «из чата «Главный»» под копией в чате задачи.
-  /// Ссылка на открытый чат или на удалённую задачу не показывается.
+  /// Подпись и ключ ссылки под сообщением или `(null, null)`: «Открыть
+  /// сессию задачи» под ответом о новой задаче, «из сессии «…»» под копией
+  /// в чате задачи (сессия, где задачу создали, или задача-родитель).
+  /// Ссылка на открытый чат, на удалённую задачу или на чат, которого
+  /// больше нет, не показывается.
   (String?, Key?) _linkOf(ChatMessage message) {
     final link = message.link;
-    if (link == null || link.chatId == _book.currentId) return (null, null);
-    if (link.chatId == ChatThread.mainId) {
-      return ('из сессии «Главный»', const Key('chat-origin-link'));
+    if (link == null) return (null, null);
+    // Старые копии ссылаются на «main» — он перенесён в сессию.
+    final chatId = _book.resolve(link.chatId);
+    if (chatId == _book.currentId) return (null, null);
+    final target = _book.thread(chatId);
+    if (target != null && target.kind != ChatKind.task) {
+      return (
+        'из сессии «${ChatBook.titleOf(target)}»',
+        const Key('chat-origin-link'),
+      );
     }
     final task = _findTask(link.taskId);
     if (task == null) return (null, null);
-    final current = _book.current;
     // Копия в чате задачи ведёт в чат задачи-родителя.
-    if (!current.isMain && current.parentTaskId == task.id) {
+    if (_book.current.parentTaskId == task.id) {
       return ('из сессии «${task.title}»', const Key('chat-origin-link'));
     }
     return ('Открыть сессию задачи', Key('open-task-chat-${task.id}'));
   }
 
   void _followLink(ChatLink link) {
+    final chatId = _book.resolve(link.chatId);
     final task = _findTask(link.taskId);
-    if (link.chatId != ChatThread.mainId && task != null) {
+    if (task != null && chatId.startsWith('task:')) {
       _openTaskChat(task, mode: AssistantViewMode.dialogue);
     } else {
-      _openChat(link.chatId);
+      _openChat(chatId);
     }
   }
 
-  Widget _buildDialogue() {
+  Widget _buildDialogue({double topInset = 0}) {
     // Карточке списка нужна высота видимой части чата, а не экрана.
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) =>
-          _buildChat(constraints.maxHeight),
+          _buildChat(constraints.maxHeight, topInset: topInset),
     );
   }
 
@@ -2433,7 +2474,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// Колонка чата: не шире [chatColumnWidth], по центру. Одна и та же для
   /// ленты сообщений и нижней части, поэтому их края совпадают. Хроника
-  /// команд — в шапке (SessionHeader.below) и ширину не занимает.
+  /// команд — поверх ленты сверху по центру и ширину не занимает.
   Widget _chatColumn({
     required AlignmentGeometry alignment,
     required Widget child,

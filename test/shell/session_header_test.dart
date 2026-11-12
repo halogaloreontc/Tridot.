@@ -1,5 +1,6 @@
 // Шапка сессии (макет «Д»): «Лиорио ▾» по центру, необязательная кнопка
-// справа, хроника команд под строкой, крупный шрифт.
+// справа, всегда одна строка 56 (хроника команд — поверх ленты), крупный
+// шрифт.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
@@ -9,7 +10,6 @@ Future<void> _pump(
   WidgetTester tester, {
   VoidCallback? onPersona,
   Widget? trailing,
-  Widget? below,
   bool wide = false,
   Size size = const Size(390, 844),
 }) async {
@@ -32,7 +32,6 @@ Future<void> _pump(
             personaName: 'Лиорио',
             onPersona: onPersona,
             trailing: trailing,
-            below: below,
           ),
         ),
       ),
@@ -56,11 +55,11 @@ void main() {
         tester.getRect(find.byKey(const Key('menu-button'))).right,
       ),
     );
-    // Без хроники шапка — одна строка 56.
+    // Шапка — одна строка 56.
     expect(tester.getSize(find.byType(SessionHeader)).height, 56);
   });
 
-  testWidgets('кнопка справа и хроника под строкой, по центру', (tester) async {
+  testWidgets('кнопка справа; шапка — одна строка 56', (tester) async {
     var shown = 0;
     await _pump(
       tester,
@@ -71,7 +70,6 @@ void main() {
         onPressed: () => shown++,
         icon: const Icon(Icons.view_sidebar_outlined),
       ),
-      below: const SizedBox(key: Key('below'), width: 120, height: 44),
     );
     await tester.tap(find.byKey(const Key('today-show')));
     expect(shown, 1);
@@ -79,10 +77,7 @@ void main() {
       tester.getRect(find.byKey(const Key('today-show'))).right,
       lessThanOrEqualTo(1000),
     );
-    final below = tester.getRect(find.byKey(const Key('below')));
-    expect(below.top, 56);
-    expect(below.center.dx, moreOrLessEquals(500, epsilon: 1));
-    expect(tester.getSize(find.byType(SessionHeader)).height, 56 + 44);
+    expect(tester.getSize(find.byType(SessionHeader)).height, 56);
   });
 
   testWidgets('320 px и шрифт 2x: без переполнения', (tester) async {
@@ -91,7 +86,6 @@ void main() {
     await _pump(
       tester,
       size: const Size(320, 640),
-      below: const SizedBox(width: 240, height: 44),
     );
     expect(tester.takeException(), isNull);
     expect(

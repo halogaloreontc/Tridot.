@@ -46,11 +46,11 @@ Future<_Calls> _pump(
           reduceMotion: true,
           sessions: <SessionEntry>[
             const SessionEntry(
-              id: 'main',
-              title: 'Главный',
+              id: 'session:a',
+              title: 'Отметить приход 318',
               time: '12:40',
-              itemKey: Key('chat-main'),
-              dotKey: Key('chat-unread-main'),
+              itemKey: Key('chat-session:a'),
+              dotKey: Key('chat-unread-session:a'),
               active: true,
             ),
             const SessionEntry(
@@ -143,7 +143,7 @@ void main() {
     ]);
     // Строки сессий — не ниже 44 px.
     expect(
-      tester.getSize(find.byKey(const Key('chat-main'))).height,
+      tester.getSize(find.byKey(const Key('chat-session:a'))).height,
       greaterThanOrEqualTo(44),
     );
   });
@@ -324,9 +324,10 @@ void main() {
     final store = InMemoryChatStore();
     final book = ChatBook(store: store, clock: FixedClock(_now));
     await book.load();
+    final s = book.currentId;
     book
       ..append(
-        ChatThread.mainId,
+        s,
         ChatMessage(
           id: book.newMessageId(),
           author: ChatAuthor.persona,
@@ -336,7 +337,7 @@ void main() {
         ),
       )
       ..append(
-        ChatThread.mainId,
+        s,
         ChatMessage(
           id: book.newMessageId(),
           author: ChatAuthor.persona,
@@ -360,21 +361,21 @@ void main() {
     // Справа — время сессии, а не имя помощника.
     expect(
       find.descendant(
-        of: find.byKey(const Key('search-hit-main')),
+        of: find.byKey(Key('search-hit-$s')),
         matching: find.text(sessionTimeLabel(_now, _now)),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
-        of: find.byKey(const Key('search-hit-main')),
+        of: find.byKey(Key('search-hit-$s')),
         matching: find.text('Лиорио'),
       ),
       findsNothing,
     );
     final snippet = tester.widget<RichText>(
       find.descendant(
-        of: find.byKey(const Key('search-snippet-main')),
+        of: find.byKey(Key('search-snippet-$s')),
         matching: find.byType(RichText),
       ),
     );
@@ -397,9 +398,9 @@ void main() {
     await tester.enterText(find.byKey(const Key('session-search')), 'приход');
     await tester.pump(RelayDrawer.searchDelay);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('search-hit-main')));
+    await tester.tap(find.byKey(Key('search-hit-$s')));
     await tester.pumpAndSettle();
-    expect(calls.log, <String>['hit:main']);
+    expect(calls.log, <String>['hit:$s']);
     expect(find.text('Недавние сессии'), findsOneWidget, reason: 'поиск снят');
   });
 

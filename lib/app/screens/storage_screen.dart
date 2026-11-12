@@ -44,7 +44,7 @@ class StorageScreen extends StatefulWidget {
   final StorageInfo info;
   final int activeCount;
 
-  /// Сколько чатов с сообщениями (главный и чаты задач).
+  /// Сколько чатов с сообщениями (сессии и чаты задач).
   final int chatCount;
 
   /// Выполненные задачи, новые первыми.

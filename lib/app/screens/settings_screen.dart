@@ -90,7 +90,8 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final canClear = messageCount > 1;
+    // Приветствия-сообщения больше нет: очищать есть что с первого.
+    final canClear = messageCount > 0;
     const switchTitle = TextStyle(color: AssistantColors.text);
 
     return SingleChildScrollView(

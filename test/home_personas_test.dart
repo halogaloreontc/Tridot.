@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
+import 'package:local_assistant/app/widgets/personas_section.dart';
 import 'package:local_assistant/core/chats/chat_models.dart';
 import 'package:local_assistant/core/chats/chat_store.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
@@ -213,28 +214,46 @@ Task _overdue(String title) => Task(
       updatedAt: DateTime(2026, 11, 1),
     );
 
+/// Чей знак в пустой сессии (SessionHero): id помощника.
+String _heroPersona(WidgetTester tester) => tester
+    .widget<PersonaMark>(
+      find
+          .descendant(
+            of: find.byKey(const Key('session-hero')),
+            matching: find.byType(PersonaMark),
+          )
+          .first,
+    )
+    .persona
+    .id;
+
 void main() {
   group('Liorio и Noda в чате', () {
-    testWidgets('приветствие и ответы подписаны помощником', (tester) async {
+    testWidgets('пустая сессия — знак помощника; ответы подписаны',
+        (tester) async {
       await _pump(tester, settings: InMemorySettingsStore());
-      expect(_history(tester).single, startsWith('rio: Я готов к работе.'));
+      // Приветствие — пустая сессия, а не сообщение.
+      expect(_history(tester), isEmpty);
+      expect(find.textContaining('Я готов к работе'), findsNothing);
+      expect(_heroPersona(tester), 'rio');
       expect(find.text('Лиорио'), findsWidgets);
       expect(find.text('Liorio'), findsNothing, reason: 'имена кириллицей');
 
       await _say(tester, 'Добавь задачу купить хлеб');
       await _say(tester, 'Noda, покажи задачи');
       final history = _history(tester);
-      expect(history[1], 'user: Добавь задачу купить хлеб');
-      expect(history[2], 'rio: Создал задачу «Купить хлеб».');
-      expect(history[3], 'user: Noda, покажи задачи');
-      expect(history[4], startsWith('noda: '));
-      expect(history[4], contains('«Купить хлеб»'));
+      expect(history[0], 'user: Добавь задачу купить хлеб');
+      expect(history[1], 'rio: Создал задачу «Купить хлеб».');
+      expect(history[2], 'user: Noda, покажи задачи');
+      expect(history[3], startsWith('noda: '));
+      expect(history[3], contains('«Купить хлеб»'));
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('подпись «Лиорио» с меткой «Л», название Связной в меню',
         (tester) async {
       await _pump(tester, settings: InMemorySettingsStore());
+      await _say(tester, 'покажи задачи');
       final author = find.byKey(const ValueKey<String>('message-author-rio'));
       expect(author, findsOneWidget);
       expect(
@@ -261,7 +280,10 @@ void main() {
         const AppSettings(personas: PersonaSettings(mainPersona: 'noda')),
       );
       await _pump(tester, settings: store);
-      expect(_history(tester).single, startsWith('noda: '));
+      expect(_history(tester), isEmpty);
+      expect(_heroPersona(tester), 'noda');
+      await _say(tester, 'покажи задачи');
+      expect(_history(tester).last, startsWith('noda: '));
     });
 
     testWidgets(
@@ -533,7 +555,6 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();
       expect(_history(tester), <Object>[
-        startsWith('noda: '),
         'user: 2+2',
         startsWith('noda: '),
       ]);
@@ -563,7 +584,7 @@ void main() {
       final before = await _snapshot(tester, h);
       expect(before['selected'], isNotNull);
       expect(before['followUp'], 'noda');
-      expect((before['history']! as List<String>).length, 7);
+      expect((before['history']! as List<String>).length, 6);
 
       for (final key in <String>[
         'assistant-mode-solo',
@@ -710,7 +731,7 @@ void main() {
       expect(h.assistant.followUpPersonaId, 'noda');
       final before = await _chats(chats);
       final history = _history(tester);
-      expect(before.length, 3, reason: 'главный и два чата задач');
+      expect(before.length, 3, reason: 'сессия и два чата задач');
 
       for (final key in <String>[
         'assistant-mode-solo',
@@ -734,7 +755,8 @@ void main() {
       expect(h.assistant.followUpPersonaId, 'noda');
       expect(tester.takeException(), isNull);
 
-      // Перезапуск над теми же хранилищами: чаты те же, открыт главный.
+      // Перезапуск над теми же хранилищами: чаты те же, открыта новая
+      // пустая сессия, прежняя — в меню.
       await _pump(
         tester,
         settings: store,
@@ -744,10 +766,13 @@ void main() {
       );
       expect(await _chats(chats), before);
       expect(_openChat(tester), isNull);
-      final main = before[ChatThread.mainId]! as Map<String, Object?>;
+      expect(_history(tester), isEmpty);
+      final sessionId = onlySessionId(before.keys);
+      final session = before[sessionId]! as Map<String, Object?>;
+      await openSessionTitled(tester, 'Добавь задачу «Купить хлеб» на завтра');
       expect(
         _history(tester).length,
-        (main['messages']! as List<String>).length,
+        (session['messages']! as List<String>).length,
       );
       await _openSettings(tester);
       await _tapSetting(tester, 'main-persona-noda');
@@ -796,10 +821,12 @@ void main() {
         (await h.tasks.listActive()).map((Task t) => t.title),
         <String>['Купить хлеб'],
       );
-      expect(
-          _history(tester).single,
-          'noda: Готова. Пример: '
-          '${AssistantController.exampleCommand}');
+      // Новая пустая сессия — со знаком нового основного; ответ — его
+      // голосом и выбранным стилем.
+      expect(_history(tester), isEmpty);
+      expect(_heroPersona(tester), 'noda');
+      await _say(tester, 'Добавь задачу купить молоко');
+      expect(_history(tester).last, startsWith('noda: '));
     });
 
     testWidgets('испорченный файл настроек: дуэт, основной Liorio, задачи целы',
@@ -816,7 +843,8 @@ void main() {
         repository: repository,
       );
       expect(h.assistant.personas, const PersonaSettings());
-      expect(_history(tester).single, startsWith('rio: '));
+      expect(_history(tester), isEmpty);
+      expect(_heroPersona(tester), 'rio');
       expect(find.byKey(const Key('addressee-switch')), findsNothing);
       expect(
         (await h.tasks.listActive()).map((Task t) => t.title),
@@ -859,7 +887,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await _tapSetting(tester, 'main-persona-noda');
       await _tapSetting(tester, 'style-rio-business');
-      await tester.tap(find.byKey(const Key('chat-main')));
+      await tester.tap(find.byKey(const Key('my-relay-back')));
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
 
@@ -877,8 +905,19 @@ void main() {
     });
   });
 
-  group('второй помощник пишет первым о просроченных задачах', () {
-    testWidgets('при открытии, один раз, без дублей после смены настроек',
+  group('просроченные — строкой в пустой сессии, а не сообщением', () {
+    /// Знак у строки о просроченных: id помощника.
+    String lineMark(WidgetTester tester) => tester
+        .widget<PersonaMark>(
+          find.descendant(
+            of: find.byKey(const Key('session-hero-overdue')),
+            matching: find.byType(PersonaMark),
+          ),
+        )
+        .persona
+        .id;
+
+    testWidgets('при открытии: строка от второго, в сессии ничего нет',
         (tester) async {
       final store = InMemorySettingsStore();
       final repository = InMemoryTaskRepository();
@@ -886,13 +925,13 @@ void main() {
       await repository.save(_overdue('Счёт'));
       await _pump(tester, settings: store, repository: repository);
 
-      List<String> notices() => _history(tester)
-          .where((String m) => m.contains('просроченные задачи'))
-          .toList();
-      expect(notices(), hasLength(1));
-      expect(notices().single, startsWith('noda: '), reason: 'второй — Noda');
-      expect(notices().single, contains('«Отчёт», «Счёт»'));
-      expect((await store.load()).noticeDay, '2026-11-04');
+      final line = find.byKey(const Key('session-hero-overdue'));
+      expect(line, findsOneWidget);
+      expect(find.text('Просрочены 2 задачи'), findsOneWidget);
+      expect(lineMark(tester), 'noda', reason: 'второй — Noda');
+      expect(_history(tester), isEmpty, reason: 'в сессию не пишется');
+      expect(tester.getSize(line).height, greaterThanOrEqualTo(44));
+      expect((await store.load()).noticeDay, isNull);
 
       await _openSettings(tester);
       for (final key in <String>[
@@ -904,19 +943,31 @@ void main() {
         await _tapSetting(tester, key);
       }
       await _openTasks(tester);
-      expect(notices(), hasLength(1), reason: 'смена настроек не повторяет');
+      expect(_history(tester), isEmpty, reason: 'смена настроек не пишет');
+      expect(line, findsOneWidget);
+      expect(lineMark(tester), 'rio', reason: 'основная теперь Noda');
 
-      // Перезапуск в тот же день — тоже без повтора.
+      // Перезапуск — та же строка, сообщений нет.
       await _pump(
         tester,
         settings: store,
         repository: repository,
         key: const ValueKey<String>('снова'),
       );
-      expect(notices(), isEmpty);
+      expect(line, findsOneWidget);
+      expect(_history(tester), isEmpty);
+
+      // После первой команды пустой сессии (и строки) больше нет.
+      await _say(tester, 'покажи задачи');
+      expect(line, findsNothing);
+      expect(
+        _history(tester).where((String m) => m.contains('просроч')),
+        hasLength(lessThanOrEqualTo(1)),
+        reason: 'только ответ на «покажи задачи»',
+      );
     });
 
-    testWidgets('в соло пишет единственный помощник', (tester) async {
+    testWidgets('в соло — знак единственного помощника', (tester) async {
       final store = InMemorySettingsStore();
       await store.save(
         const AppSettings(
@@ -929,13 +980,31 @@ void main() {
       final repository = InMemoryTaskRepository();
       await repository.save(_overdue('Отчёт'));
       await _pump(tester, settings: store, repository: repository);
-      expect(
-        _history(tester).last,
-        'rio: У вас 1 просроченная задача: «Отчёт».',
-      );
+      expect(find.text('Просрочена 1 задача'), findsOneWidget);
+      expect(lineMark(tester), 'rio');
+      expect(_history(tester), isEmpty);
     });
 
-    testWidgets('смена дня во время ответа: напоминание после ответа',
+    testWidgets('нажатие — «Мой Связной» → «Сводка»', (tester) async {
+      final repository = InMemoryTaskRepository();
+      for (var i = 0; i < 5; i++) {
+        await repository.save(_overdue('Дело $i'));
+      }
+      await _pump(
+        tester,
+        settings: InMemorySettingsStore(),
+        repository: repository,
+        size: const Size(390, 844),
+      );
+      expect(find.text('Просрочено 5 задач'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('session-hero-overdue')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('my-relay')), findsOneWidget);
+      expect(find.byKey(const Key('my-relay-summary')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('смена дня во время ответа: в истории только команда и ответ',
         (tester) async {
       final clock = _MutableClock(DateTime(2026, 11, 4, 23, 59, 50));
       final repository = _SlowRepository();
@@ -959,17 +1028,13 @@ void main() {
       await tester.pump(const Duration(seconds: 15));
       await tester.pump(const Duration(seconds: 30));
       await tester.pumpAndSettle();
-      final history = _history(tester);
-      expect(history.sublist(1), <Object>[
+      expect(_history(tester), <String>[
         'user: Добавь задачу купить хлеб',
         'rio: Создал задачу «Купить хлеб».',
-        startsWith('noda: '),
       ]);
-      expect(history.last, contains('1 просроченная задача'));
-      expect(history.last, contains('«Отчёт»'));
     });
 
-    testWidgets('без просроченных — молчит; новый день — новое сообщение',
+    testWidgets('без просроченных — строки нет; новый день — появилась',
         (tester) async {
       final clock = _MutableClock(DateTime(2026, 11, 4, 12));
       final store = InMemorySettingsStore();
@@ -984,12 +1049,13 @@ void main() {
         repository: repository,
         clock: clock,
       );
-      expect(_history(tester), hasLength(1));
+      expect(find.byKey(const Key('session-hero-overdue')), findsNothing);
       clock.value = DateTime(2026, 11, 5, 0, 0, 2);
       await tester.pump(const Duration(hours: 13));
       await tester.pumpAndSettle();
-      expect(_history(tester).last, contains('1 просроченная задача'));
-      expect((await store.load()).noticeDay, '2026-11-05');
+      expect(find.text('Просрочена 1 задача'), findsOneWidget);
+      expect(_history(tester), isEmpty);
+      expect((await store.load()).noticeDay, isNull);
     });
   });
 }

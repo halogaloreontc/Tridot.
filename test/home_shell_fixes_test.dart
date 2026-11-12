@@ -96,7 +96,7 @@ void main() {
   // Ширина подписей и вкладок — по настоящим шрифтам приложения.
   setUpAll(loadAppFonts);
 
-  testWidgets('задача из одной сессии — не «её» в главном и в другой сессии',
+  testWidgets('задача из одной сессии — не «её» в другой сессии',
       (tester) async {
     final (tasks, assistant) = await _pump(tester);
     await _say(tester, 'привет');
@@ -105,23 +105,30 @@ void main() {
     final bread = (await tasks.listActive()).single;
     expect(assistant.selectedTaskId, bread.id);
 
-    await tapInDrawer(tester, const Key('chat-main'));
+    await openSessionTitled(tester, 'привет');
     expect(assistant.selectedTaskId, isNull);
     expect(find.byKey(const Key('quick-Заверши её')), findsNothing);
     await _say(tester, 'Заверши её');
     expect((await tasks.listActive()).single.id, bread.id, reason: 'не done');
 
     // Вернулись в ту сессию — её задача снова «её».
-    await openDrawerIfNeeded(tester);
-    await tester.tap(
-      find.byWidgetPredicate(
-        (Widget w) =>
-            w.key is ValueKey<String> &&
-            (w.key! as ValueKey<String>).value.startsWith('chat-session:'),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await openSessionTitled(tester, 'добавь задачу купить хлеб');
     expect(assistant.selectedTaskId, bread.id);
+  });
+
+  testWidgets('выбор («её») первой сессии запуска возвращается вместе с ней',
+      (tester) async {
+    final (tasks, assistant) = await _pump(tester);
+    await _say(tester, 'добавь задачу купить хлеб');
+    final bread = (await tasks.listActive()).single;
+    expect(assistant.selectedTaskId, bread.id);
+
+    await tapInDrawer(tester, const Key('new-session'));
+    expect(assistant.selectedTaskId, isNull, reason: 'новая — без выбора');
+
+    await openSessionTitled(tester, 'добавь задачу купить хлеб');
+    expect(assistant.selectedTaskId, bread.id);
+    expect(find.byKey(const Key('quick-Заверши её')), findsOneWidget);
   });
 
   testWidgets('«Данные»: «Вернуть» из архива сразу обновляет список',
@@ -202,8 +209,7 @@ void main() {
     final label = find.byKey(const Key('activity-weekday-2'));
     expect(tester.getSize(label).height, greaterThan(12));
     // Вернулись в сессию — колонка «Сегодня» снова на месте.
-    await tester.tap(find.byKey(const Key('chat-main')));
-    await tester.pumpAndSettle();
+    await backToSession(tester);
     expect(find.byKey(const Key('today-panel')), findsOneWidget);
   });
 

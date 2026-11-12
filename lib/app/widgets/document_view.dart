@@ -31,6 +31,8 @@ final class DocumentView extends StatelessWidget {
     required this.onSaveNow,
     required this.onReopen,
     required this.onOpenTasks,
+    this.topInset = 0,
+    this.scrollController,
   });
 
   final Task? task;
@@ -45,12 +47,19 @@ final class DocumentView extends StatelessWidget {
   final VoidCallback onReopen;
   final VoidCallback onOpenTasks;
 
+  /// Добавка к отступу сверху: место под хронику команд поверх документа.
+  final double topInset;
+
+  /// Прокрутка документа (её же двигает хроника команд над ним).
+  final ScrollController? scrollController;
+
   @override
   Widget build(BuildContext context) {
     final current = task;
     if (current == null) {
       return ListView(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        controller: scrollController,
+        padding: EdgeInsets.fromLTRB(24, 20 + topInset, 24, 24),
         children: <Widget>[
           const Text('Задачи → Документ', style: technicalTextStyle),
           const SizedBox(height: 32),
@@ -85,7 +94,8 @@ final class DocumentView extends StatelessWidget {
     final done = current.status == TaskStatus.done;
     final due = current.dueAt;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+      controller: scrollController,
+      padding: EdgeInsets.fromLTRB(24, 20 + topInset, 24, 24),
       children: <Widget>[
         Text(
           [

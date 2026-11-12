@@ -239,7 +239,7 @@ void main() {
           );
           responses.add(working);
           book.append(
-            ChatThread.mainId,
+            book.currentId,
             ChatMessage(
               id: book.newMessageId(),
               author: ChatAuthor.user,
@@ -254,7 +254,7 @@ void main() {
           );
           responses.add(response);
           book.append(
-            ChatThread.mainId,
+            book.currentId,
             ChatMessage(
               id: book.newMessageId(),
               author: ChatAuthor.persona,
@@ -304,7 +304,7 @@ void main() {
         }
         final pending = assistant.session.pendingConfirmation;
         expectClean('ожидание', '${pending?.payload}');
-        for (final message in book.thread(ChatThread.mainId)!.messages) {
+        for (final message in book.thread(book.currentId)!.messages) {
           final json = message.toJson();
           expect(json.containsKey('secure_card'), isFalse);
           expect(json.toString(), isNot(contains('secureCard')));
@@ -497,7 +497,7 @@ void main() {
           expectClean('ответ', response.message, withIndex: true);
           expectClean('факты', response.values.values.join('|'));
           book.append(
-            ChatThread.mainId,
+            book.currentId,
             ChatMessage(
               id: book.newMessageId(),
               author: ChatAuthor.persona,
@@ -514,7 +514,7 @@ void main() {
             passwordsVaultExisted: true,
           ),
         );
-        for (final message in book.thread(ChatThread.mainId)!.messages) {
+        for (final message in book.thread(book.currentId)!.messages) {
           expectClean(
             'ChatMessage.toJson',
             '${message.toJson()}',
@@ -567,14 +567,15 @@ void main() {
         entryIds: <String>['00112233445566778899aabbccddeeff'],
       ),
     );
-    book.append(ChatThread.mainId, message);
+    book.append(book.currentId, message);
     await book.flush();
     expect(message.copyAs('m_copy').secureCard, isNull);
     expect(message.withLink(null).secureCard, isNotNull);
     expect(ChatMessage.fromJson(message.toJson())!.secureCard, isNull);
     final again = ChatBook(store: JsonChatStore(p.join(root.path, 'chats')));
     await again.load();
-    final restored = again.thread(ChatThread.mainId)!.messages.single;
+    // Сессия читается при открытии.
+    final restored = (await again.open(book.currentId)).messages.single;
     expect(restored.text, message.text);
     expect(restored.secureCard, isNull);
     for (final file in Directory(p.join(root.path, 'chats')).listSync()) {

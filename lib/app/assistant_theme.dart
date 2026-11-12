@@ -81,6 +81,10 @@ abstract final class AssistantColors {
   static const border = Color(0xFF46504B);
   static const borderSoft = Color(0xFF303633);
 
+  /// Подложка хроники команд поверх ленты: [panel] с непрозрачностью
+  /// около 0,85 — полосы читаются поверх сообщений.
+  static const railPill = Color(0xD90F1110);
+
   /// Рамка поля в фокусе (раскрытый поиск по сессиям).
   static const borderFocus = Color(0xFF8A9390);
 

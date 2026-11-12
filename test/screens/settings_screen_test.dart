@@ -122,10 +122,17 @@ void main() {
     expect(changes[1].showTimestamps, isFalse);
   });
 
-  testWidgets('clear chat is disabled with only the greeting', (tester) async {
-    await tester.pumpWidget(host(messageCount: 1));
+  testWidgets('clear chat is disabled without messages', (tester) async {
+    await tester.pumpWidget(host(messageCount: 0));
     final button = tester.widget<ButtonStyleButton>(find.byKey(clearKey));
     expect(button.onPressed, isNull);
+  });
+
+  testWidgets('clear chat is enabled from the first message', (tester) async {
+    // Приветствия-сообщения нет: одно сообщение — уже история.
+    await tester.pumpWidget(host(messageCount: 1));
+    final button = tester.widget<ButtonStyleButton>(find.byKey(clearKey));
+    expect(button.onPressed, isNotNull);
   });
 
   testWidgets('clear chat asks for confirmation; cancel keeps history',

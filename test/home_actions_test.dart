@@ -236,14 +236,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(h.actions, <String>['act_move_check', 'act_move']);
     // Запись в пути, ответа нет: приложение закрыли — что в истории?
-    final saved = await h.chats.loadMessages(ChatThread.mainId);
+    // Карточка — в сессии, где дали команду.
+    final sessionId = onlySessionId(h.chats.chatIds);
+    final saved = await h.chats.loadMessages(sessionId);
     final card = saved.lastWhere((ChatMessage m) => m.card != null).card!;
     expect(card.state, ActionCardState.unknown);
     expect(card.canSettle, isTrue);
     // Отпустить запись: ответ приходит, история — с итогом.
     h.transport.release.complete();
     await tester.pumpAndSettle();
-    final after = await h.chats.loadMessages(ChatThread.mainId);
+    final after = await h.chats.loadMessages(sessionId);
     expect(
       after.lastWhere((ChatMessage m) => m.card != null).card!.state,
       ActionCardState.applied,

@@ -3,8 +3,11 @@ import '../models/assistant_types.dart';
 import '../models/bulk.dart';
 import '../models/secure_card.dart';
 
-/// Какой это чат: главный, чат одной задачи или отдельная сессия
-/// («+» в меню, ADR-015).
+/// Какой это чат: чат одной задачи или сессия (ADR-015).
+///
+/// [main] — прежний чат «Главный»: приложение его больше не создаёт и
+/// читает только при переносе старых файлов в обычную сессию (ADR-010,
+/// «Обновление: только сессии»; [ChatThread.legacyMainSessionId]).
 enum ChatKind { main, task, session }
 
 /// Кто написал сообщение.
@@ -20,8 +23,8 @@ enum ChatAuthor {
   system,
 }
 
-/// Ссылка из сообщения на другой чат: «Открыть чат задачи» под ответом
-/// в главном чате или «из чата «Главный»» под копией в чате задачи.
+/// Ссылка из сообщения на другой чат: «Открыть сессию задачи» под ответом
+/// в сессии или «из сессии «…»» под копией в чате задачи.
 final class ChatLink {
   const ChatLink({required this.chatId, this.messageId, this.taskId});
 
@@ -203,8 +206,9 @@ final class ChatMessage {
   }
 }
 
-/// Чат: главный (`main`), чат задачи (`task:<id задачи>`) или сессия
-/// (`session:<микросекунды>_<случайное>`).
+/// Чат: чат задачи (`task:<id задачи>`) или сессия
+/// (`session:<микросекунды>_<случайное>`; перенесённый прежний «Главный» —
+/// [legacyMainSessionId]).
 ///
 /// Метаданные (id, вид, задача, адресат, время, «не прочитано», число
 /// сообщений) лежат в `chats/index.json` и в шапке файла чата; сообщения —
@@ -228,8 +232,13 @@ final class ChatThread {
         messages = messages ?? <ChatMessage>[],
         _storedCount = storedCount;
 
-  /// Id главного чата.
+  /// Id прежнего чата «Главный» — только для переноса старых файлов
+  /// ([ChatKind.main]) и старых ссылок на него ([ChatLink.chatId]).
   static const String mainId = 'main';
+
+  /// Сессия, в которую перенесён прежний «Главный» (файл
+  /// `session-main.json`).
+  static const String legacyMainSessionId = '${sessionPrefix}main';
 
   /// Id чата задачи [taskId].
   static String taskChatId(String taskId) => 'task:$taskId';
@@ -243,7 +252,7 @@ final class ChatThread {
   final String id;
   final ChatKind kind;
 
-  /// Задача чата; `null` у главного.
+  /// Задача чата; `null` у сессии.
   final String? taskId;
 
   /// Задача, из чата которой создана эта задача: первый уровень
@@ -260,7 +269,7 @@ final class ChatThread {
   String? addressee;
 
   /// Название сессии: первая команда пользователя (уже без секретов);
-  /// `null` — команды ещё не было. У главного и чатов задач не задаётся.
+  /// `null` — команды ещё не было. У чатов задач не задаётся.
   String? title;
 
   /// В чат пришло сообщение, пока он был закрыт (напоминание помощника,
@@ -276,8 +285,6 @@ final class ChatThread {
   bool loaded;
 
   final int _storedCount;
-
-  bool get isMain => kind == ChatKind.main;
 
   bool get isSession => kind == ChatKind.session;
 

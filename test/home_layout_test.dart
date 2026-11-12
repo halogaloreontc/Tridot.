@@ -1,13 +1,15 @@
 // Вёрстка главного экрана на типичных размерах окна настольного приложения:
 // ничего не переполняется и не уходит за край окна, края колонки чата
-// совпадают, хроника команд стоит под шапкой по центру и ширину у поля
-// ввода не отнимает, карточка хроники не залезает на панель задач, кубик
+// совпадают, хроника команд стоит поверх ленты под шапкой по центру (шапка
+// — одна строка 56) и ширину у поля ввода не отнимает, карточка хроники не залезает на панель задач, кубик
 // состояния стоит в строке автора ответа.
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
+import 'package:local_assistant/app/shell/session_header.dart';
+import 'package:local_assistant/app/widgets/history_rail.dart';
 import 'package:local_assistant/app/widgets/status_cube.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
@@ -136,10 +138,27 @@ void main() {
           epsilon: 2,
         ),
       );
-      // Хроника — под шапкой, по центру той же колонки.
+      // Хроника — поверх ленты под шапкой, по центру той же колонки; шапка
+      // — одна строка.
+      final header = tester.getRect(find.byType(SessionHeader));
+      expect(header.height, 56);
       expect(rail.center.dx, moreOrLessEquals(centre, epsilon: 1));
-      expect(rail.top, greaterThanOrEqualTo(56));
-      expect(rail.bottom, lessThanOrEqualTo(56 + 44 + 1));
+      expect(
+        rail.top,
+        greaterThanOrEqualTo(header.bottom + HistoryRail.overlayTop - 1),
+      );
+      expect(
+        rail.bottom,
+        lessThanOrEqualTo(
+          header.bottom + 1 + HistoryRail.overlayTop + HistoryRail.height + 1,
+        ),
+      );
+      final pill = tester.getRect(find.byKey(const Key('history-rail-pill')));
+      expect(
+        pill.overlaps(tester.getRect(find.byKey(const Key('chat-list')))),
+        isTrue,
+        reason: 'хроника — поверх ленты, а не над ней',
+      );
 
       // Текст ответа начинается там же; кубик — в строке автора, а не
       // отдельным значком левее текста.

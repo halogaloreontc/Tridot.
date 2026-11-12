@@ -5,8 +5,8 @@ import '../assistant_theme.dart';
 /// Шапка сессии (макет «Д»): слева меню или «назад», в центре помощник
 /// («Лиорио ▾» → «Мой Связной», вкладка «Помощники») или заголовок, справа
 /// — необязательная кнопка ([trailing]; на компьютере — «Показать
-/// «Сегодня»», когда колонка свёрнута). Под строкой — хроника команд
-/// ([below]), по центру.
+/// «Сегодня»», когда колонка свёрнута). Всегда одна строка 56: хроника
+/// команд — не в шапке, а поверх ленты (HistoryRailPill).
 ///
 /// Своего состояния нет: всё приходит параметрами и колбэками.
 final class SessionHeader extends StatelessWidget {
@@ -14,7 +14,6 @@ final class SessionHeader extends StatelessWidget {
     super.key,
     this.leading,
     this.trailing,
-    this.below,
     this.title,
     this.personaName,
     this.onPersona,
@@ -33,7 +32,7 @@ final class SessionHeader extends StatelessWidget {
   final String? personaName;
   final VoidCallback? onPersona;
 
-  /// Подпись справа от помощника на широком экране: «сессия «Главный»».
+  /// Подпись справа от помощника на широком экране: «сессия «<название>»».
   final String? subtitle;
 
   /// Широкий экран: помощник слева, без сетки 1fr / auto / 1fr.
@@ -42,25 +41,8 @@ final class SessionHeader extends StatelessWidget {
   /// Кнопка справа; `null` — пусто.
   final Widget? trailing;
 
-  /// Под строкой шапки, по центру: хроника команд. `null` — шапка только
-  /// в одну строку.
-  final Widget? below;
-
   @override
   Widget build(BuildContext context) {
-    final below = this.below;
-    // Всегда Column: появление хроники не пересоздаёт строку шапки.
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        _row(),
-        if (below != null) Center(child: below),
-      ],
-    );
-  }
-
-  Widget _row() {
     final center = title ??
         (personaName == null
             ? const SizedBox.shrink()

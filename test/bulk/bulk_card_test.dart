@@ -102,7 +102,15 @@ Future<void> _reveal(WidgetTester tester, Finder finder) async {
     if (viewport.evaluate().isEmpty) return;
     final scrollable =
         find.descendant(of: viewport, matching: find.byType(Scrollable)).first;
-    final area = tester.getRect(viewport);
+    var area = tester.getRect(viewport);
+    // Верх ленты закрыт хроникой команд поверх неё: цель — ниже хроники.
+    final pill = find.byKey(const Key('history-rail-pill'));
+    if (reverse && pill.evaluate().isNotEmpty) {
+      final under = tester.getRect(pill).bottom;
+      if (under > area.top) {
+        area = Rect.fromLTRB(area.left, under, area.right, area.bottom);
+      }
+    }
     final target = tester.getRect(finder);
     double delta = 0;
     if (target.top < area.top) delta = target.top - area.top - 8;
@@ -120,6 +128,29 @@ Future<void> _reveal(WidgetTester tester, Finder finder) async {
       find.ancestor(of: finder, matching: find.byKey(const Key('bulk-list')));
   await scroll(inner, reverse: false);
   await scroll(find.byKey(const Key('chat-list')), reverse: true);
+}
+
+/// Верх видимой части ленты: под хроникой команд, если она есть.
+double _visibleTop(WidgetTester tester, Rect chat) {
+  final pill = find.byKey(const Key('history-rail-pill'));
+  if (pill.evaluate().isEmpty) return chat.top;
+  return tester.getRect(pill).bottom.clamp(chat.top, chat.bottom);
+}
+
+/// Точка для жеста по ленте: середина окна чата, но не на прокручиваемом
+/// списке карточки (жест на нём листает список) и не на хронике сверху.
+Offset _dragPoint(WidgetTester tester, Rect chat) {
+  final list = find.byKey(const Key('bulk-list'));
+  final top = _visibleTop(tester, chat);
+  final free = Rect.fromLTRB(chat.left, top, chat.right, chat.bottom);
+  if (list.evaluate().isEmpty) return free.center;
+  final busy = tester.getRect(list);
+  if (!busy.contains(free.center)) return free.center;
+  final below = Rect.fromLTRB(free.left, busy.bottom, free.right, free.bottom);
+  final above = Rect.fromLTRB(free.left, free.top, free.right, busy.top);
+  if (below.height >= above.height && below.height > 8) return below.center;
+  if (above.height > 8) return above.center;
+  return free.center;
 }
 
 Future<void> _tap(WidgetTester tester, Finder finder) async {
@@ -327,7 +358,7 @@ void main() {
       for (var i = 0; i < 80; i++) {
         final card = tester.getRect(find.byType(BulkChecklistCard));
         if (card.top >= chat.top) break;
-        await tester.dragFrom(chat.center, const Offset(0, 300));
+        await tester.dragFrom(_dragPoint(tester, chat), const Offset(0, 300));
         await tester.pumpAndSettle();
       }
       var visible = false;
@@ -335,10 +366,10 @@ void main() {
         final apply =
             _apply().evaluate().isEmpty ? null : tester.getRect(_apply());
         visible = apply != null &&
-            apply.top >= chat.top &&
+            apply.top >= _visibleTop(tester, chat) &&
             apply.bottom <= chat.bottom;
         if (visible) break;
-        await tester.dragFrom(chat.center, const Offset(0, -100));
+        await tester.dragFrom(_dragPoint(tester, chat), const Offset(0, -100));
         await tester.pumpAndSettle();
       }
       expect(visible, isTrue, reason: 'кнопка «Перенести» недосягаема');

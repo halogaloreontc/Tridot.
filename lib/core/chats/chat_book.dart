@@ -10,32 +10,44 @@ import 'chat_store.dart';
 /// Карточка действия, которая ждёт «Подтвердить»: где она и какая.
 typedef PendingCard = ({String chatId, String messageId, ChatMessage message});
 
-/// Все чаты приложения: главный и чаты задач, какой открыт и куда ведёт
-/// «назад» (ADR-010).
+/// Все чаты приложения: сессии и чаты задач, какой открыт и куда ведёт
+/// «назад» (ADR-010, ADR-015).
 ///
 /// Чистый Dart, без Flutter: интерфейс вызывает операции и перерисовывает
 /// себя сам. Каждое изменение сразу уходит в [ChatStore] (тот решает,
 /// когда писать на диск).
 ///
-/// - Главный чат есть всегда.
+/// - Только сессии: чата «Главный» нет. Открыт всегда какой-то чат; при
+///   старте — новая пустая сессия ([current]). Пустая сессия на диск не
+///   пишется и в памяти не больше одной ([newSession]).
+/// - Сессия — отдельный разговор без задачи: [prune] её не трогает,
+///   название — первая команда.
 /// - Чат задачи создаётся лениво: при первом открытии ([openTask]) или
 ///   когда задачу создали из чата ([onTaskCreated]). Пустой чат на диск не
 ///   пишется.
-/// - Сообщения чата задачи читаются при первом открытии.
+/// - Сообщения чатов читаются при первом открытии.
 /// - Чат удалённой задачи удаляется ([prune]); выполненной — остаётся.
-/// - Сессия ([newSession], ADR-015) — отдельный разговор без задачи:
-///   пустая на диск не пишется, [prune] её не трогает, название — первая
-///   команда.
+/// - Прежний «Главный» из старых файлов при [load] становится обычной
+///   сессией [ChatThread.legacyMainSessionId] (если в нём были команды) и
+///   уходит в архив хранилища.
 final class ChatBook {
-  ChatBook({required ChatStore store, Clock clock = const SystemClock()})
-      : _store = store,
-        _clock = clock {
-    _chats[ChatThread.mainId] = ChatThread(
-      id: ChatThread.mainId,
-      kind: ChatKind.main,
-      createdAt: clock.now(),
-    );
+  /// [redactTitle] очищает название, которое берётся из сохранённой
+  /// команды при переносе прежнего «Главного» (секреты, коды входа).
+  ChatBook({
+    required ChatStore store,
+    Clock clock = const SystemClock(),
+    String Function(String text)? redactTitle,
+  })  : _store = store,
+        _clock = clock,
+        _redactTitle = redactTitle ?? _keep {
+    _currentId = _createSession().id;
   }
+
+  static String _keep(String text) => text;
+
+  /// Название перенесённого «Главного», если первая команда пустая после
+  /// очистки.
+  static const String legacyTitle = 'Ранее';
 
   /// Глубина стека «назад».
   static const int maxBack = 20;
@@ -51,6 +63,7 @@ final class ChatBook {
 
   final ChatStore _store;
   final Clock _clock;
+  final String Function(String text) _redactTitle;
   final Map<String, ChatThread> _chats = <String, ChatThread>{};
   final List<String> _back = <String>[];
   final Map<String, Future<void>> _loading = <String, Future<void>>{};
@@ -59,7 +72,7 @@ final class ChatBook {
   final Set<Future<void>> _deferred = <Future<void>>{};
   final Random _random = Random();
   int _sequence = 0;
-  String _currentId = ChatThread.mainId;
+  late String _currentId;
   Future<void>? _ready;
   bool _loaded = false;
 
@@ -71,16 +84,22 @@ final class ChatBook {
   /// Загрузка чатов: открытие чата и запись в него ждут её.
   Future<void> get ready => _ready ?? Future<void>.value();
 
-  ChatThread get main => _chats[ChatThread.mainId]!;
-
-  ChatThread get current => _chats[_currentId] ?? main;
+  /// Открытый чат: есть всегда (в крайнем случае — пустая сессия).
+  ChatThread get current => _chats[_currentId] ?? _chats[_emptySessionId()]!;
 
   String get currentId => _currentId;
 
-  /// Можно ли вернуться к предыдущему чату.
-  bool get canGoBack => _back.isNotEmpty || _currentId != ChatThread.mainId;
+  /// Чат [chatId]; старая ссылка на «Главный» ведёт в перенесённую сессию
+  /// ([resolve]).
+  ChatThread? thread(String chatId) => _chats[resolve(chatId)];
 
-  ChatThread? thread(String chatId) => _chats[chatId];
+  /// Id чата, куда на самом деле ведёт [chatId]: старые копии в чатах
+  /// задач ссылаются на `main`, а он перенесён в
+  /// [ChatThread.legacyMainSessionId].
+  String resolve(String chatId) => chatId == ChatThread.mainId &&
+          _chats.containsKey(ChatThread.legacyMainSessionId)
+      ? ChatThread.legacyMainSessionId
+      : chatId;
 
   /// Чат задачи [taskId], если он уже есть.
   ChatThread? taskThread(String taskId) =>
@@ -97,9 +116,9 @@ final class ChatBook {
       'm_${_clock.now().microsecondsSinceEpoch}_${_sequence++}_'
       '${_random.nextInt(1 << 20).toRadixString(16)}';
 
-  /// Читает метаданные всех чатов и сообщения главного. Возвращает `true`,
-  /// если в главном чате были сохранённые сообщения (иначе в нём остаётся
-  /// то, что было до загрузки, — обычно приветствие).
+  /// Читает метаданные всех чатов (сообщения — при открытии). Открытой
+  /// остаётся пустая сессия, созданная при старте. Возвращает `true`, если
+  /// прежний «Главный» перенесён в сессию ([_migrateLegacyMain]).
   Future<bool> load() {
     final future = _load();
     _ready = future.then((_) {});
@@ -107,38 +126,121 @@ final class ChatBook {
   }
 
   Future<bool> _load() async {
-    var restored = false;
+    var migrated = false;
     try {
+      ChatThread? legacy;
       for (final meta in await _store.loadIndex()) {
-        if (meta.isMain) {
-          main
-            ..addressee = meta.addressee
-            ..unread = meta.unread
-            ..lastActivityAt = meta.lastActivityAt;
+        if (meta.kind == ChatKind.main) {
+          legacy = meta;
         } else {
           _chats.putIfAbsent(meta.id, () => meta);
         }
       }
-      final messages = await _store.loadMessages(ChatThread.mainId);
-      if (messages.isNotEmpty) {
-        main.messages
-          ..clear()
-          ..addAll(messages);
-        restored = true;
-      }
+      // Порядок записей в index.json не важен: перенос — после всех.
+      if (legacy != null) migrated = await _migrateLegacyMain(legacy);
     } on Object {
       // Хранилище не прочиталось: работаем с пустыми чатами.
     }
     _loaded = true;
-    return restored;
+    return migrated;
   }
 
-  /// Заменяет сообщения главного чата без записи: приветствие, которое
-  /// показано, пока пользователь ничего не написал.
-  void resetMain(List<ChatMessage> messages) {
-    main.messages
-      ..clear()
-      ..addAll(messages);
+  /// Прежний «Главный» ([ChatKind.main]) → обычная сессия
+  /// [ChatThread.legacyMainSessionId], без потери данных:
+  ///
+  /// - есть команды пользователя — сессия с теми же сообщениями (те же id
+  ///   и порядок, карточки, ссылки, задачи), «не прочитано» и временем
+  ///   последней активности; название — первая команда (очищенная,
+  ///   [titleLimit]), иначе [legacyTitle]; создана — не позже первого
+  ///   сообщения (у «Главного» `created_at` — время последнего запуска);
+  /// - только приветствия и напоминания (или файл не читается) — ничего;
+  /// - затем `main.json` уходит в архив хранилища ([ChatStore.delete]) и из
+  ///   index.json.
+  ///
+  /// Повторяется без вреда: сбой между записью сессии и архивом — при
+  /// следующем запуске сессия уже есть на диске (её новые сообщения не
+  /// трогаются), остаётся убрать `main.json`. `main.json` уходит в архив,
+  /// только когда `session-main.json` прочитан с диска с сообщениями:
+  /// запись не удалась (нет места, нет прав — [ChatStore.flush] об этом не
+  /// сообщает) — `main.json` остаётся, и перенос повторится при следующем
+  /// запуске. Запись сессии в index.json без файла за ней (сбой записи)
+  /// тоже переносится заново.
+  Future<bool> _migrateLegacyMain(ChatThread meta) async {
+    List<ChatMessage> messages;
+    try {
+      messages = await _store.loadMessages(ChatThread.mainId);
+    } on Object {
+      messages = <ChatMessage>[];
+    }
+    final firstUser = messages.where((ChatMessage m) => m.fromUser).firstOrNull;
+    if (firstUser == null) {
+      // Только приветствия и напоминания: переносить нечего.
+      await _store.delete(ChatThread.mainId);
+      return false;
+    }
+    const id = ChatThread.legacyMainSessionId;
+    if (_chats.containsKey(id) && await _storedMessages(id) > 0) {
+      // Перенос уже был, не успели убрать `main.json`.
+      await _store.delete(ChatThread.mainId);
+      return false;
+    }
+    var created = meta.createdAt;
+    if (messages.first.timestamp.isBefore(created)) {
+      created = messages.first.timestamp;
+    }
+    var last = meta.lastActivityAt;
+    if (messages.last.timestamp.isAfter(last)) last = messages.last.timestamp;
+    final title = sessionTitle(_redactTitle(firstUser.text));
+    final session = ChatThread(
+      id: id,
+      kind: ChatKind.session,
+      createdAt: created,
+      lastActivityAt: last,
+      addressee: meta.addressee,
+      title: title.isEmpty ? legacyTitle : title,
+      unread: meta.unread,
+      messages: messages,
+    );
+    _chats[id] = session;
+    // Сначала новая сессия на диске, потом — архив старого файла.
+    await _store.save(session);
+    await _store.flush();
+    if (await _storedMessages(id) > 0) {
+      await _store.delete(ChatThread.mainId);
+    }
+    return true;
+  }
+
+  /// Сколько сообщений чата [chatId] читается из хранилища (0 — файла нет
+  /// или он не читается).
+  Future<int> _storedMessages(String chatId) async {
+    try {
+      return (await _store.loadMessages(chatId)).length;
+    } on Object {
+      return 0;
+    }
+  }
+
+  /// Новая пустая сессия в памяти (на диск — с первым сообщением).
+  ChatThread _createSession() {
+    final now = _clock.now();
+    final id = '${ChatThread.sessionPrefix}${now.microsecondsSinceEpoch}_'
+        '${_random.nextInt(1 << 20).toRadixString(16)}';
+    return _chats[id] =
+        ChatThread(id: id, kind: ChatKind.session, createdAt: now);
+  }
+
+  /// Пустая сессия: открытая, если она пуста, иначе уже созданная раньше,
+  /// иначе новая. Пустых сессий в памяти не больше одной.
+  String _emptySessionId() {
+    final open = _chats[_currentId];
+    if (open != null && open.isSession && open.messageCount == 0) {
+      return open.id;
+    }
+    for (final thread in _chats.values) {
+      if (thread.isSession && thread.messageCount == 0) return thread.id;
+    }
+    return _createSession().id;
   }
 
   /// Чат задачи [taskId]; создаётся, если его ещё нет. На диск пустой чат
@@ -172,7 +274,7 @@ final class ChatBook {
 
   /// Открывает чат [chatId]: прежний уходит в стек «назад», «не
   /// прочитано» снимается, сообщения читаются, если ещё не прочитаны.
-  /// Неизвестный чат — главный.
+  /// Неизвестный чат — пустая сессия.
   ///
   /// Когда чаты уже загружены, [current] меняется сразу, до ожидания
   /// результата: интерфейс переключается без задержки, а сообщения
@@ -180,7 +282,7 @@ final class ChatBook {
   /// `Future`.
   Future<ChatThread> open(String chatId) {
     if (!_loaded) return ready.then((_) => open(chatId));
-    final target = _chats[chatId] ?? main;
+    final target = _chats[resolve(chatId)] ?? _chats[_emptySessionId()]!;
     if (target.id != _currentId) {
       if (_back.isEmpty || _back.last != _currentId) _back.add(_currentId);
       if (_back.length > maxBack) _back.removeAt(0);
@@ -189,8 +291,9 @@ final class ChatBook {
     return _enter(target);
   }
 
-  /// Предыдущий чат из стека (удалённые пропускаются), иначе главный.
-  /// Переключение — сразу, как в [open].
+  /// Предыдущий чат из стека (удалённые пропускаются), иначе пустая
+  /// сессия (открытая пустая — остаётся). Переключение — сразу, как в
+  /// [open].
   Future<ChatThread> back() {
     if (!_loaded) return ready.then((_) => back());
     while (_back.isNotEmpty) {
@@ -200,8 +303,8 @@ final class ChatBook {
       _currentId = id;
       return _enter(thread);
     }
-    _currentId = ChatThread.mainId;
-    return _enter(main);
+    _currentId = _emptySessionId();
+    return _enter(current);
   }
 
   Future<ChatThread> _enter(ChatThread thread) {
@@ -309,8 +412,8 @@ final class ChatBook {
   }
 
   /// Удаляет чаты задач, которых больше нет ([liveTaskIds] — все задачи,
-  /// кроме удалённых). Сессии и главный не трогает. Возвращает `true`, если удалён открытый чат (тогда
-  /// открыт главный).
+  /// кроме удалённых). Сессии не трогает. Возвращает `true`, если удалён
+  /// открытый чат (тогда открыта пустая сессия).
   bool prune(Set<String> liveTaskIds) {
     final dead = <String>[
       for (final thread in _chats.values)
@@ -326,32 +429,30 @@ final class ChatBook {
       unawaited(_store.delete(id));
       if (id == _currentId) currentRemoved = true;
     }
-    if (currentRemoved) _currentId = ChatThread.mainId;
+    if (currentRemoved) _currentId = _emptySessionId();
     return currentRemoved;
   }
 
-  /// «+» в меню: новая пустая сессия открывается сразу (прежний чат — в
-  /// стек «назад»). Без приветствия; на диск — с первым сообщением. Если
-  /// открытая сессия ещё пуста, открывается она же.
+  /// «+» в меню: пустая сессия открывается сразу (прежний чат — в стек
+  /// «назад»). Без приветствия; на диск — с первым сообщением. Если
+  /// открытая сессия ещё пуста, остаётся она же; пустая сессия,
+  /// оставленная раньше, используется снова.
   Future<ChatThread> newSession() {
     if (!_loaded) return ready.then((_) => newSession());
     final current = this.current;
     if (current.isSession && current.messageCount == 0) {
       return Future<ChatThread>.value(current);
     }
-    final now = _clock.now();
-    final id = '${ChatThread.sessionPrefix}${now.microsecondsSinceEpoch}_'
-        '${_random.nextInt(1 << 20).toRadixString(16)}';
-    _chats[id] = ChatThread(id: id, kind: ChatKind.session, createdAt: now);
-    return open(id);
+    return open(_emptySessionId());
   }
 
-  /// Название чата для меню и поиска: «Главный», сессия — первая команда
-  /// или «Новая сессия». Чату задачи название даёт задача ([taskTitle]).
+  /// Название чата для меню и поиска: у сессии — первая команда или
+  /// «Новая сессия». Чату задачи название даёт задача ([taskTitle]).
   static String titleOf(ChatThread thread, {String? taskTitle}) =>
       switch (thread.kind) {
-        ChatKind.main => 'Главный',
-        ChatKind.session => thread.title ?? ChatThread.untitledSession,
+        ChatKind.main ||
+        ChatKind.session =>
+          thread.title ?? ChatThread.untitledSession,
         ChatKind.task => taskTitle ?? 'Задача',
       };
 
@@ -362,13 +463,12 @@ final class ChatBook {
     return '${flat.substring(0, titleLimit - 1).trimRight()}…';
   }
 
-  /// «Недавние сессии» в меню: главный, сессии и чаты задач с
-  /// сообщениями, свежие сверху. Открытый чат — всегда в списке.
+  /// «Недавние сессии» в меню: сессии и чаты задач с сообщениями, свежие
+  /// сверху. Открытый чат — всегда в списке.
   List<ChatThread> sessions({int limit = sessionsLimit}) {
     final list = <ChatThread>[
       for (final thread in _chats.values)
-        if (thread.isMain || thread.messageCount > 0 || thread.id == _currentId)
-          thread,
+        if (thread.messageCount > 0 || thread.id == _currentId) thread,
     ]..sort(
         (ChatThread a, ChatThread b) =>
             b.lastActivityAt.compareTo(a.lastActivityAt),
@@ -399,8 +499,13 @@ final class ChatBook {
 
   /// На диске у непрочитанного чата, вероятно, есть свои команды: у чата
   /// задачи — сверх двух копий из [onTaskCreated].
-  static bool _storedHasOwn(ChatThread thread) =>
-      _storedCount(thread) > (thread.kind == ChatKind.task ? 2 : 0);
+  /// У сессии — по названию: оно появляется с первой командой ([append]),
+  /// а сессия без команд (только ответы помощника) названия не получает.
+  /// Так счёт одинаков до и после перезапуска.
+  static bool _storedHasOwn(ChatThread thread) => switch (thread.kind) {
+        ChatKind.task => _storedCount(thread) > 2,
+        _ => _storedCount(thread) > 0 && thread.title != null,
+      };
 
   /// Команда [messages]`[i]` — копия из [onTaskCreated]: за ней идёт копия
   /// ответа со ссылкой на исходное сообщение ([ChatLink.messageId]).
@@ -435,9 +540,10 @@ final class ChatBook {
 
   /// Поиск по сессиям: названия чатов и тексты сообщений, без регистра,
   /// «ё» = «е». Сообщения с карточкой «Паролей» и карточками действий
-  /// пропускаются. Состояние книги не меняется: непрочитанные чаты
-  /// читаются из хранилища только для поиска. [titles] — названия чатов
-  /// задач по id задачи.
+  /// пропускаются, пустые сессии — тоже (у них нет ничего, кроме «Новая
+  /// сессия»). Состояние книги не меняется: непрочитанные чаты читаются из
+  /// хранилища только для поиска. [titles] — названия чатов задач по id
+  /// задачи.
   Future<List<ChatSearchHit>> search(
     String query, {
     Map<String, String> titles = const <String, String>{},
@@ -453,6 +559,9 @@ final class ChatBook {
       );
     for (final thread in threads) {
       if (hits.length >= limit) break;
+      // Пустая сессия — не результат («Новая сессия» без истории). Пустой
+      // чат задачи находится по названию задачи.
+      if (thread.isSession && thread.messageCount == 0) continue;
       final title = titleOf(thread, taskTitle: titles[thread.taskId]);
       final titleAt = ChatSearch.fold(title).indexOf(needle);
       List<ChatMessage> messages;
@@ -604,17 +713,12 @@ final class ChatBook {
     return list.take(limit).toList(growable: false);
   }
 
-  /// «Очистить историю сессий»: чаты задач и сессии удаляются, главный пустеет,
-  /// открыт главный. Приветствие добавляет интерфейс.
+  /// «Очистить историю сессий»: все сессии и чаты задач удаляются,
+  /// открыта новая пустая сессия.
   Future<void> clearAll() {
-    _chats.removeWhere((String id, ChatThread t) => !t.isMain);
+    _chats.clear();
     _back.clear();
-    _currentId = ChatThread.mainId;
-    main
-      ..messages.clear()
-      ..addressee = null
-      ..unread = false
-      ..loaded = true;
+    _currentId = _createSession().id;
     return _store.clearAll();
   }
 
@@ -632,9 +736,8 @@ final class ChatBook {
   }
 
   void _save(ChatThread thread) {
-    // Пустой чат задачи не пишется: он появится на диске с первым
-    // сообщением.
-    if (!thread.isMain && thread.messageCount == 0) return;
+    // Пустой чат не пишется: он появится на диске с первым сообщением.
+    if (thread.messageCount == 0) return;
     if (!thread.loaded) {
       // Сообщения чата ещё читаются (или чат не открывали): запись — после
       // чтения, иначе сохранённая история затрётся тем, что написали в

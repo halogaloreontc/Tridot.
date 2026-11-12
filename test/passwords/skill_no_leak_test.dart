@@ -127,7 +127,7 @@ void main() {
           responses.add(response);
           payloads.add('${assistant.session.pendingConfirmation?.payload}');
           book.append(
-            ChatThread.mainId,
+            book.currentId,
             ChatMessage(
               id: book.newMessageId(),
               author: ChatAuthor.persona,
@@ -145,7 +145,7 @@ void main() {
             known: assistant.knownSecret,
           );
           book.append(
-            ChatThread.mainId,
+            book.currentId,
             ChatMessage(
               id: book.newMessageId(),
               author: ChatAuthor.user,
@@ -237,7 +237,7 @@ void main() {
         for (final payload in payloads) {
           expectClean('ожидание', payload);
         }
-        for (final message in book.thread(ChatThread.mainId)!.messages) {
+        for (final message in book.thread(book.currentId)!.messages) {
           expectClean('ChatMessage.toJson', '${message.toJson()}');
         }
         // Файлы: история, задачи, настройки, хранилище.

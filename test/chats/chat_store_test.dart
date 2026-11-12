@@ -1,5 +1,8 @@
 // Хранилище чатов (ADR-010): формат, атомарная запись, терпимая загрузка,
 // лимит сообщений. Общий набор проверок — для файлов и для памяти.
+// Фикстура `_main` — прежний формат «Главного» (kind main): хранилище
+// по-прежнему читает и пишет его как есть, перенос в сессию делает
+// ChatBook (chat_book_test.dart, «перенос прежнего «Главного»»).
 import 'dart:convert';
 import 'dart:io';
 
@@ -404,7 +407,7 @@ void main() {
       final store = JsonChatStore(chats(), debounce: Duration.zero);
       var book = ChatBook(store: store, clock: clock);
       await book.load();
-      book.append('main', _message(1));
+      book.append(book.currentId, _message(1));
       await book.flush();
       final index = File(p.join(chats(), 'index.json')).readAsStringSync();
       book

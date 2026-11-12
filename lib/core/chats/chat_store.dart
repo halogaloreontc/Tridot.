@@ -32,9 +32,10 @@ abstract interface class ChatStore {
   /// отложить запись; содержимое берётся в момент записи.
   Future<void> save(ChatThread thread);
 
-  /// Убрать чат задачи, которой больше нет. Сообщения не стираются, а
-  /// уходят в архив: если задача вернётся (tasks.json восстановили из
-  /// копии), [loadMessages] снова найдёт её историю.
+  /// Убрать чат задачи, которой больше нет (или прежний «Главный» после
+  /// переноса в сессию). Сообщения не стираются, а уходят в архив: если
+  /// задача вернётся (tasks.json восстановили из копии), [loadMessages]
+  /// снова найдёт её историю.
   Future<void> delete(String chatId);
 
   /// Удалить все чаты вместе с архивом.
@@ -123,8 +124,8 @@ abstract final class ChatCodec {
   static bool _knownVersion(Object? version) =>
       version is int && version >= 1 && version <= schemaVersion;
 
-  /// Имя файла чата: `main.json`, `task-<id задачи>.json`,
-  /// `session-<x>.json`. Символы кроме латиницы, цифр, «_» и «-»
+  /// Имя файла чата: `task-<id задачи>.json`, `session-<x>.json` (прежний
+  /// «Главный» — `main.json`). Символы кроме латиницы, цифр, «_» и «-»
   /// заменяются на «_».
   static String fileName(String chatId) {
     final base = chatId.startsWith('task:')
@@ -202,7 +203,9 @@ final class InMemoryChatStore implements ChatStore {
 }
 
 /// Чаты в папке `<Документы>/assistant/chats/`: `index.json` и файл на
-/// чат (`main.json`, `task-<id>.json`).
+/// чат (`session-<id>.json`, `task-<id>.json`; `main.json` прежнего
+/// «Главного» только читается при переносе и уходит в `archive/`,
+/// ADR-010).
 ///
 /// - Запись атомарная (`<файл>.tmp` → `rename`), по очереди; ошибка одной
 ///   записи не мешает следующим и не роняет приложение.

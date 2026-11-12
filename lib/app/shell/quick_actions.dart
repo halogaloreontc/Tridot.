@@ -39,7 +39,7 @@ final class QuickActions extends StatefulWidget {
   /// «Пароль»: `null` — навык «Пароли» выключен, кнопки нет.
   final VoidCallback? onPassword;
 
-  /// В главном чате выбрана активная задача («её»).
+  /// В сессии выбрана активная задача («её»).
   final bool hasSelection;
 
   /// Кнопки включённых ролей: отправить сразу или вставить шаблон.

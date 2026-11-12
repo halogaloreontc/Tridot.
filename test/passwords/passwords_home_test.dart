@@ -9,6 +9,7 @@ import 'package:local_assistant/app/passwords/clipboard_guard.dart';
 import 'package:local_assistant/app/passwords/passwords_kit.dart';
 import 'package:local_assistant/app/passwords/passwords_platform.dart';
 import 'package:local_assistant/app/passwords/passwords_screen.dart';
+import 'package:local_assistant/app/screens/my_relay_screen.dart';
 import 'package:local_assistant/core/chats/chat_store.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
@@ -151,6 +152,95 @@ void main() {
       }
     }
   }
+
+  testWidgets('тренировка: строка в пустой сессии, вопрос — по нажатию',
+      (tester) async {
+    await setUpHome();
+    await settings.save(
+      const AppSettings(
+        enabledExtensions: <String>{PasswordsConnector.id},
+        passwordsTrainingDue: '2026-11-10',
+      ),
+    );
+    vault.lock();
+    await pumpHome(tester);
+    final line = find.byKey(const Key('session-hero-training'));
+    expect(line, findsNothing, reason: 'не в первые 30 с');
+    await tester.pump(const Duration(seconds: 31));
+    await tester.pumpAndSettle();
+    expect(line, findsOneWidget);
+    expect(tester.getSize(line).height, greaterThanOrEqualTo(44));
+    await chats.flush();
+    expect(chats.chatIds, isEmpty, reason: 'без нажатия в сессию не пишется');
+
+    await tester.tap(line);
+    await tester.pumpAndSettle();
+    expect(line, findsNothing);
+    expect(find.byKey(const Key('session-hero')), findsNothing);
+    await chats.flush();
+    expect(chats.chatIds, hasLength(1), reason: 'ответ — в открытую сессию');
+    // Нажатие — команда человека: сессия с названием, а не безымянная
+    // «Новая сессия» с одним ответом помощника.
+    final index = await chats.loadIndex();
+    final saved = index.singleWhere((t) => t.isSession);
+    expect(saved.title, 'Потренируй меня');
+    final stored = await chats.loadMessages(saved.id);
+    expect(stored.first.fromUser, isTrue);
+    expect(stored.first.text, 'Потренируй меня');
+    expect(
+      stored.any((m) => !m.fromUser),
+      isTrue,
+      reason: 'ответ «Паролей» — в той же сессии',
+    );
+    expect(
+      (await settings.load()).passwordsTrainingDue,
+      '2026-11-13',
+      reason: 'следующая — через 3 дня',
+    );
+    await expectHistoryClean();
+    await finish(tester);
+  });
+
+  testWidgets('тренировка из строки не плодит безымянные сессии',
+      (tester) async {
+    await setUpHome();
+    await settings.save(
+      const AppSettings(
+        enabledExtensions: <String>{PasswordsConnector.id},
+        passwordsTrainingDue: '2026-11-10',
+      ),
+    );
+    vault.lock();
+    await pumpHome(tester);
+    await tester.pump(const Duration(seconds: 31));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('session-hero-training')));
+    await tester.pumpAndSettle();
+    // «+» — новая пустая сессия; ещё раз «+» — она же.
+    await tapInDrawer(tester, const Key('new-session'));
+    await tapInDrawer(tester, const Key('new-session'));
+    await openDrawerIfNeeded(tester);
+    expect(drawerEntry('Потренируй меня'), findsOneWidget);
+    expect(sessionEntries(), findsNWidgets(2));
+    await chats.flush();
+    expect(
+      (await chats.loadIndex()).where((t) => t.isSession && t.title == null),
+      isEmpty,
+      reason: 'на диске нет сессий без названия',
+    );
+
+    // «сессий N» одинаково до и после перезапуска.
+    String stats() => tester
+        .widget<RelayStatsLine>(find.byKey(const Key('my-relay-stats')))
+        .stats;
+    await openMyRelay(tester);
+    expect(stats(), contains('сессий 1'));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpHome(tester);
+    await openMyRelay(tester);
+    expect(stats(), contains('сессий 1'), reason: 'после перезапуска');
+    await finish(tester);
+  });
 
   testWidgets('ползунок длины в ленте не открывает меню свайпом',
       (tester) async {

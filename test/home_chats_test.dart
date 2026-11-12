@@ -155,10 +155,11 @@ List<String> _history(WidgetTester tester) {
   return rows.reversed.toList();
 }
 
-/// Перечитать задачи, созданные в обход чата: уход из раздела и возврат.
+/// Перечитать задачи, созданные в обход чата: уход из раздела и возврат
+/// в (пустую) сессию.
 Future<void> _reload(WidgetTester tester) async {
   await tapInDrawer(tester, const Key('nav-projects'));
-  await tapInDrawer(tester, const Key('chat-main'));
+  await tapInDrawer(tester, const Key('new-session'));
 }
 
 String? _headerTitle(WidgetTester tester) {
@@ -198,7 +199,7 @@ void main() {
     expect(_headerStatus(tester), 'Выполнена');
     expect(find.byKey(const Key('task-chat-reopen')), findsOneWidget);
 
-    // «Назад» — в главный чат, его история на месте.
+    // «Назад» — в сессию, откуда пришли, её история на месте.
     await _tap(tester, find.byKey(const Key('task-back')));
     expect(find.byKey(const Key('task-chat-header')), findsNothing);
     expect(_history(tester), mainHistory);
@@ -254,16 +255,20 @@ void main() {
     await _say(tester, 'Добавь задачу «Купить хлеб» на завтра');
     final task = await h.byTitle('Купить хлеб');
     final main = _history(tester);
-    expect(main.length, 3, reason: 'приветствие, команда, ответ');
+    expect(main.length, 2, reason: 'команда и ответ, без приветствия');
 
     await _tap(
       tester,
       find.byKey(ValueKey<String>('open-task-chat-${task.id}')),
     );
     expect(_headerTitle(tester), 'Купить хлеб');
-    expect(_history(tester), main.sublist(1), reason: 'команда и ответ');
+    expect(_history(tester), main, reason: 'команда и ответ');
     expect(find.byKey(const Key('chat-origin-link')), findsOneWidget);
-    expect(find.text('из сессии «Главный»'), findsOneWidget);
+    expect(
+      find.text('из сессии «Добавь задачу «Купить хлеб» на завтра»'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Главный'), findsNothing);
 
     // Новая задача из чата задачи получает свой чат с родителем.
     await _say(tester, 'добавь задачу купить масло');
@@ -276,20 +281,21 @@ void main() {
     expect(_headerTitle(tester), 'Купить масло');
     expect(find.text('из сессии «Купить хлеб»'), findsOneWidget);
 
-    // «Назад» — в чат «Купить хлеб», затем в главный.
+    // «Назад» — в чат «Купить хлеб», затем в сессию, где его создали.
     await _tap(tester, find.byKey(const Key('task-back')));
     expect(_headerTitle(tester), 'Купить хлеб');
     await _tap(tester, find.byKey(const Key('task-back')));
     expect(_headerTitle(tester), isNull);
     expect(_history(tester), main);
 
-    // Ссылка «из чата «Главный»» тоже ведёт обратно.
+    // Ссылка «из сессии «…»» тоже ведёт обратно.
     await _tap(
       tester,
       find.byKey(ValueKey<String>('open-task-chat-${task.id}')),
     );
     await _tap(tester, find.byKey(const Key('chat-origin-link')));
     expect(_headerTitle(tester), isNull);
+    expect(_history(tester), main);
   });
 
   testWidgets('перезапуск восстанавливает чаты; карточка — устаревшая', (
@@ -325,7 +331,11 @@ void main() {
       settings: settings,
       key: const ValueKey<String>('после перезапуска'),
     );
-    expect(_headerTitle(tester), isNull, reason: 'открыт главный');
+    // После перезапуска — новая пустая сессия, прежняя — в меню.
+    expect(_headerTitle(tester), isNull);
+    expect(find.byKey(const Key('session-hero')), findsOneWidget);
+    expect(_history(tester), isEmpty);
+    await openSessionTitled(tester, 'Добавь задачу «Купить хлеб»');
     expect(_history(tester), main);
     final card = tester.widget<BulkChecklistCard>(
       find.byType(BulkChecklistCard),
@@ -351,7 +361,7 @@ void main() {
     await h.tasks.complete(report.id);
     await repository.save(bread.copyWith(deletedAt: DateTime(2026, 11, 4)));
     await _tap(tester, find.byKey(const Key('nav-projects')));
-    await _tap(tester, find.byKey(const Key('chat-main')));
+    await _tap(tester, find.byKey(const Key('new-session')));
     final store = h.chats as InMemoryChatStore;
     expect(store.chatIds, isNot(contains(ChatThread.taskChatId(bread.id))));
     expect(store.chatIds, contains(ChatThread.taskChatId(report.id)));
@@ -373,7 +383,8 @@ void main() {
 
     double top(String taskId) =>
         tester.getTopLeft(find.byKey(Key('chat-$taskId'))).dy;
-    expect(find.byKey(const Key('chat-main')), findsOneWidget);
+    expect(find.byKey(const Key('chat-main')), findsNothing);
+    expect(find.text('Главный'), findsNothing);
     expect(top(report.id), lessThan(top(bread.id)), reason: 'свежий выше');
 
     await _tap(tester, find.byKey(Key('chat-${bread.id}')));
@@ -382,16 +393,26 @@ void main() {
     await _say(tester, 'на пятницу');
     expect(top(bread.id), lessThan(top(report.id)));
 
-    // Новый день, а открыт чат задачи: напоминание уходит в главный, у
-    // него точка «новое сообщение».
+    // Новый день: о просроченной говорит строка в пустой сессии; в
+    // сессии ничего не пишется, точек «новое сообщение» нет.
     clock.value = DateTime(2026, 11, 6, 9);
     await _tap(tester, find.byKey(const Key('nav-projects')));
     await _tap(tester, find.byKey(Key('chat-${bread.id}')));
     expect(_headerTitle(tester), 'Купить хлеб');
-    expect(find.byKey(const Key('chat-unread-main')), findsOneWidget);
-    await _tap(tester, find.byKey(const Key('chat-main')));
-    expect(find.byKey(const Key('chat-unread-main')), findsNothing);
-    expect(_history(tester).last, contains('«Старое»'));
+    final unread = find.byWidgetPredicate(
+      (Widget w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('chat-unread-'),
+    );
+    expect(unread, findsNothing);
+    expect(_history(tester).join('\n'), isNot(contains('«Старое»')));
+    await _tap(tester, find.byKey(const Key('new-session')));
+    expect(find.byKey(const Key('session-hero-overdue')), findsOneWidget);
+    expect(find.text('Просрочена 1 задача'), findsOneWidget);
+    expect(_history(tester), isEmpty);
+    await openSessionTitled(tester, 'Добавь задачу «Купить хлеб»');
+    expect(_history(tester).join('\n'), isNot(contains('«Старое»')));
+    expect(unread, findsNothing);
   });
 
   testWidgets('ответ после ухода из чата приходит в свой чат', (tester) async {
@@ -446,7 +467,7 @@ void main() {
     // Меню «Чаты» в выдвижной панели.
     await _tap(tester, find.byKey(const Key('task-back')));
     await _tap(tester, find.byKey(const Key('menu-button')));
-    expect(find.byKey(const Key('chat-main')), findsOneWidget);
+    expect(sessionEntries(), findsOneWidget);
     await _tap(tester, find.byKey(Key('chat-${task.id}')));
     expect(find.byKey(const Key('task-chat-header')), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -538,7 +559,7 @@ void main() {
     await tester.enterText(find.byKey(const Key('assistant-input')), 'готово');
     await tester.testTextInput.receiveAction(TextInputAction.send);
     await tester.pump();
-    await tester.tap(find.byKey(const Key('chat-main')));
+    await tester.tap(drawerEntry('добавь задачу купить хлеб').first);
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('task-chat-header')), findsNothing);
@@ -548,6 +569,149 @@ void main() {
     expect(_history(tester), contains('user: готово'));
     expect(find.byKey(Key('chat-unread-${bread.id}')), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  group('только сессии, без «Главного»', () {
+    testWidgets('старт — пустая сессия; «+» её не множит; подпись сессии', (
+      tester,
+    ) async {
+      final h = await _pump(tester);
+      expect(find.byKey(const Key('session-hero')), findsOneWidget);
+      expect(_history(tester), isEmpty);
+      expect(find.textContaining('Главный'), findsNothing);
+      expect(sessionEntries(), findsOneWidget);
+      expect(
+        find.byKey(const Key('session-subtitle')),
+        findsNothing,
+        reason: 'у пустой сессии подписи нет',
+      );
+      await _tap(tester, find.byKey(const Key('new-session')));
+      expect(sessionEntries(), findsOneWidget, reason: 'та же пустая');
+      final input = tester.widget<TextField>(
+        find.byKey(const Key('assistant-input')),
+      );
+      expect(input.focusNode!.hasFocus, isTrue);
+      await _say(tester, 'Покажи задачи');
+      expect(
+        tester.widget<Text>(find.byKey(const Key('session-subtitle'))).data,
+        'сессия «Покажи задачи»',
+      );
+      final store = h.chats as InMemoryChatStore;
+      expect(store.chatIds.single, startsWith(ChatThread.sessionPrefix));
+    });
+
+    testWidgets(
+        'старый «Главный» — сессия под первой командой; ссылка из '
+        'чата задачи ведёт в неё', (tester) async {
+      final store = InMemoryChatStore();
+      final repository = InMemoryTaskRepository();
+      final created = DateTime(2026, 11, 3, 10);
+      await repository.save(
+        Task(
+          id: 't1',
+          title: 'Хлеб',
+          status: TaskStatus.planned,
+          priority: TaskPriority.normal,
+          createdAt: created,
+          updatedAt: created,
+        ),
+      );
+      ChatMessage message(
+        String id,
+        ChatAuthor author,
+        String text, {
+        ChatLink? link,
+      }) =>
+          ChatMessage(
+            id: id,
+            author: author,
+            personaId: author == ChatAuthor.persona ? 'rio' : null,
+            text: text,
+            timestamp: created,
+            link: link,
+          );
+      // Файлы прежней версии: «Главный» и чат задачи со ссылкой на него.
+      await store.save(
+        ChatThread(
+          id: ChatThread.mainId,
+          kind: ChatKind.main,
+          createdAt: DateTime(2026, 11, 4, 12),
+          lastActivityAt: created,
+          messages: <ChatMessage>[
+            message('m1', ChatAuthor.persona, 'Я готов к работе.'),
+            message('m2', ChatAuthor.user, 'Добавь задачу «Хлеб»'),
+            message(
+              'm3',
+              ChatAuthor.persona,
+              'Создал задачу «Хлеб».',
+              link: const ChatLink(chatId: 'task:t1', taskId: 't1'),
+            ),
+          ],
+        ),
+      );
+      await store.save(
+        ChatThread(
+          id: 'task:t1',
+          kind: ChatKind.task,
+          taskId: 't1',
+          createdAt: created,
+          messages: <ChatMessage>[
+            message('c1', ChatAuthor.user, 'Добавь задачу «Хлеб»'),
+            message(
+              'c2',
+              ChatAuthor.persona,
+              'Создал задачу «Хлеб».',
+              link: const ChatLink(chatId: 'main', messageId: 'm3'),
+            ),
+          ],
+        ),
+      );
+
+      await _pump(tester, chats: store, repository: repository);
+      expect(find.byKey(const Key('session-hero')), findsOneWidget);
+      expect(store.chatIds, isNot(contains(ChatThread.mainId)));
+      expect(store.chatIds, contains(ChatThread.legacyMainSessionId));
+      expect(store.archivedIds, contains(ChatThread.mainId));
+
+      await openSessionTitled(tester, 'Добавь задачу «Хлеб»');
+      final migrated = _history(tester);
+      expect(migrated, <String>[
+        'rio: Я готов к работе.',
+        'user: Добавь задачу «Хлеб»',
+        'rio: Создал задачу «Хлеб».',
+      ]);
+      await _tap(tester, find.byKey(const Key('open-task-chat-t1')));
+      expect(_headerTitle(tester), 'Хлеб');
+      expect(find.text('из сессии «Добавь задачу «Хлеб»»'), findsOneWidget);
+      await _tap(tester, find.byKey(const Key('chat-origin-link')));
+      expect(_headerTitle(tester), isNull);
+      expect(_history(tester), migrated);
+      expect(find.textContaining('Главный'), findsNothing);
+    });
+
+    testWidgets('«Очистить историю»: всё стёрто, открыта пустая сессия', (
+      tester,
+    ) async {
+      final h = await _pump(tester);
+      await _say(tester, 'Добавь задачу «Купить хлеб»');
+      await _tap(tester, find.byKey(const Key('new-session')));
+      await _say(tester, 'покажи задачи');
+      await openSettings(tester);
+      final clear = find.byKey(const ValueKey<String>('clear-chat'));
+      await _tap(tester, clear);
+      await _tap(
+        tester,
+        find.byKey(const ValueKey<String>('clear-chat-confirm')),
+      );
+      await backToSession(tester);
+      expect(find.byKey(const Key('session-hero')), findsOneWidget);
+      expect(_history(tester), isEmpty);
+      expect((h.chats as InMemoryChatStore).chatIds, isEmpty);
+      expect(sessionEntries(), findsOneWidget);
+      expect(find.text('Добавь задачу «Купить хлеб»'), findsNothing);
+      // Задачи на месте.
+      expect((await h.tasks.listActive()).single.title, 'Купить хлеб');
+    });
   });
 
   testWidgets('закрытие окна ждёт отложенную запись чатов', (tester) async {

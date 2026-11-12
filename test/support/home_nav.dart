@@ -3,6 +3,7 @@
 // сессию.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_assistant/app/shell/relay_drawer.dart';
 
 /// Открывает меню, если оно не стоит колонкой (телефон, узкое окно).
 Future<void> openDrawerIfNeeded(WidgetTester tester) async {
@@ -49,7 +50,31 @@ Future<void> openMyRelay(WidgetTester tester, [String tab = 'summary']) async {
 Future<void> openSettings(WidgetTester tester) =>
     openMyRelay(tester, 'settings');
 
-/// Обратно в сессию: «назад» из «Мой Связной» или «Главный» в меню.
+/// Пункты сессий (не чатов задач) в меню, свежие сверху.
+Finder sessionEntries() => find.byWidgetPredicate(
+      (Widget w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('chat-session:'),
+    );
+
+/// Пункт меню с названием [title] (сессия или чат задачи).
+Finder drawerEntry(String title) => find.descendant(
+      of: find.byType(RelayDrawer),
+      matching: find.text(title),
+    );
+
+/// Открывает из меню сессию (или чат задачи) с названием [title].
+Future<void> openSessionTitled(WidgetTester tester, String title) async {
+  await openDrawerIfNeeded(tester);
+  final entry = drawerEntry(title).first;
+  await tester.ensureVisible(entry);
+  await tester.pumpAndSettle();
+  await tester.tap(entry);
+  await tester.pumpAndSettle();
+}
+
+/// Обратно в сессию: «назад» из «Мой Связной», иначе самая свежая сессия в
+/// меню (обычно та, где писали команды).
 Future<void> backToSession(WidgetTester tester) async {
   final back = find.byKey(const Key('my-relay-back'));
   if (back.evaluate().isNotEmpty) {
@@ -57,8 +82,17 @@ Future<void> backToSession(WidgetTester tester) async {
     await tester.pumpAndSettle();
     return;
   }
-  await tapInDrawer(tester, const Key('chat-main'));
+  await openDrawerIfNeeded(tester);
+  final entry = sessionEntries().first;
+  await tester.ensureVisible(entry);
+  await tester.pumpAndSettle();
+  await tester.tap(entry);
+  await tester.pumpAndSettle();
 }
+
+/// Id единственной сохранённой сессии в [ids] (`store.chatIds`).
+String onlySessionId(Iterable<String> ids) =>
+    ids.singleWhere((String id) => id.startsWith('session:'));
 
 /// Открывает колонку «Сегодня» на компьютере, если она свёрнута. На
 /// телефоне её нет — там [openSummary].

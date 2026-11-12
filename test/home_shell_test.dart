@@ -384,7 +384,14 @@ void main() {
     await tester.tap(find.byKey(const Key('history-item-0')));
     await tester.pumpAndSettle();
     expect(find.text('Хроника команд'), findsNothing);
-    expect(find.text('0+1'), findsOneWidget);
+    // В ленте (то же — название сессии в меню).
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('chat-list')),
+        matching: find.text('0+1'),
+      ),
+      findsOneWidget,
+    );
     // Кнопка списка справа от полос.
     await tester.tap(list);
     await tester.pumpAndSettle();
@@ -484,11 +491,17 @@ void main() {
     expect(find.byKey(const Key('quick-Напомнить')), findsNothing);
     await openDrawerIfNeeded(tester);
     expect(find.text('Сверить накладные за ноябрь'), findsWidgets);
-    expect(find.byKey(const Key('chat-main')), findsOneWidget);
-    // Главный на месте, с прежней историей.
-    await tester.tap(find.byKey(const Key('chat-main')));
-    await tester.pumpAndSettle();
-    expect(find.text('привет'), findsWidgets);
+    expect(find.text('Главный'), findsNothing);
+    expect(sessionEntries(), findsNWidgets(2));
+    // Прежняя сессия на месте — под своей первой командой, с историей.
+    await openSessionTitled(tester, 'привет');
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('chat-list')),
+        matching: find.text('привет'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('поиск по сессиям из меню открывает найденную', (tester) async {
@@ -502,9 +515,19 @@ void main() {
     await tester.pump(RelayDrawer.searchDelay);
     await tester.pumpAndSettle();
     expect(find.text('Найдено в сессиях · 1'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('search-hit-main')));
+    final hit = find.byWidgetPredicate(
+      (Widget w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('search-hit-session:'),
+    );
+    expect(hit, findsOneWidget);
+    await tester.tap(hit);
     await tester.pumpAndSettle();
-    expect(find.text('Что сделать?'), findsNothing, reason: 'открыт главный');
+    expect(
+      find.text('Что сделать?'),
+      findsNothing,
+      reason: 'открыта найденная',
+    );
     expect(find.text('запомни: приход 318 от поставщика'), findsWidgets);
   });
 
@@ -514,7 +537,11 @@ void main() {
     expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
     expect(find.byKey(const Key('today-panel')), findsOneWidget);
     expect(find.byKey(const Key('menu-button')), findsNothing);
-    expect(find.byKey(const Key('session-subtitle')), findsOneWidget);
+    expect(
+      find.byKey(const Key('session-subtitle')),
+      findsNothing,
+      reason: 'пустая сессия — без подписи',
+    );
     expect(find.byKey(const Key('today-show')), findsNothing);
     expect(find.byKey(const Key('today-button')), findsNothing);
     await tester.tap(find.byKey(const Key('today-collapse')));
