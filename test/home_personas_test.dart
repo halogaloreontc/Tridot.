@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
 import 'package:local_assistant/app/widgets/personas_section.dart';
+import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/chats/chat_models.dart';
 import 'package:local_assistant/core/chats/chat_store.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
@@ -108,7 +109,7 @@ Future<void> _say(WidgetTester tester, String text) async {
   await tester.pumpAndSettle();
 }
 
-/// Настройки помощников: «Мой Связной» → «Помощники».
+/// Настройки помощников: «Мой Tridot» → «Помощники».
 Future<void> _openSettings(WidgetTester tester) =>
     openMyRelay(tester, 'assistants');
 
@@ -228,6 +229,112 @@ String _heroPersona(WidgetTester tester) => tester
     .id;
 
 void main() {
+  group('Tridot: метки, имена и выбор рода Садо', () {
+    String letter(WidgetTester tester, String id) => tester
+        .widget<Text>(
+          find
+              .descendant(
+                of: find.byKey(ValueKey<String>('message-author-$id')).first,
+                matching: find.descendant(
+                  of: find.byType(PersonaMark),
+                  matching: find.byType(Text),
+                ),
+              )
+              .first,
+        )
+        .data!;
+
+    testWidgets('над ответами — «С», «Л», «Н» цветом помощника',
+        (tester) async {
+      await _pump(tester, settings: InMemorySettingsStore());
+      await _say(tester, '2+2');
+      await _say(tester, 'Лиорио, 3+3');
+      await _say(tester, 'Нода, 4+4');
+      final history = _history(tester);
+      expect(history[1], startsWith('sado: '));
+      expect(history[3], startsWith('rio: '));
+      expect(history[5], startsWith('noda: '));
+      expect(letter(tester, 'sado'), 'С');
+      expect(letter(tester, 'rio'), 'Л');
+      expect(letter(tester, 'noda'), 'Н');
+      final name = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('message-author-sado')),
+          matching: find.text('Садо'),
+        ),
+      );
+      expect(name.style?.color, AssistantColors.sado);
+    });
+
+    testWidgets('переименованная Нода: обращение и метка — по новому имени',
+        (tester) async {
+      final store = InMemorySettingsStore();
+      await store.save(
+        const AppSettings(
+          personas: PersonaSettings(names: <String, String>{'noda': 'Мира'}),
+        ),
+      );
+      await _pump(tester, settings: store);
+      await _say(tester, 'Мира, 2+2');
+      expect(_history(tester).last, startsWith('noda: '));
+      expect(letter(tester, 'noda'), 'М');
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('message-author-noda')),
+          matching: find.text('Мира'),
+        ),
+        findsOneWidget,
+      );
+      // Прежнее имя — просто текст: отвечает Садо.
+      await _say(tester, 'Нода, 3+3');
+      expect(_history(tester).last, startsWith('sado: '));
+    });
+
+    testWidgets('переименование в «Помощниках» сразу меняет обращение',
+        (tester) async {
+      final store = InMemorySettingsStore();
+      await _pump(tester, settings: store);
+      await _openSettings(tester);
+      final field = find.byKey(const ValueKey<String>('persona-name-rio'));
+      await tester.ensureVisible(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, 'Склад');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('занято обращением'), findsOneWidget);
+      expect((await store.load()).personas.nameOf('rio'), 'Лиорио');
+      await tester.enterText(field, 'Тим');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect((await store.load()).personas.nameOf('rio'), 'Тим');
+      await _openTasks(tester);
+      await _say(tester, 'Тим, 2+2');
+      expect(_history(tester).last, startsWith('rio: '));
+      expect(letter(tester, 'rio'), 'Т');
+    });
+
+    testWidgets('карточка выбора рода Садо: видна до выбора, потом исчезает',
+        (tester) async {
+      final store = InMemorySettingsStore();
+      await _pump(tester, settings: store);
+      final card = find.byKey(const Key('sado-gender-choice'));
+      expect(card, findsOneWidget);
+      await tester
+          .tap(find.byKey(const ValueKey<String>('sado-gender-female')));
+      await tester.pumpAndSettle();
+      expect(card, findsNothing);
+      final saved = (await store.load()).personas;
+      expect(saved.sadoGenderChosen, isTrue);
+      expect(saved.genderOf('sado'), ReplyGender.female);
+      await _say(tester, 'Добавь задачу купить хлеб');
+      expect(_history(tester).last, 'sado: Создала задачу «Купить хлеб».');
+
+      // Род уже выбран — при новом запуске карточки нет.
+      await _pump(tester, settings: store, key: UniqueKey());
+      expect(card, findsNothing);
+    });
+  });
+
   group('Liorio и Noda в чате', () {
     testWidgets('пустая сессия — знак помощника; ответы подписаны',
         (tester) async {
@@ -235,55 +342,58 @@ void main() {
       // Приветствие — пустая сессия, а не сообщение.
       expect(_history(tester), isEmpty);
       expect(find.textContaining('Я готов к работе'), findsNothing);
-      expect(_heroPersona(tester), 'rio');
-      expect(find.text('Лиорио'), findsWidgets);
-      expect(find.text('Liorio'), findsNothing, reason: 'имена кириллицей');
+      expect(_heroPersona(tester), 'sado');
+      expect(find.text('Садо'), findsWidgets);
+      expect(find.text('Sado'), findsNothing, reason: 'имена кириллицей');
 
       await _say(tester, 'Добавь задачу купить хлеб');
       await _say(tester, 'Noda, покажи задачи');
       final history = _history(tester);
       expect(history[0], 'user: Добавь задачу купить хлеб');
-      expect(history[1], 'rio: Создал задачу «Купить хлеб».');
+      expect(history[1], 'sado: Создал задачу «Купить хлеб».');
       expect(history[2], 'user: Noda, покажи задачи');
       expect(history[3], startsWith('noda: '));
       expect(history[3], contains('«Купить хлеб»'));
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('подпись «Лиорио» с меткой «Л», название Связной в меню',
+    testWidgets('подпись «Садо» с меткой «С», название Tridot в меню',
         (tester) async {
       await _pump(tester, settings: InMemorySettingsStore());
       await _say(tester, 'покажи задачи');
-      final author = find.byKey(const ValueKey<String>('message-author-rio'));
+      final author = find.byKey(const ValueKey<String>('message-author-sado'));
       expect(author, findsOneWidget);
       expect(
-        find.descendant(of: author, matching: find.text('Лиорио')),
+        find.descendant(of: author, matching: find.text('Садо')),
         findsOneWidget,
       );
       // Знак и подпись помощника — кириллицей, как в макете «Д».
       expect(
-        find.descendant(of: author, matching: find.text('Л')),
+        find.descendant(of: author, matching: find.text('С')),
         findsOneWidget,
       );
+      // Ответ из зоны Лиорио (склад, пароли) подписан им — здесь их нет.
       expect(find.text('Rio'), findsNothing);
       expect(find.text('R'), findsNothing);
       expect(find.byKey(const ValueKey<String>('app-name')), findsOneWidget);
-      expect(find.text('Связной'), findsOneWidget);
+      expect(find.text(AppInfo.name), findsOneWidget);
       expect(find.text('Qenqrit'), findsNothing);
       expect(find.text('Помощник'), findsNothing);
     });
 
-    testWidgets('основной из сохранённых настроек приветствует сам',
+    testWidgets('Дуэт с Нодой из сохранённых настроек: встречает Садо',
         (tester) async {
       final store = InMemorySettingsStore();
       await store.save(
-        const AppSettings(personas: PersonaSettings(mainPersona: 'noda')),
+        const AppSettings(
+          personas: PersonaSettings(teamMode: TeamMode.duo, duoHelper: 'noda'),
+        ),
       );
       await _pump(tester, settings: store);
       expect(_history(tester), isEmpty);
-      expect(_heroPersona(tester), 'noda');
+      expect(_heroPersona(tester), 'sado');
       await _say(tester, 'покажи задачи');
-      expect(_history(tester).last, startsWith('noda: '));
+      expect(_history(tester).last, startsWith('sado: '));
     });
 
     testWidgets(
@@ -301,9 +411,9 @@ void main() {
         startsWith('noda: '),
         reason: 'калькулятор',
       );
-      // Другая тема — отвечает основной: невидимого адресата нет.
+      // Другая тема — отвечает Садо: невидимого адресата нет.
       await _say(tester, 'покажи задачи');
-      expect(_history(tester).last, startsWith('rio: '));
+      expect(_history(tester).last, startsWith('sado: '));
       expect(h.assistant.followUpPersonaId, isNull);
       await _say(tester, 'Лиорио, 3+3');
       expect(_history(tester).last, 'rio: 3 + 3 = 6');
@@ -317,7 +427,7 @@ void main() {
       await _tapSetting(tester, 'assistant-mode-solo');
       await _openTasks(tester);
       await _say(tester, 'Noda, 4+4');
-      expect(_history(tester).last, startsWith('rio: '), reason: 'соло');
+      expect(_history(tester).last, startsWith('sado: '), reason: 'соло');
       expect(tester.takeException(), isNull);
     });
 
@@ -346,8 +456,7 @@ void main() {
   });
 
   group('к кому обратились, тот и продолжает — тем же навыком', () {
-    testWidgets(
-        '«Нода, расскажи шутку» → «ещё шутку» — Noda; другое — основной',
+    testWidgets('«Нода, расскажи шутку» → «ещё шутку» — Noda; другое — Садо',
         (tester) async {
       final h = await _pump(tester, settings: InMemorySettingsStore());
       await _say(tester, 'Нода, расскажи шутку');
@@ -358,7 +467,7 @@ void main() {
 
       for (final text in <String>['2+2', 'покажи задачи']) {
         await _say(tester, text);
-        expect(_history(tester).last, startsWith('rio: '), reason: text);
+        expect(_history(tester).last, startsWith('sado: '), reason: text);
       }
       expect(h.assistant.followUpPersonaId, isNull);
 
@@ -380,27 +489,28 @@ void main() {
     });
 
     testWidgets(
-        '«пусть отвечает Лиорио», когда Лиорио и так основной, — снова Liorio',
+        '«пусть отвечает Лиорио» — главный не меняется, калькулятор у Садо',
         (tester) async {
       final h = await _pump(tester, settings: InMemorySettingsStore());
       await _say(tester, 'Нода, привет');
       expect(h.assistant.followUpPersonaId, 'noda');
       await _say(tester, 'пусть отвечает Лиорио');
-      expect(_history(tester).last, startsWith('rio: '));
-      expect(h.assistant.followUpPersonaId, isNull);
+      expect(_history(tester).last, startsWith('noda: '));
+      expect(_history(tester).last, contains('Садо'));
       await _say(tester, '2+2');
-      expect(_history(tester).last, 'rio: 2 + 2 = 4');
+      expect(_history(tester).last, 'sado: 2 + 2 = 4');
     });
 
     testWidgets('«Рио де Жанейро …» — город, никто не назван', (tester) async {
       final h = await _pump(tester, settings: InMemorySettingsStore());
       await _openSettings(tester);
-      await _tapSetting(tester, 'main-persona-noda');
+      await _tapSetting(tester, 'assistant-mode-duo');
+      await _tapSetting(tester, 'duo-helper-noda');
       await _openTasks(tester);
       await _say(tester, 'Рио де Жанейро красивый город');
       expect(h.assistant.followUpPersonaId, isNull);
       await _say(tester, '2+2');
-      expect(_history(tester).last, startsWith('noda: '));
+      expect(_history(tester).last, startsWith('sado: '));
     });
 
     testWidgets('«спасибо, Лиорио» на вопрос Noda — переспрашивает Liorio',
@@ -416,7 +526,7 @@ void main() {
       expect(_history(tester).last, startsWith('rio: '));
       expect(await h.tasks.listActive(), isEmpty);
       await _say(tester, '2+2');
-      expect(_history(tester).last, 'rio: 2 + 2 = 4');
+      expect(_history(tester).last, 'sado: 2 + 2 = 4');
     });
 
     testWidgets('новая сессия и очистка истории снимают продолжение',
@@ -428,7 +538,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(h.assistant.followUpPersonaId, isNull);
       await _say(tester, '3+3');
-      expect(_history(tester).last, startsWith('rio: '));
+      expect(_history(tester).last, startsWith('sado: '));
 
       await _say(tester, 'Нода, 2+2');
       await openSettings(tester);
@@ -439,7 +549,7 @@ void main() {
       await _openTasks(tester);
       expect(h.assistant.followUpPersonaId, isNull);
       await _say(tester, '2+2');
-      expect(_history(tester).last, startsWith('rio: '));
+      expect(_history(tester).last, startsWith('sado: '));
     });
 
     testWidgets('на «да» отвечает спросивший', (tester) async {
@@ -452,7 +562,7 @@ void main() {
       expect(await h.tasks.listActive(), isEmpty);
     });
 
-    testWidgets('соло: имя не закрепляется; в дуэте снова основной',
+    testWidgets('соло: имя не закрепляется; в дуэте снова Садо',
         (tester) async {
       await _pump(tester, settings: InMemorySettingsStore());
       await _say(tester, 'Нода, 2+2');
@@ -461,33 +571,30 @@ void main() {
       await _openTasks(tester);
       await _say(tester, 'Лиорио, 3+3');
       await _say(tester, '4+4');
-      expect(_history(tester).last, startsWith('rio: '));
+      expect(_history(tester).last, startsWith('sado: '));
       await _openSettings(tester);
-      await _tapSetting(tester, 'solo-persona-noda');
       await _tapSetting(tester, 'assistant-mode-duo');
       await _openTasks(tester);
-      // В соло «Лиорио, …» — просто текст; в дуэте отвечает основной.
+      // В соло «Лиорио, …» — просто текст; в дуэте калькулятор у Садо.
       await _say(tester, '5+5');
-      expect(_history(tester).last, startsWith('rio: '));
+      expect(_history(tester).last, startsWith('sado: '));
     });
 
-    testWidgets('смена основного: отвечает тот, кто основной сейчас',
+    testWidgets('смена режима: без имени отвечает тот, кто отвечает сейчас',
         (tester) async {
       final h = await _pump(tester, settings: InMemorySettingsStore());
       await _say(tester, 'Нода, 2+2');
+      expect(h.assistant.followUpPersonaId, 'noda');
       await _openSettings(tester);
-      await _tapSetting(tester, 'main-persona-noda');
+      await _tapSetting(tester, 'assistant-mode-solo');
       await _openTasks(tester);
       await _say(tester, '3+3');
-      expect(_history(tester).last, startsWith('noda: '));
-      // Обращение к основному, который ведёт всё, ничего не продолжает.
-      await _say(tester, 'Нода, 4+4');
-      expect(h.assistant.followUpPersonaId, isNull);
+      expect(_history(tester).last, startsWith('sado: '));
       await _openSettings(tester);
-      await _tapSetting(tester, 'main-persona-rio');
+      await _tapSetting(tester, 'assistant-mode-trio');
       await _openTasks(tester);
       await _say(tester, '5+5');
-      expect(_history(tester).last, startsWith('rio: '));
+      expect(_history(tester).last, startsWith('sado: '));
     });
   });
 
@@ -514,10 +621,7 @@ void main() {
     testWidgets('сообщение до загрузки настроек ждёт их', (tester) async {
       final store = _SlowSettingsStore(
         const AppSettings(
-          personas: PersonaSettings(
-            mode: AssistantMode.solo,
-            soloPersona: 'noda',
-          ),
+          personas: PersonaSettings(teamMode: TeamMode.solo),
         ),
       );
       tester.view.physicalSize = _tall;
@@ -556,7 +660,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(_history(tester), <Object>[
         'user: 2+2',
-        startsWith('noda: '),
+        startsWith('sado: '),
       ]);
     });
   });
@@ -588,11 +692,10 @@ void main() {
 
       for (final key in <String>[
         'assistant-mode-solo',
-        'solo-persona-noda',
-        'solo-persona-rio',
         'assistant-mode-duo',
-        'main-persona-noda',
-        'main-persona-rio',
+        'duo-helper-noda',
+        'duo-helper-rio',
+        'assistant-mode-trio',
         for (final persona in <String>['rio', 'noda'])
           for (final style in <String>[
             'friendly',
@@ -613,8 +716,18 @@ void main() {
         await _tapSetting(tester, key);
         await _openTasks(tester);
         final now = await _snapshot(tester, h);
-        expect(now, before, reason: 'после «$key»');
+        // Продолжение с Нодой снимает только Соло: она выключена и больше
+        // не отвечает (ADR-016). Остальное не сбрасывается ничем.
+        expect(
+          <String, Object?>{...now}..remove('followUp'),
+          <String, Object?>{...before}..remove('followUp'),
+          reason: 'после «$key»',
+        );
+        if (key != 'assistant-mode-solo' && now['followUp'] != null) {
+          expect(now['followUp'], 'noda', reason: 'после «$key»');
+        }
       }
+      expect(h.assistant.followUpPersonaId, isNull, reason: 'снято Соло');
       expect(tester.takeException(), isNull);
 
       // Стили вернулись к начальным, ожидание живо, на «да» — Noda.
@@ -641,15 +754,13 @@ void main() {
 
       final requests = <String, bool Function(PersonaSettings)>{
         'говори короче': (PersonaSettings p) =>
-            p.styleOf(Personas.liorio) == 'brief',
+            p.styleOf(Personas.sado) == 'brief',
         'Нода, говори официально': (PersonaSettings p) =>
             p.styleOf(Personas.noda) == 'business',
         'давай на ты': (PersonaSettings p) =>
             p.address == ReplyAddress.informal,
         'без смайликов': (PersonaSettings p) => !p.emoji,
         'шути больше': (PersonaSettings p) => p.jokes == JokeFrequency.normal,
-        'Noda будь основной': (PersonaSettings p) => p.mainPersona == 'noda',
-        'пусть отвечает Лиорио': (PersonaSettings p) => p.mainPersona == 'rio',
       };
       var history = _history(tester);
       for (final MapEntry(key: text, value: check) in requests.entries) {
@@ -683,15 +794,15 @@ void main() {
           );
         }
       }
-      expect(_history(tester).last, startsWith('rio: '));
-      // «Пусть отвечает Лиорио»: основной — Liorio, продолжения Noda нет.
+      // Продолжение Ноды короткое: «шути больше» — уже снова Садо.
+      expect(_history(tester).last, startsWith('sado: '));
       expect(h.assistant.followUpPersonaId, isNull);
       await _say(tester, 'покажи задачи');
-      expect(_history(tester).last, startsWith('rio: '));
+      expect(_history(tester).last, startsWith('sado: '));
 
       // Экран настроек показывает то же, что попросили в чате.
       await _openSettings(tester);
-      final selected = find.byKey(const ValueKey<String>('style-rio-brief'));
+      final selected = find.byKey(const ValueKey<String>('style-sado-brief'));
       await tester.ensureVisible(selected);
       expect(
         tester
@@ -735,10 +846,9 @@ void main() {
 
       for (final key in <String>[
         'assistant-mode-solo',
-        'solo-persona-noda',
         'assistant-mode-duo',
-        'main-persona-noda',
-        'main-persona-rio',
+        'duo-helper-noda',
+        'assistant-mode-trio',
         'style-rio-brief',
         'style-noda-business',
         'address-ty',
@@ -752,7 +862,9 @@ void main() {
         expect(_openChat(tester), 'Купить хлеб', reason: 'после «$key»');
         expect(_history(tester), history, reason: 'после «$key»');
       }
-      expect(h.assistant.followUpPersonaId, 'noda');
+      // Соло выключило Ноду: продолжение с ней снято и после возврата к
+      // Трио не возвращается — она больше не отвечала.
+      expect(h.assistant.followUpPersonaId, isNull);
       expect(tester.takeException(), isNull);
 
       // Перезапуск над теми же хранилищами: чаты те же, открыта новая
@@ -775,7 +887,7 @@ void main() {
         (session['messages']! as List<String>).length,
       );
       await _openSettings(tester);
-      await _tapSetting(tester, 'main-persona-noda');
+      await _tapSetting(tester, 'assistant-mode-solo');
       await _openTasks(tester);
       expect(await _chats(chats), before, reason: 'после перезапуска');
     });
@@ -785,7 +897,7 @@ void main() {
       await _say(tester, 'Добавь задачу купить хлеб');
       final before = _history(tester);
       await _openSettings(tester);
-      await _tapSetting(tester, 'main-persona-noda');
+      await _tapSetting(tester, 'assistant-mode-solo');
       await _tapSetting(tester, 'style-rio-business');
       await _tapSetting(tester, 'address-ty');
       await _openTasks(tester);
@@ -793,7 +905,7 @@ void main() {
       await _say(tester, 'Добавь задачу купить молоко');
       final after = _history(tester);
       expect(after.sublist(0, before.length), before);
-      expect(after.last, startsWith('noda: '));
+      expect(after.last, startsWith('sado: '));
     });
 
     testWidgets('смена настроек и перезапуск: настройки и данные целы',
@@ -803,8 +915,8 @@ void main() {
       await _pump(tester, settings: store, repository: repository);
       await _say(tester, 'Добавь задачу купить хлеб');
       await _openSettings(tester);
-      await _tapSetting(tester, 'main-persona-noda');
-      await _tapSetting(tester, 'style-noda-brief');
+      await _tapSetting(tester, 'assistant-mode-solo');
+      await _tapSetting(tester, 'style-sado-brief');
       await _tapSetting(tester, 'address-ty');
       final saved = await store.load();
 
@@ -821,15 +933,15 @@ void main() {
         (await h.tasks.listActive()).map((Task t) => t.title),
         <String>['Купить хлеб'],
       );
-      // Новая пустая сессия — со знаком нового основного; ответ — его
-      // голосом и выбранным стилем.
+      // Новая пустая сессия — со знаком Садо (Соло); ответ — его голосом
+      // и выбранным стилем.
       expect(_history(tester), isEmpty);
-      expect(_heroPersona(tester), 'noda');
+      expect(_heroPersona(tester), 'sado');
       await _say(tester, 'Добавь задачу купить молоко');
-      expect(_history(tester).last, startsWith('noda: '));
+      expect(_history(tester).last, startsWith('sado: '));
     });
 
-    testWidgets('испорченный файл настроек: дуэт, основной Liorio, задачи целы',
+    testWidgets('испорченный файл настроек: трио, встречает Садо, задачи целы',
         (tester) async {
       final repository = InMemoryTaskRepository();
       final service = TaskService(
@@ -844,7 +956,7 @@ void main() {
       );
       expect(h.assistant.personas, const PersonaSettings());
       expect(_history(tester), isEmpty);
-      expect(_heroPersona(tester), 'rio');
+      expect(_heroPersona(tester), 'sado');
       expect(find.byKey(const Key('addressee-switch')), findsNothing);
       expect(
         (await h.tasks.listActive()).map((Task t) => t.title),
@@ -875,7 +987,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const Key('working-message')),
-          matching: find.byKey(const ValueKey<String>('message-author-rio')),
+          matching: find.byKey(const ValueKey<String>('message-author-sado')),
         ),
         findsOneWidget,
       );
@@ -885,14 +997,14 @@ void main() {
       await tester.tap(find.byKey(const Key('my-relay-tab-assistants')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      await _tapSetting(tester, 'main-persona-noda');
-      await _tapSetting(tester, 'style-rio-business');
+      await _tapSetting(tester, 'assistant-mode-solo');
+      await _tapSetting(tester, 'style-sado-business');
       await tester.tap(find.byKey(const Key('my-relay-back')));
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
 
       final history = _history(tester);
-      expect(history.last, 'rio: Создал задачу «Купить хлеб».');
+      expect(history.last, 'sado: Создал задачу «Купить хлеб».');
       expect(
         (await h.tasks.listActive()).map((Task t) => t.title),
         <String>['Купить хлеб'],
@@ -900,7 +1012,7 @@ void main() {
       expect(find.byKey(const Key('working-message')), findsNothing);
       repository.delay = Duration.zero;
       await _say(tester, 'Покажи задачи');
-      expect(_history(tester).last, startsWith('noda: '));
+      expect(_history(tester).last, startsWith('sado: '));
       expect(tester.takeException(), isNull);
     });
   });
@@ -935,7 +1047,6 @@ void main() {
 
       await _openSettings(tester);
       for (final key in <String>[
-        'main-persona-noda',
         'assistant-mode-solo',
         'assistant-mode-duo',
         'style-noda-business',
@@ -945,7 +1056,11 @@ void main() {
       await _openTasks(tester);
       expect(_history(tester), isEmpty, reason: 'смена настроек не пишет');
       expect(line, findsOneWidget);
-      expect(lineMark(tester), 'rio', reason: 'основная теперь Noda');
+      expect(
+        lineMark(tester),
+        'sado',
+        reason: 'в дуэте с Лиорио оповещения — у Садо',
+      );
 
       // Перезапуск — та же строка, сообщений нет.
       await _pump(
@@ -972,7 +1087,7 @@ void main() {
       await store.save(
         const AppSettings(
           personas: PersonaSettings(
-            mode: AssistantMode.solo,
+            teamMode: TeamMode.solo,
             styles: <String, String>{'rio': 'neutral', 'noda': 'friendly'},
           ),
         ),
@@ -981,11 +1096,11 @@ void main() {
       await repository.save(_overdue('Отчёт'));
       await _pump(tester, settings: store, repository: repository);
       expect(find.text('Просрочена 1 задача'), findsOneWidget);
-      expect(lineMark(tester), 'rio');
+      expect(lineMark(tester), 'sado');
       expect(_history(tester), isEmpty);
     });
 
-    testWidgets('нажатие — «Мой Связной» → «Сводка»', (tester) async {
+    testWidgets('нажатие — «Мой Tridot» → «Сводка»', (tester) async {
       final repository = InMemoryTaskRepository();
       for (var i = 0; i < 5; i++) {
         await repository.save(_overdue('Дело $i'));
@@ -1030,7 +1145,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(_history(tester), <String>[
         'user: Добавь задачу купить хлеб',
-        'rio: Создал задачу «Купить хлеб».',
+        'sado: Создал задачу «Купить хлеб».',
       ]);
     });
 

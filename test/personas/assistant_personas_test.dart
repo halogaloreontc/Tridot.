@@ -71,11 +71,11 @@ void main() {
     expect(sum.message, contains('2 + 2 = 4'));
   });
 
-  group('дуэт', () {
-    test('по умолчанию отвечает Liorio нейтрально', () async {
+  group('трио', () {
+    test('по умолчанию отвечает Садо нейтрально', () async {
       final (assistant, _) = _assistant();
       final response = await assistant.handle('Добавь задачу купить хлеб');
-      expect(response.personaId, 'rio');
+      expect(response.personaId, 'sado');
       expect(response.message, 'Создал задачу «Купить хлеб».');
       expect(response.replyId, 'task.created');
       expect(response.values, <String, String>{'title': 'Купить хлеб'});
@@ -131,11 +131,16 @@ void main() {
       );
     });
 
-    test('основной — Noda: отвечает она, второй пишет Liorio', () async {
-      final (assistant, _) =
-          _assistant(personas: const PersonaSettings(mainPersona: 'noda'));
-      expect((await assistant.handle('покажи задачи')).personaId, 'noda');
-      expect(assistant.welcome().personaId, 'noda');
+    test('Дуэт с Нодой: отвечает Садо, просрочки — от Ноды', () async {
+      final (assistant, _) = _assistant(
+        personas: const PersonaSettings(
+          teamMode: TeamMode.duo,
+          duoHelper: 'noda',
+          styles: <String, String>{'noda': 'neutral'},
+        ),
+      );
+      expect((await assistant.handle('покажи задачи')).personaId, 'sado');
+      expect(assistant.welcome().personaId, 'sado');
       final notice = assistant.overdueNotice(<Task>[
         Task(
           id: '1',
@@ -148,7 +153,7 @@ void main() {
           updatedAt: DateTime(2026, 11, 1),
         ),
       ])!;
-      expect(notice.personaId, 'rio');
+      expect(notice.personaId, 'noda');
       expect(notice.message, 'У вас 1 просроченная задача: «Отчёт».');
     });
 
@@ -182,7 +187,7 @@ void main() {
 
     test(
         '«Нода, …» — дальше тем же навыком отвечает Noda, другим — снова '
-        'основной', () async {
+        'Садо', () async {
       final (assistant, tasks) = _assistant();
       final followUps = <String?>[];
       final responses = await chat(
@@ -199,30 +204,45 @@ void main() {
       );
       expect(
         responses.map((AssistantResponse r) => r.personaId),
-        <String>['noda', 'noda', 'rio', 'rio', 'rio', 'rio'],
+        <String>['noda', 'noda', 'sado', 'sado', 'rio', 'sado'],
       );
       expect(
         responses.map((AssistantResponse r) => r.addressedPersonaId),
         <String?>['noda', null, null, null, 'rio', null],
       );
       // Невидимого «закреплённого» адресата нет: другой навык — и Noda
-      // уже не продолжает. Основной, который ведёт всё, не продолжает
-      // «особо» — он и так отвечает.
-      expect(followUps, <String?>['noda', 'noda', null, null, null, null]);
+      // уже не продолжает; Лиорио продолжает только калькулятор.
+      expect(followUps, <String?>['noda', 'noda', null, null, 'rio', null]);
       expect((await tasks.listActive()).single.title, 'Купить хлеб');
     });
 
-    test('обращение к основному при чужой роли — продолжает основной',
+    test('обращение к отвечающему — продолжения нет, к помощнику — есть',
         () async {
-      final (assistant, _) =
-          _assistant(personas: const PersonaSettings(mainPersona: 'noda'));
-      final response = await assistant.handle('Нода, 2+2');
-      expect(response.personaId, 'noda');
-      expect(assistant.followUpPersonaId, isNull, reason: 'основной ведёт всё');
-      await assistant.handle('Лиорио, 2+2');
-      expect(assistant.followUpPersonaId, 'rio');
-      expect((await assistant.handle('5+5')).personaId, 'rio');
-      expect((await assistant.handle('покажи задачи')).personaId, 'noda');
+      final (assistant, _) = _assistant(
+        personas:
+            const PersonaSettings(teamMode: TeamMode.duo, duoHelper: 'noda'),
+      );
+      final response = await assistant.handle('Садо, 2+2');
+      expect(response.personaId, 'sado');
+      expect(assistant.followUpPersonaId, isNull, reason: 'Садо ведёт всё');
+      await assistant.handle('Нода, 2+2');
+      expect(assistant.followUpPersonaId, 'noda');
+      expect((await assistant.handle('5+5')).personaId, 'noda');
+      expect((await assistant.handle('покажи задачи')).personaId, 'sado');
+    });
+
+    test('имя помощника, выключенного режимом, — просто текст', () async {
+      final (assistant, _) = _assistant(
+        personas:
+            const PersonaSettings(teamMode: TeamMode.duo, duoHelper: 'noda'),
+      );
+      final response = await assistant.handle('Лиорио, 2+2');
+      expect(response.personaId, 'sado');
+      expect(response.addressedPersonaId, isNull);
+      expect(
+        (await assistant.handle('2+2', addressee: 'rio')).personaId,
+        'sado',
+      );
     });
 
     test('явный адресат (API) — на это сообщение, продолжения нет', () async {
@@ -231,7 +251,7 @@ void main() {
       expect(response.personaId, 'noda');
       expect(response.addressedPersonaId, isNull);
       expect(assistant.followUpPersonaId, isNull);
-      expect((await assistant.handle('3+3')).personaId, 'rio');
+      expect((await assistant.handle('3+3')).personaId, 'sado');
     });
 
     test('«Нода» без команды — следующая фраза ей, любым навыком', () async {
@@ -243,7 +263,7 @@ void main() {
       expect(responses.first.replyId, 'common.addressed');
       expect(
         responses.skip(1).map((AssistantResponse r) => r.personaId),
-        <String>['noda', 'noda', 'rio'],
+        <String>['noda', 'noda', 'sado'],
       );
     });
 
@@ -271,8 +291,8 @@ void main() {
       final yes = await assistant.handle('Лиорио, да');
       expect(yes.personaId, 'rio');
       expect((await tasks.listActive()), isEmpty);
-      // Основной ведёт всё — продолжать нечего.
-      expect(assistant.followUpPersonaId, isNull);
+      // Лиорио — помощник: тем же навыком дальше отвечает он.
+      expect(assistant.followUpPersonaId, 'rio');
     });
 
     test('смена чата снимает продолжение', () async {
@@ -281,7 +301,7 @@ void main() {
       expect(assistant.followUpPersonaId, 'noda');
       assistant.enterChat(sessionId: 's1');
       expect(assistant.followUpPersonaId, isNull);
-      expect((await assistant.handle('3+3')).personaId, 'rio');
+      expect((await assistant.handle('3+3')).personaId, 'sado');
       await assistant.handle('Нода, 2+2');
       assistant.forgetChatSelections();
       expect(assistant.followUpPersonaId, isNull);
@@ -289,20 +309,19 @@ void main() {
 
     test('соло: имя — просто текст, продолжения нет', () async {
       final (assistant, _) = _assistant(
-        personas: const PersonaSettings(mode: AssistantMode.solo),
+        personas: const PersonaSettings(teamMode: TeamMode.solo),
       );
       final responses = await chat(assistant, <String>['Нода, 2+2', '3+3']);
       expect(
         responses.map((AssistantResponse r) => r.personaId),
-        <String>['rio', 'rio'],
+        <String>['sado', 'sado'],
       );
       expect(responses.first.addressedPersonaId, isNull);
       expect(assistant.followUpPersonaId, isNull);
     });
 
-    test(
-        'напоминание о просрочке — от второго относительно основного, '
-        'а не от адресата', () async {
+    test('напоминание о просрочке — от ведущего оповещений, а не от адресата',
+        () async {
       final overdue = <Task>[
         Task(
           id: '1',
@@ -315,16 +334,23 @@ void main() {
           updatedAt: DateTime(2026, 11, 1),
         ),
       ];
-      for (final main in <String>['rio', 'noda']) {
-        final (assistant, _) =
-            _assistant(personas: PersonaSettings(mainPersona: main));
-        final second = main == 'rio' ? 'noda' : 'rio';
-        for (final name in <String>['Лиорио', 'Нода']) {
+      for (final (settings, notifier) in <(PersonaSettings, String)>[
+        (const PersonaSettings(), 'noda'),
+        (const PersonaSettings(dutyNotifications: 'rio'), 'rio'),
+        (const PersonaSettings(teamMode: TeamMode.duo), 'sado'),
+        (
+          const PersonaSettings(teamMode: TeamMode.duo, duoHelper: 'noda'),
+          'noda',
+        ),
+        (const PersonaSettings(teamMode: TeamMode.solo), 'sado'),
+      ]) {
+        final (assistant, _) = _assistant(personas: settings);
+        for (final name in <String>['Садо', 'Лиорио', 'Нода']) {
           await assistant.handle('$name, 2+2');
           expect(
             assistant.overdueNotice(overdue)!.personaId,
-            second,
-            reason: 'основной $main, обратились: $name',
+            notifier,
+            reason: '${settings.teamMode.name}, обратились: $name',
           );
         }
       }
@@ -332,26 +358,26 @@ void main() {
   });
 
   group('соло', () {
-    test('отвечает выбранный, имя другого — просто текст', () async {
+    test('отвечает Садо, имя помощника снимается', () async {
       final (assistant, tasks) = _assistant(
         personas: const PersonaSettings(
-          mode: AssistantMode.solo,
-          soloPersona: 'noda',
-          styles: <String, String>{'rio': 'neutral', 'noda': 'neutral'},
+          teamMode: TeamMode.solo,
+          genders: <String, ReplyGender>{'sado': ReplyGender.female},
         ),
       );
       final response = await assistant.handle('Добавь задачу купить хлеб');
-      expect(response.personaId, 'noda');
+      expect(response.personaId, 'sado');
       expect(response.message, 'Создала задачу «Купить хлеб».');
       final addressed = await assistant.handle(
         'Liorio, добавь задачу позвонить',
         addressee: 'rio',
       );
-      expect(addressed.personaId, 'noda', reason: 'в соло один помощник');
+      expect(addressed.personaId, 'sado', reason: 'в соло один помощник');
       expect(
         (await tasks.listActive()).map((Task t) => t.title),
-        isNot(contains('Позвонить')),
-        reason: 'имя не снимается',
+        contains('Позвонить'),
+        reason: 'имя выключенного помощника не обращение, но и в задачу '
+            'не попадает',
       );
       expect(assistant.overdueNotice(const <Task>[]), isNull);
     });
@@ -377,7 +403,11 @@ void main() {
   test('соседние ответы одной записи в дружеском стиле разные', () async {
     final (assistant, _) = _assistant(
       personas: const PersonaSettings(
-        styles: <String, String>{'rio': 'friendly', 'noda': 'friendly'},
+        styles: <String, String>{
+          'sado': 'friendly',
+          'rio': 'friendly',
+          'noda': 'friendly',
+        },
       ),
     );
     final first = await assistant.handle('2+2');
@@ -395,19 +425,22 @@ void main() {
     final pending = assistant.handle('Добавь задачу купить хлеб');
     await Future<void>.delayed(Duration.zero);
     assistant.personas = const PersonaSettings(
-      mode: AssistantMode.solo,
-      soloPersona: 'noda',
-      styles: <String, String>{'rio': 'business', 'noda': 'brief'},
+      teamMode: TeamMode.solo,
+      styles: <String, String>{
+        'sado': 'brief',
+        'rio': 'business',
+        'noda': 'business',
+      },
       address: ReplyAddress.informal,
     );
     repository.gate!.complete();
     final response = await pending;
-    expect(response.personaId, 'rio');
+    expect(response.personaId, 'sado');
     expect(response.message, 'Создал задачу «Купить хлеб».');
     expect((await tasks.listActive()).single.title, 'Купить хлеб');
 
     final next = await assistant.handle('Покажи задачи');
-    expect(next.personaId, 'noda');
+    expect(next.personaId, 'sado');
     expect(next.message, 'Задач: 1. Ближайшая: «Купить хлеб».');
   });
 }

@@ -91,8 +91,22 @@ enum TalkSettingKind {
   /// «Не шути».
   jokesOff,
 
-  /// «Noda, будь основной», «пусть отвечает Лиорио».
+  /// «Noda, будь основной», «пусть отвечает Лиорио». Главный всегда Садо
+  /// (ADR-016): просьба настроек не меняет, ответ — где включить
+  /// помощников.
   main,
+
+  /// «Включи соло»: всё делает Садо.
+  modeSolo,
+
+  /// «Включи дуэт», «включи дуэт с Нодой»: Садо и один помощник.
+  modeDuo,
+
+  /// «Включи трио»: все трое.
+  modeTrio;
+
+  /// Просьба сменить режим команды.
+  bool get isMode => this == modeSolo || this == modeDuo || this == modeTrio;
 }
 
 /// Разобранная реплика беседы.
@@ -179,19 +193,40 @@ abstract final class TalkPhrases {
   };
 
   /// Имена для обращения → id: «привет, Нода», «пусть отвечает Лио»
-  /// ([Persona.addressNames]). Годятся где угодно в реплике.
-  static final Map<String, String> _names = <String, String>{
-    for (final persona in Personas.all)
-      for (final form in persona.addressNames) form: persona.id,
-  };
+  /// ([Persona.addressNames]). Годятся где угодно в реплике. Из текущего
+  /// состава ([PersonaCast.current]).
+  static Map<String, String> get _names {
+    _refreshNames();
+    return _addressNames;
+  }
 
   /// Косвенные падежи имён → id: «сделай Ноду основной»
   /// ([Persona.inflectedForms]). Только на месте `<имя>` в образцах
   /// просьб: «привет Ноду» — не обращение и не беседа.
-  static final Map<String, String> _inflectedNames = <String, String>{
-    for (final persona in Personas.all)
-      for (final form in persona.inflectedForms) form: persona.id,
-  };
+  static Map<String, String> get _inflectedNames {
+    _refreshNames();
+    return _inflectedForms;
+  }
+
+  static int _namesVersion = -1;
+  static Map<String, String> _addressNames = const <String, String>{};
+  static Map<String, String> _inflectedForms = const <String, String>{};
+
+  /// Пересобирает словари имён, если имена поменялись
+  /// ([PersonaCast.version]).
+  static void _refreshNames() {
+    if (_namesVersion == PersonaCast.version) return;
+    final members = PersonaCast.current.members;
+    _addressNames = <String, String>{
+      for (final persona in members)
+        for (final form in persona.addressNames) form: persona.id,
+    };
+    _inflectedForms = <String, String>{
+      for (final persona in members)
+        for (final form in persona.inflectedForms) form: persona.id,
+    };
+    _namesVersion = PersonaCast.version;
+  }
 
   /// Вместо имени в образцах просьб.
   static const String _nameSlot = '<имя>';
@@ -620,6 +655,32 @@ abstract final class TalkPhrases {
     'сделай <имя> основным': _main,
     'сделай основной <имя>': _main,
     'сделай основным <имя>': _main,
+    'включи соло': _modeSolo,
+    'включи режим соло': _modeSolo,
+    'режим соло': _modeSolo,
+    'давай соло': _modeSolo,
+    'перейди на соло': _modeSolo,
+    'переключи на соло': _modeSolo,
+    'переключись на соло': _modeSolo,
+    'включи дуэт': _modeDuo,
+    'включи режим дуэт': _modeDuo,
+    'режим дуэт': _modeDuo,
+    'давай дуэт': _modeDuo,
+    'перейди на дуэт': _modeDuo,
+    'переключи на дуэт': _modeDuo,
+    'переключись на дуэт': _modeDuo,
+    'включи трио': _modeTrio,
+    'включи режим трио': _modeTrio,
+    'режим трио': _modeTrio,
+    'давай трио': _modeTrio,
+    'перейди на трио': _modeTrio,
+    'переключи на трио': _modeTrio,
+    'переключись на трио': _modeTrio,
+    'включи дуэт с <имя>': _modeDuo,
+    'дуэт с <имя>': _modeDuo,
+    'включи режим дуэт с <имя>': _modeDuo,
+    'давай дуэт с <имя>': _modeDuo,
+    'перейди на дуэт с <имя>': _modeDuo,
   };
 
   static const TalkRequest _brief = TalkRequest(
@@ -658,6 +719,12 @@ abstract final class TalkPhrases {
       TalkRequest(TalkTopic.setting, setting: TalkSettingKind.jokesOff);
   static const TalkRequest _main =
       TalkRequest(TalkTopic.setting, setting: TalkSettingKind.main);
+  static const TalkRequest _modeSolo =
+      TalkRequest(TalkTopic.setting, setting: TalkSettingKind.modeSolo);
+  static const TalkRequest _modeDuo =
+      TalkRequest(TalkTopic.setting, setting: TalkSettingKind.modeDuo);
+  static const TalkRequest _modeTrio =
+      TalkRequest(TalkTopic.setting, setting: TalkSettingKind.modeTrio);
 
   /// Эмодзи без слов: «👍» — отклик, «👋» — приветствие.
   static const Map<String, TalkTopic> _symbols = <String, TalkTopic>{
@@ -2095,10 +2162,11 @@ abstract final class TalkPhrases {
   ];
 
   /// Основы слов о самом приложении: «по командам», «по задачам», «по
-  /// навыкам», «по Связному».
+  /// навыкам», «по Tridot».
   static const List<String> _appTopics = <String>[
     'команд', 'задач', 'функци', 'навык', 'возможност', 'приложени', //
-    'связн', 'калькулятор', 'бесед', 'настройк', 'коннектор', 'помощник',
+    'связн', 'tridot', 'тридот', 'калькулятор', 'бесед', 'настройк',
+    'коннектор', 'помощник',
   ];
 
   /// «Что ты умеешь» своими словами или `null`: вопрос «что/чем» с

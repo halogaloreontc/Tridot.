@@ -257,7 +257,7 @@ void main() {
     await _say(tester, 'перенеси всё на выходные');
     await _tap(tester, find.byKey(ValueKey<String>('bulk-item-${h.ids[0]}')));
 
-    // Через «Мой Связной → Помощники»: режим, обращение и эмодзи.
+    // Через «Мой Tridot → Помощники»: режим, обращение и эмодзи.
     await openMyRelay(tester, 'assistants');
     for (final key in <String>[
       'assistant-mode-solo',
@@ -270,7 +270,7 @@ void main() {
       await tester.tap(control);
       await tester.pumpAndSettle();
     }
-    expect(h.assistant.personas.mode, AssistantMode.solo);
+    expect(h.assistant.personas.teamMode, TeamMode.solo);
     await backToSession(tester);
     expect(_applyLabel(tester), 'Перенести (2)');
     expect(h.assistant.pendingChecklist, isNotNull);

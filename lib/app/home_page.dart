@@ -62,7 +62,7 @@ import 'widgets/task_chat_header.dart';
 import 'widgets/task_tile.dart';
 
 /// Разделы оболочки «Д»: сессия (главный экран), задачи, проекты,
-/// планирование и «Мой Связной».
+/// планирование и «Мой Tridot».
 enum AppSection { session, tasks, projects, planning, myRelay }
 
 extension AppSectionInfo on AppSection {
@@ -78,7 +78,7 @@ extension AppSectionInfo on AppSection {
 /// Ширина, начиная с которой меню стоит постоянной колонкой слева, а
 /// «Сегодня» — колонкой справа (три колонки, макет D-Desk). Уже — меню
 /// выдвигается (кнопкой в шапке и свайпом вправо), а «Сегодня» отдельно
-/// нет: всё оттуда — в «Мой Связной» → «Сводка».
+/// нет: всё оттуда — в «Мой Tridot» → «Сводка».
 const double wideBreakpoint = 1000;
 
 /// Ширина, начиная с которой колонка «Сегодня» открыта сразу; уже — она
@@ -210,7 +210,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   MyRelayTab _myRelayTab = MyRelayTab.summary;
 
   /// Сообщения непрочитанных чатов для точной активности в «Мой
-  /// Связной»: читаются один раз при первом открытии. `null` — ещё нет.
+  /// Tridot»: читаются один раз при первом открытии. `null` — ещё нет.
   Map<String, List<ChatMessage>>? _storedChats;
   bool _readingStored = false;
   AssistantViewMode _mode = AssistantViewMode.dialogue;
@@ -589,7 +589,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _scheduleTrainingNotice();
   }
 
-  /// Первый день с Связным для «Вместе N дней»: самая ранняя дата из
+  /// Первый день с Tridot для «Вместе N дней»: самая ранняя дата из
   /// задач и сессий или сегодня. Записывается один раз.
   void _maybeFirstSeen() {
     if (_settings.firstSeenDay != null) return;
@@ -1345,7 +1345,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         final narrow = width < narrowBreakpoint;
         final wide = width >= wideBreakpoint;
         final sidebar = _sidebarShown(width);
-        // В «Мой Связной» колонки «Сегодня» нет (D-Desk-Summary): году
+        // В «Мой Tridot» колонки «Сегодня» нет (D-Desk-Summary): году
         // активности нужна ширина. Выбор пользователя не меняется.
         final today = _section != AppSection.myRelay && _todayShown(width);
         // Выдвижное меню (макет «Ж1»): до 360, справа остаётся полоса
@@ -1365,7 +1365,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           });
         }
         return PopScope(
-          // «Назад» на телефоне из разделов и «Мой Связной» — в сессию.
+          // «Назад» на телефоне из разделов и «Мой Tridot» — в сессию.
           // Открытое меню «назад» только закрывает.
           canPop: _section == AppSection.session || _drawerOpen,
           onPopInvokedWithResult: (bool didPop, Object? _) {
@@ -1489,6 +1489,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
       onOpenHit: (ChatSearchHit hit) => _openSessionEntry(hit.chatId),
       timeLabel: (DateTime at) => sessionTimeLabel(at, _now),
+      assistants: _settings.personas.cast.active,
     );
   }
 
@@ -1542,7 +1543,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   ) {
     final active = inSession && _book.currentId == thread.id;
     final time = sessionRowTimeLabel(thread.lastActivityAt, now, group);
-    final persona = Personas.byId(thread.lastPersonaId);
+    final persona = _settings.personas.cast.find(thread.lastPersonaId);
     final canAct = thread.messageCount > 0;
     switch (thread.kind) {
       // ChatKind.main в книге не бывает (переносится в сессию при чтении).
@@ -1746,7 +1747,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // ------------------------------------------------------------ «Сегодня»
 
   /// Колонка «Сегодня» — только на компьютере. На телефоне её нет: дела
-  /// на сегодня, просроченные и ждущие отметки карточки — в «Мой Связной»
+  /// на сегодня, просроченные и ждущие отметки карточки — в «Мой Tridot»
   /// → «Сводка».
   Widget _buildTodayPanel() {
     final now = _now;
@@ -1811,7 +1812,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   TodayPending _todayPending(String chatId, ChatMessage message) {
     final card = message.card!;
-    final persona = Personas.byId(message.personaId);
+    // Сигнал «ждёт подтверждения» — оповещение: подпись от ведущего
+    // оповещений, значок склада — цветом ведущего расширений (ADR-016).
+    final personas = _settings.personas;
+    final persona = personas.notifier;
     final what = switch (card.kind) {
       ActionKind.post => 'Отметка прихода ждёт подтверждения',
       ActionKind.move => 'Перемещение ждёт подтверждения',
@@ -1820,9 +1824,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       id: card.id,
       title: what,
       subtitle: <String>[
-        if (persona != null) persona.russianName,
+        persona.russianName,
         widget.assistant.extensions.skillTitle(card.connectorId).toLowerCase(),
       ].join(' · '),
+      lead: personas.extensionsLead,
       onTap: () => _openSessionEntry(chatId),
     );
   }
@@ -1949,7 +1954,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ? 'сессия «$sessionTitle»'
                 : null,
             // «Сегодня» — колонкой справа на компьютере; свёрнута — кнопка
-            // в шапке. На телефоне кнопки нет: это «Мой Связной» → «Сводка».
+            // в шапке. На телефоне кнопки нет: это «Мой Tridot» → «Сводка».
             trailing: wide && !today ? _todayShowButton() : null,
           ),
           const Divider(),
@@ -1992,7 +1997,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       onTabChanged: (MyRelayTab tab) => setState(() => _myRelayTab = tab),
       onBack: () => _goTo(AppSection.session),
       stats: stats.line,
+      assistantsShown: _settings.personas.cast.active,
       summary: RelaySummary(
+        notifier: _settings.personas.notifier,
         activity: stats.activityByDay,
         approximate: approximate,
         tasks: _active,
@@ -2137,6 +2144,48 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  /// Пустая новая сессия: знак Садо, строки ведущего оповещений, строка
+  /// о ролях помощников голосом Садо и, пока род Садо не выбран, карточка
+  /// выбора.
+  Widget _sessionHero(int overdue) {
+    final personas = _settings.personas;
+    final main = personas.responder;
+    final extensions = widget.assistant.extensions;
+    return SessionHero(
+      persona: main,
+      notifier: personas.notifier,
+      overdue: overdue,
+      onOverdue: () => _openMyRelay(MyRelayTab.summary),
+      onTraining: _trainingReady && _passwordsEnabled
+          ? () => unawaited(_startTraining())
+          : null,
+      onSadoGender: personas.sadoGenderChosen
+          ? null
+          : (ReplyGender gender) => _changeSettings(
+                _settings.copyWith(
+                  personas: personas.withGender(main.id, gender),
+                ),
+              ),
+      note: personas.teamMode != TeamMode.solo
+          ? SessionHero.noteFor(
+              <(String, Persona)>[
+                for (final role in extensions.activeRoles)
+                  (role.title, extensions.ownerOf(role.id, personas)),
+              ],
+              main,
+              line: (String roles, Persona owner) =>
+                  widget.assistant.replies.render(
+                Reply('session.handoff.note', <String, String>{
+                  'roles': roles,
+                  'name': owner.russianName,
+                }),
+                personas.voiceOf(main),
+              ),
+            )
+          : null,
+    );
+  }
+
   Widget _buildConversationColumn(double height, {required bool wide}) {
     final current = _book.current;
     final hero = _mode == AssistantViewMode.dialogue &&
@@ -2149,29 +2198,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final overdue =
         hero ? _active.where((Task t) => isOverdue(t, now)).length : 0;
     final Widget content = hero
-        ? SessionHero(
-            persona: _settings.personas.responder,
-            notifier: _settings.personas.notifier,
-            overdue: overdue,
-            onOverdue: () => _openMyRelay(MyRelayTab.summary),
-            onTraining: _trainingReady && _passwordsEnabled
-                ? () => unawaited(_startTraining())
-                : null,
-            note: _settings.personas.mode == AssistantMode.duo
-                ? SessionHero.noteFor(
-                    <(String, Persona)>[
-                      for (final role
-                          in widget.assistant.extensions.activeRoles)
-                        (
-                          role.title,
-                          widget.assistant.extensions
-                              .ownerOf(role.id, _settings.personas),
-                        ),
-                    ],
-                    _settings.personas.main,
-                  )
-                : null,
-          )
+        ? _sessionHero(overdue)
         : _mode == AssistantViewMode.dialogue
             ? _buildDialogue(topInset: rail ? HistoryRail.overlayInset : 0)
             : _withDocToast(
@@ -2317,6 +2344,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final (linkLabel, linkKey) = _linkOf(message);
       rows.add(
         _MessageRow(
+          cast: _settings.personas.cast,
           key: key,
           message: message,
           // В чате задачи плитка самой задачи под ответами не нужна: она в
@@ -2352,6 +2380,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_sending && working != null && _workingChatId == _book.currentId) {
       rows.add(
         _MessageRow(
+          cast: _settings.personas.cast,
           key: const Key('working-message'),
           message: working,
           now: _now,
@@ -2971,6 +3000,7 @@ final class _ChatLinkChip extends StatelessWidget {
 final class _MessageRow extends StatelessWidget {
   const _MessageRow({
     super.key,
+    required this.cast,
     required this.message,
     required this.now,
     required this.showTime,
@@ -2987,6 +3017,10 @@ final class _MessageRow extends StatelessWidget {
   });
 
   final ChatMessage message;
+
+  /// Состав помощников: старые ответы `rio`/`noda` подписаны текущими
+  /// именами.
+  final PersonaCast cast;
 
   /// Ссылка на другой чат под сообщением: подпись, ключ и действие.
   final String? linkLabel;
@@ -3018,7 +3052,7 @@ final class _MessageRow extends StatelessWidget {
         : AssistantColors.warning;
     final current = task;
     final cube = this.cube;
-    final author = fromUser ? null : Personas.byId(message.personaId);
+    final author = fromUser ? null : cast.find(message.personaId);
     final content = Column(
       crossAxisAlignment:
           fromUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,

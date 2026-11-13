@@ -1,4 +1,4 @@
-/// Статистика «Мой Связной» только по данным на этом устройстве: задачи
+/// Статистика «Мой Tridot» только по данным на этом устройстве: задачи
 /// и дни активности сессий. Без сети и без выдуманных чисел.
 library;
 
@@ -28,7 +28,7 @@ Map<DateTime, int> completionsByDay(Iterable<Task> tasks) {
   return result;
 }
 
-/// Итог для шапки «Мой Связной» и сетки активности.
+/// Итог для шапки «Мой Tridot» и сетки активности.
 final class RelayStats {
   const RelayStats({
     required this.daysTogether,

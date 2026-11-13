@@ -1,7 +1,7 @@
 // Оболочка «Д»: регрессии после ревью — свой выбор («её») у каждой сессии,
 // живой архив в «Данных», шапка и «пилюли» на широком экране, подпись
 // «Сегодня» и «Диалог / Документ» на телефоне, год активности без
-// обрезки, строка статистики и вкладки «Мой Связной», Ctrl+K, «назад» при
+// обрезки, строка статистики и вкладки «Мой Tridot», Ctrl+K, «назад» при
 // открытом меню, кнопки для диктора.
 import 'package:flutter/material.dart';
 import 'dart:ui' show Tristate;
@@ -191,7 +191,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('«Мой Связной» на компьютере: без «Сегодня», год целиком',
+  testWidgets('«Мой Tridot» на компьютере: без «Сегодня», год целиком',
       (tester) async {
     await _pump(tester, size: const Size(1440, 900));
     expect(find.byKey(const Key('today-panel')), findsOneWidget);
@@ -213,7 +213,7 @@ void main() {
     expect(find.byKey(const Key('today-panel')), findsOneWidget);
   });
 
-  testWidgets('«Мой Связной» на телефоне: статистика парами, вкладки-сегменты',
+  testWidgets('«Мой Tridot» на телефоне: статистика парами, вкладки-сегменты',
       (tester) async {
     await _pump(tester);
     await tapInDrawer(tester, const Key('drawer-my-relay'));
@@ -325,7 +325,7 @@ void main() {
     expect(_buttonsWithoutTap(tester), isEmpty, reason: 'меню');
     await tester.tap(find.byKey(const Key('drawer-my-relay')));
     await tester.pumpAndSettle();
-    expect(_buttonsWithoutTap(tester), isEmpty, reason: '«Мой Связной»');
+    expect(_buttonsWithoutTap(tester), isEmpty, reason: '«Мой Tridot»');
     await tester.tap(find.byKey(const Key('my-relay-back')));
     await tester.pumpAndSettle();
     // Колонка «Сегодня» на компьютере: «Свернуть» и «Показать».

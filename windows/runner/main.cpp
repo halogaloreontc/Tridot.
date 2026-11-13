@@ -27,9 +27,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  // AppInfo.name, Cyrillic as code points (ADR-009, docs/DECISIONS.md).
-  if (!window.Create(L"\u0421\u0432\u044F\u0437\u043D\u043E\u0439", origin,
-                     size)) {
+  // AppInfo.name (ADR-009, ADR-016, docs/DECISIONS.md).
+  if (!window.Create(L"Tridot", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

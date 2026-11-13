@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/screens/settings_screen.dart';
+import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/extensions/extension_registry.dart';
@@ -94,7 +95,7 @@ void main() {
     expect(find.text('Время под сообщениями'), findsOneWidget);
     expect(
       find.text(
-        'Связной · приложение с помощниками, локально, без интернета и '
+        '${AppInfo.name} · приложение с помощниками, локально, без интернета и '
         'языковой модели',
       ),
       findsOneWidget,
@@ -209,7 +210,7 @@ void main() {
       expect(find.text('Подключений пока нет'), findsOneWidget);
       // Расширения ставятся в приложение, а не в помощника (ADR-009).
       expect(
-        find.textContaining('Настройте Связной под себя'),
+        find.textContaining('Настройте ${AppInfo.name} под себя'),
         findsOneWidget,
       );
       expect(find.textContaining('Соберите помощника'), findsNothing);
@@ -483,8 +484,7 @@ void main() {
         .widget<Text>(find.byKey(ValueKey<String>('style-preview-$persona')))
         .data!;
 
-    testWidgets('по умолчанию: дуэт, основной Liorio, примеры стилей',
-        (tester) async {
+    testWidgets('по умолчанию: трио, примеры стилей', (tester) async {
       await tester.pumpWidget(host());
       expect(find.text('Помощники'), findsOneWidget);
       ChoiceChip chip(String key) => tester.widget<ChoiceChip>(
@@ -493,8 +493,13 @@ void main() {
               matching: find.byType(ChoiceChip),
             ),
           );
-      expect(chip('assistant-mode-duo').selected, isTrue);
-      expect(chip('main-persona-rio').selected, isTrue);
+      expect(chip('assistant-mode-trio').selected, isTrue);
+      expect(chip('assistant-mode-duo').selected, isFalse);
+      expect(
+        find.byKey(const ValueKey<String>('duo-helper-rio')),
+        findsNothing,
+      );
+      expect(chip('style-sado-neutral').selected, isTrue);
       expect(chip('style-rio-neutral').selected, isTrue);
       expect(chip('style-noda-friendly').selected, isTrue);
       expect(chip('address-vy').selected, isTrue);
@@ -530,20 +535,22 @@ void main() {
         ReplyTemplate.pictographs.hasMatch(preview(tester, 'noda')),
         isFalse,
       );
-      await tap(tester, 'main-persona-noda');
-      expect(changes.last.personas.mainPersona, 'noda');
-      await tap(tester, 'assistant-mode-solo');
-      expect(changes.last.personas.mode, AssistantMode.solo);
       expect(
-        find.byKey(const ValueKey<String>('solo-persona-rio')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey<String>('main-persona-rio')),
+        find.byKey(const ValueKey<String>('duo-helper-rio')),
         findsNothing,
       );
-      await tap(tester, 'solo-persona-noda');
-      expect(changes.last.personas.soloPersona, 'noda');
+      await tap(tester, 'assistant-mode-duo');
+      expect(changes.last.personas.teamMode, TeamMode.duo);
+      await tap(tester, 'duo-helper-noda');
+      expect(changes.last.personas.duoHelper, 'noda');
+      await tap(tester, 'assistant-mode-solo');
+      expect(changes.last.personas.teamMode, TeamMode.solo);
+      expect(
+        find.byKey(const ValueKey<String>('duo-helper-rio')),
+        findsNothing,
+      );
+      await tap(tester, 'assistant-mode-trio');
+      expect(changes.last.personas.teamMode, TeamMode.trio);
       await tap(tester, 'jokes-normal');
       expect(changes.last.personas.jokes, JokeFrequency.normal);
       await tap(tester, 'jokes-off');
@@ -588,7 +595,7 @@ void main() {
   });
 
   testWidgets(
-      'вкладка «Мой Связной → Настройки»: без заголовка и помощников, '
+      'вкладка «Мой Tridot → Настройки»: без заголовка и помощников, '
       'с «Данными» и «Сессиями»', (tester) async {
     var storage = 0;
     await tester.pumpWidget(

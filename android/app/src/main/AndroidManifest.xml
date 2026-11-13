@@ -6,7 +6,7 @@
     <!-- Копия Android: задачи и чаты копируются, хранилище паролей и
          secrets.json — нет (res/xml/data_extraction_rules.xml, backup_rules.xml). -->
     <application
-        android:label="Связной"
+        android:label="Tridot"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="true"

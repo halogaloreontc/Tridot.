@@ -230,19 +230,20 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  group('ведущий роли и обращение по имени (выбора «Кому» нет)', () {
+  group('ведущий расширений и обращение по имени (выбора «Кому» нет)', () {
+    // Расширения (склад) переназначены Ноде (ADR-016).
     Future<InMemorySettingsStore> nodaLeads() async {
       final store = InMemorySettingsStore();
       await store.save(
         const AppSettings(
           enabledRoles: <String>{Roles.storekeeperId},
-          roleOwners: <String, String>{Roles.storekeeperId: 'noda'},
+          personas: PersonaSettings(dutyExtensions: 'noda'),
         ),
       );
       return store;
     }
 
-    testWidgets('без имени: фразы роли — ведущей роли, остальное — основному',
+    testWidgets('без имени: склад — ведущей расширений, остальное — Садо',
         (tester) async {
       await _pump(tester, await nodaLeads(), connected: true);
       expect(find.byKey(const Key('addressee-switch')), findsNothing);
@@ -250,22 +251,22 @@ void main() {
       await _tapQuick(tester, 'Без фото');
       expect(_lastAuthor(tester), 'noda');
       await _say(tester, '2+2');
-      expect(_lastAuthor(tester), 'rio', reason: '«Личное» ведёт основной');
+      expect(_lastAuthor(tester), 'sado', reason: 'калькулятор — зона Садо');
       await _say(tester, '64115');
       expect(_lastAuthor(tester), 'noda');
     });
 
     testWidgets(
-        '«Лиорио, …» при роли Noda — Liorio продолжает, пока разговор о '
+        '«Лиорио, …» при складе у Ноды — Лиорио продолжает, пока разговор о '
         'складе', (tester) async {
       await _pump(tester, await nodaLeads(), connected: true);
       await _say(tester, 'Лиорио, где лежит 64115');
       expect(_lastAuthor(tester), 'rio');
       await _say(tester, '64115');
       expect(_lastAuthor(tester), 'rio', reason: 'тот же навык склада');
-      // Другая тема — продолжение снято, склад снова у ведущей роли.
+      // Другая тема — продолжение снято, склад снова у ведущей.
       await _say(tester, '2+2');
-      expect(_lastAuthor(tester), 'rio');
+      expect(_lastAuthor(tester), 'sado');
       await _say(tester, '64115');
       expect(_lastAuthor(tester), 'noda');
       expect(_transport.requests, hasLength(3));
@@ -279,27 +280,34 @@ void main() {
       await _say(tester, 'покажи задачи');
       expect(_lastAuthor(tester), 'noda');
       await _say(tester, '2+2');
-      expect(_lastAuthor(tester), 'rio');
+      expect(_lastAuthor(tester), 'sado');
     });
 
-    testWidgets('сменили основного — отвечает новый основной', (tester) async {
+    testWidgets('сменили режим на Дуэт с Лиорио — склад отвечает Садо',
+        (tester) async {
       final store = await nodaLeads();
       final assistant = await _pump(tester, store, connected: true);
       await _say(tester, 'Лиорио, 2+2');
       expect(_lastAuthor(tester), 'rio');
       await openMyRelay(tester, 'assistants');
-      final main = find.byKey(const ValueKey<String>('main-persona-noda'));
-      await tester.ensureVisible(main);
-      await tester.pumpAndSettle();
-      await tester.tap(main);
-      await tester.pumpAndSettle();
+      for (final key in <String>['assistant-mode-duo', 'duo-helper-rio']) {
+        final control = find.byKey(ValueKey<String>(key));
+        await tester.ensureVisible(control);
+        await tester.pumpAndSettle();
+        await tester.tap(control);
+        await tester.pumpAndSettle();
+      }
       await backToSession(tester);
-      expect(assistant.personas.main.id, 'noda');
+      expect(assistant.personas.teamMode, TeamMode.duo);
+      expect(assistant.personas.duoHelper, 'rio');
+      // Ведущая расширений Нода выключена режимом — склад у Садо.
+      await _say(tester, '64115');
+      expect(_lastAuthor(tester), 'sado');
       await _say(tester, 'покажи задачи');
-      expect(_lastAuthor(tester), 'noda');
+      expect(_lastAuthor(tester), 'sado');
     });
 
-    testWidgets('все роли ведёт основной — он и отвечает на всё',
+    testWidgets('по умолчанию склад — Лиорио, остальное — Садо',
         (tester) async {
       final store = InMemorySettingsStore();
       await store.save(
@@ -309,7 +317,7 @@ void main() {
       await _tapQuick(tester, 'Без фото');
       expect(_lastAuthor(tester), 'rio');
       await _say(tester, '2+2');
-      expect(_lastAuthor(tester), 'rio');
+      expect(_lastAuthor(tester), 'sado');
     });
   });
 

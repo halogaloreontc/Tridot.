@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_info.dart';
+import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
 import '../shell/relay_drawer.dart';
 
-/// Вкладки «Мой Связной».
+/// Вкладки «Мой Tridot».
 enum MyRelayTab { summary, activity, assistants, settings }
 
 extension MyRelayTabInfo on MyRelayTab {
@@ -36,7 +37,7 @@ TextSpan statsSpan(String stats) {
   return TextSpan(children: children);
 }
 
-/// «Мой Связной» (макет «Д»): шапка со знаками помощников, вкладки
+/// «Мой Tridot» (макет «Д»): шапка со знаками помощников, вкладки
 /// «Сводка», «Активность», «Помощники», «Настройки». Раздел внутри
 /// оболочки, а не отдельный маршрут: на широком экране рядом остаётся
 /// меню.
@@ -51,7 +52,11 @@ final class MyRelayScreen extends StatefulWidget {
     required this.settings,
     this.onBack,
     this.stats,
+    this.assistantsShown,
   });
+
+  /// Активные помощники для знаков в шапке; `null` — по текущему составу.
+  final List<Persona>? assistantsShown;
 
   final MyRelayTab tab;
   final ValueChanged<MyRelayTab> onTabChanged;
@@ -133,7 +138,11 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
                 else
                   const SizedBox(width: 10),
                 const SizedBox(width: 4),
-                const RelayAvatars(size: 36, ring: AssistantColors.workspace),
+                RelayAvatars(
+                  personas: widget.assistantsShown,
+                  size: 36,
+                  ring: AssistantColors.workspace,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -191,7 +200,7 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
   }
 }
 
-/// Строка статистики «Мой Связной»: числа ярче подписей. [pairs] —
+/// Строка статистики «Мой Tridot»: числа ярче подписей. [pairs] —
 /// телефон: по две фразы в строке, фраза и пара не разрываются, пока
 /// помещаются; иначе фразы переносятся целиком, как в D-Desk-Summary.
 /// Диктор читает фразы через запятую.
@@ -252,7 +261,7 @@ final class RelayStatsLine extends StatelessWidget {
   }
 }
 
-/// Вкладки «Мой Связной» — сегменты в капсуле (макет «Д»): дорожка
+/// Вкладки «Мой Tridot» — сегменты в капсуле (макет «Д»): дорожка
 /// [AssistantColors.panel], выбранная — [AssistantColors.bubble], высота 44.
 /// Не помещаются (узкий экран, крупный шрифт) — прокручиваются с отступом
 /// 16 по краям.

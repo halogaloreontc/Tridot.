@@ -1,7 +1,7 @@
 import 'connection.dart';
 import 'manifest_format.dart';
 
-/// Подключения, которые знает «Связной». Новое приложение — новый слот
+/// Подключения, которые знает «Tridot». Новое приложение — новый слот
 /// со своими текстами (expeora — позже, docs/PLANS.md).
 abstract final class ConnectionSlots {
   /// Склад halowarekeep.

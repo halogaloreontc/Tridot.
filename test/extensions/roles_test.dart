@@ -121,29 +121,42 @@ void main() {
       expect(registry.activeRoleOf('talk')?.id, Roles.storekeeperId);
     });
 
-    test('кто ведёт: основной по умолчанию, выбор в дуэте, соло', () {
+    test('кто ведёт: обязанность навыка, режим, переназначение', () {
       final (registry, _) = _registry(_storekeeper);
-      const duo = PersonaSettings();
-      expect(registry.ownerFor('warehouse', duo), Personas.liorio);
+      const trio = PersonaSettings();
+      expect(registry.ownerFor('warehouse', trio), Personas.liorio);
+      expect(registry.ownerFor('passwords', trio), Personas.liorio);
+      expect(registry.ownerFor('tasks', trio), Personas.sado);
+      expect(registry.ownerFor('talk', trio), Personas.sado);
+      expect(registry.ownerFor('calc', trio), Personas.sado);
       expect(
         registry.ownerFor(
           'warehouse',
-          duo.copyWith(mainPersona: Personas.noda.id),
+          trio.copyWith(teamMode: TeamMode.duo, duoHelper: Personas.noda.id),
         ),
-        Personas.noda,
-        reason: 'без записи роль идёт за основным',
+        Personas.sado,
+        reason: 'ведущий расширений выключен режимом — ведёт Садо',
       );
+      // Прежний выбор ведущего роли (role_owners) на ответы не влияет.
       registry.apply(
         registry.choice.withOwner(Roles.storekeeperId, Personas.noda.id),
       );
-      expect(registry.ownerFor('warehouse', duo), Personas.noda);
-      expect(registry.ownerFor('tasks', duo), Personas.liorio);
-      expect(registry.ownerFor('talk', duo), Personas.liorio, reason: 'Личное');
-      final solo = duo.copyWith(
-        mode: AssistantMode.solo,
-        soloPersona: Personas.liorio.id,
+      expect(registry.ownerFor('warehouse', trio), Personas.liorio);
+      // Переназначение обязанности — влияет.
+      final noda = trio.copyWith(dutyExtensions: Personas.noda.id);
+      expect(registry.ownerFor('warehouse', noda), Personas.noda);
+      expect(registry.ownerOf(Roles.storekeeperId, noda), Personas.noda);
+      expect(registry.ownerOf(Roles.personalId, noda), Personas.sado);
+      final solo = trio.copyWith(teamMode: TeamMode.solo);
+      expect(registry.ownerFor('warehouse', solo), Personas.sado);
+      expect(
+        registry.ownerFor(
+          'warehouse',
+          noda.copyWith(teamMode: TeamMode.duo, duoHelper: Personas.liorio.id),
+        ),
+        Personas.sado,
+        reason: 'ведущая расширений Нода выключена режимом — ведёт Садо',
       );
-      expect(registry.ownerFor('warehouse', solo), Personas.liorio);
       registry.apply(registry.choice.withOwner(Roles.storekeeperId, null));
       expect(registry.choice.roleOwners, isEmpty);
     });
@@ -255,7 +268,7 @@ void main() {
       const base = AppSettings(
         reduceMotion: true,
         disabledExtensions: <String>{'calc'},
-        personas: PersonaSettings(mainPersona: 'noda'),
+        personas: PersonaSettings(teamMode: TeamMode.duo, duoHelper: 'noda'),
       );
       await store.save(base);
       final changed = base.withChoice(
@@ -267,7 +280,7 @@ void main() {
       final loaded = await store.load();
       expect(loaded.reduceMotion, isTrue);
       expect(loaded.disabledExtensions, <String>{'calc'});
-      expect(loaded.personas.main, Personas.noda);
+      expect(loaded.personas, base.personas);
       expect(loaded.enabledRoles, <String>{Roles.storekeeperId});
       expect(loaded.roleOwners, <String, String>{Roles.storekeeperId: 'rio'});
       expect(await tasks.readAsBytes(), before);

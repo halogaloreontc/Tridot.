@@ -458,7 +458,7 @@ final class AssistantSession {
 
   /// Кто отвечает на текущее сообщение. Маршрутизатор ставит его вместе
   /// с [voice].
-  Persona speaker = Personas.liorio;
+  Persona speaker = Personas.sado;
 
   /// Настройки помощников на начало текущего сообщения.
   PersonaSettings personas = const PersonaSettings();
@@ -482,6 +482,20 @@ final class AssistantSession {
     Map<String, String> values = const <String, String>{},
   ]) =>
       replies.render(Reply(id, values), voice, turn: turn++);
+
+  /// Текст записи [id] голосом [voice], но в роде [gender]: фраза о другом
+  /// помощнике склоняется по его роду (`talk.who.helper`), стиль и
+  /// обращение — говорящего.
+  String sayAs(
+    String id,
+    ReplyGender gender, [
+    Map<String, String> values = const <String, String>{},
+  ]) =>
+      replies.render(
+        Reply(id, values),
+        voice.copyWith(gender: gender),
+        turn: turn++,
+      );
 
   /// Ответ из каталога: текст по записи [id] с фактами [values].
   AssistantResponse reply(

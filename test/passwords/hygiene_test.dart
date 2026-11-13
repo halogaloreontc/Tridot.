@@ -164,6 +164,8 @@ void main() {
       'streak',
       'when',
       'code',
+      // Название приложения в косвенном падеже (`passwords.lostDevice`).
+      'appGenitive',
     };
     const forbidden = <String>{
       'password',

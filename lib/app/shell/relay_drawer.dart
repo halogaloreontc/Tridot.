@@ -210,9 +210,9 @@ String _dayMonth(DateTime at) {
   return '${at.day} ${months[at.month - 1]}';
 }
 
-/// Левая панель (макет «Ж1»): сверху — «Связной» с версией, внизу — поиск
+/// Левая панель (макет «Ж1»): сверху — «Tridot» с версией, внизу — поиск
 /// по сессиям и «+» (новая сессия); между ними прокручиваются «Мой
-/// Связной», разделы со счётчиками, закреплённые сессии, сессии по дням и
+/// Tridot», разделы со счётчиками, закреплённые сессии, сессии по дням и
 /// «Расширения». Края прокрутки мягко гаснут.
 ///
 /// Долгое нажатие на сессию (на компьютере — «⋯» и правая кнопка) — меню
@@ -221,7 +221,7 @@ String _dayMonth(DateTime at) {
 /// На телефоне — содержимое выдвижной панели, на широком экране —
 /// постоянная колонка ([wide]) с «Свернуть панель»; там «Вчера», «На
 /// неделе» и «Ранее» свёрнуты в заголовки со счётом. Настроек здесь нет:
-/// они в «Мой Связной».
+/// они в «Мой Tridot».
 final class RelayDrawer extends StatefulWidget {
   const RelayDrawer({
     super.key,
@@ -243,7 +243,12 @@ final class RelayDrawer extends StatefulWidget {
     this.searchFocus,
     this.reduceMotion = false,
     this.activeSection,
+    this.assistants,
   });
+
+  /// Активные помощники для знаков на карточке «Мой …»; `null` — по
+  /// текущему составу.
+  final List<Persona>? assistants;
 
   /// Группы сессий по порядку; пустые не показываются.
   final List<SessionGroupEntry> groups;
@@ -388,7 +393,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
     // клавиатуру, поэтому отступ снизу — на высоту клавиатуры, и поиск с
     // «Отменой» стоит прямо над ней. Колонка на компьютере — без отступа.
     final inset = widget.wide ? 0.0 : MediaQuery.viewInsetsOf(context).bottom;
-    // Клавиатура открыта для поиска: шапка, «Мой Связной» и разделы
+    // Клавиатура открыта для поиска: шапка, «Мой Tridot» и разделы
     // уступают место результатам.
     final roomy = !(_searching && inset > 0);
     final showHits = _searching && _query.text.trim().isNotEmpty;
@@ -415,6 +420,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                       _MyRelayCard(
                         onTap: widget.onOpenMyRelay,
                         wide: widget.wide,
+                        assistants: widget.assistants,
                       ),
                       const SizedBox(height: 8),
                       _Sections(
@@ -831,41 +837,50 @@ final class _NewSessionButton extends StatelessWidget {
   }
 }
 
-/// Знак «Связного»: два кружка, соединённые линией.
+/// Знак приложения: три точки цветами помощников — Садо, Лиорио и Нода
+/// (ADR-016).
 final class _RelayGlyph extends StatelessWidget {
   const _RelayGlyph();
 
   @override
   Widget build(BuildContext context) => const ExcludeSemantics(
         child: SizedBox.square(
+          key: ValueKey<String>('app-glyph'),
           dimension: 22,
-          child: CustomPaint(painter: _RelayGlyphPainter()),
+          child: CustomPaint(painter: RelayGlyphPainter()),
         ),
       );
 }
 
-final class _RelayGlyphPainter extends CustomPainter {
-  const _RelayGlyphPainter();
+/// Рисует знак приложения на сетке 24: точки в (5,12), (12,12), (19,12),
+/// радиус 3.
+final class RelayGlyphPainter extends CustomPainter {
+  const RelayGlyphPainter();
+
+  /// Цвета точек слева направо: Садо, Лиорио, Нода.
+  static const List<Color> colors = <Color>[
+    AssistantColors.sado,
+    AssistantColors.liorio,
+    AssistantColors.noda,
+  ];
 
   @override
   void paint(Canvas canvas, Size size) {
     final k = size.width / 24;
-    final paint = Paint()
-      ..color = AssistantColors.textStrong
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6 * k
-      ..strokeCap = StrokeCap.round;
-    canvas
-      ..drawCircle(Offset(6 * k, 12 * k), 2.5 * k, paint)
-      ..drawCircle(Offset(18 * k, 12 * k), 2.5 * k, paint)
-      ..drawLine(Offset(8.5 * k, 12 * k), Offset(15.5 * k, 12 * k), paint);
+    for (final (i, color) in colors.indexed) {
+      canvas.drawCircle(
+        Offset((5 + 7 * i) * k, 12 * k),
+        3 * k,
+        Paint()..color = color,
+      );
+    }
   }
 
   @override
-  bool shouldRepaint(_RelayGlyphPainter oldDelegate) => false;
+  bool shouldRepaint(RelayGlyphPainter oldDelegate) => false;
 }
 
-/// Шапка панели: знак, «Связной» и версия; на компьютере справа —
+/// Шапка панели: знак, название приложения и версия; на компьютере справа —
 /// «Свернуть панель».
 final class _TitlePlate extends StatelessWidget {
   const _TitlePlate({required this.onCollapse});
@@ -939,12 +954,17 @@ final class _TitlePlate extends StatelessWidget {
   }
 }
 
-/// Карточка «Мой Связной»: знаки помощников внахлёст, название, шеврон.
+/// Карточка «Мой Tridot»: знаки помощников внахлёст, название, шеврон.
 final class _MyRelayCard extends StatelessWidget {
-  const _MyRelayCard({required this.onTap, required this.wide});
+  const _MyRelayCard({
+    required this.onTap,
+    required this.wide,
+    this.assistants,
+  });
 
   final VoidCallback onTap;
   final bool wide;
+  final List<Persona>? assistants;
 
   @override
   Widget build(BuildContext context) {
@@ -973,7 +993,7 @@ final class _MyRelayCard extends StatelessWidget {
               ),
               child: Row(
                 children: <Widget>[
-                  RelayAvatars(size: size),
+                  RelayAvatars(personas: assistants, size: size),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -1003,39 +1023,43 @@ final class _MyRelayCard extends StatelessWidget {
   }
 }
 
-/// Знаки Лиорио и Ноды внахлёст.
+/// Знаки активных помощников внахлёст: в Соло — один Садо, в Дуэте — два,
+/// в Трио — три.
 final class RelayAvatars extends StatelessWidget {
   const RelayAvatars({
     super.key,
+    this.personas,
     this.size = 36,
     this.ring = AssistantColors.raised,
   });
 
+  /// Кого показать; `null` — активные по текущему составу
+  /// ([PersonaCast.current]).
+  final List<Persona>? personas;
   final double size;
   final Color ring;
 
   @override
   Widget build(BuildContext context) {
+    final shown = personas ?? PersonaCast.current.active;
+    final step = size - size / 4;
     return SizedBox(
-      width: size * 2 - size / 4,
+      key: const ValueKey<String>('relay-avatars'),
+      width: shown.isEmpty ? 0 : size + step * (shown.length - 1),
       height: size,
       child: Stack(
         children: <Widget>[
-          PersonaMark(
-            persona: Personas.liorio,
-            size: size,
-            round: true,
-            ring: ring,
-          ),
-          Positioned(
-            left: size - size / 4,
-            child: PersonaMark(
-              persona: Personas.noda,
-              size: size,
-              round: true,
-              ring: ring,
+          for (final (i, persona) in shown.indexed)
+            Positioned(
+              left: step * i,
+              child: PersonaMark(
+                key: ValueKey<String>('relay-avatar-${persona.id}'),
+                persona: persona,
+                size: size,
+                round: true,
+                ring: ring,
+              ),
             ),
-          ),
         ],
       ),
     );

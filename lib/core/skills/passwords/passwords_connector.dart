@@ -1,3 +1,4 @@
+import '../../app_info.dart';
 import '../../connectors/connector.dart';
 import '../../extensions/extension_registry.dart';
 import '../../models/secure_card.dart';
@@ -167,6 +168,7 @@ final class PasswordsConnector implements Connector, ConnectorHealth {
         // 5.12: восстановить из копии; если копии нет — сделать сейчас.
         return session.reply(
           'passwords.lostDevice',
+          values: const <String, String>{'appGenitive': AppInfo.nameGenitive},
           intent: cmd,
           status: AssistantStatus.completed,
           secureCard: const SecureCardRequest(kind: SecureCardKind.restore),

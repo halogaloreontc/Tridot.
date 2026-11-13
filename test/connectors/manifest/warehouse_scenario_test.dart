@@ -54,12 +54,14 @@ void main() {
     expect(rio.message, startsWith('«товар»: 30 позиций'));
     expect(rio.message, endsWith('Показаны не все — уточните запрос.'));
 
+    // Дуэт с Нодой: Лиорио выключен, склад отвечает Садо.
     assistant.personas = const PersonaSettings(
-      mainPersona: 'noda',
+      teamMode: TeamMode.duo,
+      duoHelper: 'noda',
       address: ReplyAddress.informal,
     );
     final noda = await assistant.handle('где лежит 64115');
-    expect(noda.personaId, 'noda');
+    expect(noda.personaId, 'sado');
     expect(noda.message, startsWith('«товар»: 30 позиций'));
     expect(noda.message, endsWith('уточни запрос.'));
     expect(noda.message, isNot(contains(fakeToken)));

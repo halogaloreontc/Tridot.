@@ -186,7 +186,8 @@ void main() {
   test('цена — голосом помощника: на «ты» без «вы»', () async {
     final (assistant, _) = build();
     assistant.personas = const PersonaSettings(
-      mainPersona: 'noda',
+      teamMode: TeamMode.duo,
+      duoHelper: 'noda',
       address: ReplyAddress.informal,
     );
     final price = await assistant.handle('сколько стоит 64115');

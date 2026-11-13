@@ -30,8 +30,12 @@ const Map<String, String> facts = <String, String>{
   'active': '5',
   'overdue': '2',
   'problems': '«Склад» не работает: нет связи с сервером (с 14:05)',
-  'other': 'Noda',
-  'appPrepositional': 'Связном',
+  'other': 'Нода',
+  'main': 'Садо',
+  'duties': 'оповещения (напоминания, просрочки, сигналы склада)',
+  'team': 'Садо, Лиорио и Нода',
+  'appPrepositional': 'Tridot',
+  'appGenitive': 'Tridot',
   'skills': '«Задачи» — например, «Покажи задачи»',
   'roles': 'с задачами и со складом',
   'app': 'Склад',
@@ -351,6 +355,87 @@ void main() {
       }
     }
     expect(checked, greaterThan(1000));
+  });
+
+  group('Садо, Лиорио и Нода (ADR-016)', () {
+    test('ReplyVoice.copyWith меняет только род', () {
+      const voice = ReplyVoice(
+        style: ReplyStyles.brief,
+        address: ReplyAddress.informal,
+        emoji: false,
+      );
+      final female = voice.copyWith(gender: ReplyGender.female);
+      expect(female.gender, ReplyGender.female);
+      expect(female.style, ReplyStyles.brief);
+      expect(female.address, ReplyAddress.informal);
+      expect(female.emoji, isFalse);
+      expect(voice.copyWith().gender, ReplyGender.male);
+    });
+
+    test('о помощнике — в его роде, стилем говорящего', () {
+      // Краткий стиль называет помощника без слова «помощник».
+      for (final style in ReplyStyles.builtIn) {
+        if (style == ReplyStyles.brief) continue;
+        for (final gender in ReplyGender.values) {
+          final text = library.render(
+            const Reply('talk.who.helper', <String, String>{
+              'name': 'Нода',
+              'duties': 'оповещения (напоминания, просрочки)',
+            }),
+            ReplyVoice(style: style, gender: gender),
+          );
+          final female = gender == ReplyGender.female;
+          expect(
+            text,
+            contains(female ? 'помощница' : 'помощник'),
+            reason: '$style: $text',
+          );
+          if (!female) {
+            expect(text, isNot(contains('помощница')), reason: text);
+          }
+        }
+      }
+    });
+
+    test('обратного рода больше нет: о другом — без «{м:…ая|ж:…ой}»', () {
+      for (final style in ReplyStyles.builtIn) {
+        final raw = File('assets/replies/$style.json').readAsStringSync();
+        expect(raw, isNot(contains('{м:вторая')), reason: style);
+        expect(raw, isNot(contains('{м:Вторая')), reason: style);
+        expect(raw, isNot(contains('{м:Основная')), reason: style);
+        expect(raw, isNot(contains('Связн')), reason: style);
+      }
+    });
+
+    test('Садо о себе — во всех стилях и в обоих родах', () {
+      for (final id in <String>[
+        'common.welcome',
+        'talk.greet',
+        'talk.who.main',
+        'talk.set.mainFixed',
+        'talk.set.modeSolo',
+        'session.handoff.note',
+      ]) {
+        expect(library.schema.contains(id), isTrue, reason: id);
+        for (final style in ReplyStyles.builtIn) {
+          expect(
+            library.variants(id, style),
+            isNotEmpty,
+            reason: '$id/$style',
+          );
+        }
+      }
+      expect(
+        library.render(
+          const Reply('session.handoff.note', <String, String>{
+            'roles': '«Кладовщик»',
+            'name': 'Лиорио',
+          }),
+          const ReplyVoice(gender: ReplyGender.female),
+        ),
+        '«Кладовщик» ведёт Лиорио — такие фразы передам',
+      );
+    });
   });
 
   group('выбор варианта', () {

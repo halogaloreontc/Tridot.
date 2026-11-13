@@ -74,9 +74,21 @@ abstract final class SocialPrefix {
   };
 
   /// Имена помощников: после приветствия — обращение («привет, Нода, …»).
-  static final Set<String> _names = <String>{
-    for (final persona in Personas.all) ...persona.addressNames,
-  };
+  /// Из текущего состава ([PersonaCast.current]); пересобирается, когда
+  /// меняются имена.
+  static Set<String> get _names {
+    if (_namesVersion != PersonaCast.version) {
+      _cachedNames = <String>{
+        for (final persona in PersonaCast.current.members)
+          ...persona.addressNames,
+      };
+      _namesVersion = PersonaCast.version;
+    }
+    return _cachedNames;
+  }
+
+  static int _namesVersion = -1;
+  static Set<String> _cachedNames = const <String>{};
 
   /// «Как дела», «как ты» после приветствия.
   static const Set<String> _howWords = <String>{'дела', 'ты', 'вы', 'жизнь'};

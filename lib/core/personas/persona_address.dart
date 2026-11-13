@@ -18,6 +18,7 @@ final class PersonaAddressing {
   /// начинается с имени («Лион», «Нодаа», «Лио-Лио»), и имя в середине
   /// фразы обращением не считаются. `null` — не обращение.
   static PersonaAddressing? parse(String message) {
+    _ensure();
     final match = _pattern.firstMatch(message);
     if (match == null) return null;
     return PersonaAddressing(
@@ -26,11 +27,23 @@ final class PersonaAddressing {
     );
   }
 
+  /// [message] без обращения по имени в начале («Садо, добавь задачу
+  /// хлеб» → «добавь задачу хлеб»): так фразу получают навыки — и в
+  /// маршрутизаторе, и в корпусном тесте, и в `tool/route_phrases.dart`.
+  /// Одно имя без остального не трогается.
+  static String commandText(String message) {
+    final addressing = parse(message);
+    return addressing != null && addressing.rest.isNotEmpty
+        ? addressing.rest
+        : message;
+  }
+
   /// Обращение по имени в конце ответа: «да, Лиорио», «спасибо — Нода!».
   /// Перед именем — запятая или тире: «съездить в Лион» и «спасибо Лио»
   /// обращением не считаются. [rest] — ответ без имени. `null` — не
   /// обращение или в сообщении одно имя.
   static PersonaAddressing? parseTrailing(String message) {
+    _ensure();
     final match = _trailing.firstMatch(message);
     if (match == null) return null;
     final rest = message.substring(0, match.start).trim();
@@ -42,6 +55,7 @@ final class PersonaAddressing {
   /// («…, Лиорио») и между запятыми («…, Лиорио, …»): разбор команды от
   /// него не зависит. Одно имя без остального не трогается.
   static String withoutAddress(String message) {
+    _ensure();
     var value = message;
     final leading = parse(value);
     if (leading != null && leading.rest.isNotEmpty) value = leading.rest;
@@ -51,30 +65,46 @@ final class PersonaAddressing {
   }
 
   /// Имена через «|», длинные раньше: «лиорио» проверяется до «лио».
+  /// Берутся из текущего состава ([PersonaCast.current]).
   static String get _names {
-    final names = <String>[
-      for (final persona in Personas.all) ...persona.addressNames,
-    ]..sort((String a, String b) => b.length.compareTo(a.length));
-    return names.map(RegExp.escape).join('|');
+    final names = <String>{
+      for (final persona in PersonaCast.current.members)
+        ...persona.addressNames,
+    }.toList()
+      ..sort((String a, String b) => b.length.compareTo(a.length));
+    // «е» в имени совпадает и с «ё»: «Алёна, …» и «Алена, …» — одно
+    // обращение ([Persona.fold]).
+    return names
+        .map((String name) => RegExp.escape(name).replaceAll('е', '[её]'))
+        .join('|');
   }
 
-  static final RegExp _pattern = RegExp(
-    '^\\s*($_names)'
-    r'(?:\s*[,:;!?.…]+\s*|\s*[—–]\s*|\s*-(?![\p{L}\p{N}])\s*|\s+|$)',
-    caseSensitive: false,
-    unicode: true,
-  );
+  static int _builtFor = -1;
+  static late RegExp _pattern;
+  static late RegExp _trailing;
+  static late RegExp _between;
 
-  static final RegExp _trailing = RegExp(
-    '(?:\\s*,\\s*|\\s*[—–]\\s*|\\s+-\\s+)($_names)'
-    r'\s*[!.…]*\s*$',
-    caseSensitive: false,
-    unicode: true,
-  );
-
-  static final RegExp _between = RegExp(
-    '\\s*,\\s*($_names)\\s*,\\s*',
-    caseSensitive: false,
-    unicode: true,
-  );
+  /// Пересобирает образцы, если имена поменялись ([PersonaCast.version]).
+  static void _ensure() {
+    if (_builtFor == PersonaCast.version) return;
+    final names = _names;
+    _pattern = RegExp(
+      '^\\s*($names)'
+      r'(?:\s*[,:;!?.…]+\s*|\s*[—–]\s*|\s*-(?![\p{L}\p{N}])\s*|\s+|$)',
+      caseSensitive: false,
+      unicode: true,
+    );
+    _trailing = RegExp(
+      '(?:\\s*,\\s*|\\s*[—–]\\s*|\\s+-\\s+)($names)'
+      r'\s*[!.…]*\s*$',
+      caseSensitive: false,
+      unicode: true,
+    );
+    _between = RegExp(
+      '\\s*,\\s*($names)\\s*,\\s*',
+      caseSensitive: false,
+      unicode: true,
+    );
+    _builtFor = PersonaCast.version;
+  }
 }

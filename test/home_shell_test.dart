@@ -1,4 +1,4 @@
-// Оболочка «Д» на главном экране: «Лиорио ▾» → «Мой Связной · Помощники»,
+// Оболочка «Д» на главном экране: «Садо ▾» → «Мой Tridot · Помощники»,
 // «+» (новая сессия), «Сегодня» — колонкой на компьютере и «Сводкой» на
 // телефоне, свайп вправо по сессии открывает меню, хроника команд под
 // шапкой, чистый «Документ», поиск по сессиям из меню, телефон и крупный
@@ -67,13 +67,13 @@ Future<void> _say(WidgetTester tester, String text) async {
 }
 
 void main() {
-  testWidgets('«Лиорио ▾» открывает «Мой Связной» на вкладке «Помощники»',
+  testWidgets('«Садо ▾» открывает «Мой Tridot» на вкладке «Помощники»',
       (tester) async {
     await _pump(tester);
     expect(
       find.descendant(
         of: find.byKey(const Key('persona-switch')),
-        matching: find.text('Лиорио'),
+        matching: find.text('Садо'),
       ),
       findsOneWidget,
     );
@@ -81,7 +81,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('my-relay')), findsOneWidget);
     expect(
-      find.byKey(const ValueKey<String>('main-persona-noda')),
+      find.byKey(const ValueKey<String>('assistant-mode-trio')),
       findsOneWidget,
     );
     expect(find.byKey(const Key('assistants-journal-planned')), findsOneWidget);
@@ -91,7 +91,7 @@ void main() {
   });
 
   testWidgets(
-      'телефон: кнопки и панели «Сегодня» нет — всё в «Мой Связной» → '
+      'телефон: кнопки и панели «Сегодня» нет — всё в «Мой Tridot» → '
       '«Сводка», сегодняшние не обрезаются', (tester) async {
     final tasks = await _pump(tester);
     await tasks.create(title: 'Позвонить', dueAt: DateTime(2026, 11, 9, 11));
@@ -566,7 +566,7 @@ void main() {
   for (final size in const <Size>[Size(320, 640), Size(390, 844)]) {
     testWidgets(
         '${size.width.toInt()}x${size.height.toInt()}, шрифт 2x: шапка, '
-        'меню, «Мой Связной» и «Сводка» без переполнений', (tester) async {
+        'меню, «Мой Tridot» и «Сводка» без переполнений', (tester) async {
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       final tasks = await _pump(tester, size: size);
@@ -585,7 +585,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('drawer-my-relay')));
       await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull, reason: '«Мой Связной»');
+      expect(tester.takeException(), isNull, reason: '«Мой Tridot»');
       for (final tab in <String>['activity', 'assistants', 'settings']) {
         final target = find.byKey(Key('my-relay-tab-$tab'));
         await tester.ensureVisible(target);
@@ -607,7 +607,7 @@ void main() {
   }
 
   testWidgets(
-      '«Мой Связной»: строка статистики из локальных данных, первый день '
+      '«Мой Tridot»: строка статистики из локальных данных, первый день '
       'записан, «Настройки» — вкладкой', (tester) async {
     final store = InMemorySettingsStore();
     final tasks = await _pump(tester, settingsStore: store);

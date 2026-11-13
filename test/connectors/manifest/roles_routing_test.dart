@@ -164,22 +164,40 @@ void main() {
     });
   });
 
-  group('кто ведёт роль', () {
-    _Setup noda() => _Setup(
-          choice: const ExtensionChoice(
-            enabledRoles: <String>{Roles.storekeeperId},
-            roleOwners: <String, String>{Roles.storekeeperId: 'noda'},
-          ),
-        );
+  group('кто ведёт расширения', () {
+    // Склад — расширение: без обращения отвечает ведущий расширений
+    // (ADR-016). Здесь расширения переназначены Ноде.
+    _Setup noda() {
+      final s = _Setup();
+      s.assistant.personas = const PersonaSettings(dutyExtensions: 'noda');
+      return s;
+    }
 
-    test('фразы склада — от Noda, остальное — от основного', () async {
+    test('по умолчанию склад — от Лиорио, остальное — от Садо', () async {
+      final s = _Setup();
+      expect((await s.say('где лежит 64115')).personaId, 'rio');
+      expect(s.assistant.working('где лежит 64115').personaId, 'rio');
+      expect((await s.say('Добавь задачу купить хлеб')).personaId, 'sado');
+      expect((await s.say('2+2')).personaId, 'sado');
+      expect((await s.say('привет')).personaId, 'sado');
+      expect(s.assistant.working('2+2').personaId, 'sado');
+    });
+
+    test('прежний выбор «Кладовщика ведёт Нода» на ответы не влияет', () async {
+      final s = _Setup(
+        choice: const ExtensionChoice(
+          enabledRoles: <String>{Roles.storekeeperId},
+          roleOwners: <String, String>{Roles.storekeeperId: 'noda'},
+        ),
+      );
+      expect((await s.say('где лежит 64115')).personaId, 'rio');
+    });
+
+    test('расширения переназначены Ноде — склад от неё', () async {
       final s = noda();
       expect((await s.say('где лежит 64115')).personaId, 'noda');
       expect(s.assistant.working('где лежит 64115').personaId, 'noda');
-      expect((await s.say('Добавь задачу купить хлеб')).personaId, 'rio');
-      expect((await s.say('2+2')).personaId, 'rio');
-      expect((await s.say('привет')).personaId, 'rio');
-      expect(s.assistant.working('2+2').personaId, 'rio');
+      expect((await s.say('Добавь задачу купить хлеб')).personaId, 'sado');
     });
 
     test('обращение по имени и адресат в поле ввода важнее', () async {
@@ -193,29 +211,33 @@ void main() {
         s.assistant.working('где лежит 64115', addressee: 'rio').personaId,
         'rio',
       );
+      final sado = await s.say('Садо, где лежит 64115');
+      expect(sado.personaId, 'sado');
     });
 
-    test('голос владельца: стиль Noda (дружеский)', () async {
-      final s = _Setup(
-        connected: false,
-        choice: const ExtensionChoice(
-          enabledRoles: <String>{Roles.storekeeperId},
-          roleOwners: <String, String>{Roles.storekeeperId: 'noda'},
-        ),
-      );
+    test('голос ведущего: стиль Ноды (дружеский)', () async {
+      final s = _Setup(connected: false);
+      s.assistant.personas = const PersonaSettings(dutyExtensions: 'noda');
       final response = await s.say('64115');
       expect(response.personaId, 'noda');
       expect(response.replyId, 'role.notConnected');
       expect(response.message, contains('загляните в Настройки → Роли'));
     });
 
-    test('соло — единственный помощник', () async {
+    test('дуэт с Нодой — склад у Садо, зона Лиорио вернулась к нему', () async {
+      final s = _Setup();
+      s.assistant.personas =
+          const PersonaSettings(teamMode: TeamMode.duo, duoHelper: 'noda');
+      expect((await s.say('где лежит 64115')).personaId, 'sado');
+      expect(s.assistant.working('где лежит 64115').personaId, 'sado');
+      // Имя выключенного помощника — просто текст.
+      expect((await s.say('Лиорио, где лежит 64115')).personaId, 'sado');
+    });
+
+    test('соло — всё делает Садо', () async {
       final s = noda();
-      s.assistant.personas = const PersonaSettings(
-        mode: AssistantMode.solo,
-        soloPersona: 'rio',
-      );
-      expect((await s.say('где лежит 64115')).personaId, 'rio');
+      s.assistant.personas = const PersonaSettings(teamMode: TeamMode.solo);
+      expect((await s.say('где лежит 64115')).personaId, 'sado');
     });
   });
 
@@ -238,102 +260,102 @@ void main() {
     });
   });
 
-  group('«Кому:» важнее ведущего роли — и основной тоже', () {
-    _Setup noda() => _Setup(
-          choice: const ExtensionChoice(
-            enabledRoles: <String>{Roles.storekeeperId},
-            roleOwners: <String, String>{Roles.storekeeperId: 'noda'},
-          ),
-        );
+  group('«Кому:» важнее ведущего расширений — и Садо тоже', () {
+    _Setup noda() {
+      final s = _Setup();
+      s.assistant.personas = const PersonaSettings(dutyExtensions: 'noda');
+      return s;
+    }
+
     const main = AssistantController.mainAddressee;
 
-    test('явно выбранный основной отвечает на фразы роли другого', () async {
+    test('явно выбранный главный отвечает на фразы расширений', () async {
       final s = noda();
-      // Никого не выбрали — отвечает ведущая роли.
+      // Никого не выбрали — отвечает ведущая расширений.
       expect((await s.say('64115')).personaId, 'noda');
-      // Выбрали основного в «Кому:» — отвечает он, и «обрабатывается…»
+      // Выбрали главного в «Кому:» — отвечает Садо, и «обрабатывается…»
       // звучит его голосом.
       for (final text in <String>['Без фото', '64115', 'где лежит 64115']) {
         expect(
           (await s.say(text, addressee: main)).personaId,
-          'rio',
+          'sado',
           reason: text,
         );
         expect(
           s.assistant.working(text, addressee: main).personaId,
-          'rio',
+          'sado',
           reason: text,
         );
       }
     });
 
-    test('«основной» — тот, кто основной сейчас, а не имя', () async {
+    test('«главный» — Садо в любом режиме', () async {
       final s = noda();
-      s.assistant.personas = const PersonaSettings(mainPersona: 'noda');
-      expect((await s.say('2+2', addressee: main)).personaId, 'noda');
+      s.assistant.personas =
+          const PersonaSettings(teamMode: TeamMode.duo, duoHelper: 'noda');
+      expect((await s.say('2+2', addressee: main)).personaId, 'sado');
       expect(AssistantController.isExplicitAddressee(main), isTrue);
       expect(AssistantController.isExplicitAddressee('rio'), isTrue);
       expect(AssistantController.isExplicitAddressee(null), isFalse);
       expect(AssistantController.isExplicitAddressee('кто-то'), isFalse);
     });
 
-    test('без имени отвечает тот, кто ведёт роль, — или основной', () async {
-      // Все роли ведёт основной — он и отвечает на всё.
+    test('без имени: зона главного — Садо, расширения — их ведущий', () async {
       final plain = _Setup();
-      for (final text in <String>['64115', '2+2', 'привет']) {
-        expect((await plain.say(text)).personaId, 'rio', reason: text);
+      expect((await plain.say('64115')).personaId, 'rio');
+      for (final text in <String>['2+2', 'привет', 'покажи задачи']) {
+        expect((await plain.say(text)).personaId, 'sado', reason: text);
       }
-      // «Личное» ведёт Noda — на задачи отвечает она; явно основному — он.
-      final personal = _Setup(
-        choice: const ExtensionChoice(
-          roleOwners: <String, String>{Roles.personalId: 'noda'},
-        ),
-      );
-      expect((await personal.say('покажи задачи')).personaId, 'noda');
-      expect(
-        (await personal.say('покажи задачи', addressee: main)).personaId,
-        'rio',
-      );
+      // Расширения ведёт Садо (дуэт с Нодой): он отвечает на всё.
+      final duo = _Setup();
+      duo.assistant.personas =
+          const PersonaSettings(teamMode: TeamMode.duo, duoHelper: 'noda');
+      expect(duo.registry.mainLeadsAll(duo.assistant.personas), isTrue);
+      expect(plain.registry.mainLeadsAll(plain.assistant.personas), isFalse);
+      for (final text in <String>['64115', '2+2', 'привет']) {
+        expect((await duo.say(text)).personaId, 'sado', reason: text);
+      }
     });
 
     test(
-        'к кому обратились, тот и продолжает тем же навыком — и основной '
-        'при чужой роли', () async {
+        'к кому обратились, тот и продолжает тем же навыком — и Садо '
+        'при чужой зоне', () async {
       final s = noda();
       expect((await s.say('Лиорио, где лежит 64115')).personaId, 'rio');
       expect(
         s.assistant.followUpPersonaId,
         'rio',
-        reason: 'иначе «64115» забрала бы Noda',
+        reason: 'иначе «64115» забрала бы Нода',
       );
-      // Тот же навык склада — продолжает Liorio, и «обрабатывается…» —
+      // Тот же навык склада — продолжает Лиорио, и «обрабатывается…» —
       // его голосом.
       expect(s.assistant.working('а 64116?').personaId, 'rio');
       expect((await s.say('64116')).personaId, 'rio');
-      // Другой навык — продолжение снято, склад снова у ведущей роли.
-      expect((await s.say('2+2')).personaId, 'rio');
+      // Другой навык — продолжение снято, склад снова у ведущей.
+      expect((await s.say('2+2')).personaId, 'sado');
       expect(s.assistant.followUpPersonaId, isNull);
       expect((await s.say('64115')).personaId, 'noda');
-      expect((await s.say('Нода, 2+2')).personaId, 'noda');
-      expect(s.assistant.followUpPersonaId, 'noda');
-      expect((await s.say('64115')).personaId, 'noda');
-      // Все роли ведёт основной: обращение к нему ничего не продолжает.
-      final plain = _Setup();
-      await plain.say('Лиорио, 2+2');
-      expect(plain.assistant.followUpPersonaId, isNull);
+      expect((await s.say('Садо, где лежит 64115')).personaId, 'sado');
+      expect(s.assistant.followUpPersonaId, 'sado');
+      expect((await s.say('64116')).personaId, 'sado');
+      // Расширения ведёт сам Садо: обращение к нему ничего не продолжает.
+      final duo = _Setup();
+      duo.assistant.personas = const PersonaSettings(teamMode: TeamMode.solo);
+      await duo.say('Садо, 2+2');
+      expect(duo.assistant.followUpPersonaId, isNull);
     });
 
     test(
         'продолжение короткое: после ${AssistantController.followUpLimit} '
-        'фраз без имени — снова ведущий роли', () async {
+        'фраз без имени — снова ведущий расширений', () async {
       final s = noda();
       final who = <String?>[
         (await s.say('Лиорио, где лежит 64115')).personaId,
         for (var n = 64116; n <= 64120; n++)
           (await s.say('где лежит $n')).personaId,
       ];
-      // Обратились к Liorio — он и ещё две фразы того же навыка; дальше
-      // склад снова у Noda, хотя навык не менялся.
+      // Обратились к Лиорио — он и ещё две фразы того же навыка; дальше
+      // склад снова у Ноды, хотя навык не менялся.
       expect(who, <String?>['rio', 'rio', 'rio', 'noda', 'noda', 'noda']);
       expect(s.assistant.followUpPersonaId, isNull);
       // Новое обращение по имени — новое короткое продолжение.
@@ -605,13 +627,18 @@ void main() {
         ];
 
     for (final style in ReplyStyles.builtIn) {
-      for (final persona in <String>['rio', 'noda']) {
+      for (final persona in <String>['rio', 'sado']) {
         test('$style, $persona: путь в «Роли», один смайлик, без повторов',
             () async {
           final s = _Setup();
           s.assistant.personas = PersonaSettings(
-            mainPersona: persona,
-            styles: <String, String>{'rio': style, 'noda': style},
+            // Садо отвечает без обращения в Соло.
+            teamMode: persona == 'sado' ? TeamMode.solo : TeamMode.trio,
+            styles: <String, String>{
+              'sado': style,
+              'rio': style,
+              'noda': style,
+            },
           );
           final can = await s.say('что ты умеешь');
           expect(can.replyId, 'talk.capabilities.roles');

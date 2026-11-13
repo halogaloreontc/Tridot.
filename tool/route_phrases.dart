@@ -35,6 +35,7 @@
 // `connected` не разбираются (см. [routeInput]).
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
+import 'package:local_assistant/core/personas/persona_address.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
@@ -87,7 +88,14 @@ List<Connector> appConnectors(DateTime now) {
 
 /// Кто забрал бы фразу и разбор задач. [after] — коннектор из контекста
 /// сессии или `null`.
-Map<String, Object?> routePhrase(String text, DateTime now, {String? after}) {
+Map<String, Object?> routePhrase(
+  String message,
+  DateTime now, {
+  String? after,
+}) {
+  // Обращение по имени в начале («Садо, …») маршрутизатор снимает до
+  // разбора (AssistantController.resolve), корпусный тест — тоже.
+  final text = PersonaAddressing.commandText(message);
   final utterance = Utterance.analyze(text, now: now)
       .withChat(null, recentConnectorId: after);
   final candidates = <ConnectorMatch>[];

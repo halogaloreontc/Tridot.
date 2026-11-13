@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../../core/extensions/extension_registry.dart';
+import '../../core/personas/persona_names.dart';
 import '../../core/replies/reply_library.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
 import 'task_tile.dart';
 
-/// Раздел «Помощники» в настройках: дуэт или соло, кто основной, стиль
-/// каждого с живым примером из каталога ответов, «вы»/«ты», эмодзи,
-/// как часто шутить.
+/// Раздел «Помощники» в настройках: режим (Соло, Дуэт, Трио), помощник в
+/// дуэте, кто ведёт расширения и оповещения, имя, род и стиль каждого с
+/// живым примером из каталога ответов, «вы»/«ты», эмодзи, как часто
+/// шутить.
 ///
 /// Смена настроек меняет только то, как помощник говорит дальше: задачи,
-/// история, черновик и выбор остаются (docs/PLANS.md, «Liorio и Noda»).
+/// история, черновик и выбор остаются (ADR-016).
 class PersonasSection extends StatefulWidget {
   const PersonasSection({
     super.key,
@@ -73,7 +75,14 @@ class _PersonasSectionState extends State<PersonasSection> {
   Widget build(BuildContext context) {
     final library = widget.registry?.replyLibrary ?? ReplyLibrary.builtIn;
     final personas = _personas;
-    final duo = personas.mode == AssistantMode.duo;
+    final mode = personas.teamMode;
+    final cast = personas.cast;
+    final sado = cast.responder.russianName;
+    final helpers = <Persona>[
+      for (final id in Personas.helperIds) cast.byId(id),
+    ];
+    // Подсказка об обращении — именем первого активного помощника.
+    final addressee = cast.active.length > 1 ? cast.active[1] : cast.responder;
     return Column(
       key: const ValueKey<String>('personas-section'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -81,55 +90,65 @@ class _PersonasSectionState extends State<PersonasSection> {
         const SectionLabel('Помощники'),
         _Group(
           title: 'Режим',
-          hint: duo
-              ? 'Основной отвечает на всё, второй пишет первым — '
-                  'например, о просроченных задачах. Написать можно любому: '
-                  '«Нода, …» или выбор в поле ввода.'
-              : 'Один помощник отвечает на всё и сам пишет первым.',
+          hint: '${switch (mode) {
+            TeamMode.solo => '$sado делает всё сам.',
+            TeamMode.duo => '$sado и один помощник на выбор; зона второго '
+                'возвращается к $sado.',
+            TeamMode.trio => 'Все трое: $sado, ${helpers[0].russianName} и '
+                '${helpers[1].russianName}.',
+          }} Написать помощнику напрямую: «${addressee.russianName}, …».',
+          hintKey: const ValueKey<String>('assistant-mode-hint'),
           children: <Widget>[
-            _Choice(
-              key: const ValueKey<String>('assistant-mode-duo'),
-              label: 'Дуэт',
-              selected: duo,
-              onSelected: () =>
-                  _set(personas.copyWith(mode: AssistantMode.duo)),
-            ),
-            _Choice(
-              key: const ValueKey<String>('assistant-mode-solo'),
-              label: 'Соло',
-              selected: !duo,
-              onSelected: () =>
-                  _set(personas.copyWith(mode: AssistantMode.solo)),
-            ),
-          ],
-        ),
-        _Group(
-          title: duo ? 'Основной' : 'Отвечает',
-          children: <Widget>[
-            for (final persona in Personas.all)
+            for (final (value, label) in const <(TeamMode, String)>[
+              (TeamMode.solo, 'Соло'),
+              (TeamMode.duo, 'Дуэт'),
+              (TeamMode.trio, 'Трио'),
+            ])
               _Choice(
-                key: ValueKey<String>(
-                  '${duo ? 'main' : 'solo'}-persona-${persona.id}',
-                ),
-                label: persona.russianName,
-                accent: Color(persona.accentColor),
-                selected:
-                    (duo ? personas.main : personas.solo).id == persona.id,
-                onSelected: () => _set(
-                  duo
-                      ? personas.copyWith(mainPersona: persona.id)
-                      : personas.copyWith(soloPersona: persona.id),
-                ),
+                key: ValueKey<String>('assistant-mode-${value.name}'),
+                label: label,
+                selected: mode == value,
+                onSelected: () => _set(personas.copyWith(teamMode: value)),
               ),
           ],
         ),
-        for (final persona in Personas.all)
+        if (mode == TeamMode.duo)
+          _Group(
+            title: 'Помощник в дуэте',
+            children: <Widget>[
+              for (final helper in helpers)
+                _Choice(
+                  key: ValueKey<String>('duo-helper-${helper.id}'),
+                  label: helper.russianName,
+                  accent: Color(helper.accentColor),
+                  selected: personas.duoHelper == helper.id,
+                  onSelected: () =>
+                      _set(personas.copyWith(duoHelper: helper.id)),
+                ),
+            ],
+          ),
+        for (final (duty, title) in const <(PersonaDuty, String)>[
+          (PersonaDuty.extensions, 'Расширения ведёт'),
+          (PersonaDuty.notifications, 'Оповещения ведёт'),
+        ])
+          _DutyGroup(
+            duty: duty,
+            title: title,
+            personas: personas,
+            helpers: helpers,
+            onSelected: (String id) => _set(personas.withDuty(duty, id)),
+          ),
+        for (final persona in cast.members)
           _PersonaStyle(
+            key: ValueKey<String>('persona-settings-${persona.id}'),
             persona: persona,
             personas: personas,
             library: library,
             onStyle: (String style) =>
                 _set(personas.withStyle(persona.id, style)),
+            onName: (String name) => _set(personas.withName(persona.id, name)),
+            onGender: (ReplyGender gender) =>
+                _set(personas.withGender(persona.id, gender)),
           ),
         _Group(
           title: 'Обращение',
@@ -187,13 +206,61 @@ class _PersonasSectionState extends State<PersonasSection> {
   }
 }
 
-/// Стиль одного помощника и пример ответа этим стилем.
-class _PersonaStyle extends StatelessWidget {
+/// Кто ведёт обязанность: Лиорио или Нода. Если назначенного выключил
+/// режим — подпись «сейчас делает Садо».
+class _DutyGroup extends StatelessWidget {
+  const _DutyGroup({
+    required this.duty,
+    required this.title,
+    required this.personas,
+    required this.helpers,
+    required this.onSelected,
+  });
+
+  final PersonaDuty duty;
+  final String title;
+  final PersonaSettings personas;
+  final List<Persona> helpers;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final cast = personas.cast;
+    final assigned = personas.dutyOwnerId(duty);
+    final fallback = !cast.isActive(assigned);
+    final owner = cast.byId(assigned);
+    final off = owner.gender == ReplyGender.female ? 'выключена' : 'выключен';
+    return _Group(
+      title: title,
+      hint: fallback
+          ? 'Сейчас делает ${cast.responder.russianName}: '
+              '${owner.russianName} $off режимом.'
+          : null,
+      hintKey: ValueKey<String>('duty-${duty.name}-fallback'),
+      children: <Widget>[
+        for (final helper in helpers)
+          _Choice(
+            key: ValueKey<String>('duty-${duty.name}-${helper.id}'),
+            label: helper.russianName,
+            accent: Color(helper.accentColor),
+            selected: assigned == helper.id,
+            onSelected: () => onSelected(helper.id),
+          ),
+      ],
+    );
+  }
+}
+
+/// Один помощник: имя, род, стиль и пример ответа этим стилем.
+class _PersonaStyle extends StatefulWidget {
   const _PersonaStyle({
+    super.key,
     required this.persona,
     required this.personas,
     required this.library,
     required this.onStyle,
+    required this.onName,
+    required this.onGender,
   });
 
   final Persona persona;
@@ -201,13 +268,88 @@ class _PersonaStyle extends StatelessWidget {
   final ReplyLibrary library;
   final ValueChanged<String> onStyle;
 
+  /// Новое имя — только проверенное ([PersonaNames.validate]).
+  final ValueChanged<String> onName;
+  final ValueChanged<ReplyGender> onGender;
+
+  @override
+  State<_PersonaStyle> createState() => _PersonaStyleState();
+}
+
+class _PersonaStyleState extends State<_PersonaStyle> {
+  late final TextEditingController _name =
+      TextEditingController(text: widget.persona.russianName);
+  final FocusNode _focus = FocusNode();
+
+  /// Ошибка имени под полем; `null` — имя годится.
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_onFocus);
+  }
+
+  @override
+  void didUpdateWidget(_PersonaStyle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Имя сменили не здесь (сброс настроек, беседа): поле — за ним, если
+    // пользователь сейчас его не правит.
+    final current = widget.persona.russianName;
+    if (!_focus.hasFocus &&
+        current != oldWidget.persona.russianName &&
+        _name.text != current) {
+      _name.text = current;
+      _error = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focus
+      ..removeListener(_onFocus)
+      ..dispose();
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _onFocus() {
+    if (!_focus.hasFocus) _submit(_name.text);
+  }
+
+  String? _check(String value) => PersonaNames.validate(
+        value,
+        widget.persona.id,
+        widget.personas.cast,
+      );
+
+  void _submit(String value) {
+    final name = value.trim();
+    if (name == widget.persona.russianName) {
+      if (_error != null) setState(() => _error = null);
+      return;
+    }
+    final error = _check(name);
+    setState(() => _error = error);
+    // Неверное имя не сохраняется: в настройках остаётся прежнее.
+    if (error == null) widget.onName(name);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final persona = widget.persona;
+    final personas = widget.personas;
+    final library = widget.library;
     final style = personas.styleOf(persona);
     final available = library.hasStyle(style);
     final voice = personas.voiceOf(persona);
     final preview = library.render(PersonasSection.preview, voice);
     final accent = Color(persona.accentColor);
+    final isSado = persona.id == Personas.sado.id;
+    // Род Садо до выбора не отмечен: ни «он», ни «она».
+    final ReplyGender? gender = isSado && !personas.sadoGenderChosen
+        ? null
+        : personas.genderOf(persona.id);
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
       child: Column(
@@ -215,15 +357,63 @@ class _PersonaStyle extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              PersonaMark(persona: persona),
+              PersonaMark(persona: persona, size: 24),
               const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  '${persona.russianName}: стиль',
-                  style: const TextStyle(color: AssistantColors.text),
+              Expanded(
+                child: TextField(
+                  key: ValueKey<String>('persona-name-${persona.id}'),
+                  controller: _name,
+                  focusNode: _focus,
+                  maxLength: PersonaNames.maxLength,
+                  textInputAction: TextInputAction.done,
+                  style: const TextStyle(color: AssistantColors.textStrong),
+                  onChanged: (String value) {
+                    // Ошибка видна сразу, сохраняется — по «Готово» или
+                    // когда поле теряет фокус.
+                    final error = value.trim() == persona.russianName
+                        ? null
+                        : _check(value);
+                    if (error != _error) setState(() => _error = error);
+                  },
+                  onSubmitted: _submit,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    labelText: 'Имя',
+                    counterText: '',
+                    errorText: _error,
+                    errorMaxLines: 3,
+                  ),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            key: ValueKey<String>('persona-gender-${persona.id}'),
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: <Widget>[
+              const Text('Род:', style: TextStyle(color: AssistantColors.text)),
+              for (final (value, label) in const <(ReplyGender, String)>[
+                (ReplyGender.male, 'Он'),
+                (ReplyGender.female, 'Она'),
+              ])
+                _Choice(
+                  key: ValueKey<String>(
+                    'persona-gender-${persona.id}-${value.name}',
+                  ),
+                  label: label,
+                  accent: accent,
+                  selected: gender == value,
+                  onSelected: () => widget.onGender(value),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${persona.russianName}: стиль',
+            style: const TextStyle(color: AssistantColors.text),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -238,7 +428,7 @@ class _PersonaStyle extends StatelessWidget {
                   label: catalog.title,
                   accent: accent,
                   selected: catalog.style == style,
-                  onSelected: () => onStyle(catalog.style),
+                  onSelected: () => widget.onStyle(catalog.style),
                 ),
             ],
           ),
@@ -271,6 +461,18 @@ class _PersonaStyle extends StatelessWidget {
               style: const TextStyle(color: AssistantColors.text),
             ),
           ),
+          // Пример склоняется в мужском роде, пока род Садо не выбран
+          // (ADR-016): об этом сказано прямо, чтобы пример не спорил с
+          // неотмеченными «Он» и «Она».
+          if (gender == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Пример — в мужском роде, пока род не выбран.',
+                key: ValueKey<String>('style-preview-note-${persona.id}'),
+                style: technicalTextStyle,
+              ),
+            ),
         ],
       ),
     );
@@ -279,10 +481,16 @@ class _PersonaStyle extends StatelessWidget {
 
 /// Подпись, кнопки выбора с переносом строк и пояснение.
 class _Group extends StatelessWidget {
-  const _Group({required this.title, required this.children, this.hint});
+  const _Group({
+    required this.title,
+    required this.children,
+    this.hint,
+    this.hintKey,
+  });
 
   final String title;
   final String? hint;
+  final Key? hintKey;
   final List<Widget> children;
 
   @override
@@ -298,7 +506,7 @@ class _Group extends StatelessWidget {
           Wrap(spacing: 8, runSpacing: 8, children: children),
           if (hint != null) ...<Widget>[
             const SizedBox(height: 6),
-            Text(hint!, style: technicalTextStyle),
+            Text(hint!, key: hintKey, style: technicalTextStyle),
           ],
         ],
       ),
@@ -356,7 +564,8 @@ class PersonaMark extends StatelessWidget {
   final Persona persona;
   final double size;
 
-  /// Круглый знак (аватары «Мой Связной»), иначе — скруглённый квадрат.
+  /// Круглый знак (аватары на карточке «Мой …»), иначе — скруглённый
+  /// квадрат.
   final bool round;
 
   /// Обводка вокруг круглого знака цветом фона под ним: знаки внахлёст.

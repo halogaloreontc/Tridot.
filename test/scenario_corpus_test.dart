@@ -9,6 +9,7 @@ import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/extensions/extension_registry.dart';
 import 'package:local_assistant/core/models/bulk.dart';
 import 'package:local_assistant/core/models/task.dart';
+import 'package:local_assistant/core/personas/persona_address.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
@@ -381,8 +382,11 @@ final class _Case {
       ];
     }
 
-    var phrase = text;
-    var utterance = Utterance.analyze(text, now: now)
+    // Обращение по имени в начале («Садо, …») маршрутизатор снимает до
+    // разбора (AssistantController.resolve): навыки получают фразу без
+    // него.
+    var phrase = PersonaAddressing.commandText(text);
+    var utterance = Utterance.analyze(phrase, now: now)
         .withChat(null, recentConnectorId: after);
     var matches = matchesOf(utterance);
     var decision = RoutePolicy.pick(matches, recentConnectorId: after);

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
 import 'package:local_assistant/app/widgets/status_cube.dart';
+import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/models/task.dart';
@@ -142,7 +143,7 @@ void main() {
     expect(find.byKey(const Key('history-rail')), findsNothing);
     expect(find.byKey(const Key('assistant-composer')), findsOneWidget);
     for (final title in <String>[
-      'Мой Связной',
+      AppInfo.hubName,
       'Проекты',
       'Задачи',
       'Планирование',
@@ -151,7 +152,7 @@ void main() {
     ]) {
       expect(find.text(title), findsWidgets, reason: title);
     }
-    // Шестерёнки настроек в меню нет: настройки — в «Мой Связной».
+    // Шестерёнки настроек в меню нет: настройки — в «Мой Tridot».
     expect(find.byKey(const Key('nav-settings')), findsNothing);
 
     for (final (key, chat) in <(String, bool)>[
@@ -742,7 +743,7 @@ void main() {
 
   testWidgets(
       '«Сегодня» — колонкой у правого края только на компьютере, «Мой '
-      'Связной» в меню', (tester) async {
+      'Tridot» в меню', (tester) async {
     await _pump(tester, size: _desktop);
     final panel = tester.getRect(find.byKey(const Key('today-panel')));
     expect(panel.right, _desktop.width);

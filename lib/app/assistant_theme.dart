@@ -116,6 +116,13 @@ abstract final class AssistantColors {
   /// Просрочено, ошибка.
   static const danger = Color(0xFFFF6B6B);
 
+  /// Садо: акцент и фон знака. Третий акцент П1, фиолетовый (ADR-016).
+  static const sado = Color(PersonaPalette.sado);
+  static const sadoBg = Color(PersonaPalette.sadoBg);
+
+  /// Садо на светлом фоне: светлой темы пока нет (ADR-016).
+  static const sadoOnLight = Color(PersonaPalette.sadoOnLight);
+
   /// Лиорио: акцент и фон знака.
   static const liorio = Color(PersonaPalette.liorio);
   static const liorioBg = Color(PersonaPalette.liorioBg);

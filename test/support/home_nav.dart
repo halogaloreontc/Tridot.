@@ -1,4 +1,4 @@
-// Переходы по оболочке «Д» в тестах главного экрана: меню, «Мой Связной»
+// Переходы по оболочке «Д» в тестах главного экрана: меню, «Мой Tridot»
 // и его вкладки, «Сегодня» (компьютер) и «Сводка» (телефон), возврат в
 // сессию.
 import 'package:flutter/material.dart';
@@ -35,7 +35,7 @@ Future<void> tapInDrawer(WidgetTester tester, Key key) async {
   await tester.pumpAndSettle();
 }
 
-/// «Мой Связной» на вкладке [tab]: summary, activity, assistants,
+/// «Мой Tridot» на вкладке [tab]: summary, activity, assistants,
 /// settings.
 Future<void> openMyRelay(WidgetTester tester, [String tab = 'summary']) async {
   await tapInDrawer(tester, const Key('drawer-my-relay'));
@@ -46,7 +46,7 @@ Future<void> openMyRelay(WidgetTester tester, [String tab = 'summary']) async {
   await tester.pumpAndSettle();
 }
 
-/// Экран настроек: «Мой Связной» → «Настройки».
+/// Экран настроек: «Мой Tridot» → «Настройки».
 Future<void> openSettings(WidgetTester tester) =>
     openMyRelay(tester, 'settings');
 
@@ -74,7 +74,7 @@ Future<void> openSessionTitled(WidgetTester tester, String title) async {
   await tester.pumpAndSettle();
 }
 
-/// Обратно в сессию: «назад» из «Мой Связной», иначе самая свежая сессия в
+/// Обратно в сессию: «назад» из «Мой Tridot», иначе самая свежая сессия в
 /// меню (обычно та, где писали команды).
 Future<void> backToSession(WidgetTester tester) async {
   final back = find.byKey(const Key('my-relay-back'));
@@ -103,7 +103,7 @@ Future<void> openToday(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// «Мой Связной» → «Сводка»: на телефоне здесь всё, что было в «Сегодня».
+/// «Мой Tridot» → «Сводка»: на телефоне здесь всё, что было в «Сегодня».
 Future<void> openSummary(WidgetTester tester) => openMyRelay(tester);
 
 /// То же, что [finder], но без меню: в меню у сессии вторая строка —

@@ -78,9 +78,14 @@ final class RelaySummary extends StatelessWidget {
     required this.onOpenTask,
     required this.onAllTasks,
     this.approximate = false,
+    this.notifier,
   });
 
   final Map<DateTime, int> activity;
+
+  /// Знак у ждущих отметки карточек — ведущий оповещений; `null` — по
+  /// текущему составу ([PersonaCast.current]).
+  final Persona? notifier;
 
   /// Все задачи; в «Сейчас и дальше» попадают активные со сроком.
   final List<Task> tasks;
@@ -214,7 +219,7 @@ final class RelaySummary extends StatelessWidget {
                         _NextRow(
                           key: Key('next-pending-${item.id}'),
                           first: next.isEmpty && i == 0,
-                          mark: Personas.noda,
+                          mark: notifier ?? PersonaCast.current.notifier,
                           title: item.title,
                           subtitle: item.subtitle,
                           onTap: item.onTap,
@@ -392,23 +397,33 @@ final class _RelayActivityState extends State<RelayActivity> {
 
 // ------------------------------------------------------------- Помощники
 
-/// Подзаголовок карточки помощника: «главный помощник», «второй
-/// помощник», «отвечает на всё», «выключен в соло».
+/// Подзаголовок карточки помощника: «главный помощник», «ведёт
+/// расширения», «ведёт оповещения», «выключен · режим «Соло»». Пока род
+/// Садо не выбран, о нём — без рода.
 String personaRole(Persona persona, PersonaSettings personas) {
-  final female = persona.gender == ReplyGender.female;
-  if (personas.mode == AssistantMode.duo) {
-    return personas.main.id == persona.id
-        ? (female ? 'главная помощница' : 'главный помощник')
-        : 'пишет первым';
+  final cast = personas.cast;
+  final female = personas.genderOf(persona.id) == ReplyGender.female;
+  if (!cast.isActive(persona.id)) {
+    final mode = personas.teamMode == TeamMode.solo ? 'Соло' : 'Дуэт';
+    return '${female ? 'выключена' : 'выключен'} · режим «$mode»';
   }
-  return personas.solo.id == persona.id
-      ? 'отвечает на всё'
-      : (female ? 'выключена · режим «Соло»' : 'выключен · режим «Соло»');
+  if (persona.id == cast.responder.id) {
+    if (!personas.sadoGenderChosen) return 'главное: беседа, задачи, планы';
+    return female ? 'главная помощница' : 'главный помощник';
+  }
+  final extensions = cast.extensionsLead.id == persona.id;
+  final notifications = cast.notifier.id == persona.id;
+  return switch ((extensions, notifications)) {
+    (true, true) => 'ведёт расширения и оповещения',
+    (true, false) => 'ведёт расширения',
+    (false, true) => 'ведёт оповещения',
+    (false, false) => 'без обязанностей',
+  };
 }
 
-/// «Помощники» (D-Desk-Assistants): карточки Лиорио и Ноды с их
-/// настройками (стиль, обращение, роли, включён ли второй), полные
-/// настройки ниже и приглушённая строка о журнале. Журнал не строим.
+/// «Помощники» (D-Desk-Assistants): карточки Садо, Лиорио и Ноды
+/// (стиль, обращение, роли, включён ли помощник), полные настройки ниже и
+/// приглушённая строка о журнале. Журнал не строим.
 final class RelayAssistants extends StatefulWidget {
   const RelayAssistants({
     super.key,
@@ -425,6 +440,9 @@ final class RelayAssistants extends StatefulWidget {
   /// «Ведёт: Кладовщик» → роли во вкладке «Настройки».
   final VoidCallback onOpenRoles;
 
+  /// С этой ширины карточки стоят в ряд, уже — столбцом.
+  static const double rowWidth = 900;
+
   @override
   State<RelayAssistants> createState() => _RelayAssistantsState();
 }
@@ -437,21 +455,23 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
   void _set(PersonaSettings personas) =>
       widget.onChanged(widget.settings.copyWith(personas: personas));
 
-  /// Включить или выключить [persona]: в дуэте выключение второго — соло
-  /// основного; в соло включение другого — дуэт, основной остаётся
-  /// отвечающим.
+  /// Включить или выключить помощника [persona]: оба помощника Садо
+  /// включены — Трио, один — Дуэт с ним, ни одного — Соло.
   void _setActive(Persona persona, bool active) {
     final p = _personas;
-    if (active) {
-      _set(p.copyWith(mode: AssistantMode.duo, mainPersona: p.responder.id));
-    } else {
-      final other = Personas.all.firstWhere((Persona x) => x.id != persona.id);
-      _set(p.copyWith(mode: AssistantMode.solo, soloPersona: other.id));
-    }
+    final on = <String>{
+      for (final id in Personas.helperIds)
+        if (p.cast.isActive(id)) id,
+    };
+    active ? on.add(persona.id) : on.remove(persona.id);
+    _set(
+      switch (on.length) {
+        0 => p.copyWith(teamMode: TeamMode.solo),
+        1 => p.copyWith(teamMode: TeamMode.duo, duoHelper: on.single),
+        _ => p.copyWith(teamMode: TeamMode.trio),
+      },
+    );
   }
-
-  bool _isActive(Persona persona) =>
-      _personas.mode == AssistantMode.duo || _personas.solo.id == persona.id;
 
   void _edit() {
     final target = _details.currentContext;
@@ -465,6 +485,7 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
   @override
   Widget build(BuildContext context) {
     final personas = _personas;
+    final cast = personas.cast;
     final library = widget.registry.replyLibrary;
     return _page(
       key: const Key('my-relay-assistants'),
@@ -472,35 +493,34 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
         LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final cards = <Widget>[
-              for (final persona in Personas.all)
+              for (final persona in cast.members)
                 _PersonaCard(
                   persona: persona,
                   personas: personas,
                   library: library,
                   roles: <String>[
                     for (final role in widget.registry.activeRoles)
-                      if (personas.mode == AssistantMode.duo
-                          ? widget.registry.ownerOf(role.id, personas).id ==
-                              persona.id
-                          : personas.solo.id == persona.id)
+                      if (widget.registry.ownerOf(role.id, personas).id ==
+                          persona.id)
                         role.title,
                   ],
-                  active: _isActive(persona),
-                  // Основной (в соло — отвечающий) всегда включён.
-                  canToggle: persona.id != personas.responder.id,
+                  active: cast.isActive(persona.id),
+                  // Садо всегда включён; помощников включает режим.
+                  canToggle: persona.id != cast.responder.id,
                   onActive: (bool v) => _setActive(persona, v),
                   onEdit: _edit,
                   onOpenRoles: widget.onOpenRoles,
                 ),
             ];
-            if (constraints.maxWidth >= 640) {
+            if (constraints.maxWidth >= RelayAssistants.rowWidth) {
               return IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
-                    Expanded(child: cards[0]),
-                    const SizedBox(width: 12),
-                    Expanded(child: cards[1]),
+                    for (final (i, card) in cards.indexed) ...<Widget>[
+                      if (i > 0) const SizedBox(width: 12),
+                      Expanded(child: card),
+                    ],
                   ],
                 ),
               );
@@ -508,9 +528,10 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                cards[0],
-                const SizedBox(height: 12),
-                cards[1],
+                for (final (i, card) in cards.indexed) ...<Widget>[
+                  if (i > 0) const SizedBox(height: 12),
+                  card,
+                ],
               ],
             );
           },

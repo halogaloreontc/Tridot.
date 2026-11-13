@@ -40,19 +40,20 @@ export 'route_policy.dart';
 /// сбрасываются, снимается только ожидание подтверждения выключенного
 /// коннектора.
 ///
-/// Отвечает один из помощников ([personas], docs/PLANS.md, «Liorio и Noda»):
-/// в дуэте — основной или ведущий роли, чей навык забрал фразу (ADR-012),
-/// а тот, к кому обратились по имени («Noda, …»), — на это сообщение; в
-/// соло — выбранный. Обращение по имени в дуэте отмечается в ответе
+/// Отвечает один из помощников ([personas], ADR-016): без обращения —
+/// Садо или ведущий обязанности, чей навык забрал фразу (склад, пароли —
+/// ведущий расширений, если режим его включает), а тот, к кому обратились
+/// по имени («Нода, …»), — на это сообщение. Имя помощника, выключенного
+/// режимом, — просто текст. Обращение по имени отмечается в ответе
 /// ([AssistantResponse.addressedPersonaId]).
 ///
 /// К кому обратились — тот и продолжает, пока разговор идёт тем же
 /// навыком ([_followUp]): «Нода, расскажи шутку» → «ещё шутку» — снова
-/// Noda, а «покажи задачи» после этого — уже ведущий роли или основной.
+/// Нода, а «покажи задачи» после этого — уже Садо.
 /// Продолжение — не дольше [followUpLimit] фраз без имени. Это короткое
 /// продолжение живёт только здесь, в памяти: интерфейс его не
 /// показывает и не сохраняет, смена чата его снимает. Выбора «Кому» в
-/// интерфейсе нет. На «да» или «нет» в дуэте отвечает тот,
+/// интерфейсе нет. На «да» или «нет» отвечает тот,
 /// кто спросил ([AssistantSession.pendingSpeaker]), если в ответе никого
 /// не назвали по имени. Голос (стиль, род, обращение, эмодзи) фиксируется
 /// в начале сообщения: смена настроек посреди ответа применится со
@@ -64,15 +65,17 @@ final class AssistantController {
     List<Connector>? connectors,
     ExtensionRegistry? extensions,
     Clock clock = const SystemClock(),
-    this.personas = const PersonaSettings(),
+    PersonaSettings personas = const PersonaSettings(),
     this.knownSecret,
-  })  : assert(
+  })  : _personas = personas,
+        assert(
           connectors == null || extensions == null,
           'Передайте либо connectors, либо extensions',
         ),
         extensions = extensions ??
             ExtensionRegistry(connectors: connectors ?? const <Connector>[]),
         session = AssistantSession(clock: clock) {
+    PersonaCast.configure(personas);
     session
       ..replies = this.extensions.replyLibrary
       ..extensions = this.extensions
@@ -106,17 +109,45 @@ final class AssistantController {
   /// вопрос «копию чего?».
   static const Duration contextWindow = Duration(minutes: 10);
 
-  /// Адресат «основной помощник», выбранный в поле ввода явно. Это не то
-  /// же, что «никого не выбрали» (`null`): явный выбор важнее ведущего
-  /// роли (ADR-012), а без выбора фразу навыка роли забирает её ведущий.
-  /// Основной здесь — тот, кто основной сейчас: после смены основного в
-  /// настройках отвечает новый.
+  /// Адресат «главный помощник» (Садо), выбранный явно. Это не то же, что
+  /// «никого не выбрали» (`null`): явный выбор важнее ведущего обязанности
+  /// (ADR-016), а без выбора фразу расширения забирает его ведущий.
   static const String mainAddressee = 'main';
 
-  /// В поле ввода выбрали помощника явно: по имени или основного
+  /// В поле ввода выбрали помощника явно: по имени или главного
   /// ([mainAddressee]).
   static bool isExplicitAddressee(String? addressee) =>
       addressee == mainAddressee || Personas.byId(addressee) != null;
+
+  /// Помощник [id] с текущим именем и родом из настроек; неизвестный id —
+  /// `null`.
+  Persona? _member(String? id) => personas.cast.find(id);
+
+  /// Помощник [id] с текущим именем, если он активен в текущем режиме;
+  /// выключенный режимом или неизвестный — `null`.
+  Persona? _activeMember(String? id) {
+    final cast = personas.cast;
+    final persona = cast.find(id);
+    return persona != null && cast.isActive(persona.id) ? persona : null;
+  }
+
+  /// Кто спросил ([AssistantSession.pendingSpeaker]) с текущим именем;
+  /// выключен режимом после вопроса — ведущий обязанности навыка
+  /// [connectorId], как у карточек ([_cardSpeaker]). Не спрашивал никто —
+  /// `null`.
+  Persona? _activeAsker(Persona? asker, String connectorId) =>
+      asker == null ? null : _cardSpeaker(asker.id, connectorId);
+
+  /// Автор карточки [id], если он ещё активен в текущем режиме; иначе —
+  /// ведущий обязанности навыка [connectorId]: карточка, нажатая после
+  /// смены режима, не говорит голосом выключенного помощника.
+  Persona _cardSpeaker(String? id, String connectorId) {
+    final cast = personas.cast;
+    final author = cast.find(id);
+    return author != null && cast.isActive(author.id)
+        ? author
+        : extensions.ownerFor(connectorId, personas);
+  }
 
   /// Навыки, подключения, паки и выбор пользователя.
   final ExtensionRegistry extensions;
@@ -125,8 +156,21 @@ final class AssistantController {
   final AssistantSession session;
 
   /// Настройки помощников. Новые применяются со следующего сообщения:
-  /// ответ, который уже готовится, договаривается прежним голосом.
-  PersonaSettings personas;
+  /// ответ, который уже готовится, договаривается прежним голосом. Имена
+  /// для обращения меняются сразу ([PersonaCast.configure]).
+  PersonaSettings get personas => _personas;
+  set personas(PersonaSettings value) {
+    _personas = value;
+    PersonaCast.configure(value);
+    // Продолжение с помощником, которого режим выключил, снимается: он
+    // больше не отвечает (ADR-016).
+    final follow = _followUp;
+    if (follow != null && _activeMember(follow.personaId) == null) {
+      _followUp = null;
+    }
+  }
+
+  PersonaSettings _personas;
 
   /// Совпадает ли токен по отпечатку с паролем записи открытого хранилища
   /// (`VaultFacade.knownSecret`). По нему [SecretGuard] ловит пароль без
@@ -263,20 +307,20 @@ final class AssistantController {
 
   /// Продолжение разговора с тем, к кому обратились по имени: помощник и
   /// навык, которым шёл разговор. Следующая фраза без имени, которую
-  /// забрал тот же навык, — снова ему ([_leadByRole]); другой навык —
+  /// забрал тот же навык, — снова ему ([_leadByDuty]); другой навык —
   /// продолжение снимается. `connectorId == null` — обратились по имени
   /// без команды («Нода»): следующая фраза — ему, каким бы навыком она ни
   /// была. Только в памяти и только в текущем чате ([enterChat]).
   ///
   /// Продолжение короткое: не больше [followUpLimit] фраз без имени
-  /// подряд, потом снова отвечает ведущий роли или основной. Интерфейс
+  /// подряд, потом снова отвечает ведущий обязанности или Садо. Интерфейс
   /// продолжение не показывает — долгое «залипание» было бы невидимым
   /// адресатом.
   ({String personaId, String? connectorId, int left})? _followUp;
 
   /// Сколько фраз без имени после обращения по имени продолжает тот, к
   /// кому обратились: «Нода, расскажи шутку» → «ещё шутку» → «ещё» — Noda,
-  /// следующая — снова по ролям.
+  /// следующая — снова по обязанностям.
   static const int followUpLimit = 2;
 
   /// Растёт при каждой смене чата: ответ, пришедший после смены, не
@@ -290,16 +334,17 @@ final class AssistantController {
   /// помощник продолжает навыком, которым ответил; фраза без имени ушла
   /// другому навыку (или никакому) — продолжение снимается.
   void _updateFollowUp(AssistantResponse response) {
-    if (personas.mode != AssistantMode.duo ||
-        response.settingsChange?.mainPersona != null) {
+    if (personas.teamMode == TeamMode.solo ||
+        response.settingsChange?.teamMode != null) {
       _followUp = null;
       return;
     }
     final connectorId = session.lastConnectorId;
-    final named = Personas.byId(response.addressedPersonaId);
+    final named = _member(response.addressedPersonaId);
     if (named != null) {
-      if (named.id == personas.main.id && extensions.mainLeadsAll(personas)) {
-        // Основной и так отвечает на всё.
+      if (named.id == personas.responder.id &&
+          extensions.mainLeadsAll(personas)) {
+        // Садо и так отвечает на всё.
         _followUp = null;
       } else if (response.replyId == 'common.addressed') {
         // «Нода» без команды: следующая фраза — ей, любым навыком.
@@ -330,19 +375,29 @@ final class AssistantController {
     );
   }
 
-  /// Кто ответит на [message]: в дуэте обращение по имени («Noda, …»)
-  /// важнее адресата [addressee] из поля ввода ([mainAddressee] —
-  /// основной), а без них отвечает основной — или ведущий роли, чей навык
-  /// заберёт фразу ([_leadByRole]). В соло — всегда выбранный помощник, имя — просто текст.
+  /// Кто ответит на [message]: обращение по имени активного помощника
+  /// («Нода, …», «Садо, …») важнее адресата [addressee] из поля ввода
+  /// ([mainAddressee] — Садо), а без них отвечает Садо — или ведущий
+  /// обязанности, чей навык заберёт фразу ([_leadByDuty]). Имя помощника,
+  /// выключенного режимом, — не обращение: отвечает Садо, а имя из начала
+  /// фразы убирается (ADR-016).
   /// Возвращает помощника и текст без обращения.
   (Persona, String, bool) resolve(String message, {String? addressee}) {
-    final settings = personas;
-    if (settings.mode == AssistantMode.solo) {
-      return (settings.solo, message, false);
-    }
+    final cast = personas.cast;
     final addressing = PersonaAddressing.parse(message);
-    if (addressing != null) return (addressing.persona, addressing.rest, true);
-    return (Personas.byId(addressee) ?? settings.main, message, false);
+    if (addressing != null && cast.isActive(addressing.persona.id)) {
+      return (cast.byId(addressing.persona.id), addressing.rest, true);
+    }
+    // Имя помощника, выключенного режимом, обращением не считается, но и в
+    // команду не попадает: «Нода, добавь задачу хлеб» в Дуэте с Лиорио —
+    // задача «Хлеб» от Садо (ADR-016).
+    final text = PersonaAddressing.commandText(message);
+    final chosen = cast.find(addressee);
+    return (
+      chosen != null && cast.isActive(chosen.id) ? chosen : cast.responder,
+      text,
+      false,
+    );
   }
 
   /// Отвечает на сообщение пользователя. [addressee] — помощник, которому
@@ -374,15 +429,15 @@ final class AssistantController {
         addressee == null &&
         waiting != null &&
         waiting.connectorId == null &&
-        settings.mode == AssistantMode.duo) {
-      final named = Personas.byId(waiting.personaId);
+        settings.teamMode != TeamMode.solo) {
+      final named = _activeMember(waiting.personaId);
       if (named != null) {
         persona = named;
         addressed = true;
       }
     }
     // Явное обращение (имя в сообщении или явный адресат, в том числе
-    // основной) важнее владельца роли (ADR-012).
+    // главный) важнее ведущего обязанности (ADR-016).
     _explicit = addressed || isExplicitAddressee(addressee);
     final epoch = _chatEpoch;
     _messageNo++;
@@ -416,8 +471,8 @@ final class AssistantController {
       before.onDropped?.call();
     }
     _awaitingAnswer = response.status == AssistantStatus.needsClarification;
-    // Навык мог отметить адресата сам: «Нода, пусть отвечает Лио» — дальше
-    // отвечает Liorio, а не та, к кому обратились в начале.
+    // Навык мог отметить адресата сам: «спасибо, Лиорио» в ответ на вопрос
+    // Ноды — дальше отвечает Лиорио, а не та, к кому обратились в начале.
     final result = !addressed || response.addressedPersonaId != null
         ? response
         : response.withAddressed(persona.id);
@@ -469,7 +524,7 @@ final class AssistantController {
     return response.withPersona(response.personaId ?? session.speaker.id);
   }
 
-  /// Приветствие основного (в соло — единственного) помощника. В
+  /// Приветствие Садо: он встречает в новой сессии (ADR-016). В
   /// интерфейсе сообщением не показывается (приветствие — пустая сессия,
   /// SessionHero); ключ `common.welcome` оставлен для паков реплик.
   AssistantResponse welcome() => speak(
@@ -480,9 +535,9 @@ final class AssistantController {
         intent: 'welcome',
       );
 
-  /// «Команда обрабатывается…» голосом того, кто ответит на [message]: в
-  /// дуэте без явного обращения — владелец роли, чей навык, скорее всего,
-  /// заберёт фразу.
+  /// «Команда обрабатывается…» голосом того, кто ответит на [message]: без
+  /// явного обращения — ведущий обязанности, чей навык, скорее всего,
+  /// заберёт фразу ([ExtensionRegistry.ownerFor]).
   AssistantResponse working(
     String message, {
     String? addressee,
@@ -494,10 +549,10 @@ final class AssistantController {
     final guarded =
         secretRedacted || SecretGuard.redact(text, known: knownSecret).guarded;
     final follow = _followUp;
-    final followed = Personas.byId(follow?.personaId);
+    final followed = _activeMember(follow?.personaId);
     if (!addressed &&
         !isExplicitAddressee(addressee) &&
-        personas.mode == AssistantMode.duo &&
+        personas.teamMode != TeamMode.solo &&
         follow != null &&
         follow.connectorId == null &&
         followed != null) {
@@ -505,13 +560,12 @@ final class AssistantController {
     } else if (!guarded &&
         !addressed &&
         !isExplicitAddressee(addressee) &&
-        session.pendingConfirmation == null &&
-        personas.mode == AssistantMode.duo) {
+        session.pendingConfirmation == null) {
       final likely = _likely(text);
       if (likely != null) {
         speaker = followed != null && likely.info.id == follow?.connectorId
             ? followed
-            : extensions.ownerFor(likely.info.id, personas) ?? speaker;
+            : extensions.ownerFor(likely.info.id, personas);
       }
     }
     return speak(
@@ -609,29 +663,32 @@ final class AssistantController {
     return null;
   }
 
-  /// Фразу забрал навык роли: в дуэте без явного обращения отвечает тот,
-  /// кто ведёт роль (ADR-012). Обращение по имени и явный адресат важнее;
-  /// продолжение разговора тем же навыком ([_followUp]) — тоже. В соло
-  /// помощник один.
-  void _leadByRole(Connector connector) {
-    if (_explicit || session.personas.mode != AssistantMode.duo) return;
+  /// Фразу забрал навык из зоны помощника: без явного обращения отвечает
+  /// ведущий этой обязанности — так Садо передаёт фразу помощнику
+  /// (ADR-016). Зона неактивного помощника — у Садо. Обращение по имени и
+  /// явный адресат важнее; продолжение разговора тем же навыком
+  /// ([_followUp]) — тоже.
+  void _leadByDuty(Connector connector) {
+    if (_explicit) return;
     final follow = _followUp;
-    final followed = Personas.byId(follow?.personaId);
-    if (followed != null && follow?.connectorId == connector.info.id) {
+    final followed = _activeMember(follow?.personaId);
+    if (followed != null &&
+        follow?.connectorId == connector.info.id &&
+        session.personas.teamMode != TeamMode.solo) {
       session
         ..speaker = followed
         ..voice = session.personas.voiceOf(followed);
       return;
     }
     final owner = extensions.ownerFor(connector.info.id, session.personas);
-    if (owner == null || owner.id == session.speaker.id) return;
+    if (owner.id == session.speaker.id) return;
     session
       ..speaker = owner
       ..voice = session.personas.voiceOf(owner);
   }
 
-  /// Первым пишет второй помощник (в соло — единственный): просроченные
-  /// задачи. `null`, если просроченных нет. Интерфейс в сессию это больше
+  /// Первым пишет ведущий оповещений ([PersonaCast.notifier]; выключен
+  /// режимом — Садо): просроченные задачи. `null`, если просроченных нет. Интерфейс в сессию это больше
   /// не пишет (строка «Просрочена N задач» в пустой сессии); ключ
   /// `task.overdue` оставлен для паков реплик.
   AssistantResponse? overdueNotice(List<Task> overdue) {
@@ -669,18 +726,17 @@ final class AssistantController {
         personaId: persona.id,
       );
 
-  /// Ответ на вопрос подтверждения в дуэте звучит от того, кто спросил,
+  /// Ответ на вопрос подтверждения звучит от того, кто спросил,
   /// даже если адресат в поле ввода с тех пор сменился. Если в ответе
   /// назвали помощника по имени в начале ([addressed]: «Лио, да»), отвечает
   /// названный. Имя в конце ([trailing]: «да, Лиорио», «спасибо, Лио») —
-  /// тоже обращение: отвечает названный. В соло помощник один — тот, что
-  /// в настройках сейчас.
+  /// тоже обращение: отвечает названный. В соло все ответы — от Садо.
   void _speakAsAsker(
     Persona? asker, {
     required bool addressed,
     Persona? trailing,
   }) {
-    if (session.personas.mode != AssistantMode.duo) return;
+    if (session.personas.teamMode == TeamMode.solo) return;
     final speaker = trailing ?? (addressed ? null : asker);
     if (speaker == null) return;
     session
@@ -738,8 +794,11 @@ final class AssistantController {
     // получает ни один сетевой коннектор — ни в match, ни в уточнении
     // ответа, при любой уверенности, включён навык или нет.
     final hideFromNetwork = PasswordPhrases.looksLike(utterance);
-    final asker = session.pendingSpeaker;
+    final pendingAsker = session.pendingSpeaker;
     final pending = session.takePendingConfirmation();
+    final asker = pending == null
+        ? null
+        : _activeAsker(pendingAsker, pending.connectorId);
     final owner = pending == null
         ? null
         : connectors
@@ -747,13 +806,20 @@ final class AssistantController {
             .firstOrNull;
     // «Да, Лиорио», «спасибо, Нода»: имя в конце ответа на вопрос — тоже
     // обращение (в дуэте). Само «да» или «нет» ищем в тексте без имени.
-    final trailing = pending != null &&
+    final parsedTrailing = pending != null &&
             owner != null &&
             !addressed &&
-            session.personas.mode == AssistantMode.duo
+            session.personas.teamMode != TeamMode.solo
         ? PersonaAddressing.parseTrailing(message)
         : null;
-    final named = trailing?.persona;
+    // Имя помощника, выключенного режимом, — просто текст.
+    final trailing = parsedTrailing != null &&
+            session.personas.cast.isActive(parsedTrailing.persona.id)
+        ? parsedTrailing
+        : null;
+    final named = trailing == null
+        ? null
+        : session.personas.cast.byId(trailing.persona.id);
     final answerUtterance = trailing == null
         ? utterance
         : Utterance.analyze(trailing.rest, now: session.clock.now());
@@ -934,7 +1000,7 @@ final class AssistantController {
           response.values,
         );
       }
-      _leadByRole(bestConnector);
+      _leadByDuty(bestConnector);
       return _run(
         bestConnector,
         ConnectorMatch(
@@ -948,7 +1014,7 @@ final class AssistantController {
       );
     }
 
-    _leadByRole(bestConnector);
+    _leadByDuty(bestConnector);
     return _run(bestConnector, best);
   }
 
@@ -1067,7 +1133,7 @@ final class AssistantController {
         .where((Connector c) => c.info.id == passwordsId)
         .firstOrNull;
     if (owner == null) return null;
-    final speaker = Personas.byId(personaId) ?? personas.responder;
+    final speaker = _cardSpeaker(personaId, passwordsId);
     _voiceOf(speaker);
     final response = await _run(
       owner,
@@ -1117,7 +1183,8 @@ final class AssistantController {
         .where((Connector c) => c.info.id == pending.connectorId)
         .firstOrNull;
     if (owner == null) return null;
-    final asker = session.pendingSpeaker ?? personas.responder;
+    final asker = _activeAsker(session.pendingSpeaker, pending.connectorId) ??
+        personas.responder;
     session.takePendingConfirmation();
     _voiceOf(asker);
     final response = await _answer(
@@ -1152,7 +1219,8 @@ final class AssistantController {
         .where((Connector c) => c.info.id == pending.connectorId)
         .firstOrNull;
     if (owner == null) return null;
-    final asker = session.pendingSpeaker ?? personas.responder;
+    final asker = _activeAsker(session.pendingSpeaker, pending.connectorId) ??
+        extensions.ownerFor(pending.connectorId, personas);
     // Ожидание снимается до запроса: второе нажатие не найдёт карточку.
     session.takePendingConfirmation();
     _voiceOf(asker);
@@ -1176,7 +1244,7 @@ final class AssistantController {
         .where((Connector c) => c.info.id == card.connectorId)
         .firstOrNull;
     if (owner == null) return null;
-    final speaker = Personas.byId(personaId) ?? personas.responder;
+    final speaker = _cardSpeaker(personaId, card.connectorId);
     _voiceOf(speaker);
     final response = await _run(
       owner,
@@ -1200,7 +1268,7 @@ final class AssistantController {
     if (!checklist.canUndo) return null;
     final tasks = _connectors.whereType<TasksConnector>().firstOrNull;
     if (tasks == null) return null;
-    final speaker = Personas.byId(personaId) ?? personas.responder;
+    final speaker = _cardSpeaker(personaId, TasksConnector.id);
     _voiceOf(speaker);
     final response = await _run(
       tasks,

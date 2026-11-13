@@ -10,11 +10,12 @@ import 'extensions_section.dart' show connectionChanged;
 import 'task_tile.dart';
 
 /// Раздел «Роли» в настройках, над «Расширениями» (ADR-012): карточка на
-/// роль — название, описание, что входит, переключатель, кто ведёт (в
-/// дуэте), а у роли с подключением — статус и «Подключить склад».
+/// роль — название, описание, что входит, переключатель, а у роли с
+/// подключением — статус и «Подключить склад». Кто отвечает на фразы
+/// навыков роли, задают обязанности помощников (ADR-016), а не роль.
 ///
-/// Выбор живёт в [AppSettings] (`enabled_roles`, `disabled_roles`,
-/// `role_owners`); применяет его владелец экрана — сразу, без перезапуска.
+/// Выбор живёт в [AppSettings] (`enabled_roles`, `disabled_roles`);
+/// применяет его владелец экрана — сразу, без перезапуска.
 /// Выключенная роль прячет свои навыки и кнопки, но подключение и секреты
 /// остаются: включённая снова роль работает без нового входа.
 class RolesSection extends StatefulWidget {
@@ -236,9 +237,6 @@ class _RolesSectionState extends State<RolesSection> {
   Widget _card(RoleInfo role) {
     final choice = _choice;
     final on = choice.isRoleEnabled(role);
-    final personas = widget.settings.personas;
-    final duo = personas.mode == AssistantMode.duo;
-    final owner = Personas.byId(choice.roleOwners[role.id]) ?? personas.main;
     final link = role.connection;
     final service = link == null ? null : _connection(link.extensionId);
     return Container(
@@ -331,51 +329,6 @@ class _RolesSectionState extends State<RolesSection> {
                   ),
                   if (role.actionHint != null)
                     _actionsSwitch(role, service, on: on),
-                ],
-                if (duo) ...<Widget>[
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: <Widget>[
-                      const Text(
-                        'Ведёт:',
-                        style: TextStyle(color: AssistantColors.text),
-                      ),
-                      for (final persona in Personas.all)
-                        ChoiceChip(
-                          key: ValueKey<String>(
-                            'role-owner-${role.id}-${persona.id}',
-                          ),
-                          label: Text(persona.russianName),
-                          selected: owner.id == persona.id,
-                          showCheckmark: false,
-                          onSelected: (_) => _set(
-                            // Основной — без записи: роль идёт за основным,
-                            // если его сменят.
-                            choice.withOwner(
-                              role.id,
-                              persona.id == personas.main.id
-                                  ? null
-                                  : persona.id,
-                            ),
-                          ),
-                          labelStyle: TextStyle(
-                            color: owner.id == persona.id
-                                ? AssistantColors.textStrong
-                                : AssistantColors.text,
-                          ),
-                          backgroundColor: AssistantColors.workspace,
-                          selectedColor: AssistantColors.bubble,
-                          side: BorderSide(
-                            color: owner.id == persona.id
-                                ? Color(persona.accentColor)
-                                : AssistantColors.border,
-                          ),
-                        ),
-                    ],
-                  ),
                 ],
               ],
             ),

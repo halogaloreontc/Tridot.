@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_info.dart';
 import '../assistant_theme.dart';
 
 /// Шапка сессии (макет «Д»): слева меню или «назад», в центре помощник
-/// («Лиорио ▾» → «Мой Связной», вкладка «Помощники») или заголовок, справа
+/// («Лиорио ▾» → «Мой Tridot», вкладка «Помощники») или заголовок, справа
 /// — необязательная кнопка ([trailing]; на компьютере — «Показать
 /// «Сегодня»», когда колонка свёрнута). Всегда одна строка 56: хроника
 /// команд — не в шапке, а поверх ленты (HistoryRailPill).
@@ -118,7 +119,8 @@ final class _PersonaSwitch extends StatelessWidget {
     return Semantics(
       button: true,
       header: true,
-      label: '$name — помощник. Сменить в «Мой Связной», раздел «Помощники»',
+      label:
+          '$name — помощник. Сменить в «${AppInfo.hubName}», раздел «Помощники»',
       onTap: onTap,
       excludeSemantics: true,
       child: InkWell(

@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:local_assistant/core/models/task.dart';
+import 'package:local_assistant/core/personas/persona_address.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 
@@ -19,7 +20,11 @@ final DateTime defaultNow = DateTime(2026, 11, 2, 16, 30);
 
 Future<void> main() => processLines(
       (Map<String, dynamic> input, DateTime now) =>
-          parsedFields(input['text'] as String, now),
+          // Обращение по имени в начале снимается, как в маршрутизаторе.
+          parsedFields(
+        PersonaAddressing.commandText(input['text'] as String),
+        now,
+      ),
     );
 
 /// Читает JSON Lines из stdin и печатает `{"id", ...convert(строка)}`.

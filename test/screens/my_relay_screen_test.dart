@@ -1,4 +1,4 @@
-// «Мой Связной» (макет «Д»): шапка со строкой статистики, вкладки,
+// «Мой Tridot» (макет «Д»): шапка со строкой статистики, вкладки,
 // сетка активности 16/52 недели, «Сейчас и дальше», карточки помощников.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,10 +7,12 @@ import 'package:local_assistant/app/screens/my_relay_screen.dart';
 import 'package:local_assistant/app/screens/my_relay_tabs.dart';
 import 'package:local_assistant/app/shell/today_panel.dart';
 import 'package:local_assistant/app/widgets/activity_grid.dart';
+import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/extensions/extension_registry.dart';
 import 'package:local_assistant/core/models/task.dart';
+import 'package:local_assistant/core/replies/reply_library.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
@@ -157,7 +159,7 @@ void main() {
           ),
         ),
       );
-      expect(find.text('Мой Связной'), findsOneWidget);
+      expect(find.text(AppInfo.hubName), findsOneWidget);
       expect(
         tester
             .widget<RelayStatsLine>(find.byKey(const Key('my-relay-stats')))
@@ -321,6 +323,7 @@ void main() {
       WidgetTester tester,
       AppSettings settings, {
       VoidCallback? onOpenRoles,
+      Size size = const Size(390, 844),
     }) async {
       final changes = <AppSettings>[];
       final tasks =
@@ -350,28 +353,27 @@ void main() {
             onOpenRoles: onOpenRoles ?? () {},
           ),
         ),
+        size: size,
       );
       return changes;
     }
 
-    testWidgets('карточки Лиорио и Ноды с их настройками', (tester) async {
+    testWidgets('карточки Садо, Лиорио и Ноды с их настройками',
+        (tester) async {
       await pumpAssistants(tester, const AppSettings());
-      expect(
-        find.byKey(const Key('persona-card-${'rio'}')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('persona-card-noda')), findsOneWidget);
-      expect(
-        tester.widget<Text>(find.byKey(const Key('persona-role-rio'))).data,
-        'главный помощник',
-      );
-      expect(
-        tester.widget<Text>(find.byKey(const Key('persona-role-noda'))).data,
-        'пишет первым',
-      );
-      expect(find.text('на вы'), findsNWidgets(2));
-      // Основной не выключается; второй — переключателем.
-      expect(find.byKey(const Key('persona-active-rio')), findsNothing);
+      for (final id in <String>['sado', 'rio', 'noda']) {
+        expect(find.byKey(Key('persona-card-$id')), findsOneWidget);
+      }
+      String role(String id) =>
+          tester.widget<Text>(find.byKey(Key('persona-role-$id'))).data!;
+      // Род Садо ещё не выбран — подпись без рода.
+      expect(role('sado'), 'главное: беседа, задачи, планы');
+      expect(role('rio'), 'ведёт расширения');
+      expect(role('noda'), 'ведёт оповещения');
+      expect(find.text('на вы'), findsNWidgets(3));
+      // У Садо переключателя нет: он всегда включён.
+      expect(find.byKey(const Key('persona-active-sado')), findsNothing);
+      expect(find.byKey(const Key('persona-active-rio')), findsOneWidget);
       expect(find.byKey(const Key('persona-active-noda')), findsOneWidget);
       expect(
         find.byKey(const Key('assistants-journal-planned')),
@@ -384,30 +386,97 @@ void main() {
       );
     });
 
-    testWidgets('выключить Ноду — соло Лиорио; включить — снова дуэт',
+    testWidgets('род Садо выбран — «главный помощник» / «главная помощница»',
         (tester) async {
+      for (final (gender, text) in <(ReplyGender, String)>[
+        (ReplyGender.male, 'главный помощник'),
+        (ReplyGender.female, 'главная помощница'),
+      ]) {
+        await pumpAssistants(
+          tester,
+          AppSettings(
+            personas: PersonaSettings(
+              genders: <String, ReplyGender>{'sado': gender},
+            ),
+          ),
+        );
+        expect(
+          tester.widget<Text>(find.byKey(const Key('persona-role-sado'))).data,
+          text,
+        );
+      }
+    });
+
+    testWidgets('обе обязанности у Лиорио: у Ноды — «без обязанностей»',
+        (tester) async {
+      await pumpAssistants(
+        tester,
+        const AppSettings(
+          personas: PersonaSettings(dutyNotifications: 'rio'),
+        ),
+      );
+      String role(String id) =>
+          tester.widget<Text>(find.byKey(Key('persona-role-$id'))).data!;
+      expect(role('rio'), 'ведёт расширения и оповещения');
+      expect(role('noda'), 'без обязанностей');
+    });
+
+    testWidgets('от 900 px карточки в ряд, уже — столбцом', (tester) async {
+      Offset at(String id) =>
+          tester.getTopLeft(find.byKey(Key('persona-card-$id')));
+      await pumpAssistants(
+        tester,
+        const AppSettings(),
+        size: const Size(1200, 900),
+      );
+      expect(at('sado').dy, at('rio').dy);
+      expect(at('rio').dy, at('noda').dy);
+      expect(at('sado').dx, lessThan(at('rio').dx));
+      expect(at('rio').dx, lessThan(at('noda').dx));
+      await pumpAssistants(
+        tester,
+        const AppSettings(),
+        size: const Size(800, 900),
+      );
+      expect(at('sado').dx, at('rio').dx);
+      expect(at('sado').dy, lessThan(at('rio').dy));
+      expect(at('rio').dy, lessThan(at('noda').dy));
+    });
+
+    testWidgets('переключатели помощников выставляют режим', (tester) async {
       final changes = await pumpAssistants(tester, const AppSettings());
       await tester.tap(find.byKey(const Key('persona-active-noda')));
       await tester.pumpAndSettle();
-      expect(changes.last.personas.mode, AssistantMode.solo);
-      expect(changes.last.personas.solo.id, 'rio');
+      expect(changes.last.personas.teamMode, TeamMode.duo);
+      expect(changes.last.personas.duoHelper, 'rio');
       expect(
         tester.widget<Text>(find.byKey(const Key('persona-role-noda'))).data,
-        'выключена · режим «Соло»',
+        'выключена · режим «Дуэт»',
+      );
+      await tester.tap(find.byKey(const Key('persona-active-rio')));
+      await tester.pumpAndSettle();
+      expect(changes.last.personas.teamMode, TeamMode.solo);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('persona-role-rio'))).data,
+        'выключен · режим «Соло»',
       );
       await tester.tap(find.byKey(const Key('persona-active-noda')));
       await tester.pumpAndSettle();
-      expect(changes.last.personas.mode, AssistantMode.duo);
-      expect(changes.last.personas.main.id, 'rio');
+      expect(changes.last.personas.teamMode, TeamMode.duo);
+      expect(changes.last.personas.duoHelper, 'noda');
+      await tester.tap(find.byKey(const Key('persona-active-rio')));
+      await tester.pumpAndSettle();
+      expect(changes.last.personas.teamMode, TeamMode.trio);
     });
 
-    testWidgets('«Ведёт: Кладовщик» у Ноды открывает роли', (tester) async {
+    testWidgets('«Ведёт: Кладовщик» у ведущей расширений Ноды открывает роли',
+        (tester) async {
       var roles = 0;
       await pumpAssistants(
         tester,
         const AppSettings(
           enabledRoles: <String>{'storekeeper'},
-          roleOwners: <String, String>{'storekeeper': 'noda'},
+          personas: PersonaSettings(dutyExtensions: 'noda'),
         ),
         onOpenRoles: () => roles++,
       );
@@ -427,7 +496,7 @@ void main() {
         tester,
         const AppSettings(
           enabledRoles: <String>{'storekeeper'},
-          roleOwners: <String, String>{'storekeeper': 'noda'},
+          personas: PersonaSettings(dutyExtensions: 'noda'),
         ),
         onOpenRoles: () {},
       );

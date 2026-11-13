@@ -26,7 +26,7 @@ final class ManifestRule {
   /// конкретнее правило.
   final int weight;
 
-  /// Сколько слов вокруг полей: от него уверенность «Связного».
+  /// Сколько слов вокруг полей: от него уверенность «Tridot».
   final int literalWords;
 
   /// Порядок фразы внутри команды: при равном весе — раньше первее.
@@ -156,7 +156,7 @@ final class ManifestMatcher {
   }
 
   /// Порт `askMatch`: сначала фраза как есть, потом без связок, потом
-  /// команда по умолчанию. Без правил «Связного» — для сверки с core.mjs.
+  /// команда по умолчанию. Без правил «Tridot» — для сверки с core.mjs.
   ManifestHit? askMatch(String text) {
     final raw = askText(text);
     if (raw.isEmpty) return null;
@@ -188,7 +188,7 @@ final class ManifestMatcher {
     return null;
   }
 
-  /// Все подходящие правила по порядку: «Связной» отбирает из них своё.
+  /// Все подходящие правила по порядку: «Tridot» отбирает из них своё.
   Iterable<ManifestHit> hits(String text) sync* {
     for (final rule in rules) {
       final m = rule.pattern.firstMatch(text);

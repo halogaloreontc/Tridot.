@@ -35,7 +35,7 @@
 {"id":"wh-035","text":"215-1-1-1","connector":"warehouse","intent":"warehouse.cell","note":"голый код ячейки по shape","source":"manual"}
 {"id":"wh-036","text":"215-3","connector":"warehouse","intent":"warehouse.cell","note":"калькулятор числа через «-» без пробелов не берёт","source":"manual"}
 {"id":"wh-037","text":"без места","connector":"warehouse","intent":"warehouse.cell","source":"manual"}
-{"id":"wh-038","text":"что умеет склад","connector":"warehouse","intent":"warehouse.help","note":"своя фраза справки «Связного»","source":"manual"}
+{"id":"wh-038","text":"что умеет склад","connector":"warehouse","intent":"warehouse.help","note":"своя фраза справки Tridot","source":"manual"}
 {"id":"wh-039","text":"найти 64115","connector":"warehouse","intent":"warehouse.where","note":"явная фраза склада сильнее неявной задачи по инфинитиву","source":"manual"}
 {"id":"wh-040","text":"сегодня","connector":"warehouse","intent":"unknown","note":"однословные фразы без поля склад не берёт","source":"manual"}
 {"id":"wh-041","text":"вчера","connector":"warehouse","intent":"unknown","source":"manual"}

@@ -1,5 +1,5 @@
-// Левое меню (макет «Д»): шапка «Связной» с версией, карточка «Мой
-// Связной», разделы, дерево расширений со статусами, недавние сессии,
+// Левое меню (макет «Д»): шапка «Tridot» с версией, карточка «Мой
+// Tridot», разделы, дерево расширений со статусами, недавние сессии,
 // поиск по сессиям, который растягивается и прячет «+», «Отмена» и Esc,
 // встаёт над клавиатурой, подсветка совпадения. Секреты из карточек
 // «Паролей» поиск не находит.
@@ -127,6 +127,7 @@ Future<_Calls> _pump(
   VoidCallback? onCollapse,
   List<SessionGroupEntry>? groups,
   SectionCounts counts = const SectionCounts(),
+  List<Persona>? assistants,
 }) async {
   final calls = _Calls();
   tester.view.physicalSize = size;
@@ -172,6 +173,7 @@ Future<_Calls> _pump(
           search: search ?? (String q) async => const <ChatSearchHit>[],
           onOpenHit: (ChatSearchHit hit) => calls.log.add('hit:${hit.chatId}'),
           timeLabel: (DateTime at) => sessionTimeLabel(at, _now),
+          assistants: assistants,
         ),
       ),
     ),
@@ -180,10 +182,66 @@ Future<_Calls> _pump(
 }
 
 void main() {
+  testWidgets('знак приложения — три точки цветами Садо, Лиорио и Ноды',
+      (tester) async {
+    await _pump(tester);
+    final glyph = find.byKey(const ValueKey<String>('app-glyph'));
+    expect(glyph, findsOneWidget);
+    // Знак — слева от названия на плашке.
+    expect(
+      tester.getRect(glyph).right,
+      lessThanOrEqualTo(
+        tester.getRect(find.byKey(const ValueKey<String>('app-name'))).left,
+      ),
+    );
+    final paint = tester.widget<CustomPaint>(
+      find.descendant(of: glyph, matching: find.byType(CustomPaint)),
+    );
+    expect(paint.painter, isA<RelayGlyphPainter>());
+    expect(RelayGlyphPainter.colors, <Color>[
+      AssistantColors.sado,
+      AssistantColors.liorio,
+      AssistantColors.noda,
+    ]);
+    // Три закрашенные точки на сетке 24: (5,12), (12,12), (19,12), r = 3.
+    final recorder = _CircleCanvas();
+    const RelayGlyphPainter().paint(recorder, const Size(24, 24));
+    expect(recorder.circles, <(Offset, double, int)>[
+      (const Offset(5, 12), 3, AssistantColors.sado.toARGB32()),
+      (const Offset(12, 12), 3, AssistantColors.liorio.toARGB32()),
+      (const Offset(19, 12), 3, AssistantColors.noda.toARGB32()),
+    ]);
+  });
+
+  testWidgets('знаки на карточке «Мой …» — только активные помощники',
+      (tester) async {
+    Iterable<String> shown() => <String>[
+          for (final id in <String>['sado', 'rio', 'noda'])
+            if (find
+                .byKey(ValueKey<String>('relay-avatar-$id'))
+                .evaluate()
+                .isNotEmpty)
+              id,
+        ];
+    double width() => tester
+        .getSize(find.byKey(const ValueKey<String>('relay-avatars')))
+        .width;
+
+    await _pump(tester, assistants: Personas.all);
+    expect(shown(), <String>['sado', 'rio', 'noda']);
+    final trio = width();
+    await _pump(tester, assistants: <Persona>[Personas.sado, Personas.noda]);
+    expect(shown(), <String>['sado', 'noda']);
+    expect(width(), lessThan(trio));
+    await _pump(tester, assistants: <Persona>[Personas.sado]);
+    expect(shown(), <String>['sado']);
+    expect(width(), 36);
+  });
+
   testWidgets('карточка, разделы, расширения и сессии ведут куда надо',
       (tester) async {
     final calls = await _pump(tester);
-    expect(find.text('Мой Связной'), findsOneWidget);
+    expect(find.text(AppInfo.hubName), findsOneWidget);
     expect(find.byKey(const Key('nav-settings')), findsNothing);
     expect(find.byIcon(Icons.settings_outlined), findsNothing);
     expect(
@@ -232,7 +290,7 @@ void main() {
     );
   });
 
-  testWidgets('«Мой Связной»: телефон — 88 px и 18/600, компьютер — 72 и 16',
+  testWidgets('«Мой Tridot»: телефон — 88 px и 18/600, компьютер — 72 и 16',
       (tester) async {
     for (final wide in <bool>[false, true]) {
       await _pump(tester, wide: wide, size: Size(wide ? 312 : 360, 900));
@@ -261,14 +319,14 @@ void main() {
     expect(find.text('Расширения'), findsNothing);
   });
 
-  testWidgets('шапка «Связной» с версией — и на телефоне', (tester) async {
+  testWidgets('шапка «Tridot» с версией — и на телефоне', (tester) async {
     await _pump(tester);
     expect(find.byKey(const ValueKey<String>('app-name')), findsOneWidget);
     expect(find.text(AppInfo.name), findsOneWidget);
     final version = find.byKey(const ValueKey<String>('app-version'));
     expect(tester.widget<Text>(version).data, AppInfo.version);
     expect(find.bySemanticsLabel('Версия ${AppInfo.version}'), findsOneWidget);
-    // Версия — рядом с названием, в той же строке, над «Мой Связной».
+    // Версия — рядом с названием, в той же строке, над «Мой Tridot».
     final name = tester.getRect(find.byKey(const ValueKey<String>('app-name')));
     final ver = tester.getRect(version);
     expect(ver.left, greaterThan(name.right));
@@ -347,7 +405,7 @@ void main() {
       tester.getRect(find.byKey(const Key('session-search-cancel'))).bottom,
       lessThanOrEqualTo(640 - 300),
     );
-    // Шапка, «Мой Связной» и разделы уступили место результатам.
+    // Шапка, «Мой Tridot» и разделы уступили место результатам.
     expect(find.byKey(const ValueKey<String>('app-name')), findsNothing);
     expect(find.byKey(const Key('drawer-my-relay')), findsNothing);
     final hit = find.byKey(const Key('search-hit-session:0'));
@@ -589,7 +647,7 @@ void main() {
       matching: find.byType(PersonaMark),
     );
     expect(tester.widget<PersonaMark>(mark).persona, Personas.noda);
-    // Порядок: «Мой Связной», разделы, закреплённые, дни, «Расширения».
+    // Порядок: «Мой Tridot», разделы, закреплённые, дни, «Расширения».
     double top(String key) => tester.getRect(find.byKey(Key(key))).top;
     expect(top('drawer-my-relay'), lessThan(top('nav-tasks')));
     expect(top('nav-planning'), lessThan(top('drawer-group-pinned')));
@@ -850,4 +908,17 @@ void main() {
     expect(sessionTimeLabel(DateTime(2026, 11, 5), _now), 'чт');
     expect(sessionTimeLabel(DateTime(2026, 10, 9), _now), '9 окт.');
   });
+}
+
+/// Холст, который запоминает нарисованные круги.
+final class _CircleCanvas implements Canvas {
+  final List<(Offset, double, int)> circles = <(Offset, double, int)>[];
+
+  @override
+  void drawCircle(Offset c, double radius, Paint paint) =>
+      circles.add((c, radius, paint.color.toARGB32()));
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('${invocation.memberName}');
 }

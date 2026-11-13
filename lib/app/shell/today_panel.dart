@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/formatting/due_format.dart';
 import '../../core/formatting/plural.dart';
 import '../../core/models/task.dart';
+import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
 
 /// Ждущая отметки карточка действия в «Сегодня»: «Приход 318 ждёт
@@ -13,11 +14,15 @@ final class TodayPending {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.lead,
   });
 
   final String id;
   final String title;
   final String subtitle;
+
+  /// Кто ведёт расширения: значок склада — его цветом; `null` — цвет Ноды.
+  final Persona? lead;
   final VoidCallback onTap;
 }
 
@@ -142,7 +147,7 @@ final class TodayPanel extends StatelessWidget {
   final List<TodaySection> sections;
 
   /// Свернуть колонку (широкий экран; на телефоне панели нет — всё это
-  /// в «Мой Связной» → «Сводка»).
+  /// в «Мой Tridot» → «Сводка»).
   final VoidCallback? onClose;
   final String closeTooltip;
   final Key closeKey;
@@ -510,13 +515,20 @@ final class _PendingRow extends StatelessWidget {
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
-                    color: AssistantColors.nodaBg,
+                    color: item.lead == null
+                        ? AssistantColors.nodaBg
+                        : Color(item.lead!.accentBackground),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.inventory_2_outlined,
+                    key: ValueKey<String>(
+                      'today-pending-icon-${item.lead?.id ?? 'noda'}',
+                    ),
                     size: 16,
-                    color: AssistantColors.noda,
+                    color: item.lead == null
+                        ? AssistantColors.noda
+                        : Color(item.lead!.accentColor),
                   ),
                 ),
                 const SizedBox(width: 12),

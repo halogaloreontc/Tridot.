@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 
 import '../../core/formatting/plural.dart';
 import '../../core/personas/persona.dart';
+import '../../core/replies/reply_library.dart';
 import '../assistant_theme.dart';
 import '../widgets/personas_section.dart';
 
-/// Пустая новая сессия (макет «Д») — она же приветствие: знак помощника,
-/// «Что сделать?» и, если какую-то роль ведёт второй помощник, строка об
-/// этом. Ниже — короткие строки от второго помощника ([notifier]):
-/// «Просрочена 1 задача ›» ([overdue]) и «Пора потренировать пароль ›»
-/// ([onTraining]). Сами по себе в сессию они ничего не пишут.
+/// Пустая новая сессия (макет «Д») — она же приветствие: знак Садо,
+/// «Что сделать?» и, если какую-то роль ведёт помощник, строка об этом.
+/// Ниже — короткие строки от ведущего оповещений ([notifier]): «Просрочена
+/// 1 задача ›» ([overdue]) и «Пора потренировать пароль ›» ([onTraining]).
+/// Сами по себе в сессию они ничего не пишут.
+///
+/// Пока род Садо не выбран, под «Что сделать?» — карточка «Садо — он или
+/// она?» ([onSadoGender]): не модальное окно, её можно не замечать.
 final class SessionHero extends StatelessWidget {
   const SessionHero({
     super.key,
@@ -19,21 +23,27 @@ final class SessionHero extends StatelessWidget {
     this.overdue = 0,
     this.onOverdue,
     this.onTraining,
+    this.onSadoGender,
   });
 
+  /// Главный — Садо: его знак крупно.
   final Persona persona;
 
-  /// «Кладовщик» ведёт Нода — передам сам»; `null` — без строки.
+  /// «Кладовщик» ведёт Лиорио — такие фразы передам»; `null` — без строки.
   final String? note;
 
-  /// Кто пишет первым (второй помощник, в соло — единственный): его знак у
-  /// строк о просроченных и тренировке. `null` — без знака.
+  /// Ведущий оповещений (в Соло — Садо): его знак у строк о просроченных
+  /// и тренировке. `null` — без знака.
   final Persona? notifier;
+
+  /// Род Садо ещё не выбран: карточка выбора, нажатие — выбранный род;
+  /// `null` — карточки нет.
+  final ValueChanged<ReplyGender>? onSadoGender;
 
   /// Сколько задач просрочено; 0 — строки нет.
   final int overdue;
 
-  /// Нажатие на строку о просроченных («Мой Связной» → «Сводка»).
+  /// Нажатие на строку о просроченных («Мой …» → «Сводка»).
   final VoidCallback? onOverdue;
 
   /// Пора потренировать пароль: нажатие задаёт вопрос; `null` — строки
@@ -45,23 +55,26 @@ final class SessionHero extends StatelessWidget {
       '${ruPlural(n, 'Просрочена', 'Просрочены', 'Просрочено')} $n '
       '${ruPlural(n, 'задача', 'задачи', 'задач')}';
 
-  /// Строка о ролях второго помощника: `null`, если все роли ведёт
-  /// основной.
+  /// Строка о ролях, которые ведёт не главный: `null`, если все роли у
+  /// [main]. Текст одной строки — [line] (запись каталога
+  /// `session.handoff.note` голосом Садо): роли через запятую и кто их
+  /// ведёт.
   static String? noteFor(
     Iterable<(String roleTitle, Persona owner)> roles,
-    Persona main,
-  ) {
-    final others = <String, List<String>>{};
+    Persona main, {
+    required String Function(String roles, Persona owner) line,
+  }) {
+    final others = <String, (Persona, List<String>)>{};
     for (final (title, owner) in roles) {
       if (owner.id == main.id) continue;
-      others.putIfAbsent(owner.russianName, () => <String>[]).add('«$title»');
+      others
+          .putIfAbsent(owner.id, () => (owner, <String>[]))
+          .$2
+          .add('«$title»');
     }
     if (others.isEmpty) return null;
-    return others.entries
-        .map(
-          (MapEntry<String, List<String>> e) =>
-              '${e.value.join(', ')} ведёт ${e.key} — передам сам',
-        )
+    return others.values
+        .map(((Persona, List<String>) e) => line(e.$2.join(', '), e.$1))
         .join('; ');
   }
 
@@ -98,6 +111,10 @@ final class SessionHero extends StatelessWidget {
                 style: technicalTextStyle,
               ),
             ],
+            if (onSadoGender != null) ...<Widget>[
+              const SizedBox(height: 16),
+              _GenderChoice(name: persona.russianName, onChosen: onSadoGender!),
+            ],
             if (overdue > 0 || onTraining != null) const SizedBox(height: 16),
             if (overdue > 0)
               _HeroLine(
@@ -124,7 +141,71 @@ final class SessionHero extends StatelessWidget {
   }
 }
 
-/// Строка второго помощника под «Что сделать?»: знак, текст и «›». Цель
+/// «Садо — он или она?» и два чипа. Выбор пишется в настройки, и
+/// карточка исчезает.
+final class _GenderChoice extends StatelessWidget {
+  const _GenderChoice({required this.name, required this.onChosen});
+
+  final String name;
+  final ValueChanged<ReplyGender> onChosen;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: DecoratedBox(
+        key: const Key('sado-gender-choice'),
+        decoration: BoxDecoration(
+          color: AssistantColors.raised,
+          border: Border.all(color: AssistantColors.borderSoft),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                '$name — он или она?',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AssistantColors.textStrong),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'От этого зависит, как помощник говорит о себе. '
+                'Поменять можно в «Помощниках».',
+                textAlign: TextAlign.center,
+                style: technicalTextStyle,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  for (final (gender, label) in const <(ReplyGender, String)>[
+                    (ReplyGender.male, 'Он'),
+                    (ReplyGender.female, 'Она'),
+                  ])
+                    ActionChip(
+                      key: ValueKey<String>('sado-gender-${gender.name}'),
+                      label: Text(label),
+                      onPressed: () => onChosen(gender),
+                      labelStyle: const TextStyle(color: AssistantColors.text),
+                      backgroundColor: AssistantColors.workspace,
+                      side: const BorderSide(color: AssistantColors.sado),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Строка ведущего оповещений под «Что сделать?»: знак, текст и «›». Цель
 /// нажатия не ниже 44.
 final class _HeroLine extends StatelessWidget {
   const _HeroLine({

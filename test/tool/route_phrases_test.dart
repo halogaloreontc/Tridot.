@@ -227,4 +227,18 @@ void main() {
       expect(toml, contains('\nconnector = "data"\n'));
     });
   });
+
+  test('обращение по имени снимается до разбора, как в приложении', () {
+    for (final text in <String>[
+      'Садо, добавь задачу хлеб',
+      'Нода, добавь задачу хлеб',
+      'Лиорио: добавь задачу хлеб',
+    ]) {
+      final result = routed(text);
+      expect(result['connector'], 'tasks', reason: text);
+      final parse = result['parse']! as Map<String, Object?>;
+      expect(parse['intent'], 'createTask', reason: text);
+      expect(parse['title'], 'Хлеб', reason: text);
+    }
+  });
 }

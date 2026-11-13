@@ -77,7 +77,7 @@ final class ManifestCommand {
 ///
 /// Читается только у встроенной копии описания: у описания сервера раздел
 /// не разбирается вовсе. Тела запросов, карточку и ответы задаёт код
-/// «Связного» по [kind]; у записи нет `call`, `answer`, `reply`.
+/// «Tridot» по [kind]; у записи нет `call`, `answer`, `reply`.
 final class ManifestAction {
   const ManifestAction({
     required this.id,
@@ -230,7 +230,7 @@ final class ManifestDescription {
   /// Формат, который понимает коннектор.
   static const String format = 'assistant/1';
 
-  /// Пределы «Связного»: описание — недоверенные данные.
+  /// Пределы «Tridot»: описание — недоверенные данные.
   static const int maxBytes = 256 * 1024;
   static const int maxCommands = 100;
   static const int maxPhrases = 50;
@@ -254,7 +254,7 @@ final class ManifestDescription {
   final String actionName;
   final List<String> only;
 
-  /// `api.act` — действия с записью по описанию. «Связной» его не
+  /// `api.act` — действия с записью по описанию. «Tridot» его не
   /// использует: что писать, знает код ([writeActions]); признак «сервер
   /// умеет» — сам ответ расчёта.
   final List<String> act;
@@ -286,7 +286,7 @@ final class ManifestDescription {
   /// Разобрано как встроенная копия из `assets/connectors/`.
   final bool builtIn;
 
-  /// Действия с записью, которые знает код «Связного», по виду: расчёт и
+  /// Действия с записью, которые знает код «Tridot», по виду: расчёт и
   /// запись. Встроенное описание с другой парой проверку не проходит.
   /// Новое действие — сюда, после чтения кода сервера.
   static const Map<String, (String, String)> writeActions =
@@ -361,7 +361,7 @@ final class ManifestDescription {
     return _build(decoded, source, builtIn: builtIn);
   }
 
-  /// Проверка как `askCheck` из core.mjs плюс пределы «Связного». Пустой
+  /// Проверка как `askCheck` из core.mjs плюс пределы «Tridot». Пустой
   /// список — описанием можно пользоваться.
   static List<String> check(
     Object? desc, {
@@ -491,7 +491,7 @@ final class ManifestDescription {
         bad('fallback: у команды должно быть ровно одно поле');
       }
     }
-    // Пределы и правила «Связного».
+    // Пределы и правила «Tridot».
     if (cmds.length > maxCommands) bad('commands: команд больше $maxCommands');
     final app = _map(desc['app']);
     if (appId != null && app['id'] != appId) {
@@ -775,7 +775,7 @@ final class ManifestDescription {
       }
     }
     // Команды не зовут ни записи, ни расчёты действий: расчёт строит
-    // карточку только в потоке действий «Связного».
+    // карточку только в потоке действий «Tridot».
     final forbidden = <Object?>{...act, ...checks};
     for (var i = 0; i < commands.length; i++) {
       final c = commands[i];

@@ -230,12 +230,12 @@ void main() {
 
     await _tap(tester, find.byKey(const Key('task-chat-done')));
     expect((await h.byTitle('Купить хлеб')).status, TaskStatus.done);
-    expect(_history(tester), <String>['rio: Задача «Купить хлеб» завершена.']);
+    expect(_history(tester), <String>['sado: Задача «Купить хлеб» завершена.']);
     expect(_headerStatus(tester), 'Выполнена');
 
     await _tap(tester, find.byKey(const Key('task-chat-reopen')));
     expect((await h.byTitle('Купить хлеб')).isActive, isTrue);
-    expect(_history(tester).last, 'rio: Задача «Купить хлеб» снова в работе.');
+    expect(_history(tester).last, 'sado: Задача «Купить хлеб» снова в работе.');
     expect(_headerStatus(tester), 'В работе');
 
     // «Перенести…» вставляет в поле начало команды.
@@ -441,7 +441,7 @@ void main() {
     expect(find.byKey(Key('chat-unread-${bread.id}')), findsOneWidget);
     await _tap(tester, find.byKey(Key('chat-${bread.id}')));
     expect(_history(tester).first, 'user: готово');
-    expect(_history(tester).last, startsWith('rio: '));
+    expect(_history(tester).last, startsWith('sado: '));
   });
 
   testWidgets('320 px и крупный шрифт: шапка — меню, без переполнений', (

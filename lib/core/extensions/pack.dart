@@ -2,11 +2,12 @@ import 'dart:convert';
 
 import '../replies/reply_library.dart';
 
-/// Для кого запись пака: для любого помощника, только Liorio или только Noda.
-/// Значение в JSON — id помощника: `rio` (Liorio, id от прежнего имени,
-/// ADR-008) или `noda`; `liorio` читается как `rio`.
+/// Для кого запись пака: для любого помощника, только Садо, только Лиорио
+/// или только Ноды. Значение в JSON — id помощника: `sado`, `rio` (Лиорио,
+/// id от прежнего имени, ADR-008) или `noda`; `liorio` читается как `rio`.
 enum PackPersona {
   any,
+  sado,
   rio,
   noda;
 
@@ -473,7 +474,8 @@ abstract final class PackFormat {
           : null;
       if (match == null) {
         errors.add(
-          '$where: persona должна быть одной из: any, rio (Liorio), noda.',
+          '$where: persona должна быть одной из: any, sado (Садо), rio (Лиорио), '
+          'noda (Нода).',
         );
       } else {
         persona = match;

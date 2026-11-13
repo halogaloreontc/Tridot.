@@ -188,6 +188,11 @@ final class DataConnector implements Connector, ConnectorHealth {
     );
   }
 
+  /// Слова ответа на вопрос «копию чего?»: пароли и все данные. Имя
+  /// помощника ими быть не может (`PersonaNames.validate`).
+  static Set<String> get answerWords =>
+      <String>{..._passwordsAnswers, ..._dataAnswers};
+
   static const Set<String> _passwordsAnswers = <String>{
     'пароли',
     'паролей',

@@ -183,31 +183,16 @@ void main() {
     expect(h.registry.isEnabled(TasksConnector.id), isTrue);
   });
 
-  testWidgets('«Ведёт» — только в дуэте; основной — без записи',
+  testWidgets('«Ведёт:» в карточке роли нет: ведущего задают обязанности',
       (tester) async {
     final h = _Harness();
     await tester.pumpWidget(h.build());
     await tester.pumpAndSettle();
-    final noda = 'role-owner-${Roles.storekeeperId}-noda';
-    final rio = 'role-owner-${Roles.storekeeperId}-rio';
-    expect(tester.widget<ChoiceChip>(_key(rio)).selected, isTrue);
-    await _tap(tester, noda);
-    expect(
-      h.settings.roleOwners,
-      <String, String>{Roles.storekeeperId: 'noda'},
-    );
-    expect(tester.widget<ChoiceChip>(_key(noda)).selected, isTrue);
-    await _tap(tester, rio);
-    expect(h.settings.roleOwners, isEmpty);
-
-    final solo = _Harness(
-      settings: const AppSettings(
-        personas: PersonaSettings(mode: AssistantMode.solo),
-      ),
-    );
-    await tester.pumpWidget(solo.build());
-    await tester.pumpAndSettle();
     expect(find.text('Ведёт:'), findsNothing);
+    expect(
+      _key('role-owner-${Roles.storekeeperId}-noda'),
+      findsNothing,
+    );
   });
 
   testWidgets('«Подключить склад» → экран подключения, вход включает роль',
@@ -315,15 +300,12 @@ void main() {
       for (final key in <String>[
         'role-card-${Roles.personalId}',
         'role-card-${Roles.storekeeperId}',
-        'role-owner-${Roles.storekeeperId}-noda',
         'role-connect-${Roles.storekeeperId}',
       ]) {
         await tester.ensureVisible(_key(key));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: key);
       }
-      await _tap(tester, 'role-owner-${Roles.storekeeperId}-noda');
-      expect(tester.takeException(), isNull);
     });
   }
 

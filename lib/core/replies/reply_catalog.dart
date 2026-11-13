@@ -32,6 +32,16 @@ final class ReplyVoice {
 
   /// Показывать эмодзи, если стиль ими пользуется.
   final bool emoji;
+
+  /// Тот же голос с другим родом: фраза о другом помощнике («Нода —
+  /// помощница: …») склоняется по его роду, а стиль и обращение остаются
+  /// говорящего.
+  ReplyVoice copyWith({ReplyGender? gender}) => ReplyVoice(
+        style: style,
+        gender: gender ?? this.gender,
+        address: address,
+        emoji: emoji,
+      );
 }
 
 /// Встроенные стили общения.

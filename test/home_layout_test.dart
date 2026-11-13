@@ -167,7 +167,7 @@ void main() {
 
       // Текст ответа начинается там же; кубик — в строке автора, а не
       // отдельным значком левее текста.
-      final author = find.byKey(const ValueKey<String>('message-author-rio'));
+      final author = find.byKey(const ValueKey<String>('message-author-sado'));
       final cube = find.byType(StatusCube);
       expect(cube, findsOneWidget);
       final cubeRow = find.ancestor(of: cube, matching: author);

@@ -1,4 +1,5 @@
 import '../connectors/connector.dart';
+import '../personas/duty_zones.dart';
 import '../personas/persona.dart';
 import '../replies/reply_library.dart';
 import 'extension_info.dart';
@@ -157,20 +158,23 @@ final class ExtensionRegistry {
   RoleInfo? activeRoleOf(String id) =>
       rolesOf(id).where(_choice.isRoleEnabled).firstOrNull;
 
-  /// Кто ведёт роль [roleId] при настройках [personas]: выбранный в
-  /// карточке роли или основной. В соло — единственный помощник.
+  /// Кто ведёт роль [roleId] при настройках [personas]: ведущий
+  /// обязанности, к которой относится первый навык роли (ADR-016):
+  /// «Личное» — Садо, «Кладовщик» — ведущий расширений. Выбор
+  /// `role_owners` на это больше не влияет: роли только включают навыки.
   Persona ownerOf(String roleId, PersonaSettings personas) {
-    if (personas.mode == AssistantMode.solo) return personas.solo;
-    return Personas.byId(_choice.roleOwners[roleId]) ?? personas.main;
+    final found = role(roleId);
+    final first = found == null || found.extensions.isEmpty
+        ? null
+        : found.extensions.first;
+    return first == null ? personas.responder : ownerFor(first, personas);
   }
 
-  /// Кто отвечает на фразы расширения [connectorId] в дуэте, если к
-  /// помощнику не обращались явно: владелец его включённой роли; `null` —
-  /// расширение вне ролей (отвечает адресат по обычным правилам).
-  Persona? ownerFor(String connectorId, PersonaSettings personas) {
-    final role = activeRoleOf(connectorId);
-    return role == null ? null : ownerOf(role.id, personas);
-  }
+  /// Кто отвечает на фразы навыка [connectorId], если к помощнику не
+  /// обращались явно: ведущий его обязанности ([DutyZones.dutyOf]), если
+  /// он активен в текущем режиме, иначе Садо.
+  Persona ownerFor(String connectorId, PersonaSettings personas) =>
+      personas.cast.ownerOf(DutyZones.dutyOf(connectorId));
 
   /// Название навыка для пользователя — одно и то же в карточке роли, в
   /// «Расширениях» и в «что умеешь»: название расширения («Склад»).
@@ -220,14 +224,13 @@ final class ExtensionRegistry {
     return '${parts.sublist(0, parts.length - 1).join(', ')} и ${parts.last}';
   }
 
-  /// Все включённые роли в дуэте ведёт основной помощник [personas]:
-  /// тогда без явного адресата на любую фразу отвечает он. Иначе фразу
-  /// навыка роли забирает её ведущий, и заранее не сказать, кто ответит.
-  bool mainLeadsAll(PersonaSettings personas) =>
-      personas.mode != AssistantMode.duo ||
-      activeRoles.every(
-        (RoleInfo role) => ownerOf(role.id, personas).id == personas.main.id,
-      );
+  /// Без обращения по имени на любую фразу отвечает Садо: расширения
+  /// тоже ведёт он (Соло, Дуэт без ведущего расширений). Иначе фразу
+  /// расширения забирает его ведущий, и заранее не сказать, кто ответит.
+  bool mainLeadsAll(PersonaSettings personas) {
+    final cast = personas.cast;
+    return cast.extensionsLead.id == cast.responder.id;
+  }
 
   /// Выбор, в котором роль [id] включена или выключена.
   ExtensionChoice roleChoiceWith(String id, bool enabled) {

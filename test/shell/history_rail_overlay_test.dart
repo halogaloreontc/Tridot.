@@ -285,7 +285,7 @@ void main() {
       }
       final rail = _readAt(tester, 'Хроника команд');
       // Первое сообщение ленты — ответ помощника (подпись с его именем).
-      final feed = _readAt(tester, 'Лиорио\n');
+      final feed = _readAt(tester, 'Садо\n');
       expect(rail, isNonNegative);
       expect(feed, isNonNegative);
       expect(rail, lessThan(feed));

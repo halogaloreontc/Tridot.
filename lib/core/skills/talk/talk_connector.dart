@@ -17,7 +17,7 @@ export 'talk_phrases.dart';
 ///
 /// Беседа заготовленная, а не свободная (ADR-001): понимает только
 /// короткие реплики целиком ([TalkPhrases]) и отвечает записями каталога
-/// ответов голосом Liorio или Noda. Совпадения беседы — на крайний случай
+/// ответов голосом Садо, Лиорио или Ноды. Совпадения беседы — на крайний случай
 /// ([ConnectorMatch.fallback]): любая команда задач, калькулятора или
 /// подключения важнее.
 final class TalkConnector implements Connector, ConnectorHealth {
@@ -136,15 +136,18 @@ final class TalkConnector implements Connector, ConnectorHealth {
     if (payload is ConfirmationAnswer) return _complaint(payload, session);
     final request = payload! as TalkRequest;
     final command = match.commandId;
-    // «Спасибо, Нода», «как дела, Нода?»: в дуэте отвечает названный
+    // «Спасибо, Нода», «как дела, Нода?»: отвечает названный активный
     // помощник, его голосом, и он же становится адресатом чата
-    // ([AssistantResponse.addressedPersonaId]). В соло имя — просто текст.
-    // Просьба «пусть отвечает Лиорио» решает, кто подтвердит, сама (_setting):
-    // имя в ней — не обращение, а новый основной.
-    final named = Personas.byId(request.persona);
+    // ([AssistantResponse.addressedPersonaId]). Имя помощника, выключенного
+    // режимом, — просто текст. Просьбы «пусть отвечает Лиорио» и «включи
+    // дуэт с Нодой» решают, кто ответит, сами (_setting): имя в них — не
+    // обращение.
+    final cast = session.personas.cast;
+    final named = cast.find(request.persona);
     if (named == null ||
-        session.personas.mode != AssistantMode.duo ||
-        request.setting == TalkSettingKind.main) {
+        !cast.isActive(named.id) ||
+        request.setting == TalkSettingKind.main ||
+        (request.setting?.isMode ?? false)) {
       return _run(request, command, session);
     }
     if (named.id == session.speaker.id) {
@@ -443,6 +446,20 @@ final class TalkConnector implements Connector, ConnectorHealth {
     ConfirmationAnswer answer,
     AssistantSession session,
   ) {
+    // Жалоба — сигнал: о ней говорит ведущий оповещений (ADR-016).
+    final notifier = session.personas.cast.notifier;
+    if (notifier.id != session.speaker.id) {
+      session
+        ..speaker = notifier
+        ..voice = session.personas.voiceOf(notifier);
+    }
+    return _complaintReply(answer, session).withPersona(notifier.id);
+  }
+
+  AssistantResponse _complaintReply(
+    ConfirmationAnswer answer,
+    AssistantSession session,
+  ) {
     if (!answer.confirmed) {
       return _say(
         session,
@@ -466,19 +483,46 @@ final class TalkConnector implements Connector, ConnectorHealth {
 
   // ------------------------------------------------------- кто ты, умеешь
 
+  /// Обязанности помощника [persona] для «кто ты» (`{duties}`): что он
+  /// ведёт сейчас, с учётом режима. Фразы фиксированные, в именительном
+  /// падеже, без рода — годятся и о себе, и о другом. Выключенные навыки
+  /// ([registry]) не называются: склад, выключенный в «Расширениях», не
+  /// упоминается ни в расширениях, ни в сигналах.
+  static String dutiesOf(
+    Persona persona,
+    PersonaCast cast, [
+    ExtensionRegistry? registry,
+  ]) {
+    bool on(String id) => registry == null || registry.isEnabled(id);
+    final extensions = <String>[
+      if (on('warehouse')) 'склад',
+      if (on('passwords')) 'пароли',
+    ];
+    final parts = <String>[
+      if (cast.extensionsLead.id == persona.id)
+        extensions.isEmpty
+            ? 'расширения (пока ни одно не включено)'
+            : 'расширения (${extensions.join(', ')})',
+      if (cast.notifier.id == persona.id)
+        'оповещения (напоминания, просрочки'
+            '${on('warehouse') ? ', сигналы склада' : ''})',
+    ];
+    return parts.isEmpty
+        ? 'закреплённых обязанностей нет, только обращение по имени'
+        : parts.join(' и ');
+  }
+
+  /// «Кто ты» (ADR-016). Соло — Садо о себе (`talk.who.solo`). В Дуэте и
+  /// Трио Садо говорит о себе (`talk.who.main`) и о каждом активном
+  /// помощнике (`talk.who.helper` — в роде помощника), помощник — о себе
+  /// (`talk.who.self.helper`) и о главном (`talk.who.mainRef` — в роде
+  /// Садо). Имена — текущие русские из настроек, только в именительном
+  /// падеже; название приложения звучит один раз.
   AssistantResponse _who(AssistantSession session, String command) {
     final speaker = session.speaker;
-    final settings = session.personas;
-    // Помощник представляется вместе с приложением, но себя «связным» не
-    // называет: роль — «помощник»/«помощница», название — «в Связном»
-    // (ADR-009). О втором помощнике пары каталог говорит в обратном роде:
-    // Liorio и Noda разного рода.
-    final values = <String, String>{
-      'name': speaker.name,
-      'other': Personas.other(speaker).name,
-      'appPrepositional': AppInfo.namePrepositional,
-    };
-    if (settings.mode == AssistantMode.solo) {
+    final cast = session.personas.cast;
+    final app = AppInfo.namePrepositional;
+    if (cast.mode == TeamMode.solo) {
       return _withRoles(
         session,
         _say(
@@ -486,19 +530,54 @@ final class TalkConnector implements Connector, ConnectorHealth {
           'talk.who.solo',
           command: command,
           values: <String, String>{
-            'name': speaker.name,
-            'appPrepositional': AppInfo.namePrepositional,
+            'name': speaker.russianName,
+            'appPrepositional': app,
           },
         ),
       );
     }
+    final main = cast.responder;
+    final String replyId;
+    final List<String> parts;
+    if (speaker.id == main.id) {
+      replyId = 'talk.who.main';
+      parts = <String>[
+        session.say(replyId, <String, String>{
+          'name': speaker.russianName,
+          'appPrepositional': app,
+        }),
+        for (final helper in cast.active)
+          if (helper.id != main.id)
+            session.sayAs('talk.who.helper', helper.gender, <String, String>{
+              'name': helper.russianName,
+              'duties': dutiesOf(helper, cast, session.extensions),
+            }),
+        session.say('talk.who.byName'),
+      ];
+    } else {
+      replyId = 'talk.who.self.helper';
+      parts = <String>[
+        session.say(replyId, <String, String>{
+          'name': speaker.russianName,
+          'duties': dutiesOf(speaker, cast, session.extensions),
+          'appPrepositional': app,
+        }),
+        session.sayAs('talk.who.mainRef', main.gender, <String, String>{
+          'main': main.russianName,
+        }),
+      ];
+    }
     return _withRoles(
       session,
-      _say(
-        session,
-        settings.main.id == speaker.id ? 'talk.who.main' : 'talk.who.secondary',
-        command: command,
-        values: values,
+      AssistantResponse(
+        message: sentences(parts),
+        intent: command,
+        status: AssistantStatus.completed,
+        replyId: replyId,
+        values: <String, String>{
+          'name': speaker.russianName,
+          'appPrepositional': app,
+        },
       ),
     );
   }
@@ -666,11 +745,14 @@ final class TalkConnector implements Connector, ConnectorHealth {
     String command,
   ) {
     final settings = session.personas;
+    final kind = request.setting!;
+    // Главный всегда Садо (ADR-016): «пусть отвечает Лио», «сделай Ноду
+    // основной» настроек не меняют — ответ объясняет, где включить
+    // помощников.
+    if (kind == TalkSettingKind.main) return _mainFixed(session, command);
+    if (kind.isMode) return _mode(request, session, command);
     final speaker = session.speaker;
-    final named = Personas.byId(request.persona);
-    final duo = settings.mode == AssistantMode.duo;
-    final (PersonaSettingsChange change, String reply) =
-        switch (request.setting!) {
+    final (PersonaSettingsChange change, String reply) = switch (kind) {
       TalkSettingKind.style => (
           PersonaSettingsChange(
             stylePersona: speaker.id,
@@ -697,56 +779,104 @@ final class TalkConnector implements Connector, ConnectorHealth {
       TalkSettingKind.jokesLess => _jokes(settings.jokes.less),
       TalkSettingKind.jokesMore => _jokes(settings.jokes.more),
       TalkSettingKind.jokesOff => _jokes(JokeFrequency.off),
-      TalkSettingKind.main => duo
-          ? (
-              PersonaSettingsChange(mainPersona: (named ?? speaker).id),
-              'talk.set.main',
-            )
-          : (
-              PersonaSettingsChange(soloPersona: (named ?? speaker).id),
-              'talk.set.solo',
-            ),
+      TalkSettingKind.main ||
+      TalkSettingKind.modeSolo ||
+      TalkSettingKind.modeDuo ||
+      TalkSettingKind.modeTrio =>
+        throw StateError('обработано выше'),
     };
     if (change.isNoOpFor(settings)) {
-      if (request.setting != TalkSettingKind.main || !duo) {
-        return _say(
-          session,
-          'talk.set.already',
-          command: command,
-          status: AssistantStatus.noAction,
-        );
-      }
-      // «Пусть отвечает Лиорио», а Лиорио и так основной: настройки не меняются,
-      // но просьба ясна — отвечает основной, и продолжение разговора с
-      // другим помощником снимается (обращение к основному, который ведёт
-      // всё, ничего не продолжает — AssistantController._followUp).
-      final main = named ?? speaker;
-      session
-        ..speaker = main
-        ..voice = settings.voiceOf(main);
       return _say(
         session,
         'talk.set.already',
         command: command,
         status: AssistantStatus.noAction,
-      ).withPersona(main.id).withAddressed(main.id);
+      );
     }
     final updated = change.apply(settings);
     // Подтверждение звучит уже новым голосом: «без смайликов» — без
-    // смайликов, «давай на ты» — на «ты». Новый основной отвечает сам.
-    final responder =
-        request.setting == TalkSettingKind.main ? (named ?? speaker) : speaker;
-    session.voice = updated.voiceOf(responder);
+    // смайликов, «давай на ты» — на «ты».
+    session.voice = updated.voiceOf(speaker);
     final response = session.reply(
       reply,
-      values: request.setting == TalkSettingKind.main
-          ? <String, String>{'name': responder.name}
-          : const <String, String>{},
       intent: command,
       status: AssistantStatus.completed,
       settingsChange: change,
     );
-    return response.withPersona(responder.id);
+    return response.withPersona(speaker.id);
+  }
+
+  /// «Пусть отвечает Лиорио»: главный — Садо, это не меняется
+  /// (`talk.set.mainFixed`, в роде Садо, стилем говорящего).
+  AssistantResponse _mainFixed(AssistantSession session, String command) {
+    final main = session.personas.cast.responder;
+    return AssistantResponse(
+      message:
+          session.sayAs('talk.set.mainFixed', main.gender, <String, String>{
+        'main': main.russianName,
+      }),
+      intent: command,
+      status: AssistantStatus.noAction,
+      replyId: 'talk.set.mainFixed',
+      values: <String, String>{'main': main.russianName},
+    );
+  }
+
+  /// «Включи трио», «включи дуэт с Нодой», «включи соло»: режим меняет и
+  /// подтверждает Садо — он есть в любом режиме.
+  AssistantResponse _mode(
+    TalkRequest request,
+    AssistantSession session,
+    String command,
+  ) {
+    final settings = session.personas;
+    final cast = settings.cast;
+    final main = cast.responder;
+    session
+      ..speaker = main
+      ..voice = settings.voiceOf(main);
+    final named = cast.find(request.persona);
+    final helper = named != null && Personas.helperIds.contains(named.id)
+        ? named.id
+        : null;
+    final mode = switch (request.setting!) {
+      TalkSettingKind.modeSolo => TeamMode.solo,
+      TalkSettingKind.modeDuo => TeamMode.duo,
+      _ => TeamMode.trio,
+    };
+    final change = PersonaSettingsChange(
+      teamMode: mode,
+      duoHelper: mode == TeamMode.duo ? helper : null,
+    );
+    if (change.isNoOpFor(settings)) {
+      return _say(
+        session,
+        'talk.set.already',
+        command: command,
+        status: AssistantStatus.noAction,
+      ).withPersona(main.id);
+    }
+    final next = change.apply(settings).cast;
+    final team = next.active.map((Persona p) => p.russianName).toList();
+    final names = team.length <= 1
+        ? team.join()
+        : '${team.sublist(0, team.length - 1).join(', ')} и ${team.last}';
+    final reply = switch (mode) {
+      TeamMode.solo => 'talk.set.modeSolo',
+      TeamMode.duo => 'talk.set.modeDuo',
+      TeamMode.trio => 'talk.set.modeTrio',
+    };
+    return session
+        .reply(
+          reply,
+          values: mode == TeamMode.solo
+              ? const <String, String>{}
+              : <String, String>{'team': names},
+          intent: command,
+          status: AssistantStatus.completed,
+          settingsChange: change,
+        )
+        .withPersona(main.id);
   }
 
   static (PersonaSettingsChange, String) _jokes(JokeFrequency value) => (

@@ -10,14 +10,10 @@ import 'package:local_assistant/core/passwords/vault_backup.dart';
 /// строкой. Тест держит их вместе с [AppInfo] (ADR-009).
 String _read(String path) => File(path).readAsStringSync();
 
-/// Строка как последовательность `\uXXXX` для исходника C++.
-String _escaped(String text) => text.runes
-    .map((r) => '\\u${r.toRadixString(16).toUpperCase().padLeft(4, '0')}')
-    .join();
-
 void main() {
-  test('русское и латинское название', () {
-    expect(AppInfo.name, 'Связной');
+  test('название Tridot и служебное латинское Relay (ADR-016)', () {
+    expect(AppInfo.name, 'Tridot');
+    expect(AppInfo.hubName, 'Мой Tridot');
     expect(AppInfo.latinName, 'Relay');
     expect(AppInfo.latinName, matches(RegExp(r'^[A-Za-z]+$')));
   });
@@ -32,20 +28,20 @@ void main() {
     expect(VaultBackup.appVersion, AppInfo.version);
   });
 
-  test('«Связной» склоняется как прилагательное', () {
-    expect(AppInfo.nameGenitive, 'Связного');
-    expect(AppInfo.nameDative, 'Связному');
-    expect(AppInfo.nameInstrumental, 'Связным');
-    expect(AppInfo.namePrepositional, 'Связном');
+  test('«Tridot» в косвенных падежах не склоняется (ADR-016)', () {
+    expect(AppInfo.nameGenitive, 'Tridot');
+    expect(AppInfo.nameDative, 'Tridot');
+    expect(AppInfo.nameInstrumental, 'Tridot');
+    expect(AppInfo.namePrepositional, 'Tridot');
   });
 
-  test('автор встроенных расширений и пака шуток — русское название', () {
+  test('автор встроенных расширений и пака шуток — название приложения', () {
     expect(ConnectorInfo.defaultAuthor, AppInfo.name);
     final pack = jsonDecode(_read('assets/packs/jokes_basic.json')) as Map;
     expect(pack['author'], AppInfo.name);
   });
 
-  test('русское название — в заголовках окон и подписи', () {
+  test('название — в заголовках окон и подписи', () {
     final linux = _read('linux/runner/my_application.cc');
     expect(
       linux,
@@ -57,7 +53,7 @@ void main() {
     );
 
     final windows = _read('windows/runner/main.cpp');
-    expect(windows, contains('L"${_escaped(AppInfo.name)}"'));
+    expect(windows, contains('L"${AppInfo.name}"'));
     // Без /utf-8 MSVC читает исходник в кодовой странице системы.
     expect(windows.runes.every((r) => r < 128), isTrue);
 
@@ -72,17 +68,22 @@ void main() {
     expect(xib, contains('title="Скрыть ${AppInfo.name}"'));
     expect(xib, contains('title="Завершить ${AppInfo.name}"'));
     // Меню целиком по-русски: английских пунктов шаблона Flutter не осталось
-    // (внутреннее имя «Main Menu» пользователь не видит).
+    // (внутреннее имя «Main Menu» пользователь не видит). Латиницей —
+    // только само название приложения.
     final titles = RegExp(r'title="([^"]*)"')
         .allMatches(xib)
         .map((m) => m.group(1)!)
         .where((t) => t != 'Main Menu');
     for (final title in titles) {
-      expect(title, isNot(matches(RegExp('[A-Za-z]'))), reason: title);
+      expect(
+        title.replaceAll(AppInfo.name, ''),
+        isNot(matches(RegExp('[A-Za-z]'))),
+        reason: title,
+      );
     }
 
     // Строка меню приложения и панель «О программе» берут CFBundleName:
-    // он русский, а не PRODUCT_NAME (Relay).
+    // он — название приложения, а не PRODUCT_NAME (Relay).
     expect(
       _read('macos/Runner/Configs/AppInfo.xcconfig'),
       contains('APP_DISPLAY_NAME = ${AppInfo.name}\n'),
@@ -123,8 +124,11 @@ void main() {
       contains('BuildableName = "${AppInfo.latinName}.app"'),
     );
     final rc = _read('windows/runner/Runner.rc');
+    // ProductName и CompanyName задают папку данных в RoamingAppData:
+    // не меняются при смене названия (ADR-016). Описание файла — новое имя.
     expect(rc, contains('VALUE "ProductName", "${AppInfo.latinName}"'));
-    expect(rc, contains('VALUE "FileDescription", "${AppInfo.latinName}"'));
+    expect(rc, contains('VALUE "CompanyName", "com.example"'));
+    expect(rc, contains('VALUE "FileDescription", "${AppInfo.name}"'));
   });
 
   test('id пакета, приложения и исполняемых файлов не меняются (ADR-008)', () {
@@ -137,6 +141,32 @@ void main() {
       contains('VALUE "OriginalFilename", "local_assistant.exe"'),
     );
     expect(_read('pubspec.yaml'), startsWith('name: local_assistant'));
+    // Обновление поверх установленной версии (ADR-016): id приложения на
+    // Android и Linux прежние, папки данных те же.
+    final gradle = _read('android/app/build.gradle.kts');
+    expect(gradle, contains('applicationId = "com.example.local_assistant"'));
+    expect(gradle, contains('namespace = "com.example.local_assistant"'));
+    final cmake = _read('linux/CMakeLists.txt');
+    expect(
+      cmake,
+      contains('set(APPLICATION_ID "com.example.local_assistant")'),
+    );
+    expect(cmake, contains('set(BINARY_NAME "local_assistant")'));
+  });
+
+  test('прежнего названия «Связной» нет в подписях и заголовках (ADR-016)', () {
+    for (final path in <String>[
+      'lib/app/shell/session_header.dart',
+      'linux/runner/my_application.cc',
+      'windows/runner/main.cpp',
+      'windows/runner/Runner.rc',
+      'android/app/src/main/AndroidManifest.xml',
+      'macos/Runner/Base.lproj/MainMenu.xib',
+      'macos/Runner/Configs/AppInfo.xcconfig',
+      'assets/packs/jokes_basic.json',
+    ]) {
+      expect(_read(path), isNot(contains('Связн')), reason: path);
+    }
   });
 
   test('старого названия нигде нет', () {
