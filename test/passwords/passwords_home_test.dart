@@ -398,7 +398,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PasswordsScreen), findsOneWidget);
     // Выключение заперло хранилище; включение его не открывает.
-    expect(find.text('Хранилище заперто'), findsOneWidget);
+    expect(find.text('Сейф заперт'), findsOneWidget);
     await finish(tester);
   });
 
@@ -447,7 +447,7 @@ void main() {
     vault.lock();
     await pumpHome(tester);
     await send(tester, 'забыл пароль от почты');
-    expect(find.text('Хранилище заперто.'), findsOneWidget);
+    expect(find.text('Сейф заперт.'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey<String>('secure-card-open')));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -479,11 +479,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester.widget<Text>(status).data,
-      startsWith('Открыто до'),
+      startsWith('Сейф открыт до'),
     );
     vault.lock();
     await tester.pump();
-    expect(tester.widget<Text>(status).data, 'Заперто');
+    expect(tester.widget<Text>(status).data, 'Сейф заперт');
     await tester.tap(
       find.byKey(const ValueKey<String>('extension-configure-passwords')),
     );

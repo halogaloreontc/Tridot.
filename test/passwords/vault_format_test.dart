@@ -259,7 +259,8 @@ void main() {
       final vault = testVault(store, crypto);
       await vault.create(secret(Canary.master), params: fastKdf);
       vault.lock();
-      final json = _json((await store.readVault())!)..['v'] = 2;
+      final json = _json((await store.readVault())!)
+        ..['v'] = VaultFormat.version + 1;
       final bytes = _bytes(json);
       store.files[FileVaultStore.vaultName] = bytes;
       final fresh = testVault(store, crypto);
@@ -271,7 +272,7 @@ void main() {
       expect(store.files.containsKey(FileVaultStore.previousName), isFalse);
     });
 
-    test('миграция с синтетической v0: копия .bak, затем v1, .bak удалён',
+    test('миграция с синтетической v0: копия .bak, затем текущая, .bak удалён',
         () async {
       final store = _LoggingStore();
       final (file, id) = await craft(version: 0, schema: 0);
@@ -281,12 +282,34 @@ void main() {
       expect(store.log, <String>['bak0', 'vault', '-bak0']);
       expect(vault.entry(id)!.service, 'Почта');
       final migrated = _json((await store.readVault())!);
-      expect(migrated['v'], 1);
+      expect(migrated['v'], VaultFormat.version);
       expect(migrated['kind'], 'vault');
       final value = await vault.readSecret(id);
       expect(utf8.decode(value.password.unsafeBytes), Canary.password);
       value.wipe();
       // Мигрированный файл открывается заново.
+      vault.lock();
+      final again = testVault(store, crypto);
+      await again.unlock(secret(Canary.master));
+      (await again.readSecret(id)).wipe();
+      expect(await store.backupVersions(), isEmpty);
+    });
+
+    test('миграция v1 → v2 (ADR-015): .bak1 записан и удалён, без хронологии',
+        () async {
+      final store = _LoggingStore();
+      final (file, id) = await craft();
+      store.inner.files[FileVaultStore.vaultName] = file;
+      final vault = testVault(store, crypto);
+      await vault.unlock(secret(Canary.master));
+      expect(store.log, <String>['bak1', 'vault', '-bak1']);
+      final migrated = _json((await store.readVault())!);
+      expect(migrated['v'], 2);
+      expect(migrated.containsKey('history'), isFalse);
+      expect(vault.entry(id)!.history, isEmpty);
+      final value = await vault.readSecret(id);
+      expect(utf8.decode(value.password.unsafeBytes), Canary.password);
+      value.wipe();
       vault.lock();
       final again = testVault(store, crypto);
       await again.unlock(secret(Canary.master));

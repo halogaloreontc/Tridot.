@@ -424,3 +424,22 @@ def test_builtin_talk_topics_load() -> None:
     assert not talk.title_intents and not talk.due_intents
     assert "пока не забыл" in talk.label_rules and talk.generation_rules
     assert "talk:style" in catalog.refs()
+
+
+def test_builtin_data_topics_load() -> None:
+    """Навык «Данные»: commandId из DataConnector, уточняющий вопрос и контекст сессии."""
+    data = load_catalog().connector("data")
+    assert data.intents == ("data.clarify", "data.backup", "data.restore", "data.open", "data.lock", "unknown")
+    assert set(data.topics) == {"vague", "everything", "tricky"}
+    assert data.topics["vague"].intents == {"data.clarify"}
+    assert not data.title_intents and not data.due_intents
+    assert "«сделай бэкап»" in data.label_rules and "«открой хранилище»" in data.label_rules
+    assert "data:vague" in load_catalog().refs()
+
+
+def test_data_phrases_are_not_strict_secrets() -> None:
+    """Фразы «Данных» о паролях не говорят: строгий фильтр — только у навыка «Пароли»."""
+    from corpus_gen.secret_filter import looks_secret
+
+    for text in ("сделай бэкап", "открой хранилище", "восстанови из копии, пожалуйста"):
+        assert not looks_secret(text, "data")

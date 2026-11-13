@@ -1,6 +1,7 @@
 import '../personas/persona.dart';
 import 'action_card.dart';
 import 'bulk.dart';
+import 'clarification.dart';
 import 'secure_card.dart';
 import 'task.dart';
 
@@ -20,6 +21,7 @@ final class AssistantResponse {
     this.checklist,
     this.card,
     this.secureCard,
+    this.clarification,
   });
 
   /// Готовый текст для пользователя. В истории чата хранится именно он:
@@ -64,6 +66,11 @@ final class AssistantResponse {
   /// историю чата она не попадает (`ChatMessage.toJson` её не пишет).
   final SecureCardRequest? secureCard;
 
+  /// Уточняющий вопрос с вариантами: интерфейс рисует под ответом кнопки
+  /// вариантов, пока вопрос ждёт ответа. Тот же объект ждёт ответа в
+  /// сессии. В историю чата не попадает. `null` — без вариантов.
+  final Clarification? clarification;
+
   /// Тот же ответ от помощника [personaId].
   AssistantResponse withPersona(String personaId) => AssistantResponse(
         message: message,
@@ -78,6 +85,7 @@ final class AssistantResponse {
         checklist: checklist,
         card: card,
         secureCard: secureCard,
+        clarification: clarification,
       );
 
   /// Тот же ответ, в котором пользователь обратился к [personaId] по имени.
@@ -94,6 +102,7 @@ final class AssistantResponse {
         checklist: checklist,
         card: card,
         secureCard: secureCard,
+        clarification: clarification,
       );
 
   /// Тот же ответ с другим текстом и фактами (выходной фильтр паролей).
@@ -111,5 +120,6 @@ final class AssistantResponse {
         checklist: checklist,
         card: card,
         secureCard: secureCard,
+        clarification: clarification,
       );
 }

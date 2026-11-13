@@ -84,7 +84,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
             icon: Icons.lock_outline,
             title: 'Навык «Пароли» выключен',
             text: 'Данные сохранены и заперты. Включите навык в '
-                '«Настройки → Расширения», чтобы открыть хранилище.',
+                '«Настройки → Расширения», чтобы открыть сейф.',
           ),
         VaultState.notCreated => _CreateView(
             kit: kit,
@@ -332,7 +332,7 @@ class _CreateViewState extends State<_CreateView> {
       if (mounted) setState(() => _failure = vaultErrorText(error.code));
     } on Object {
       if (mounted) {
-        setState(() => _failure = 'Не получилось создать хранилище.');
+        setState(() => _failure = 'Не получилось создать сейф.');
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -347,9 +347,9 @@ class _CreateViewState extends State<_CreateView> {
         if (kit.vaultExisted)
           const _Banner(
             key: ValueKey<String>('passwords-not-found'),
-            text: 'Хранилище на этом устройстве не найдено. Если есть '
+            text: 'Сейф на этом устройстве не найден. Если есть '
                 'резервная копия, пароли вернёт только она. Можно и создать '
-                'новое хранилище.',
+                'новый сейф.',
           ),
         // D28: на новом устройстве первым пунктом — восстановление.
         Align(
@@ -372,7 +372,7 @@ class _CreateViewState extends State<_CreateView> {
           ),
         ),
         const Text(
-          'Создать хранилище паролей',
+          'Создать сейф паролей',
           style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
         ),
         const SizedBox(height: 14),
@@ -497,7 +497,7 @@ class _RecheckViewState extends State<_RecheckView> {
     return _Column(
       children: <Widget>[
         const Text(
-          'Хранилище создано',
+          'Сейф создан',
           style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
         ),
         const SizedBox(height: 8),
@@ -619,7 +619,7 @@ class _LockViewState extends State<_LockView> {
         const Icon(Icons.lock_outline, size: 36, color: AssistantColors.muted),
         const SizedBox(height: 12),
         const Text(
-          'Хранилище заперто',
+          'Сейф заперт',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
         ),
@@ -717,7 +717,7 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             const Text(
-              'Восстановить нельзя: без мастер-пароля хранилище не '
+              'Восстановить нельзя: без мастер-пароля сейф не '
               'расшифровать — ни мне, ни кому-либо ещё.',
               style: TextStyle(color: AssistantColors.textStrong),
             ),
@@ -736,8 +736,8 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
             if (exists) ...<Widget>[
               const SizedBox(height: 16),
               const Text(
-                'Начать заново: старое хранилище не стирается, а '
-                'откладывается в архив — вдруг вспомните. Новое хранилище '
+                'Начать заново: старый сейф не стирается, а '
+                'откладывается в архив — вдруг вспомните. Новый сейф '
                 'будет пустым. Чтобы продолжить, введите слово «начать».',
                 style: TextStyle(color: AssistantColors.text),
               ),
@@ -892,7 +892,7 @@ class _ListViewState extends State<_ListView> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Открыто$until',
+                      'Сейф открыт$until',
                       style: const TextStyle(color: AssistantColors.text),
                     ),
                   ),
@@ -918,7 +918,7 @@ class _ListViewState extends State<_ListView> {
                 padding: EdgeInsets.symmetric(horizontal: 16),
                 child: _Banner(
                   key: ValueKey<String>('passwords-rolled-back'),
-                  text: 'Файл хранилища старее, чем был. Его могли '
+                  text: 'Файл сейфа старее, чем был. Его могли '
                       'подменить или восстановить из старой копии. '
                       'Последние изменения могли пропасть.',
                 ),

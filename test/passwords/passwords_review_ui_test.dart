@@ -351,7 +351,7 @@ void main() {
       expect(find.byType(EntryScreen), findsNothing);
       expect(find.byKey(const ValueKey<String>('entry-delete')), findsNothing);
       expect(find.text(Canary.login), findsNothing);
-      expect(find.text('Хранилище заперто'), findsOneWidget);
+      expect(find.text('Сейф заперт'), findsOneWidget);
       expect(vault.entries, isEmpty);
       await finish(tester);
     });
@@ -376,7 +376,7 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byType(EntryEditorScreen), findsNothing);
       expect(find.byType(EntryScreen), findsNothing);
-      expect(find.text('Хранилище заперто'), findsOneWidget);
+      expect(find.text('Сейф заперт'), findsOneWidget);
       await finish(tester);
     });
 
@@ -502,11 +502,11 @@ void main() {
         ),
         findsNothing,
       );
-      // Полоса «Открыто»: текст не рвётся посреди слова — ему хватает места
-      // хотя бы на слово «Открыто» целиком.
+      // Полоса «Сейф открыт»: текст не рвётся посреди слова — ему хватает
+      // места хотя бы на «Сейф открыт» целиком.
       final bar = find.descendant(
         of: find.byKey(const ValueKey<String>('passwords-open-bar')),
-        matching: find.textContaining('Открыто'),
+        matching: find.textContaining('Сейф открыт'),
       );
       expect(tester.getSize(bar).width, greaterThan(140));
       await finish(tester);

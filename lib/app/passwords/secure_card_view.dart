@@ -217,12 +217,12 @@ class _SecureCardViewState extends State<SecureCardView> {
         _Line(
           icon: unlocked ? Icons.lock_open_outlined : Icons.lock_outline,
           text: unlocked
-              ? 'Хранилище открыто.'
+              ? 'Сейф открыт.'
               : notCreated
                   ? (kit.vaultExisted
-                      ? 'Хранилище на этом устройстве не найдено.'
-                      : 'Хранилища паролей ещё нет.')
-                  : 'Хранилище заперто.',
+                      ? 'Сейф на этом устройстве не найден.'
+                      : 'Сейфа паролей ещё нет.')
+                  : 'Сейф заперт.',
         ),
         if (!unlocked)
           Padding(
@@ -234,7 +234,7 @@ class _SecureCardViewState extends State<SecureCardView> {
                 notCreated ? Icons.add : Icons.lock_open_outlined,
                 size: 16,
               ),
-              label: Text(notCreated ? 'Создать хранилище' : 'Открыть'),
+              label: Text(notCreated ? 'Создать сейф' : 'Открыть'),
             ),
           ),
         if (notCreated && kit.vaultExisted)
@@ -284,7 +284,7 @@ class _SecureCardViewState extends State<SecureCardView> {
 
   Widget _gone() => const _Line(
         icon: Icons.remove_circle_outline,
-        text: 'Этой записи уже нет в хранилище.',
+        text: 'Этой записи уже нет в сейфе.',
       );
 
   Widget _loginRow(VaultEntry entry) => Row(
@@ -418,7 +418,7 @@ class _SecureCardViewState extends State<SecureCardView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         Text(
-          choose ? 'Какую запись?' : 'Записи хранилища',
+          choose ? 'Какую запись?' : 'Записи сейфа',
           style: technicalTextStyle,
         ),
         for (final entry in entries.take(choose ? 12 : 50))
@@ -524,7 +524,7 @@ class _SecureCardViewState extends State<SecureCardView> {
             icon: Icons.info_outline,
             text: 'Восстановить мастер-пароль нельзя. Вход по отпечатку и '
                 'восстановление из копии появятся в следующих обновлениях. '
-                'Можно начать заново: старое хранилище уйдёт в архив, не '
+                'Можно начать заново: старый сейф уйдёт в архив, не '
                 'сотрётся.',
           ),
           const SizedBox(height: 6),

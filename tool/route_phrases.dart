@@ -15,9 +15,13 @@
 // 5.9), явная фраза о паролях — у навыка «Пароли», «на крайний случай»
 // (fallback) уступает любому совпадению, без маркера (implicit) — явному,
 // при близкой уверенности двух коннекторов помощник переспрашивает
-// (`ambiguous`).
+// (`ambiguous`) — общая функция RoutePolicy.pick. Поле `after` строки —
+// коннектор из контекста сессии (Utterance.recentConnectorId): при нём
+// «Данные» отдают фразу сейфу (Reroute), и ответ — разбор канонической
+// фразы, как в маршрутизаторе.
 //
-// Вход (stdin): JSON Lines {"id": "...", "text": "...", "now": "2026-11-02T16:30"}.
+// Вход (stdin): JSON Lines {"id": "...", "text": "...", "now": "2026-11-02T16:30",
+// "after": "passwords"} (after — необязательно).
 // Выход (stdout): JSON Lines {"id", "connector", "command", "matches",
 // "parse"}: connector — id победителя, `ambiguous` или null (никто не
 // откликнулся); command — его commandId; matches — все совпадения
@@ -36,6 +40,7 @@ import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
+import 'package:local_assistant/core/skills/data/data_connector.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
@@ -56,7 +61,11 @@ Map<String, Object?> routeInput(Map<String, dynamic> input, DateTime now) {
           'строку корпусным тестом');
     }
   }
-  return routePhrase(input['text'] as String, now);
+  return routePhrase(
+    input['text'] as String,
+    now,
+    after: input['after'] as String?,
+  );
 }
 
 /// Коннекторы корпусного теста в его порядке (_connectorFactories в
@@ -72,12 +81,15 @@ List<Connector> appConnectors(DateTime now) {
     const CalculatorConnector(),
     TalkConnector(taskService: tasks),
     PasswordsConnector(),
+    const DataConnector(),
   ];
 }
 
-/// Кто забрал бы фразу и разбор задач.
-Map<String, Object?> routePhrase(String text, DateTime now) {
-  final utterance = Utterance.analyze(text, now: now);
+/// Кто забрал бы фразу и разбор задач. [after] — коннектор из контекста
+/// сессии или `null`.
+Map<String, Object?> routePhrase(String text, DateTime now, {String? after}) {
+  final utterance = Utterance.analyze(text, now: now)
+      .withChat(null, recentConnectorId: after);
   final candidates = <ConnectorMatch>[];
   // Фразу о паролях или со словом «пароль» не получает ни один сетевой
   // коннектор — ни в каком виде (раздел 5.9, AssistantController).
@@ -85,11 +97,18 @@ Map<String, Object?> routePhrase(String text, DateTime now) {
   for (final connector in appConnectors(now)) {
     if (passwordsPhrase && connector.info.requiresNetwork) continue;
     // Как в корпусном тесте: ошибка коннектора — ошибка всей фразы (ответ
-    // `error` из processLines), совпадение с нулевой уверенностью тоже
-    // участвует в выборе.
+    // `error` из processLines).
     final match = connector.match(utterance);
     if (match == null) continue;
     candidates.add(match);
+  }
+  final decision = RoutePolicy.pick(candidates, recentConnectorId: after);
+  final winner = decision.winner;
+  // Фраза понята по контексту как фраза другого навыка: ответ — разбор
+  // канонической фразы (один раз, как в маршрутизаторе).
+  if (winner?.payload case final Reroute reroute) {
+    final resolved = routePhrase(reroute.text, now);
+    return <String, Object?>{...resolved, 'reroute': reroute.text};
   }
   // Устойчивая сортировка: при равной уверенности — раньше подключённый.
   final all = candidates.indexed.toList()
@@ -98,10 +117,9 @@ Map<String, Object?> routePhrase(String text, DateTime now) {
       return byConfidence != 0 ? byConfidence : a.$1.compareTo(b.$1);
     });
   final ranked = <ConnectorMatch>[for (final (_, m) in all) m];
-  final (connector, command) = route(ranked);
   return <String, Object?>{
-    'connector': connector,
-    'command': command,
+    'connector': decision.isAmbiguous ? ambiguous : winner?.connectorId,
+    'command': winner?.commandId,
     'matches': <Map<String, Object?>>[
       for (final m in ranked)
         <String, Object?>{
@@ -118,37 +136,3 @@ Map<String, Object?> routePhrase(String text, DateTime now) {
 
 /// Метка «помощник переспросит, какой коннектор имелся в виду».
 const String ambiguous = 'ambiguous';
-
-/// Выбор маршрутизатора среди совпадений, отсортированных по убыванию
-/// уверенности: id коннектора и commandId победителя, ([ambiguous], null)
-/// или (null, null), если никто не откликнулся.
-(String?, String?) route(List<ConnectorMatch> ranked) {
-  if (ranked.isEmpty) return (null, null);
-  var firm = ranked;
-  if (firm.any((ConnectorMatch m) => !m.fallback)) {
-    firm = firm.where((ConnectorMatch m) => !m.fallback).toList();
-  }
-  if (firm.any((ConnectorMatch m) => !m.implicit)) {
-    firm = firm.where((ConnectorMatch m) => !m.implicit).toList();
-  }
-  // Явная фраза о паролях — у навыка «Пароли», как в AssistantController.
-  final passwords = firm
-      .where(
-        (ConnectorMatch m) =>
-            m.connectorId == PasswordsConnector.id && !m.implicit,
-      )
-      .firstOrNull;
-  if (passwords != null) return (passwords.connectorId, passwords.commandId);
-  final best = firm.first;
-  for (final other in firm.skip(1)) {
-    if (other.connectorId == best.connectorId) continue;
-    if (best.confidence >= AssistantController.ambiguityFloor &&
-        other.confidence >= AssistantController.ambiguityFloor &&
-        best.confidence - other.confidence <=
-            AssistantController.ambiguityMargin) {
-      return (ambiguous, null);
-    }
-    break;
-  }
-  return (best.connectorId, best.commandId);
-}

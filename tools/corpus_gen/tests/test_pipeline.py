@@ -245,6 +245,33 @@ def test_corpus_line_omits_defaults() -> None:
     }
 
 
+def test_corpus_line_and_tool_input_carry_after() -> None:
+    """Контекст сессии `after` проходит насквозь: в строку корпуса и во вход route_phrases.dart."""
+    row = {
+        "cid": "ctx",
+        "text": "сделай бэкап",
+        "now": pipeline.CORPUS_DEFAULT_NOW,
+        "after": "passwords",
+        "source": "manual",
+        "topic": "context",
+        "final": {"intent": "passwords.backup"},
+    }
+    connector = pipeline.load_catalog().connector("passwords")
+    line = pipeline.corpus_line(row, connector)
+    assert line["after"] == "passwords"
+    assert list(line)[:5] == ["id", "text", "connector", "intent", "after"]
+    assert pipeline._tool_input(row) == {
+        "id": "ctx",
+        "text": "сделай бэкап",
+        "now": pipeline.CORPUS_DEFAULT_NOW,
+        "after": "passwords",
+    }
+    # Без контекста поля нет.
+    del row["after"]
+    assert "after" not in pipeline.corpus_line(row, connector)
+    assert "after" not in pipeline._tool_input(row)
+
+
 def test_load_json_tolerates_fences_and_text() -> None:
     assert _load_json('```json\n{"a": 1}\n```', "x") == {"a": 1}
     assert _load_json('Вот ответ: {"a": 2} — готово', "x") == {"a": 2}

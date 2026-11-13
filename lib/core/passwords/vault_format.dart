@@ -17,8 +17,9 @@ abstract final class VaultFormat {
   /// Значение поля `format`.
   static const String name = 'relay-vault';
 
-  /// Текущая версия конверта.
-  static const int version = 1;
+  /// Текущая версия конверта. 2 — хронология паролей (ADR-015):
+  /// поле `history` конверта и `hist` записи индекса.
+  static const int version = 2;
 
   /// Текущая схема индекса.
   static const int indexSchema = 1;
@@ -71,6 +72,9 @@ abstract final class VaultFormat {
   static const int maxUrls = 20;
   static const int maxUrl = 2048;
   static const int maxAliases = 20;
+
+  /// Предел числа элементов хронологии во всём файле.
+  static const int maxHistoryBoxes = maxEntries * VaultEntry.maxHistory;
 
   /// Худший JSON секрета: каждый байт пароля и заметки — `\u00XX`
   /// (6 байт), плюс `{"p":"`, `","note":"`, `"}`.
@@ -164,6 +168,7 @@ final class VaultEnvelope {
     required this.rev,
     required this.index,
     required this.secrets,
+    this.history = const <String, SealedBox>{},
     this.wrapBio,
     this.sourceVersion = VaultFormat.version,
   });
@@ -183,6 +188,12 @@ final class VaultEnvelope {
 
   /// id записи → шифротекст её секрета.
   final Map<String, SealedSecret> secrets;
+
+  /// Хронология паролей (ADR-015): id элемента → шифротекст прежнего
+  /// пароля. Какой записи он принадлежит — только в индексе (`hist`) и в
+  /// AD шифротекста; снаружи видно лишь общее число элементов. Пусто —
+  /// поля в файле нет.
+  final Map<String, SealedBox> history;
 
   /// Версия, в которой файл был записан (меньше [VaultFormat.version] —
   /// мигрирован при чтении). По ней строится `header_bytes` для AD.
@@ -207,6 +218,11 @@ final class VaultEnvelope {
               for (final MapEntry(:key, :value) in secrets.entries)
                 key: value.toJson(),
             },
+            if (history.isNotEmpty)
+              'history': <String, Object?>{
+                for (final MapEntry(:key, :value) in history.entries)
+                  key: value.toJson(),
+              },
           }),
         ),
       );
@@ -283,6 +299,17 @@ final class VaultEnvelope {
         r,
       );
     }
+    final history = <String, SealedBox>{};
+    if (json.containsKey('history')) {
+      final rawHistory = _map(json['history']);
+      if (rawHistory.length > VaultFormat.maxHistoryBoxes) {
+        throw VaultError.corrupt;
+      }
+      for (final MapEntry(:key, :value) in rawHistory.entries) {
+        if (!VaultIds.isHistoryId(key)) throw VaultError.corrupt;
+        history[key] = _box(value, maxB64: VaultFormat.maxSecretB64);
+      }
+    }
     return VaultEnvelope(
       kind: kind! as String,
       vaultId: vaultId,
@@ -292,6 +319,7 @@ final class VaultEnvelope {
       rev: rev,
       index: index,
       secrets: secrets,
+      history: history,
       sourceVersion: sourceVersion,
     );
   }
@@ -411,6 +439,9 @@ abstract final class VaultIds {
 
   static bool isEntryId(String id) => _entry.hasMatch(id);
 
+  /// id элемента хронологии — тоже 16 случайных байт в hex.
+  static bool isHistoryId(String id) => _entry.hasMatch(id);
+
   static String hex(Uint8List bytes) =>
       bytes.map((int b) => b.toRadixString(16).padLeft(2, '0')).join();
 }
@@ -422,6 +453,7 @@ abstract final class VaultMigrations {
   static final Map<int, Map<String, Object?> Function(Map<String, Object?>)>
       envelope = <int, Map<String, Object?> Function(Map<String, Object?>)>{
     0: _envelope0to1,
+    1: _envelope1to2,
   };
 
   /// Индекс: схема `from` → `from + 1`.
@@ -437,6 +469,11 @@ abstract final class VaultMigrations {
         'v': 1,
         'kind': VaultFormat.kindVault,
       };
+
+  /// v1 → v2: добавилась необязательная хронология паролей (ADR-015);
+  /// в файле v1 её нет.
+  static Map<String, Object?> _envelope1to2(Map<String, Object?> json) =>
+      <String, Object?>{...json, 'v': 2};
 
   /// Схема 0: название записи — `title`, а не `service`.
   static Map<String, Object?> _index0to1(Map<String, Object?> json) {
@@ -489,6 +526,90 @@ abstract final class VaultPadding {
 /// Откуда дата изменения пароля.
 enum DateSource { user, import, unknown }
 
+/// Элемент хронологии паролей записи (ADR-015): только id шифротекста и
+/// даты — сам прежний пароль лежит в `history` конверта, зашифрованный
+/// так же, как текущий. Даты — только внутри зашифрованного индекса.
+final class HistoryMeta {
+  const HistoryMeta({
+    required this.id,
+    required this.from,
+    required this.to,
+    this.src = DateSource.unknown,
+    this.extra = const <String, Object?>{},
+  });
+
+  /// id шифротекста (16 случайных байт в hex): ключ в `history` конверта
+  /// и часть AD.
+  final String id;
+
+  /// С какого времени пароль стоял у записи (её прежнее `changed`).
+  final DateTime from;
+
+  /// Когда его сменили.
+  final DateTime to;
+
+  /// Откуда дата [from].
+  final DateSource src;
+
+  /// Неизвестные поля элемента (из более новой версии того же формата):
+  /// пишутся обратно как есть, как у [VaultEntry.extra].
+  final Map<String, Object?> extra;
+
+  static const Set<String> _known = <String>{'h', 'from', 'to', 'src'};
+
+  /// Пароль простоял меньше часа — похоже на опечатку. Только если дата
+  /// [from] известна: у записи из CSV без дат `from` — время импорта, и
+  /// пароль, которым пользовались годами, иначе выглядел бы опечаткой.
+  bool get looksLikeTypo =>
+      src != DateSource.unknown &&
+      to.difference(from) < const Duration(hours: 1);
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        ...extra,
+        'h': id,
+        'from': from.toUtc().toIso8601String(),
+        'to': to.toUtc().toIso8601String(),
+        'src': src.name,
+      };
+
+  /// Элемент из индекса хранилища: нарушение схемы — `corrupt`.
+  static HistoryMeta fromJson(Object? json) {
+    final meta = tryParse(json);
+    if (meta == null) throw VaultError.corrupt;
+    return meta;
+  }
+
+  /// Элемент из недоверенного источника (копия): нарушение — `null`.
+  static HistoryMeta? tryParse(Object? json) {
+    if (json is! Map<String, Object?>) return null;
+    final id = json['h'];
+    final from = json['from'];
+    final to = json['to'];
+    if (id is! String || !VaultIds.isHistoryId(id)) return null;
+    if (from is! String || from.length > 40) return null;
+    if (to is! String || to.length > 40) return null;
+    final fromDate = DateTime.tryParse(from);
+    final toDate = DateTime.tryParse(to);
+    if (fromDate == null || toDate == null) return null;
+    return HistoryMeta(
+      id: id,
+      from: fromDate,
+      to: toDate,
+      src: DateSource.values
+              .where((DateSource s) => s.name == json['src'])
+              .firstOrNull ??
+          DateSource.unknown,
+      extra: <String, Object?>{
+        for (final MapEntry(:key, :value) in json.entries)
+          if (!_known.contains(key)) key: value,
+      },
+    );
+  }
+
+  @override
+  String toString() => 'HistoryMeta($id)';
+}
+
 /// Запись индекса: всё, кроме пароля и заметки. [toString] — только id.
 final class VaultEntry {
   VaultEntry({
@@ -506,6 +627,7 @@ final class VaultEntry {
     required this.fp,
     this.fpLoose,
     this.fpOld = const <Uint8List>[],
+    this.history = const <HistoryMeta>[],
     this.score,
     this.flags = const <String>[],
     this.train = const <String, Object?>{},
@@ -514,6 +636,9 @@ final class VaultEntry {
 
   /// Сколько прежних отпечатков хранится (самих паролей нет).
   static const int maxOldFingerprints = 5;
+
+  /// Сколько прежних паролей хранит хронология записи (ADR-015).
+  static const int maxHistory = 10;
 
   final String id;
 
@@ -533,6 +658,10 @@ final class VaultEntry {
   final Uint8List fp;
   final Uint8List? fpLoose;
   final List<Uint8List> fpOld;
+
+  /// Хронология паролей (ADR-015): новые первыми. Пусто, пока опция
+  /// выключена и ничего не сохранено.
+  final List<HistoryMeta> history;
   final int? score;
   final List<String> flags;
   final Map<String, Object?> train;
@@ -555,6 +684,7 @@ final class VaultEntry {
     Uint8List? fp,
     Uint8List? fpLoose,
     List<Uint8List>? fpOld,
+    List<HistoryMeta>? history,
     int? score,
     List<String>? flags,
     Map<String, Object?>? train,
@@ -574,6 +704,7 @@ final class VaultEntry {
         fp: fp ?? this.fp,
         fpLoose: fpLoose ?? this.fpLoose,
         fpOld: fpOld ?? this.fpOld,
+        history: history ?? this.history,
         score: score ?? this.score,
         flags: flags ?? this.flags,
         train: train ?? this.train,
@@ -595,6 +726,7 @@ final class VaultEntry {
     'fp',
     'fp_loose',
     'fp_old',
+    'hist',
     'score',
     'flags',
     'train',
@@ -616,6 +748,8 @@ final class VaultEntry {
         'fp': base64.encode(fp),
         if (fpLoose != null) 'fp_loose': base64.encode(fpLoose!),
         'fp_old': <String>[for (final old in fpOld) base64.encode(old)],
+        if (history.isNotEmpty)
+          'hist': <Object?>[for (final h in history) h.toJson()],
         if (score != null) 'score': score,
         'flags': flags,
         'train': train,
@@ -633,6 +767,16 @@ final class VaultEntry {
     final fpOld = _strings(json['fp_old'], VaultEntry.maxOldFingerprints)
         .map(_fp)
         .toList();
+    final rawHistory = json['hist'];
+    if (rawHistory != null &&
+        (rawHistory is! List<Object?> ||
+            rawHistory.length > VaultEntry.maxHistory)) {
+      throw VaultError.corrupt;
+    }
+    final history = <HistoryMeta>[
+      if (rawHistory is List<Object?>)
+        for (final h in rawHistory) HistoryMeta.fromJson(h),
+    ];
     final loose = json['fp_loose'];
     final score = json['score'];
     final train = json['train'];
@@ -658,6 +802,7 @@ final class VaultEntry {
       fp: _fp(json['fp']),
       fpLoose: loose == null ? null : _fp(loose),
       fpOld: fpOld,
+      history: List<HistoryMeta>.unmodifiable(history),
       score: score is int && score >= 0 && score <= 4 ? score : null,
       flags: _strings(json['flags'], 32, 32),
       train: train is Map<String, Object?> ? train : const <String, Object?>{},

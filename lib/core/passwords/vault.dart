@@ -214,10 +214,15 @@ final class Vault {
   /// копии (поэтому «повтор» и «это прежний пароль» работают и на новом
   /// устройстве). Хранилища на устройстве быть не должно. [contents]
   /// затирает вызывающий.
+  ///
+  /// [keepHistory] — перенести прежние пароли из копии и включить в новом
+  /// хранилище хронологию паролей (ADR-015); иначе хронология копии
+  /// отбрасывается.
   Future<void> createFromBackup(
     BackupContents contents,
     SecretBytes master, {
     VaultKdfParams? params,
+    bool keepHistory = false,
   }) {
     final epoch = _epoch;
     return _op(() async {
@@ -231,7 +236,13 @@ final class Vault {
       final kdf = params ?? await _calibrate();
       _checkParams(kdf);
       await _install(
-        await _build(master, kdf, kFp: contents.kFp, items: contents.items),
+        await _build(
+          master,
+          kdf,
+          kFp: contents.kFp,
+          items: contents.items,
+          keepHistory: keepHistory,
+        ),
         epoch: epoch,
       );
     });
@@ -240,7 +251,9 @@ final class Vault {
   /// «Заменить всё» из копии (5.7): только с верным мастер-паролем
   /// [master]; текущее хранилище не стирается, а уходит в
   /// `archive/replaced-<дата>.relayvault`. Новое — с тем же мастер-паролем
-  /// и параметрами Argon2id, `k_fp` из копии. Возвращает имя в архиве.
+  /// и параметрами Argon2id, `k_fp` из копии. Хронология паролей копии
+  /// переносится, только если она включена в текущем хранилище (тогда
+  /// включена и в новом). Возвращает имя в архиве.
   Future<String> replaceWithBackup(
     BackupContents contents,
     SecretBytes master,
@@ -258,8 +271,13 @@ final class Vault {
           open.envelope.kdf,
           allowTesting: allowTestingKdf,
         );
-        final built =
-            await _build(master, kdf, kFp: contents.kFp, items: contents.items);
+        final built = await _build(
+          master,
+          kdf,
+          kFp: contents.kFp,
+          items: contents.items,
+          keepHistory: VaultPrefs.passwordHistory.of(open.index.prefs),
+        );
         final String name;
         try {
           _alive(open);
@@ -288,12 +306,14 @@ final class Vault {
       });
 
   /// Новое хранилище в памяти: ключи, индекс (с записями [items]) и
-  /// конверт. Ещё не записано.
+  /// конверт. Ещё не записано. [keepHistory] — с хронологией паролей
+  /// записей (и включённой опцией).
   Future<_Built> _build(
     SecretBytes master,
     VaultKdfParams kdf, {
     SecretBytes? kFp,
     List<ImportItem> items = const <ImportItem>[],
+    bool keepHistory = false,
   }) async {
     final now = clock.now();
     final salt = crypto.bytes(VaultFormat.saltBytes);
@@ -324,6 +344,7 @@ final class Vault {
       );
       final entries = <VaultEntry>[];
       final secrets = <String, SealedSecret>{};
+      final history = <String, SealedBox>{};
       final ids = <String>{};
       for (final item in items) {
         _checkInfo(
@@ -368,6 +389,17 @@ final class Vault {
                       Uint8List.fromList(old),
                   ]
                 : const <Uint8List>[],
+            history: keepHistory
+                ? _mergeHistory(
+                    ring: ring,
+                    envelope: base,
+                    entryId: id,
+                    kFp: kFpKey,
+                    currentFp: fp,
+                    incoming: item.history,
+                    boxes: history,
+                  )
+                : const <HistoryMeta>[],
           ),
           item.password,
         );
@@ -379,6 +411,9 @@ final class Vault {
         kFp: kFpBytes,
         entries: List<VaultEntry>.unmodifiable(entries),
         master: <String, Object?>{'last_typed': _iso(now)},
+        prefs: keepHistory
+            ? <String, Object?>{VaultPrefs.passwordHistory.key: true}
+            : const <String, Object?>{},
       );
       final envelope = _sealEnvelope(
         ring: ring,
@@ -387,6 +422,7 @@ final class Vault {
         wrapPw: wrap,
         index: index,
         secrets: secrets,
+        history: history,
       );
       final bytes = envelope.encode();
       try {
@@ -599,6 +635,9 @@ final class Vault {
       open,
       entries: open.index.entries,
       secrets: secrets,
+      history: migrated
+          ? _resealHistory(open, open.ring, open.envelope)
+          : envelope.history,
       master: <String, Object?>{
         ...open.index.master,
         'last_typed': _iso(clock.now()),
@@ -997,7 +1036,8 @@ final class Vault {
   ///
   /// Новый пароль: прежний отпечаток уходит в `fp_old` (до 5), `srev`
   /// растёт, `changed = now`. Прежние пароль и заметка не живут и в
-  /// `.prev`.
+  /// `.prev` (D7) — кроме включённой хронологии паролей (ADR-015): тогда
+  /// прежний пароль ложится в хронологию записи зашифрованным.
   ///
   /// Снять «Важный» при включённом «Переспрашивать для важных» —
   /// ослабление защиты (3.6, 15.2): только с верным [master]. Любая
@@ -1077,9 +1117,51 @@ final class Vault {
         final current = secretChanged || (assessor != null && infoAssess)
             ? _openSecret(open, open.ring, entry)
             : null;
+        var history = open.envelope.history;
         try {
           if (password != null) {
             final fp = VaultKeys.fingerprint(crypto, open.kFp, password);
+            if (VaultPrefs.passwordHistory.of(open.index.prefs)) {
+              final boxes = <String, SealedBox>{...history};
+              updated = updated.copyWith(
+                history: _mergeHistory(
+                  ring: open.ring,
+                  envelope: open.envelope,
+                  entryId: id,
+                  kFp: open.kFp,
+                  currentFp: fp,
+                  existing: _historyPrints(open, entry),
+                  incoming: <ImportHistory>[
+                    ImportHistory(
+                      password: current!.password,
+                      from: entry.changed,
+                      to: now,
+                      src: entry.dateSource,
+                    ),
+                  ],
+                  boxes: boxes,
+                ),
+              );
+              history = boxes;
+            } else if (entry.history.isNotEmpty) {
+              // Хронология выключена («Оставить»): новые прежние пароли не
+              // копятся, но новый пароль, совпавший с оставленным
+              // элементом, из хронологии убирается — текущий пароль не
+              // показывается как прежний.
+              final boxes = <String, SealedBox>{...history};
+              updated = updated.copyWith(
+                history: _mergeHistory(
+                  ring: open.ring,
+                  envelope: open.envelope,
+                  entryId: id,
+                  kFp: open.kFp,
+                  currentFp: fp,
+                  existing: _historyPrints(open, entry),
+                  boxes: boxes,
+                ),
+              );
+              history = boxes;
+            }
             // Вернулись к прежнему паролю (5.5, флаг `returnedOld`).
             var returned = false;
             for (final old in entry.fpOld) {
@@ -1130,6 +1212,7 @@ final class Vault {
             open,
             entries: _replace(open.index.entries, updated),
             secrets: secrets,
+            history: history,
             replacePrevious: secretChanged,
           );
         } finally {
@@ -1339,9 +1422,11 @@ final class Vault {
   /// Экран и карточка чата сначала переспрашивают.
   Future<void> deleteEntry(String id) => _op(() async {
         final open = _requireOpen();
-        if (isGuarded(_entry(open, id))) {
+        final entry = _entry(open, id);
+        if (isGuarded(entry)) {
           throw StateError('важная запись — после мастер-пароля');
         }
+        final gone = <String>{for (final h in entry.history) h.id};
         await _commit(
           open,
           entries: <VaultEntry>[
@@ -1351,6 +1436,10 @@ final class Vault {
           secrets: <String, SealedSecret>{
             for (final MapEntry(:key, :value) in open.envelope.secrets.entries)
               if (key != id) key: value,
+          },
+          history: <String, SealedBox>{
+            for (final MapEntry(:key, :value) in open.envelope.history.entries)
+              if (!gone.contains(key)) key: value,
           },
           replacePrevious: true,
         );
@@ -1366,6 +1455,139 @@ final class Vault {
         touch();
         return secret;
       });
+
+  // ------------------------------------- хронология паролей (ADR-015)
+
+  /// Включена ли хронология паролей (опция в `prefs` индекса).
+  bool get historyEnabled => VaultPrefs.passwordHistory.of(prefs);
+
+  /// Сколько прежних паролей хранится во всём хранилище.
+  int get historyCount {
+    var n = 0;
+    for (final e in entries) {
+      n += e.history.length;
+    }
+    return n;
+  }
+
+  /// Прежний пароль [historyId] записи [id]. Только для экрана записи в
+  /// `lib/app` (через `VaultFacade` недоступно; в чат не выходит).
+  /// Охраняемую важную запись ([isGuarded]) — только после мастер-пароля
+  /// (`StateError`). Вызывающий затирает результат.
+  Future<SecretBytes> readHistoryPassword(String id, String historyId) =>
+      _guard(() async {
+        final open = _requireOpen();
+        final entry = _entry(open, id);
+        if (isGuarded(entry)) {
+          throw StateError('важная запись — после мастер-пароля');
+        }
+        if (!entry.history.any((HistoryMeta h) => h.id == historyId)) {
+          throw ArgumentError('нет такого прежнего пароля');
+        }
+        final password = _openHistory(open, open.ring, entry, historyId);
+        touch();
+        return password;
+      });
+
+  /// Удалить прежний пароль [historyId] записи [id] (например, опечатку).
+  /// Гарантия D7 для него восстанавливается: шифротекст, его отпечаток в
+  /// `fp_old` и он сам в `vault.prev` и `vault.v<N>.bak` исчезают. Вернуть
+  /// можно только из резервной копии. Охраняемую важную запись — только
+  /// после мастер-пароля (`StateError`).
+  Future<void> deleteHistoryItem(String id, String historyId) =>
+      _dropHistory(<String>{id}, only: historyId);
+
+  /// Очистить хронологию записи [id] (как [deleteHistoryItem] для всех её
+  /// прежних паролей, одной записью файла).
+  Future<void> clearHistory(String id) => _dropHistory(<String>{id});
+
+  /// Удалить прежние пароли всех записей (выключение опции с «Удалить»).
+  /// Одна запись файла; `.prev` и `.bak` перезаписываются.
+  Future<void> purgeHistory() => _op(() async {
+        final open = _requireOpen();
+        await _dropHistoryIn(
+          open,
+          <String>{
+            for (final e in open.index.entries)
+              if (e.history.isNotEmpty) e.id,
+          },
+          guard: false,
+        );
+      });
+
+  Future<void> _dropHistory(Set<String> ids, {String? only}) =>
+      _op(() => _dropHistoryIn(_requireOpen(), ids, only: only));
+
+  Future<void> _dropHistoryIn(
+    _Open open,
+    Set<String> ids, {
+    String? only,
+    bool guard = true,
+  }) async {
+    final boxes = <String, SealedBox>{...open.envelope.history};
+    final updated = <String, VaultEntry>{};
+    for (final id in ids) {
+      final entry = _entry(open, id);
+      if (guard && isGuarded(entry)) {
+        throw StateError('важная запись — после мастер-пароля');
+      }
+      final drop = <HistoryMeta>[
+        for (final h in entry.history)
+          if (only == null || h.id == only) h,
+      ];
+      if (only != null && drop.isEmpty) {
+        throw ArgumentError('нет такого прежнего пароля');
+      }
+      if (drop.isEmpty) continue;
+      // Отпечатки удаляемых паролей уходят и из `fp_old`: иначе от
+      // опечатки остался бы след («это прежний пароль»).
+      final prints = <Uint8List>[];
+      for (final h in drop) {
+        final old = _openHistory(open, open.ring, entry, h.id);
+        try {
+          prints.add(VaultKeys.fingerprint(crypto, open.kFp, old));
+        } finally {
+          old.wipe();
+        }
+        boxes.remove(h.id);
+      }
+      final fpOld = <Uint8List>[
+        for (final f in entry.fpOld)
+          if (!prints.any((Uint8List p) => crypto.equal(p, f))) f,
+      ];
+      final returned = entry.flags.contains(EntryFlags.returnedOld) &&
+          fpOld.any((Uint8List f) => crypto.equal(f, entry.fp));
+      updated[id] = entry.copyWith(
+        history: List<HistoryMeta>.unmodifiable(<HistoryMeta>[
+          for (final h in entry.history)
+            if (!drop.contains(h)) h,
+        ]),
+        fpOld: fpOld,
+        flags: <String>[
+          for (final f in entry.flags)
+            if (f != EntryFlags.returnedOld) f,
+          if (returned) EntryFlags.returnedOld,
+        ],
+      );
+    }
+    if (updated.isEmpty) return;
+    _alive(open);
+    final written = await _commit(
+      open,
+      entries: <VaultEntry>[
+        for (final e in open.index.entries) updated[e.id] ?? e,
+      ],
+      secrets: open.envelope.secrets,
+      history: boxes,
+      replacePrevious: true,
+    );
+    // Удалённый пароль не живёт и в копиях до миграции.
+    for (final version in await store.backupVersions()) {
+      await store.writeBackup(version, written);
+    }
+    touch();
+    _notify(VaultSignal.changed);
+  }
 
   // ------------------------------- охраняемые важные записи (3.6, 15.2)
 
@@ -1600,7 +1822,10 @@ final class Vault {
   /// флаги и тренировка сбрасываются. `fp`/`fp_loose` считаются ключом
   /// `k_fp` хранилища, `fp_old` пришедших записей отбрасываются. При
   /// «заменить» прежний `fp` уходит в `fp_old`, `vault.prev` сразу
-  /// переписывается (старых паролей нет и там).
+  /// переписывается (старых паролей нет и там). С включённой хронологией
+  /// паролей (ADR-015) прежний пароль и хронология из копии ложатся в
+  /// хронологию записи (без повторов, до [VaultEntry.maxHistory]);
+  /// с выключенной — хронология копии отбрасывается.
   Future<ImportResult> importItems(
     List<ImportDecision> decisions, {
     required bool fromBackup,
@@ -1610,6 +1835,10 @@ final class Vault {
         final now = clock.now();
         final entries = <VaultEntry>[...open.index.entries];
         final secrets = <String, SealedSecret>{...open.envelope.secrets};
+        final history = <String, SealedBox>{...open.envelope.history};
+        // Хронология паролей (ADR-015): выключена — прежние пароли не
+        // копятся, а хронология копии отбрасывается.
+        final keepHistory = VaultPrefs.passwordHistory.of(open.index.prefs);
         final ids = <String>{for (final e in entries) e.id};
         final replacedIds = <String>{};
         // Охрана важных записей проверяется один раз на весь импорт: окно
@@ -1690,6 +1919,38 @@ final class Vault {
                     for (final f in existing.flags)
                       if (f != EntryFlags.importConflict) f,
                   ],
+                  history: keepHistory
+                      ? _mergeHistory(
+                          ring: open.ring,
+                          envelope: open.envelope,
+                          entryId: existing.id,
+                          kFp: open.kFp,
+                          currentFp: fp,
+                          existing: _historyPrints(open, existing),
+                          incoming: <ImportHistory>[
+                            ImportHistory(
+                              password: current.password,
+                              from: existing.changed,
+                              to: now,
+                              src: existing.dateSource,
+                            ),
+                            if (fromBackup) ...item.history,
+                          ],
+                          boxes: history,
+                        )
+                      // Хронология выключена: оставленные элементы — без
+                      // нового текущего пароля.
+                      : existing.history.isEmpty
+                          ? null
+                          : _mergeHistory(
+                              ring: open.ring,
+                              envelope: open.envelope,
+                              entryId: existing.id,
+                              kFp: open.kFp,
+                              currentFp: fp,
+                              existing: _historyPrints(open, existing),
+                              boxes: history,
+                            ),
                 ),
                 item.password,
               );
@@ -1732,6 +1993,17 @@ final class Vault {
               flags: decision.match.status == ImportStatus.conflict
                   ? const <String>[EntryFlags.importConflict]
                   : const <String>[],
+              history: keepHistory && fromBackup
+                  ? _mergeHistory(
+                      ring: open.ring,
+                      envelope: open.envelope,
+                      entryId: id,
+                      kFp: open.kFp,
+                      currentFp: fp,
+                      incoming: item.history,
+                      boxes: history,
+                    )
+                  : const <HistoryMeta>[],
             ),
             item.password,
           );
@@ -1754,6 +2026,7 @@ final class Vault {
             open,
             entries: entries,
             secrets: secrets,
+            history: history,
             replacePrevious: replaced > 0,
           );
           _notify(VaultSignal.changed);
@@ -1840,6 +2113,7 @@ final class Vault {
               plain.wipe();
             }
           }
+          final history = _resealHistory(open, ring, base);
           final index = VaultIndex(
             rev: 1,
             kFp: open.index.kFp.clone(),
@@ -1858,6 +2132,7 @@ final class Vault {
               wrapPw: wrap,
               index: index,
               secrets: secrets,
+              history: history,
               kind: VaultFormat.kindBackup,
             );
           } finally {
@@ -1870,7 +2145,8 @@ final class Vault {
           // Проверка чтением: открыть паролем, индекс и каждый секрет.
           final read = await _readBackup(bytes, secret);
           final complete = read.skipped == 0 &&
-              read.items.length == open.index.entries.length;
+              read.items.length == open.index.entries.length &&
+              _historyComplete(read.items, open.index.entries);
           read.wipe();
           if (!complete) throw VaultError.corrupt;
           touch();
@@ -1978,6 +2254,20 @@ final class Vault {
             skipped++;
             continue;
           }
+          final history = <ImportHistory>[];
+          for (final meta in info.history) {
+            final password = _openBackupHistory(envelope, ring, info, meta);
+            if (password != null) {
+              history.add(
+                ImportHistory(
+                  password: password,
+                  from: meta.from,
+                  to: meta.to,
+                  src: meta.src,
+                ),
+              );
+            }
+          }
           items.add(
             ImportItem(
               service: info.service,
@@ -1992,6 +2282,7 @@ final class Vault {
               sourceId: info.id,
               srcFp: info.fp,
               srcFpOld: info.fpOld,
+              history: List<ImportHistory>.unmodifiable(history),
               record: items.length + 1,
             ),
           );
@@ -2012,6 +2303,58 @@ final class Vault {
     } finally {
       ring.dispose();
     }
+  }
+
+  /// Прежний пароль из копии или `null` (нет шифротекста, не
+  /// расшифровался, пусто, длиннее предела): битый элемент хронологии
+  /// пропускается, запись остаётся.
+  SecretBytes? _openBackupHistory(
+    VaultEnvelope envelope,
+    VaultKeyRing ring,
+    BackupEntryInfo info,
+    HistoryMeta meta,
+  ) {
+    final box = envelope.history[meta.id];
+    if (box == null) return null;
+    final plain = crypto.open(
+      ring.secret,
+      box,
+      VaultKeys.historyAd(
+        version: envelope.sourceVersion,
+        kind: envelope.kind,
+        vaultId: envelope.vaultId,
+        entryId: info.id,
+        historyId: meta.id,
+      ),
+    );
+    if (plain == null) return null;
+    final VaultSecret secret;
+    try {
+      secret = SecretCodec.decodePadded(plain);
+    } on VaultError {
+      return null;
+    }
+    secret.note.wipe();
+    final password = secret.password;
+    if (password.isEmpty || password.length > VaultFormat.maxPassword) {
+      password.wipe();
+      return null;
+    }
+    return password;
+  }
+
+  /// Проверка копии чтением: у каждой записи прочиталась вся хронология.
+  static bool _historyComplete(
+    List<ImportItem> items,
+    List<VaultEntry> entries,
+  ) {
+    final expected = <String, int>{
+      for (final e in entries) e.id: e.history.length,
+    };
+    for (final item in items) {
+      if (expected[item.sourceId] != item.history.length) return false;
+    }
+    return true;
   }
 
   // ------------------------------------------------ мастер-пароль
@@ -2107,6 +2450,7 @@ final class Vault {
         open,
         entries: open.index.entries,
         secrets: secrets,
+        history: _resealHistory(open, ring, base),
         master: <String, Object?>{
           ...open.index.master,
           'last_typed': _iso(clock.now()),
@@ -2265,6 +2609,163 @@ final class Vault {
     }
   }
 
+  /// Прежний пароль [historyId] записи [entry] (ключи [ring], AD — версии
+  /// файла). Вызывающий затирает.
+  SecretBytes _openHistory(
+    _Open open,
+    VaultKeyRing ring,
+    VaultEntry entry,
+    String historyId,
+  ) {
+    final box = open.envelope.history[historyId];
+    if (box == null) throw VaultError.corrupt;
+    final body = crypto.open(
+      ring.secret,
+      box,
+      VaultKeys.historyAd(
+        version: open.envelope.sourceVersion,
+        kind: open.envelope.kind,
+        vaultId: open.envelope.vaultId,
+        entryId: entry.id,
+        historyId: historyId,
+      ),
+    );
+    if (body == null) throw VaultError.corrupt;
+    final secret = SecretCodec.decodePadded(body);
+    secret.note.wipe();
+    return secret.password;
+  }
+
+  /// Шифротекст прежнего пароля: тело то же, что у секрета (пароль и пустая
+  /// заметка, дополнение до 256 байт), ключ `K_secret`, своя AD.
+  SealedBox _sealHistory(
+    VaultKeyRing ring,
+    VaultEnvelope envelope,
+    String entryId,
+    String historyId,
+    SecretBytes password,
+  ) {
+    final empty = SecretBytes.empty();
+    final body = SecretCodec.encodePadded(password, empty);
+    try {
+      return crypto.seal(
+        ring.secret,
+        body,
+        VaultKeys.historyAd(
+          version: VaultFormat.version,
+          kind: envelope.kind,
+          vaultId: envelope.vaultId,
+          entryId: entryId,
+          historyId: historyId,
+        ),
+      );
+    } finally {
+      body.fillRange(0, body.length, 0);
+      empty.wipe();
+    }
+  }
+
+  /// Вся хронология открытого хранилища заново: ключами [ring] под
+  /// конверт [base] (смена ключа, копия, миграция).
+  Map<String, SealedBox> _resealHistory(
+    _Open open,
+    VaultKeyRing ring,
+    VaultEnvelope base,
+  ) {
+    final out = <String, SealedBox>{};
+    for (final entry in open.index.entries) {
+      for (final meta in entry.history) {
+        final password = _openHistory(open, open.ring, entry, meta.id);
+        try {
+          out[meta.id] = _sealHistory(ring, base, entry.id, meta.id, password);
+        } finally {
+          password.wipe();
+        }
+      }
+    }
+    return out;
+  }
+
+  /// Хронология записи [entry] с отпечатками паролей (для слияния).
+  List<(HistoryMeta, Uint8List)> _historyPrints(_Open open, VaultEntry entry) =>
+      <(HistoryMeta, Uint8List)>[
+        for (final meta in entry.history)
+          (meta, _historyPrint(open, entry, meta.id)),
+      ];
+
+  Uint8List _historyPrint(_Open open, VaultEntry entry, String historyId) {
+    final password = _openHistory(open, open.ring, entry, historyId);
+    try {
+      return VaultKeys.fingerprint(crypto, open.kFp, password);
+    } finally {
+      password.wipe();
+    }
+  }
+
+  /// Хронология записи [entryId] после слияния (ADR-015): прежние
+  /// [existing] (с отпечатками) и пришедшие [incoming] (прежний пароль
+  /// при смене, хронология копии). Без повторов по отпечатку и без
+  /// текущего пароля [currentFp]; новые (по дате смены) первыми; не больше
+  /// [VaultEntry.maxHistory]. Пришедшие запечатываются в [boxes] под
+  /// новыми id, выпавшие прежние из [boxes] убираются. Пароли [incoming]
+  /// не затираются.
+  List<HistoryMeta> _mergeHistory({
+    required VaultKeyRing ring,
+    required VaultEnvelope envelope,
+    required String entryId,
+    required VaultKey kFp,
+    required Uint8List currentFp,
+    List<(HistoryMeta, Uint8List)> existing = const <(
+      HistoryMeta,
+      Uint8List
+    )>[],
+    List<ImportHistory> incoming = const <ImportHistory>[],
+    required Map<String, SealedBox> boxes,
+  }) {
+    // Пришедшие — в начале: при равной дате (сменили дважды за миг) только
+    // что сменённый пароль новее хранившихся.
+    final candidates = <(DateTime, Uint8List, HistoryMeta?, ImportHistory?)>[
+      for (final item in incoming)
+        (
+          item.to,
+          VaultKeys.fingerprint(crypto, kFp, item.password),
+          null,
+          item,
+        ),
+      for (final (meta, fp) in existing) (meta.to, fp, meta, null),
+    ];
+    // Устойчивая сортировка: новые по дате смены первыми.
+    final order = List<int>.generate(candidates.length, (int i) => i)
+      ..sort((int a, int b) {
+        final byDate = candidates[b].$1.compareTo(candidates[a].$1);
+        return byDate != 0 ? byDate : a.compareTo(b);
+      });
+    final seen = <Uint8List>[currentFp];
+    final result = <HistoryMeta>[];
+    for (final i in order) {
+      final (_, fp, meta, item) = candidates[i];
+      final duplicate = seen.any((Uint8List s) => crypto.equal(s, fp));
+      if (duplicate || result.length >= VaultEntry.maxHistory) {
+        if (meta != null) boxes.remove(meta.id);
+        continue;
+      }
+      seen.add(fp);
+      if (meta != null) {
+        result.add(meta);
+        continue;
+      }
+      var hid = VaultIds.hex(crypto.bytes(VaultFormat.idBytes));
+      while (boxes.containsKey(hid)) {
+        hid = VaultIds.hex(crypto.bytes(VaultFormat.idBytes));
+      }
+      boxes[hid] = _sealHistory(ring, envelope, entryId, hid, item!.password);
+      result.add(
+        HistoryMeta(id: hid, from: item.from, to: item.to, src: item.src),
+      );
+    }
+    return List<HistoryMeta>.unmodifiable(result);
+  }
+
   VaultEnvelope _sealEnvelope({
     required VaultKeyRing ring,
     required String vaultId,
@@ -2272,6 +2773,7 @@ final class Vault {
     required SealedBox wrapPw,
     required VaultIndex index,
     required Map<String, SealedSecret> secrets,
+    Map<String, SealedBox> history = const <String, SealedBox>{},
     BioWrap? wrapBio,
     String kind = VaultFormat.kindVault,
   }) {
@@ -2288,6 +2790,7 @@ final class Vault {
         index:
             crypto.seal(ring.index, body, VaultKeys.indexAd(header, index.rev)),
         secrets: Map<String, SealedSecret>.unmodifiable(secrets),
+        history: Map<String, SealedBox>.unmodifiable(history),
       );
     } finally {
       body.fillRange(0, body.length, 0);
@@ -2300,6 +2803,7 @@ final class Vault {
     _Open open, {
     required List<VaultEntry> entries,
     required Map<String, SealedSecret> secrets,
+    Map<String, SealedBox>? history,
     Map<String, Object?>? master,
     Map<String, Object?>? prefs,
     Map<String, Object?>? backup,
@@ -2325,7 +2829,14 @@ final class Vault {
       wrapBio: ring == null && wrapPw == null ? open.envelope.wrapBio : null,
       index: index,
       secrets: secrets,
+      history: history ?? open.envelope.history,
     );
+    // Индекс и хронология конверта должны сойтись: иначе файл не открыть.
+    try {
+      VaultKeys.checkConsistency(envelope, index);
+    } on VaultError {
+      throw StateError('хронология не сходится с индексом');
+    }
     final bytes = envelope.encode();
     // Файл, который не прочитать (предел шифротекста, индекса, файла), не
     // пишется: иначе хранилище целиком стало бы «испорченным».

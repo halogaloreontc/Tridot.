@@ -552,6 +552,186 @@ void main() {
     }
   });
 
+  test('хронология паролей (ADR-015): прежних паролей нет нигде открыто',
+      () async {
+    const old = <String>['CANARY-hist-a-Tz4', 'CANARY-hist-b-Nq7'];
+    const current = 'CANARY-hist-now-Kp2';
+    void clean(String where, String text) {
+      for (final canary in <String>[...forbidden, ...old, current]) {
+        for (final form in Canary.textForms(canary)) {
+          expect(text, isNot(contains(form)), reason: '$where: $canary');
+        }
+      }
+    }
+
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) => logs.add('$message');
+    addTearDown(() => debugPrint = previousDebugPrint);
+
+    await runZoned(
+      () async {
+        final documents = p.join(root.path, 'documents', 'assistant');
+        final support = p.join(root.path, 'support', 'assistant');
+        final clock = TestClock(DateTime(2026, 11, 10, 12));
+        final vault = testVault(
+          FileVaultStore(p.join(support, 'vault')),
+          crypto,
+          clock: clock,
+        );
+        final notices = <String>[];
+        final kit = PasswordsKit(
+          vault: vault,
+          platform: PasswordsPlatform.linux,
+          kdfForTesting: fastKdf,
+          clipboard: ClipboardGuard(
+            platform: PasswordsPlatform.linux,
+            cipher: crypto,
+            write: (String text) async {},
+            read: () async => null,
+          ),
+        );
+        kit.onSettings = ({
+          int? seenRev,
+          bool? vaultExisted,
+          String? trainingDue,
+        }) =>
+            notices.add('$seenRev $vaultExisted $trainingDue');
+        addTearDown(kit.dispose);
+        await vault.load();
+        await kit.create(Canary.master);
+        expect(
+          await kit.setPasswordHistory(true, master: Canary.master),
+          isTrue,
+        );
+        final id = await vault.addEntry(
+          service: 'Почта',
+          login: Canary.login,
+          password: secret(old[0]),
+          important: true,
+        );
+        expect(await kit.confirm(Canary.master), isTrue);
+        await vault.updatePassword(id, secret(old[1]));
+        await vault.updatePassword(id, secret(current));
+        expect(vault.entry(id)!.history, hasLength(2));
+        final models = <Object>[
+          vault,
+          kit,
+          ...vault.entries,
+          ...vault.entry(id)!.history,
+        ];
+        // Показ в карточке записи — байты затираются сразу.
+        final shown = await kit.historyPassword(
+          id,
+          vault.entry(id)!.history.first.id,
+        );
+        models.add(shown);
+        shown.wipe();
+
+        // Копия с хронологией и «новое устройство» с ней.
+        final backup = await kit.exportBackup(Canary.master);
+        await File(p.join(root.path, 'history.relaybak')).writeAsBytes(backup);
+        final device = testVault(
+          FileVaultStore(p.join(root.path, 'device', 'vault')),
+          crypto,
+          clock: clock,
+        );
+        await device.load();
+        final opened = await device.readBackup(backup, secret(Canary.master));
+        models
+          ..add(opened)
+          ..addAll(opened.items)
+          ..addAll(opened.items.expand((ImportItem i) => i.history));
+        await device.createFromBackup(
+          opened,
+          secret(Canary.master),
+          params: fastKdf,
+          keepHistory: true,
+        );
+        opened.wipe();
+        expect(device.historyCount, 2);
+
+        // Чат: «старый пароль» хронологию не раскрывает.
+        final facade = VaultFacade(vault);
+        models.addAll(facade.all());
+        final assistant = AssistantController(
+          extensions: ExtensionRegistry(
+            connectors: <Connector>[PasswordsConnector(vault: facade)],
+            choice: const ExtensionChoice(
+              enabled: <String>{PasswordsConnector.id},
+            ),
+          ),
+          clock: clock,
+          knownSecret: facade.knownSecret,
+        );
+        final book = ChatBook(
+          store: JsonChatStore(p.join(documents, 'chats')),
+          clock: clock,
+        );
+        await book.load();
+        for (final text in <String>[
+          'покажи старый пароль от почты',
+          'какой был прежний пароль от почты',
+          'покажи хронологию паролей почты',
+          'удали старый пароль почты',
+        ]) {
+          final response = await assistant.handle(text);
+          clean('ответ «$text»', response.message);
+          clean('факты', response.values.values.join('|'));
+          clean(
+            'ожидание',
+            '${assistant.session.pendingConfirmation?.payload}',
+          );
+          book.append(
+            book.currentId,
+            ChatMessage(
+              id: book.newMessageId(),
+              author: ChatAuthor.persona,
+              text: response.message,
+              timestamp: clock.now(),
+              secureCard: response.secureCard,
+            ),
+          );
+        }
+        // Чат прежних паролей не удаляет и не показывает.
+        expect(vault.entry(id)!.history, hasLength(2));
+        await book.flush();
+        for (final message in book.thread(book.currentId)!.messages) {
+          clean('ChatMessage.toJson', '${message.toJson()}');
+        }
+        for (final model in models) {
+          clean('toString ${model.runtimeType}', '$model');
+        }
+        for (final notice in notices) {
+          clean('уведомление', notice);
+        }
+        vault.lock();
+        device.lock();
+        // Файлы: хранилища, .prev, копия, чаты — ни одного прежнего пароля.
+        await for (final entity in root.list(recursive: true)) {
+          if (entity is! File) continue;
+          final bytes = await entity.readAsBytes();
+          for (final canary in <String>[...old, current]) {
+            for (final form in Canary.encodings(canary)) {
+              expect(
+                containsBytes(bytes, form),
+                isFalse,
+                reason: '${p.relative(entity.path, from: root.path)}: $canary',
+              );
+            }
+          }
+        }
+      },
+      zoneSpecification: ZoneSpecification(
+        print: (Zone self, ZoneDelegate parent, Zone zone, String line) =>
+            logs.add(line),
+      ),
+    );
+    for (final line in logs) {
+      clean('вывод', line);
+    }
+  });
+
   test('после «перезапуска» карточки нет — только текст', () async {
     final store = JsonChatStore(p.join(root.path, 'chats'));
     final clock = TestClock(DateTime(2026, 11, 10, 12));

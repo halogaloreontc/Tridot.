@@ -74,6 +74,15 @@ abstract final class VaultPrefs {
     _turnsOff,
   );
 
+  /// Хронология паролей (ADR-015, выкл.): прежние пароли записи хранятся
+  /// зашифрованными. Включение — ослабление D7, только с мастер-паролем.
+  static const VaultPref<bool> passwordHistory = VaultPref<bool>._(
+    'pw_history',
+    false,
+    <bool>[false, true],
+    _turnsOn,
+  );
+
   static const List<VaultPref<int>> numbers = <VaultPref<int>>[
     autolockMinutes,
     masterEveryHours,
@@ -85,6 +94,7 @@ abstract final class VaultPrefs {
     hintsInHistory,
     loginInReplies,
     repromptImportant,
+    passwordHistory,
   ];
 
   /// Неизвестный ключ или недопустимое значение в [changes] — ошибка
@@ -102,7 +112,7 @@ abstract final class VaultPrefs {
 
   /// Ослабляет ли [changes] защиту относительно [current]: дольше
   /// автозапирание, показ или буфер, реже мастер-пароль, подсказки или
-  /// логин в истории, выключен переспрос.
+  /// логин в истории, выключен переспрос, включена хронология паролей.
   static bool weakens(
     Map<String, Object?> current,
     Map<String, Object?> changes,

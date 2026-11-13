@@ -28,7 +28,7 @@ String _errorText(Object error) => switch (error) {
       _ => '$error',
     };
 
-/// Экран «Хранилище»: где лежат данные, резервная копия и архив
+/// Экран «Данные»: где лежат данные, резервная копия и архив
 /// выполненных задач.
 class StorageScreen extends StatefulWidget {
   const StorageScreen({
@@ -135,7 +135,7 @@ class _StorageScreenState extends State<StorageScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               Text(
-                'Хранилище',
+                'Данные',
                 style: theme.textTheme.titleLarge?.copyWith(
                   color: AssistantColors.textStrong,
                 ),
@@ -243,7 +243,7 @@ class _StorageScreenState extends State<StorageScreen> {
                         const Padding(
                           padding: EdgeInsets.only(top: 6),
                           child: Text(
-                            'Для хранилища в памяти копия недоступна',
+                            'Данные только в памяти — копия недоступна',
                             style: technicalTextStyle,
                           ),
                         ),

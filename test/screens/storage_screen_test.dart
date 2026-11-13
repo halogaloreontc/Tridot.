@@ -100,7 +100,10 @@ void main() {
       host(FakeStorageInfo(), completed: <Task>[doneTask(1)]),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Хранилище'), findsOneWidget);
+    // Экран зовётся «Данные»: «Хранилище» оставлено за «Хранилищем
+    // контекста» (docs/PLANS.md).
+    expect(find.text('Данные'), findsOneWidget);
+    expect(find.textContaining('Хранилищ'), findsNothing);
     expect(find.text('JSON на этом устройстве'), findsOneWidget);
     expect(find.byType(SelectableText), findsOneWidget);
     expect(find.text('/data/tasks.json'), findsOneWidget);
@@ -118,7 +121,23 @@ void main() {
       find.byKey(const ValueKey<String>('storage-backup')),
     );
     expect(button.onPressed, isNull);
+    expect(
+      find.text('Данные только в памяти — копия недоступна'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Хранилищ'), findsNothing);
     expect(find.byType(EmptyState), findsOneWidget);
+  });
+
+  test('memory storage: backup error names the data, not «Хранилище»',
+      () async {
+    await expectLater(
+      const MemoryStorageInfo().backup(),
+      throwsA(
+        isA<UnsupportedError>()
+            .having((e) => e.message, 'message', 'Данные только в памяти'),
+      ),
+    );
   });
 
   testWidgets('backup success shows progress, then the path', (tester) async {

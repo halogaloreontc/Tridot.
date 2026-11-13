@@ -74,6 +74,7 @@ final class Utterance {
     required this.due,
     this.chatTaskId,
     this.awaitingAnswer = false,
+    this.recentConnectorId,
   });
 
   /// Разбирает [text]; [now] нужен для сроков «завтра», «в 10:00».
@@ -124,10 +125,17 @@ final class Utterance {
   }
 
   /// То же сообщение, отправленное в чате задачи [chatTaskId] (`null` —
-  /// в главном чате); [awaitingAnswer] — помощник перед этим задал вопрос.
-  /// Ставит маршрутизатор.
-  Utterance withChat(String? chatTaskId, {bool awaitingAnswer = false}) =>
-      chatTaskId == this.chatTaskId && awaitingAnswer == this.awaitingAnswer
+  /// в главном чате); [awaitingAnswer] — помощник перед этим задал вопрос;
+  /// [recentConnectorId] — кто недавно отвечал в этом чате (контекст
+  /// сессии). Ставит маршрутизатор.
+  Utterance withChat(
+    String? chatTaskId, {
+    bool awaitingAnswer = false,
+    String? recentConnectorId,
+  }) =>
+      chatTaskId == this.chatTaskId &&
+              awaitingAnswer == this.awaitingAnswer &&
+              recentConnectorId == this.recentConnectorId
           ? this
           : Utterance._(
               original: original,
@@ -140,7 +148,16 @@ final class Utterance {
               due: due,
               chatTaskId: chatTaskId,
               awaitingAnswer: awaitingAnswer,
+              recentConnectorId: recentConnectorId,
             );
+
+  /// Коннектор, который отвечал в этом чате одно-два сообщения назад и не
+  /// дольше нескольких минут назад (контекст сессии,
+  /// `AssistantController`); `null` — контекста нет. Так «сделай бэкап»
+  /// сразу после разговора о паролях понимается как копия паролей, а не
+  /// вопрос «копию чего?». Только id коннектора: текста прежних сообщений
+  /// здесь нет.
+  final String? recentConnectorId;
 
   /// Предыдущий ответ помощника был вопросом («На когда перенести
   /// задачу?», «да или нет?»): короткое слово сейчас — скорее ответ на

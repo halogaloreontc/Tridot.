@@ -15,6 +15,7 @@ import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/skills/calculator/calculator.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
+import 'package:local_assistant/core/skills/data/data_connector.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
@@ -118,6 +119,7 @@ const Set<String> _allowedKeys = <String>{
   'shift',
   'roles',
   'connected',
+  'after',
 };
 
 /// Роли строки без поля `roles`: все встроенные.
@@ -162,6 +164,10 @@ final Map<String, Connector Function(DateTime now, bool connected)>
   // всегда: он спорит за каждую строку, а его фразы — только синтетика.
   // `match` не трогает хранилище, поэтому фасад не нужен.
   PasswordsConnector.id: (DateTime now, bool connected) => PasswordsConnector(),
+  // «Данные» (решения владельца 3, 5): копия и «хранилище» без опоры на
+  // пароли — уточняющий вопрос. Совпадения без маркера и ниже порога
+  // спора: уступают любой явной фразе.
+  DataConnector.id: (DateTime now, bool connected) => const DataConnector(),
 };
 
 /// Ответ калькулятора для сравнения с полем `answer`: пример — как его
@@ -176,34 +182,10 @@ String _calcAnswer(Utterance utterance) {
 }
 
 /// Кого выберет маршрутизатор: id коннектора, `ambiguous`, если он
-/// переспросит (те же правила, что в AssistantController), или `null`.
-String? _routed(List<ConnectorMatch> all) {
-  if (all.isEmpty) return null;
-  final firm = all.any((ConnectorMatch m) => !m.fallback)
-      ? all.where((ConnectorMatch m) => !m.fallback).toList()
-      : all;
-  final sorted = firm.any((ConnectorMatch m) => !m.implicit)
-      ? firm.where((ConnectorMatch m) => !m.implicit).toList()
-      : firm;
-  // Явная фраза о паролях — у навыка «Пароли», как в AssistantController.
-  if (sorted.any(
-    (ConnectorMatch m) => m.connectorId == PasswordsConnector.id && !m.implicit,
-  )) {
-    return PasswordsConnector.id;
-  }
-  final best = sorted.first;
-  for (final other in sorted.skip(1)) {
-    if (other.connectorId == best.connectorId) continue;
-    if (best.confidence >= AssistantController.ambiguityFloor &&
-        other.confidence >= AssistantController.ambiguityFloor &&
-        best.confidence - other.confidence <=
-            AssistantController.ambiguityMargin) {
-      return 'ambiguous';
-    }
-    break;
-  }
-  return best.connectorId;
-}
+/// переспросит, или `null` — общая функция [RoutePolicy.pick], та же, что
+/// в AssistantController.
+String? _routed(RouteDecision decision) =>
+    decision.isAmbiguous ? 'ambiguous' : decision.winner?.connectorId;
 
 Set<String> get _connectorIds => _connectorFactories.keys.toSet();
 
@@ -326,6 +308,10 @@ void _validate(Map<String, dynamic> json, String location) {
   if (connected != null && connected is! bool) {
     fail('поле connected — true или false');
   }
+  final after = json['after'];
+  if (after != null && (after is! String || !_connectorIds.contains(after))) {
+    fail('поле after — id коннектора: $_connectorIds');
+  }
   final status = json['status'];
   if (status != null && status != 'active' && status != 'known_gap') {
     fail('неизвестный status «$status»');
@@ -361,7 +347,7 @@ final class _Case {
 
     final connectorId = json['connector'] as String? ?? TasksConnector.id;
     final expectedIntent = json['intent'] as String;
-    final utterance = Utterance.analyze(text, now: now);
+    final after = json['after'] as String?;
     final roles = <String>{
       ...(json['roles'] as List<dynamic>?)?.cast<String>() ?? _defaultRoles,
     };
@@ -382,24 +368,43 @@ final class _Case {
         },
       ),
     );
-    // Фразу о паролях не получает ни один сетевой коннектор (раздел 5.9)
-    // — то же правило, что в AssistantController.
-    final passwordsPhrase = PasswordPhrases.looksLike(utterance);
-    final matches = <ConnectorMatch>[
-      for (final connector in registry.enabledConnectors)
-        if (!(passwordsPhrase && connector.info.requiresNetwork))
-          if (connector.match(utterance) case final ConnectorMatch match) match,
-    ]..sort(
-        (ConnectorMatch a, ConnectorMatch b) =>
-            b.confidence.compareTo(a.confidence),
-      );
+    // Совпадения в порядке подключения. Фразу о паролях не получает ни
+    // один сетевой коннектор (раздел 5.9) — то же правило, что в
+    // AssistantController.
+    List<ConnectorMatch> matchesOf(Utterance utterance) {
+      final passwordsPhrase = PasswordPhrases.looksLike(utterance);
+      return <ConnectorMatch>[
+        for (final connector in registry.enabledConnectors)
+          if (!(passwordsPhrase && connector.info.requiresNetwork))
+            if (connector.match(utterance) case final ConnectorMatch match)
+              match,
+      ];
+    }
+
+    var phrase = text;
+    var utterance = Utterance.analyze(text, now: now)
+        .withChat(null, recentConnectorId: after);
+    var matches = matchesOf(utterance);
+    var decision = RoutePolicy.pick(matches, recentConnectorId: after);
+    // Фраза понята по контексту как фраза другого навыка: проверяется
+    // разбор канонической фразы, как её разберёт маршрутизатор.
+    if (decision.winner?.payload case final Reroute reroute) {
+      phrase = reroute.text;
+      utterance = Utterance.analyze(phrase, now: now);
+      matches = matchesOf(utterance);
+      decision = RoutePolicy.pick(matches);
+    }
     if (expectedIntent != 'unknown') {
-      compare('connector', _routed(matches), connectorId);
+      compare('connector', _routed(decision), connectorId);
     }
     if (connectorId != TasksConnector.id) {
       final own = matches
           .where((ConnectorMatch m) => m.connectorId == connectorId)
-          .toList();
+          .toList()
+        ..sort(
+          (ConnectorMatch a, ConnectorMatch b) =>
+              b.confidence.compareTo(a.confidence),
+        );
       compare(
         'intent',
         own.isEmpty ? 'unknown' : own.first.commandId,
@@ -411,7 +416,7 @@ final class _Case {
       return mismatches;
     }
 
-    final parsed = ScenarioParser(clock: FixedClock(now)).parse(text);
+    final parsed = ScenarioParser(clock: FixedClock(now)).parse(phrase);
 
     compare(
       'intent',

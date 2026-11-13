@@ -19,6 +19,7 @@ final class ImportItem {
     this.sourceId,
     this.srcFp,
     this.srcFpOld = const <List<int>>[],
+    this.history = const <ImportHistory>[],
     this.record = 0,
   }) : note = note ?? SecretBytes.empty();
 
@@ -47,16 +48,42 @@ final class ImportItem {
   final List<int>? srcFp;
   final List<List<int>> srcFpOld;
 
+  /// Хронология паролей из копии (ADR-015), новые первыми. Из CSV —
+  /// всегда пусто. Ложится в хранилище, только если там включена опция.
+  final List<ImportHistory> history;
+
   /// Номер записи в файле (с 1) — для сообщений «запись 14».
   final int record;
 
   void wipe() {
     password.wipe();
     note.wipe();
+    for (final h in history) {
+      h.password.wipe();
+    }
   }
 
   @override
   String toString() => 'ImportItem(#$record)';
+}
+
+/// Прежний пароль записи из копии (ADR-015). Пароль — только
+/// [SecretBytes]; затирает [ImportItem.wipe].
+final class ImportHistory {
+  const ImportHistory({
+    required this.password,
+    required this.from,
+    required this.to,
+    this.src = DateSource.unknown,
+  });
+
+  final SecretBytes password;
+  final DateTime from;
+  final DateTime to;
+  final DateSource src;
+
+  @override
+  String toString() => 'ImportHistory(•••)';
 }
 
 /// Что пришедшая запись значит для хранилища (по `fp`).

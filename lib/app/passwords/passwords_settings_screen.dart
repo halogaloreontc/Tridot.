@@ -60,7 +60,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
         ok = await askMaster(
           context,
           title: 'Ослабить защиту?',
-          text: 'Эта настройка делает хранилище менее защищённым. '
+          text: 'Эта настройка делает сейф менее защищённым. '
               'Подтвердите мастер-паролем.',
           check: (String master) => kit.setPrefs(changes, master: master),
         );
@@ -135,6 +135,71 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
     );
   }
 
+  /// Хронология паролей (ADR-015): включение — ослабление D7, только с
+  /// мастер-паролем; при выключении — спросить, удалить ли сохранённое.
+  Future<void> _setHistory(bool enabled) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    var ok = false;
+    try {
+      if (enabled) {
+        ok = await askMaster(
+          context,
+          title: 'Хранить прежние пароли?',
+          text: 'Прежние пароли будут храниться в сейфе зашифрованными — '
+              'это ослабляет защиту. Подтвердите мастер-паролем.',
+          check: (String master) =>
+              kit.setPasswordHistory(true, master: master),
+        );
+      } else {
+        bool? purge = false;
+        if (kit.historyCount > 0) {
+          purge = await showDialog<bool>(
+            context: context,
+            builder: (BuildContext context) => AlertDialog(
+              scrollable: true,
+              backgroundColor: AssistantColors.raised,
+              title: const Text(
+                'Удалить сохранённые прежние пароли всех записей?',
+              ),
+              content: const Text(
+                'Если оставить, при смене пароля старый больше не '
+                'сохраняется, а сохранённые останутся в записях — их можно '
+                'удалить по одному. Удалённое вернуть можно только из '
+                'резервной копии.',
+              ),
+              actions: <Widget>[
+                TextButton(
+                  key: const ValueKey<String>('prefs-history-keep'),
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Оставить'),
+                ),
+                TextButton(
+                  key: const ValueKey<String>('prefs-history-purge'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AssistantColors.danger,
+                  ),
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Удалить'),
+                ),
+              ],
+            ),
+          );
+          // Закрыли диалог мимо кнопок — ничего не меняем.
+          if (purge == null) return;
+        }
+        ok = await kit.setPasswordHistory(false, purge: purge);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!ok && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Настройка не изменена.')),
+      );
+    }
+  }
+
   Future<void> _changeMaster() async {
     final changed = await showDialog<bool>(
       context: context,
@@ -144,7 +209,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(
           content: Text(
-            'Мастер-пароль сменён, хранилище перешифровано новым ключом.',
+            'Мастер-пароль сменён, сейф перешифрован новым ключом.',
           ),
         ),
       );
@@ -170,7 +235,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8),
                 child: Text(
-                  'Эти настройки хранятся внутри зашифрованного хранилища. '
+                  'Эти настройки хранятся внутри зашифрованного сейфа. '
                   'Ослабить защиту можно только мастер-паролем.',
                   style: technicalTextStyle,
                 ),
@@ -193,6 +258,22 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                 'Показ и копирование важных записей — с мастер-паролем.',
                 VaultPrefs.repromptImportant,
               ),
+              SwitchListTile(
+                key: const ValueKey<String>('prefs-pw_history'),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                value: kit.historyEnabled,
+                onChanged: _busy ? null : (bool v) => unawaited(_setHistory(v)),
+                title: const Text(
+                  'Хранить прежние пароли (хронология)',
+                  style: TextStyle(color: AssistantColors.text),
+                ),
+                subtitle: const Text(
+                  'Выключено: старый пароль стирается при смене. Включено: '
+                  'прежние пароли хранятся зашифрованными в записи, '
+                  'ошибочные можно удалить.',
+                  style: TextStyle(color: AssistantColors.muted),
+                ),
+              ),
               const SectionLabel('ЧТО ПОПАДАЕТ В ИСТОРИЮ'),
               _flag(
                 'Подсказки можно хранить в истории',
@@ -211,7 +292,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                 child: Text(
                   'Пароли и заметки в историю не попадают никогда: в сессии '
                   'остаются только названия, логин в маске и факты вроде '
-                  '«пароль был показан». «Очистить историю» хранилище не '
+                  '«пароль был показан». «Очистить историю» сейф не '
                   'трогает.',
                   style: technicalTextStyle,
                 ),
@@ -223,7 +304,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                 leading: const Icon(Icons.key_outlined),
                 title: const Text('Сменить мастер-пароль'),
                 subtitle: const Text(
-                  'Хранилище перешифруется новым ключом: старый мастер-пароль '
+                  'Сейф перешифруется новым ключом: старый мастер-пароль '
                   'больше ничего не откроет.',
                 ),
                 onTap: () => unawaited(_changeMaster()),
@@ -235,7 +316,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                   Icons.inventory_2_outlined,
                   color: AssistantColors.danger,
                 ),
-                title: const Text('Отложить хранилище в архив'),
+                title: const Text('Отложить сейф в архив'),
                 subtitle: const Text(
                   'Для тех, кто забыл мастер-пароль: файл не стирается, '
                   'можно начать заново.',

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/core/passwords/secret_guard.dart';
+import 'package:local_assistant/core/skills/data/data_connector.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 
 import '../../tool/route_phrases.dart';
@@ -180,5 +181,50 @@ void main() {
     for (final phrase in phrases) {
       expect(SecretGuard.redact(phrase).guarded, isTrue, reason: phrase);
     }
+  });
+
+  group('«Данные» и контекст сессии', () {
+    test('копия без объекта — уточняющий вопрос «Данных»', () {
+      final result = routed('сделай бэкап');
+      expect(result['connector'], 'data');
+      expect(result['command'], 'data.clarify');
+    });
+
+    test('после паролей — разбор канонической фразы о сейфе', () {
+      final result = routeInput(
+        <String, dynamic>{'text': 'сделай бэкап', 'after': 'passwords'},
+        now,
+      );
+      expect(result['connector'], 'passwords');
+      expect(result['command'], 'passwords.backup');
+      expect(result['reroute'], 'сделай резервную копию сейфа');
+    });
+
+    test('после данных — команда данных без вопроса', () {
+      final result = routePhrase('сделай бэкап', now, after: 'data');
+      expect(result['command'], 'data.backup');
+    });
+
+    test('намерения topics/data.toml — команды навыка', () {
+      final toml = File('tools/corpus_gen/topics/data.toml').readAsStringSync();
+      final block = RegExp(r'^intents = \[([^\]]*)\]', multiLine: true)
+          .firstMatch(toml)!
+          .group(1)!;
+      final intents = <String>[
+        for (final m in RegExp(r'"([^"]+)"').allMatches(block)) m.group(1)!,
+      ];
+      expect(intents, <String>[
+        DataConnector.clarifyCommand,
+        for (final action in <DataAction>[
+          DataAction.backup,
+          DataAction.restore,
+          DataAction.open,
+          DataAction.lock,
+        ])
+          'data.${action.name}',
+        'unknown',
+      ]);
+      expect(toml, contains('\nconnector = "data"\n'));
+    });
   });
 }

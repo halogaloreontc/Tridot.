@@ -12,6 +12,9 @@ import '../personas/persona_address.dart';
 import '../replies/reply_library.dart';
 import '../services/clock.dart';
 import '../skills/passwords/passwords_phrases.dart';
+import 'route_policy.dart';
+
+export 'route_policy.dart';
 
 /// Маршрутизатор сообщений между коннекторами.
 ///
@@ -86,12 +89,22 @@ final class AssistantController {
   /// Пример из подсказок интерфейса. Тест проверяет, что парсер его понимает.
   static const String exampleCommand = TasksConnector.exampleCommand;
 
-  /// Совпадения ниже этой уверенности не участвуют в споре коннекторов.
-  static const double ambiguityFloor = 0.5;
+  /// Совпадения ниже этой уверенности не участвуют в споре коннекторов
+  /// ([RoutePolicy.ambiguityFloor]).
+  static const double ambiguityFloor = RoutePolicy.ambiguityFloor;
 
   /// Если два коннектора ближе друг к другу, чем на эту величину, —
-  /// уточнение.
-  static const double ambiguityMargin = 0.15;
+  /// уточнение ([RoutePolicy.ambiguityMargin]).
+  static const double ambiguityMargin = RoutePolicy.ambiguityMargin;
+
+  /// Контекст сессии ([Utterance.recentConnectorId]) живёт столько
+  /// обработанных сообщений этого чата: «сделай бэкап» через одно
+  /// сообщение после разговора о паролях — ещё о паролях.
+  static const int contextMessages = 2;
+
+  /// И не дольше этого времени: через полчаса «сделай бэкап» — снова
+  /// вопрос «копию чего?».
+  static const Duration contextWindow = Duration(minutes: 10);
 
   /// Адресат «основной помощник», выбранный в поле ввода явно. Это не то
   /// же, что «никого не выбрали» (`null`): явный выбор важнее ведущего
@@ -201,6 +214,10 @@ final class AssistantController {
     // Продолжение разговора — только в том чате, где обратились.
     _followUp = null;
     _chatEpoch++;
+    // Контекст сессии и «предыдущий коннектор» — только этого чата: «да»
+    // и «сделай бэкап» в другом чате не опираются на чужой разговор.
+    _recent = null;
+    session.lastConnectorId = null;
     _viewChatTaskId = taskId;
     _viewSessionId = taskId == null ? sessionId : null;
     _awaitingAnswer = false;
@@ -239,6 +256,7 @@ final class AssistantController {
   /// Забывает выбор («её») всех чатов: история сессий очищена.
   void forgetChatSelections() {
     _followUp = null;
+    _recent = null;
     _selections.clear();
     clearSelection();
   }
@@ -367,6 +385,7 @@ final class AssistantController {
     // основной) важнее владельца роли (ADR-012).
     _explicit = addressed || isExplicitAddressee(addressee);
     final epoch = _chatEpoch;
+    _messageNo++;
     _inFlight++;
     session.chatTaskId = chatTaskId;
     if (chatTaskId != null) selectTask(chatTaskId);
@@ -510,37 +529,84 @@ final class AssistantController {
   /// Предыдущий ответ был вопросом ([Utterance.awaitingAnswer]).
   bool _awaitingAnswer = false;
 
+  /// Номер сообщения, которое сейчас обрабатывается ([handle]).
+  int _messageNo = 0;
+
+  /// Контекст сессии: какой коннектор последним выполнил фразу, в каком
+  /// чате, когда и на каком сообщении. Только id и время, без текста, и
+  /// только в памяти. Беседа ([ConnectorMatch.fallback]) тему не меняет:
+  /// «спасибо» между «покажи пароли» и «сделай бэкап» контекст не сбивает.
+  /// Сбрасывается на «не понял», «к чему относится команда?», скрытый
+  /// пароль, уточняющий вопрос и смену чата.
+  ({String chat, String connectorId, DateTime at, int message})? _recent;
+
+  /// Чат текущего сообщения: задача или сессия.
+  String get _chatKey {
+    final task = session.chatTaskId;
+    return task != null ? 'task:$task' : 'session:${_appliedSessionId ?? ''}';
+  }
+
+  /// Коннектор из контекста сессии для текущего сообщения или `null`:
+  /// тот же чат, не дальше [contextMessages] сообщений и не старше
+  /// [contextWindow].
+  String? get _recentConnectorId {
+    final recent = _recent;
+    if (recent == null || recent.chat != _chatKey) return null;
+    if (_messageNo - recent.message > contextMessages) return null;
+    final age = session.clock.now().difference(recent.at);
+    if (age.isNegative || age > contextWindow) return null;
+    return recent.connectorId;
+  }
+
+  /// Коннектор из контекста сессии: для тестов и отладки.
+  String? get recentConnectorId => _recentConnectorId;
+
+  /// Уточняющий вопрос с вариантами, который ждёт ответа, или `null`:
+  /// интерфейс показывает кнопки вариантов, пока он жив.
+  Clarification? get pendingClarification {
+    final payload = session.pendingConfirmation?.payload;
+    return payload is Clarification ? payload : null;
+  }
+
   /// Кто, скорее всего, заберёт [text] — по тем же правилам, что
   /// [_route], без подтверждений и без запуска. Только для голоса
   /// «обрабатывается…».
   Connector? _likely(String text) {
-    final utterance = Utterance.analyze(text, now: session.clock.now())
-        .withChat(session.chatTaskId, awaitingAnswer: _awaitingAnswer);
+    final recent = _recentConnectorId;
+    final utterance =
+        Utterance.analyze(text, now: session.clock.now()).withChat(
+      session.chatTaskId,
+      awaitingAnswer: _awaitingAnswer,
+      recentConnectorId: recent,
+    );
     final found = <(Connector, ConnectorMatch)>[];
     final passwordsPhrase = PasswordPhrases.looksLike(utterance);
     for (final connector in _connectors) {
       if (passwordsPhrase && connector.info.requiresNetwork) continue;
       try {
         final match = connector.match(utterance);
-        if (match != null && match.confidence > 0) {
-          found.add((connector, match));
-        }
+        if (match != null) found.add((connector, match));
       } catch (_) {
         continue;
       }
     }
-    if (found.any(((Connector, ConnectorMatch) c) => !c.$2.fallback)) {
-      found.removeWhere(((Connector, ConnectorMatch) c) => c.$2.fallback);
+    final likely = RoutePolicy.pick(
+      <ConnectorMatch>[for (final (_, m) in found) m],
+      recentConnectorId: recent,
+    ).likely;
+    return _ownerOf(found, likely);
+  }
+
+  /// Коннектор совпадения [match] среди [found].
+  static Connector? _ownerOf(
+    List<(Connector, ConnectorMatch)> found,
+    ConnectorMatch? match,
+  ) {
+    if (match == null) return null;
+    for (final (connector, candidate) in found) {
+      if (identical(candidate, match)) return connector;
     }
-    if (found.any(((Connector, ConnectorMatch) c) => !c.$2.implicit)) {
-      found.removeWhere(((Connector, ConnectorMatch) c) => c.$2.implicit);
-    }
-    if (found.isEmpty) return null;
-    var best = found.first;
-    for (final candidate in found.skip(1)) {
-      if (candidate.$2.confidence > best.$2.confidence) best = candidate;
-    }
-    return best.$1;
+    return null;
   }
 
   /// Фразу забрал навык роли: в дуэте без явного обращения отвечает тот,
@@ -634,12 +700,14 @@ final class AssistantController {
     String message, {
     required bool addressed,
     bool secretRedacted = false,
+    int depth = 0,
   }) async {
     // Пароль, вставленный в чат (D12): ни один коннектор фразу не
     // получает, задача не создаётся. Вопрос, если ждал ответа, остаётся.
     if (secretRedacted ||
         SecretGuard.redact(message, known: knownSecret).guarded) {
       session.lastConnectorId = null;
+      _recent = null;
       // Навык выключен — подсказать, где его включить.
       return session.reply(
         _passwordsOff ? 'secret.redacted.off' : 'secret.redacted',
@@ -659,10 +727,12 @@ final class AssistantController {
       );
     }
     final connectors = _connectors;
+    final recent = _recentConnectorId;
     final utterance =
         Utterance.analyze(message, now: session.clock.now()).withChat(
       session.chatTaskId,
       awaitingAnswer: _awaitingAnswer || session.pendingConfirmation != null,
+      recentConnectorId: recent,
     );
     // Фраза о паролях или просто со словом «пароль» (раздел 5.9): её не
     // получает ни один сетевой коннектор — ни в match, ни в уточнении
@@ -687,11 +757,50 @@ final class AssistantController {
     final answerUtterance = trailing == null
         ? utterance
         : Utterance.analyze(trailing.rest, now: session.clock.now());
-    if (pending != null && owner != null) {
+    // Уточняющий вопрос с вариантами (Clarification): выбранный вариант
+    // разбирается заново как его каноническая команда — со всеми
+    // правилами, в том числе «фраза о паролях не уходит в сеть»; «нет» —
+    // отмена; «да» — не выбор, переспросить.
+    final clarification = owner != null && pending?.payload is Clarification
+        ? pending!.payload! as Clarification
+        : null;
+    if (clarification != null) {
+      final option = clarification.choose(answerUtterance);
+      if (option != null) {
+        _answered = pending;
+        _speakAsAsker(asker, addressed: addressed, trailing: named);
+        return _markTrailing(
+          await _route(option.text, addressed: addressed, depth: depth + 1),
+          named,
+        );
+      }
+      final reply = ConfirmationReply.of(answerUtterance);
+      if (reply == ConfirmationReply.no) {
+        _answered = pending;
+        _speakAsAsker(asker, addressed: addressed, trailing: named);
+        session.lastConnectorId = null;
+        return _markTrailing(
+          session.reply(
+            'common.clarify.cancelled',
+            intent: 'clarify.cancelled',
+            status: AssistantStatus.noAction,
+          ),
+          named,
+        );
+      }
+      if (reply == ConfirmationReply.yes) {
+        _speakAsAsker(asker, addressed: addressed, trailing: named);
+        session.requestConfirmation(pending!);
+        return _markTrailing(_clarifyAgain(clarification), named);
+      }
+    }
+    // Вопрос «да или нет?» (не уточнение с вариантами).
+    final confirming = clarification == null ? pending : null;
+    if (confirming != null && owner != null) {
       final reply = ConfirmationReply.of(answerUtterance);
       if (reply != null) {
         _speakAsAsker(asker, addressed: addressed, trailing: named);
-        return _markTrailing(await _answer(owner, pending, reply), named);
+        return _markTrailing(await _answer(owner, confirming, reply), named);
       }
       // «Кроме хлеба», «только отчёт»: уточнение ответа, которое понимает
       // сам спросивший коннектор (ConfirmationFollowUp).
@@ -699,7 +808,7 @@ final class AssistantController {
           !(hideFromNetwork && owner.info.requiresNetwork)) {
         final followUp = (owner as ConfirmationFollowUp).matchFollowUp(
           answerUtterance,
-          pending,
+          confirming,
         );
         if (followUp != null) {
           _speakAsAsker(asker, addressed: addressed, trailing: named);
@@ -733,7 +842,7 @@ final class AssistantController {
       if (match == null || match.confidence <= 0) continue;
       candidates.add((connector, match));
     }
-    if (pending != null && owner != null) {
+    if (confirming != null && owner != null) {
       // «Да, купил хлеб», «нет, не купил»: ответ с пояснением. Если в
       // пояснении явная команда («нет, добавь задачу молоко»), это уже
       // новое сообщение, а не ответ.
@@ -748,13 +857,15 @@ final class AssistantController {
         final instead = owner is ConfirmationFollowUp &&
                 !(hideFromNetwork && owner.info.requiresNetwork)
             ? (owner as ConfirmationFollowUp)
-                .matchLeadingAnswer(answerUtterance, pending, reply)
+                .matchLeadingAnswer(answerUtterance, confirming, reply)
             : null;
         if (instead != null) {
           return _markTrailing(await _run(owner, instead), named);
         }
-        return _markTrailing(await _answer(owner, pending, reply), named);
+        return _markTrailing(await _answer(owner, confirming, reply), named);
       }
+    }
+    if (pending != null && owner != null) {
       // «Хорошо», «спасибо» в ответ на вопрос: не согласие и не новая
       // команда. Молча снять вопрос нельзя — пользователь решит, что
       // действие выполнено. Переспрашиваем и ждём ответа дальше.
@@ -767,73 +878,88 @@ final class AssistantController {
         _speakAsAsker(asker, addressed: addressed, trailing: named);
         session.requestConfirmation(pending);
         return _markTrailing(
-          session.reply(
-            'common.confirm.unclear',
-            intent: 'confirm.unclear',
-            status: AssistantStatus.needsClarification,
-          ),
+          clarification != null
+              ? _clarifyAgain(clarification)
+              : session.reply(
+                  'common.confirm.unclear',
+                  intent: 'confirm.unclear',
+                  status: AssistantStatus.needsClarification,
+                ),
           named,
         );
       }
     }
-    if (candidates.isEmpty) {
+    final decision = RoutePolicy.pick(
+      <ConnectorMatch>[for (final (_, m) in candidates) m],
+      recentConnectorId: recent,
+    );
+    final best = decision.winner;
+    if (decision.isAmbiguous) {
       session.lastConnectorId = null;
+      _recent = null;
+      return session.reply(
+        'router.ambiguous',
+        values: <String, String>{
+          'first': _ownerOf(candidates, decision.first)!.info.title,
+          'second': _ownerOf(candidates, decision.second)!.info.title,
+        },
+        intent: 'router.ambiguous',
+        status: AssistantStatus.needsClarification,
+      );
+    }
+    final bestConnector = _ownerOf(candidates, best);
+    if (best == null || bestConnector == null) {
+      session.lastConnectorId = null;
+      _recent = null;
       return _unknown();
     }
-    // Совпадение на крайний случай (беседа) уступает любому другому.
-    if (candidates.any(((Connector, ConnectorMatch) c) => !c.$2.fallback)) {
-      candidates.removeWhere(
-        ((Connector, ConnectorMatch) c) => c.$2.fallback,
+    // Фраза понята по контексту сессии как фраза другого навыка: её
+    // разбирают заново как каноническую команду (один раз).
+    if (best.payload case final Reroute reroute) {
+      final target = connectors.any(
+        (Connector c) => c.info.id == reroute.connectorId,
       );
-    }
-    // Совпадение без маркера уступает явному совпадению другого коннектора.
-    if (candidates.any(((Connector, ConnectorMatch) c) => !c.$2.implicit)) {
-      candidates.removeWhere(
-        ((Connector, ConnectorMatch) c) => c.$2.implicit,
-      );
-    }
-
-    // Явная фраза о паролях — у навыка «Пароли» (раздел 6): «добавь
-    // пароль для озона» — не задача «Пароль для озона».
-    if (candidates.any(
-      ((Connector, ConnectorMatch) c) =>
-          c.$1.info.id == passwordsId && !c.$2.implicit,
-    )) {
-      candidates.removeWhere(
-        ((Connector, ConnectorMatch) c) => c.$1.info.id != passwordsId,
-      );
-    }
-
-    // Устойчивая сортировка: при равной уверенности побеждает коннектор,
-    // подключённый раньше (но тогда сработает уточнение ниже).
-    final ranked = candidates.indexed.toList()
-      ..sort((a, b) {
-        final byConfidence = b.$2.$2.confidence.compareTo(a.$2.$2.confidence);
-        return byConfidence != 0 ? byConfidence : a.$1.compareTo(b.$1);
-      });
-    final (bestConnector, best) = ranked.first.$2;
-    for (final (_, (other, otherMatch)) in ranked.skip(1)) {
-      if (other.info.id == bestConnector.info.id) continue;
-      if (best.confidence >= ambiguityFloor &&
-          otherMatch.confidence >= ambiguityFloor &&
-          best.confidence - otherMatch.confidence <= ambiguityMargin) {
-        session.lastConnectorId = null;
-        return session.reply(
-          'router.ambiguous',
-          values: <String, String>{
-            'first': bestConnector.info.title,
-            'second': other.info.title,
-          },
-          intent: 'router.ambiguous',
-          status: AssistantStatus.needsClarification,
+      if (target && depth == 0) {
+        final response = await _route(
+          reroute.text,
+          addressed: addressed,
+          depth: depth + 1,
+        );
+        final note = reroute.noteReplyId;
+        if (note == null || response.status == AssistantStatus.failed) {
+          return response;
+        }
+        return response.withText(
+          '${session.say(note)} ${response.message}',
+          response.values,
         );
       }
-      break;
+      _leadByRole(bestConnector);
+      return _run(
+        bestConnector,
+        ConnectorMatch(
+          connectorId: best.connectorId,
+          commandId: best.commandId,
+          confidence: best.confidence,
+          implicit: best.implicit,
+          fallback: best.fallback,
+          payload: reroute.orElse,
+        ),
+      );
     }
 
     _leadByRole(bestConnector);
     return _run(bestConnector, best);
   }
+
+  /// Переспросить уточняющий вопрос с теми же вариантами.
+  AssistantResponse _clarifyAgain(Clarification clarification) => session.reply(
+        'common.clarify.unclear',
+        values: <String, String>{'options': clarification.optionsText},
+        intent: 'clarify.unclear',
+        status: AssistantStatus.needsClarification,
+        clarification: clarification,
+      );
 
   Future<AssistantResponse> _answer(
     Connector owner,
@@ -858,7 +984,20 @@ final class AssistantController {
     ConnectorMatch match,
   ) async {
     try {
-      return _filterOutbound(await connector.run(match, session));
+      final response = _filterOutbound(await connector.run(match, session));
+      // Контекст сессии: тему задаёт выполненная команда. Беседа тему не
+      // меняет; уточняющий вопрос — тема ещё не выбрана.
+      if (response.clarification != null) {
+        _recent = null;
+      } else if (!match.fallback) {
+        _recent = (
+          chat: _chatKey,
+          connectorId: connector.info.id,
+          at: session.clock.now(),
+          message: _messageNo,
+        );
+      }
+      return response;
     } catch (error) {
       // Навык с секретами: текст исключения мог нести пароль (D13).
       if (connector.info.sensitive) {
@@ -1079,6 +1218,7 @@ final class AssistantController {
   /// массовые изменения из чата больше нельзя.
   void clearConversation() {
     session.takePendingConfirmation()?.onDropped?.call();
+    _recent = null;
     for (final connector in _connectors.whereType<TasksConnector>()) {
       connector.forgetUndo();
     }

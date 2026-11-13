@@ -28,6 +28,7 @@ import 'core/services/clock.dart';
 import 'core/services/task_service.dart';
 import 'core/settings/app_settings.dart';
 import 'core/skills/calculator/calculator_connector.dart';
+import 'core/skills/data/data_connector.dart';
 import 'core/skills/passwords/passwords_connector.dart';
 import 'core/skills/talk/talk_connector.dart';
 import 'core/storage/json_task_repository.dart';
@@ -108,6 +109,10 @@ Future<void> main() async {
         canCopySecrets: passwords?.canCopySecrets ?? false,
         vaultExisted: () => passwords?.vaultExisted ?? false,
       ),
+      // Копия и «хранилище» без опоры на пароли: уточняющий вопрос
+      // «Копию чего: паролей или всех данных?» (решения владельца 3, 5).
+      // Включён всегда.
+      const DataConnector(),
     ],
     packs: packs,
   );

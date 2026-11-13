@@ -401,7 +401,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(BackupRestoreScreen), findsOne);
     expect(find.byKey(const ValueKey<String>('restore-done')), findsOne);
-    expect(text('Хранилище заменено копией. Прежнее — в архиве.'), findsOne);
+    expect(text('Сейф заменён копией. Прежний — в архиве.'), findsOne);
     expect(vault.isUnlocked, isTrue);
     expect(vault.entries.single.service, 'Почта');
     expect(vault.entry(forum), isNull);

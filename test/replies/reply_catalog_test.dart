@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -71,6 +72,8 @@ const Map<String, String> facts = <String, String>{
   'old': '4',
   'streak': '3',
   'days': '7',
+  // Уточняющий вопрос с вариантами.
+  'options': '«Пароли» или «Все данные»',
 };
 
 /// Подстановки-числа с формами слова: проверяются при 1, 2, 3, 5, 11, 21.
@@ -234,6 +237,32 @@ void main() {
       }
     }
     expect(checked, greaterThan(100));
+  });
+
+  test(
+      '«Пароли» зовутся сейфом: слово «хранилище» оставлено за '
+      '«Хранилищем контекста»', () {
+    final storage = RegExp('хранилищ', caseSensitive: false);
+    var checked = 0;
+    for (final style in ReplyStyles.builtIn) {
+      // Сырой JSON: и тексты, и варианты рода/обращения/эмодзи.
+      final raw =
+          jsonDecode(File('assets/replies/$style.json').readAsStringSync())
+              as Map<String, Object?>;
+      final entries = raw['entries']! as Map<String, Object?>;
+      for (final MapEntry(:key, :value) in entries.entries) {
+        if (!key.startsWith('passwords.')) continue;
+        final texts = value is List ? value : <Object?>[value];
+        for (final text in texts) {
+          expect('$text', isNot(contains(storage)), reason: '$style/$key');
+          checked++;
+        }
+      }
+    }
+    expect(checked, greaterThan(50));
+    // Отрицательная проверка самого правила: «сейф» не ловится.
+    expect('Сейф заперт.', isNot(contains(storage)));
+    expect('Хранилище заперто.', contains(storage));
   });
 
   test(

@@ -295,6 +295,19 @@ abstract final class VaultKeys {
   }) =>
       _ascii('relay-vault|$version|$kind|$vaultId|$entryId|secret|$srev');
 
+  /// AD прежнего пароля в хронологии (ADR-015): элемент нельзя
+  /// пересадить к другой записи или под другой id.
+  static Uint8List historyAd({
+    required int version,
+    required String kind,
+    required String vaultId,
+    required String entryId,
+    required String historyId,
+  }) =>
+      _ascii(
+        'relay-vault|$version|$kind|$vaultId|$entryId|hist|$historyId',
+      );
+
   static Uint8List _ascii(String text) =>
       Uint8List.fromList(ascii.encode(text));
 
@@ -354,8 +367,9 @@ abstract final class VaultKeys {
 
   /// Согласованность конверта и индекса (защита от отката по частям):
   /// внутренний `rev` равен внешнему, набор id секретов равен набору id
-  /// записей, внешнее `r` каждого секрета равно `srev` записи. Иначе —
-  /// [VaultError.corrupt].
+  /// записей, внешнее `r` каждого секрета равно `srev` записи, набор id
+  /// хронологии в индексе (без повторов) равен набору ключей `history`
+  /// конверта. Иначе — [VaultError.corrupt].
   static void checkConsistency(VaultEnvelope envelope, VaultIndex index) {
     if (index.rev != envelope.rev) throw VaultError.corrupt;
     if (envelope.secrets.length != index.entries.length) {
@@ -365,6 +379,14 @@ abstract final class VaultKeys {
       final secret = envelope.secrets[entry.id];
       if (secret == null || secret.rev != entry.srev) throw VaultError.corrupt;
     }
+    final hids = <String>{};
+    for (final entry in index.entries) {
+      for (final meta in entry.history) {
+        if (!hids.add(meta.id)) throw VaultError.corrupt;
+        if (!envelope.history.containsKey(meta.id)) throw VaultError.corrupt;
+      }
+    }
+    if (hids.length != envelope.history.length) throw VaultError.corrupt;
   }
 }
 

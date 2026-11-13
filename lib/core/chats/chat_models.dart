@@ -2,6 +2,7 @@ import 'package:characters/characters.dart';
 import '../models/action_card.dart';
 import '../models/assistant_types.dart';
 import '../models/bulk.dart';
+import '../models/clarification.dart';
 import '../models/secure_card.dart';
 
 /// Какой это чат: чат одной задачи или сессия (ADR-015).
@@ -84,6 +85,7 @@ final class ChatMessage {
     this.card,
     this.link,
     this.secureCard,
+    this.clarification,
   });
 
   /// `m_<микросекунды>_<номер>`: уникален в пределах устройства.
@@ -123,6 +125,11 @@ final class ChatMessage {
   /// перезапуска остаётся только текст.
   final SecureCardRequest? secureCard;
 
+  /// Уточняющий вопрос с вариантами под ответом: кнопки вариантов, пока
+  /// вопрос ждёт ответа. Живёт только в памяти, как [secureCard]: его нет
+  /// в [toJson] и [fromJson], и [copyAs] его не копирует.
+  final Clarification? clarification;
+
   bool get fromUser => author == ChatAuthor.user;
 
   /// То же сообщение с другим [id] и ссылкой [link] (копия в чат задачи).
@@ -152,6 +159,7 @@ final class ChatMessage {
         card: card,
         link: link,
         secureCard: secureCard,
+        clarification: clarification,
       );
 
   /// Пустые поля не пишутся.

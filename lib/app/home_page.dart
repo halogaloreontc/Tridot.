@@ -473,6 +473,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         checklist: response.checklist,
         card: response.card,
         secureCard: response.secureCard,
+        clarification: response.clarification,
       );
 
   // ------------------------------------------------------------- данные
@@ -1665,7 +1666,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ? AssistantColors.warning
               : AssistantColors.faint,
           status: switch (passwords.state) {
-            VaultState.notCreated => 'не создано',
+            VaultState.notCreated => 'не создан',
             VaultState.locked => 'заперт',
             VaultState.unlocked => 'открыт',
             VaultState.disabled => 'выключен',
@@ -2342,7 +2343,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 viewportHeight,
               ) ??
               _actionCard(message, i, lastWithCard) ??
-              _secureCard(message),
+              _secureCard(message) ??
+              _clarifyOptions(message),
         ),
       );
     }
@@ -2483,6 +2485,39 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _cardAction(
           () => widget.assistant.settleCard(card, personaId: message.personaId),
         ),
+      ),
+    );
+  }
+
+  /// Кнопки вариантов уточняющего вопроса: пока он ждёт ответа. Нажатие
+  /// отправляет подпись варианта обычным сообщением — тот же путь, что
+  /// набранный текст. Только в памяти: после перезапуска остаётся текст.
+  Widget? _clarifyOptions(ChatMessage message) {
+    final clarification = message.clarification;
+    if (clarification == null ||
+        !identical(widget.assistant.pendingClarification, clarification)) {
+      return null;
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: <Widget>[
+          for (final (index, option) in clarification.options.indexed)
+            OutlinedButton(
+              key: ValueKey<String>('clarify-option-$index'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(40, 44),
+                foregroundColor: AssistantColors.textStrong,
+                side: const BorderSide(color: AssistantColors.border),
+              ),
+              onPressed: _sending || _bulkBusy
+                  ? null
+                  : () => unawaited(_send(option.label)),
+              child: Text(option.label),
+            ),
+        ],
       ),
     );
   }

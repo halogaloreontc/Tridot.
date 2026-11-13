@@ -769,11 +769,20 @@ def run_dart_router(config: Config, items: list[dict[str, Any]]) -> dict[str, di
     return _run_dart_tool(config, "tool/route_phrases.dart", items)
 
 
+def _tool_input(item: dict[str, Any]) -> dict[str, Any]:
+    """Строка входа dart-инструмента: id, текст, «сейчас» и контекст сессии `after`, если он есть.
+
+    `after` — коннектор, который только что отвечал в чате (Utterance.recentConnectorId):
+    с ним tool/route_phrases.dart выбирает так же, как scenario_corpus_test.dart.
+    """
+    line = {"id": item["cid"], "text": item["text"], "now": item["now"]}
+    if item.get("after"):
+        line["after"] = item["after"]
+    return line
+
+
 def _run_dart_tool(config: Config, script: str, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    payload = "".join(
-        json.dumps({"id": i["cid"], "text": i["text"], "now": i["now"]}, ensure_ascii=False) + "\n"
-        for i in items
-    )
+    payload = "".join(json.dumps(_tool_input(i), ensure_ascii=False) + "\n" for i in items)
     completed = subprocess.run(
         [config.dart, "run", script],
         cwd=config.project_root,
@@ -920,6 +929,9 @@ def corpus_line(row: dict[str, Any], connector: ConnectorTopics | None = None) -
     if connector.id != DEFAULT_CONNECTOR:
         line["connector"] = connector.id
     line["intent"] = final["intent"]
+    # Контекст сессии (поле корпуса `after`): строка проверяется с ним.
+    if row.get("after"):
+        line["after"] = row["after"]
     if connector.id != DEFAULT_CONNECTOR:
         line["source"] = row["source"]
         line["tags"] = [f"topic:{row['topic']}", "labels:" + ",".join(row.get("final_by") or ["manual"])]

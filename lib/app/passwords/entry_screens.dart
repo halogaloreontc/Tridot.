@@ -82,15 +82,12 @@ Future<bool> _reprompt(
 Future<bool> confirmDelete(
   BuildContext context,
   PasswordsKit kit,
-  String id,
-) async {
+  String id, {
+  String title = 'Удалить важную запись',
+  String text = 'Удаление важной записи подтверждается мастер-паролем.',
+}) async {
   if (!kit.needsReprompt(id, margin: PasswordsKit.saveMargin)) return true;
-  return askMaster(
-    context,
-    title: 'Удалить важную запись',
-    text: 'Удаление важной записи подтверждается мастер-паролем.',
-    check: kit.confirm,
-  );
+  return askMaster(context, title: title, text: text, check: kit.confirm);
 }
 
 /// Пароль записи для показа: важная запись при включённом переспросе
@@ -113,6 +110,18 @@ Future<SecretBytes?> loadNote(
 ) async {
   if (!await _reprompt(context, kit, id)) return null;
   return kit.note(id);
+}
+
+/// Прежний пароль [historyId] записи [id] для показа (ADR-015): тот же
+/// переспрос мастер-пароля для важной записи, что у текущего пароля.
+Future<SecretBytes?> loadHistoryPassword(
+  BuildContext context,
+  PasswordsKit kit,
+  String id,
+  String historyId,
+) async {
+  if (!await _reprompt(context, kit, id)) return null;
+  return kit.historyPassword(id, historyId);
 }
 
 /// Скопировать пароль записи [id]: переспрос для важной, тост.
@@ -215,6 +224,160 @@ class _EntryScreenState extends State<EntryScreen>
     }
   }
 
+  /// Удалить из хронологии прежний пароль [meta] записи [entry] (`null` —
+  /// всю хронологию записи): подтверждение, для важной записи —
+  /// мастер-пароль.
+  Future<void> _dropHistory(VaultEntry entry, HistoryMeta? meta) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        scrollable: true,
+        backgroundColor: AssistantColors.raised,
+        title: Text(
+          meta == null
+              ? 'Очистить хронологию «${entry.service}»?'
+              : 'Удалить этот пароль из хронологии?',
+        ),
+        content: const Text(
+          'Вернуть можно только из резервной копии. В отложенных архивах '
+          'сейфа (после «Заменить всё» или «Отложить сейф в архив») '
+          'прежний пароль остаётся.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            key: const ValueKey<String>('entry-history-confirm'),
+            style:
+                TextButton.styleFrom(foregroundColor: AssistantColors.danger),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(meta == null ? 'Очистить' : 'Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (!(confirmed ?? false) || !mounted) return;
+    // Важная запись: удаляется не она, а прежний пароль — так и
+    // спрашиваем.
+    if (!await confirmDelete(
+          context,
+          kit,
+          entry.id,
+          title:
+              meta == null ? 'Очистить хронологию' : 'Удалить прежний пароль',
+          text: 'У важной записи правка хронологии подтверждается '
+              'мастер-паролем.',
+        ) ||
+        !mounted) {
+      return;
+    }
+    final ok = meta == null
+        ? await kit.clearHistory(entry.id)
+        : await kit.deleteHistory(entry.id, meta.id);
+    if (!ok && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Не получилось удалить.')),
+      );
+    }
+  }
+
+  /// «Прежние пароли (N)» (ADR-015): только если хронология включена или
+  /// в записи что-то сохранено.
+  Widget _history(VaultEntry entry) {
+    final items = entry.history;
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: ExpansionTile(
+        key: const ValueKey<String>('entry-history'),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        title: Text(
+          'Прежние пароли (${items.length})',
+          style: technicalTextStyle,
+        ),
+        children: <Widget>[
+          if (items.isEmpty)
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Пока пусто: прежний пароль появится здесь после смены.',
+                style: TextStyle(color: AssistantColors.muted),
+              ),
+            ),
+          if (!kit.historyEnabled && items.isNotEmpty)
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Хронология выключена: при смене пароля старый больше не '
+                'сохраняется.',
+                style: technicalTextStyle,
+              ),
+            ),
+          for (final meta in items)
+            Padding(
+              key: ValueKey<String>('entry-history-${meta.id}'),
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        Text(
+                          historyPeriodText(meta),
+                          style: technicalTextStyle,
+                        ),
+                        if (meta.looksLikeTypo)
+                          const Text(
+                            'Использовался меньше часа — похоже на опечатку.',
+                            style: TextStyle(color: AssistantColors.warning),
+                          ),
+                        SecretRevealText(
+                          key: ValueKey<String>('entry-history-reveal-'
+                              '${meta.id}'),
+                          load: () => loadHistoryPassword(
+                            context,
+                            kit,
+                            entry.id,
+                            meta.id,
+                          ),
+                          seconds: kit.revealSeconds,
+                          hide: kit.hideTicks,
+                          kind: 'Прежний пароль',
+                          compact: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    key: ValueKey<String>('entry-history-delete-${meta.id}'),
+                    tooltip: 'Удалить из хронологии',
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    onPressed: () => unawaited(_dropHistory(entry, meta)),
+                  ),
+                ],
+              ),
+            ),
+          if (items.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                key: const ValueKey<String>('entry-history-clear'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AssistantColors.danger,
+                ),
+                onPressed: () => unawaited(_dropHistory(entry, null)),
+                child: const Text('Очистить хронологию'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final entry = kit.vault.entry(widget.id);
@@ -301,6 +464,8 @@ class _EntryScreenState extends State<EntryScreen>
                         key: const ValueKey<String>('entry-copy-note'),
                         style: technicalTextStyle,
                       ),
+                    if (kit.historyEnabled || entry.history.isNotEmpty)
+                      _history(entry),
                     _Field(
                       label: 'Подсказка',
                       child: Text(
@@ -375,6 +540,28 @@ class _EntryScreenState extends State<EntryScreen>
             ),
     );
   }
+}
+
+/// Дата «12.11.2026» (местное время).
+String dayText(DateTime time) {
+  final local = time.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(local.day)}.${two(local.month)}.${local.year}';
+}
+
+/// Когда стоял прежний пароль: «с 10.11.2026 по 12.11.2026»; в один
+/// день — со временем: «10.11.2026, 09:00–09:10»; дата начала неизвестна
+/// (CSV без дат) — только «до 12.11.2026».
+String historyPeriodText(HistoryMeta meta) {
+  if (meta.src == DateSource.unknown) return 'до ${dayText(meta.to)}';
+  final from = meta.from.toLocal();
+  final to = meta.to.toLocal();
+  if (from.year == to.year && from.month == to.month && from.day == to.day) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${dayText(from)}, ${two(from.hour)}:${two(from.minute)}–'
+        '${two(to.hour)}:${two(to.minute)}';
+  }
+  return 'с ${dayText(from)} по ${dayText(to)}';
 }
 
 class _Field extends StatelessWidget {

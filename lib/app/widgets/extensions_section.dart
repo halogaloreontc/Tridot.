@@ -113,7 +113,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
     if (mounted) setState(() {});
   }
 
-  /// Статус хранилища в плитке «Пароли» (раздел 8).
+  /// Статус сейфа в плитке «Пароли» (раздел 8).
   String _passwordsStatus(PasswordsKit kit, bool enabled) {
     if (!enabled) {
       return kit.vaultExisted || kit.state != VaultState.notCreated
@@ -123,16 +123,16 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
     switch (kit.state) {
       case VaultState.notCreated:
         return kit.vaultExisted
-            ? 'Не найдено на устройстве — восстановить можно из копии'
-            : 'Не создано';
+            ? 'Сейф не найден на устройстве — восстановить можно из копии'
+            : 'Сейф не создан';
       case VaultState.locked:
       case VaultState.disabled:
-        return 'Заперто';
+        return 'Сейф заперт';
       case VaultState.unlocked:
         final at = kit.vault.lockAt?.toLocal();
         return at == null
-            ? 'Открыто'
-            : 'Открыто до ${at.hour.toString().padLeft(2, '0')}:'
+            ? 'Сейф открыт'
+            : 'Сейф открыт до ${at.hour.toString().padLeft(2, '0')}:'
                 '${at.minute.toString().padLeft(2, '0')}';
     }
   }

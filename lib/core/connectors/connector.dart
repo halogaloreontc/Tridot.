@@ -3,6 +3,7 @@ import '../extensions/extension_registry.dart';
 import '../models/action_card.dart';
 import '../models/assistant_types.dart';
 import '../models/bulk.dart';
+import '../models/clarification.dart';
 import '../models/secure_card.dart';
 import '../models/task.dart';
 import '../personas/persona.dart';
@@ -12,6 +13,7 @@ import 'utterance.dart';
 
 export '../extensions/extension_kind.dart';
 export '../models/assistant_types.dart' show AssistantResponse, AssistantStatus;
+export '../models/clarification.dart';
 export 'utterance.dart';
 
 /// Что коннектору разрешено делать с данными своего приложения.
@@ -407,6 +409,35 @@ final class ConfirmationAnswer {
   bool get confirmed => reply == ConfirmationReply.yes;
 }
 
+/// Совпадение, которое маршрутизатор выполняет как другую фразу: так
+/// коннектор, понявший фразу по контексту сессии, отдаёт её тому, кто её
+/// выполнит («сделай бэкап» после разговора о паролях — «сделай резервную
+/// копию сейфа»). Кладётся в [ConnectorMatch.payload].
+final class Reroute {
+  const Reroute({
+    required this.text,
+    required this.connectorId,
+    this.noteReplyId,
+    this.orElse,
+  });
+
+  /// Каноническая фраза без секретов: её разберут заново, со всеми
+  /// правилами (SecretGuard, фраза о паролях не уходит в сеть).
+  final String text;
+
+  /// Коннектор, которому предназначена [text]. Если он выключен,
+  /// маршрутизатор не перенаправляет, а запускает исходное совпадение с
+  /// [orElse] в payload.
+  final String connectorId;
+
+  /// Запись каталога, которой начинается ответ: «Понял как копию
+  /// паролей.» (как понята фраза — PLANS.md, слой 7). `null` — без неё.
+  final String? noteReplyId;
+
+  /// Payload исходного совпадения, если перенаправить нельзя.
+  final Object? orElse;
+}
+
 /// Состояние диалога, общее для всех коннекторов.
 ///
 /// Живёт столько же, сколько контроллер. Коннектор читает и меняет выбор
@@ -463,6 +494,7 @@ final class AssistantSession {
     BulkChecklist? checklist,
     ActionCard? card,
     SecureCardRequest? secureCard,
+    Clarification? clarification,
     String? prefix,
   }) =>
       AssistantResponse(
@@ -477,6 +509,7 @@ final class AssistantSession {
         checklist: checklist,
         card: card,
         secureCard: secureCard,
+        clarification: clarification,
       );
 
   SelectedItem? _selection;

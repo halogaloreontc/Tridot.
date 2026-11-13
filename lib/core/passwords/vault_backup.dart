@@ -45,6 +45,7 @@ final class BackupEntryInfo {
     required this.changed,
     required this.fp,
     required this.fpOld,
+    this.history = const <HistoryMeta>[],
   });
 
   final String id;
@@ -58,6 +59,10 @@ final class BackupEntryInfo {
   final DateTime changed;
   final Uint8List fp;
   final List<Uint8List> fpOld;
+
+  /// Хронология паролей (ADR-015): битый элемент пропущен, запись
+  /// остаётся.
+  final List<HistoryMeta> history;
 
   @override
   String toString() => 'BackupEntryInfo($id)';
@@ -83,6 +88,10 @@ final class BackupContents {
   /// Сколько записей пропущено из-за нарушения схемы (без содержимого).
   final int skipped;
   final DateTime? exportedAt;
+
+  /// В копии есть прежние пароли (хронология, ADR-015).
+  bool get hasHistory =>
+      items.any((ImportItem item) => item.history.isNotEmpty);
 
   void wipe() {
     for (final item in items) {
@@ -210,6 +219,17 @@ abstract final class BackupIndexReader {
         fpOld.add(old);
       }
     }
+    // Хронология строго, но по элементам: битый элемент или повтор
+    // пропускается, запись остаётся. Лишнее сверх предела отброшено.
+    final rawHistory = json['hist'];
+    final history = <HistoryMeta>[];
+    if (rawHistory is List<Object?>) {
+      final seen = <String>{};
+      for (final h in rawHistory.take(VaultEntry.maxHistory)) {
+        final meta = HistoryMeta.tryParse(h);
+        if (meta != null && seen.add(meta.id)) history.add(meta);
+      }
+    }
     return BackupEntryInfo(
       id: id,
       srev: srev,
@@ -222,6 +242,7 @@ abstract final class BackupIndexReader {
       changed: changed,
       fp: fp,
       fpOld: List<Uint8List>.unmodifiable(fpOld),
+      history: List<HistoryMeta>.unmodifiable(history),
     );
   }
 

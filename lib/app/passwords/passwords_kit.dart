@@ -531,6 +531,59 @@ final class PasswordsKit extends ChangeNotifier {
     await clipboard.copySecret(secret, Duration(seconds: clipboardSeconds));
   }
 
+  // ------------------------------------- хронология паролей (ADR-015)
+
+  /// Включена ли хронология паролей.
+  bool get historyEnabled => vault.historyEnabled;
+
+  /// Сколько прежних паролей хранится во всём сейфе.
+  int get historyCount => vault.historyCount;
+
+  /// Прежний пароль [historyId] записи [id] — только для показа в карточке
+  /// записи (в чат не выходит). Вызывающий затирает.
+  Future<SecretBytes> historyPassword(String id, String historyId) =>
+      vault.readHistoryPassword(id, historyId);
+
+  /// Удалить прежний пароль из хронологии (опечатка). `false` — не вышло.
+  Future<bool> deleteHistory(String id, String historyId) =>
+      _quietly(() => vault.deleteHistoryItem(id, historyId));
+
+  /// Очистить хронологию записи [id]. `false` — не вышло.
+  Future<bool> clearHistory(String id) =>
+      _quietly(() => vault.clearHistory(id));
+
+  /// Удалить прежние пароли всех записей. `false` — не вышло.
+  Future<bool> purgeHistory() => _quietly(vault.purgeHistory);
+
+  /// Включить (только с мастер-паролем [master]) или выключить хронологию.
+  /// При выключении с [purge] прежние пароли всех записей удаляются;
+  /// без него — новые не копятся, сохранённые остаются.
+  Future<bool> setPasswordHistory(
+    bool enabled, {
+    String? master,
+    bool purge = false,
+  }) async {
+    final ok = await setPrefs(
+      <String, Object?>{VaultPrefs.passwordHistory.key: enabled},
+      master: master,
+    );
+    if (!ok || enabled || !purge) return ok;
+    return purgeHistory();
+  }
+
+  Future<bool> _quietly(Future<void> Function() action) async {
+    try {
+      await action();
+      return true;
+    } on VaultError {
+      return false;
+    } on ArgumentError {
+      return false;
+    } on StateError {
+      return false;
+    }
+  }
+
   /// Записи с этим же паролем (по отпечатку) — для живого предупреждения
   /// о повторе в редакторе (на каждое нажатие клавиши).
   ///
@@ -650,11 +703,21 @@ final class PasswordsKit extends ChangeNotifier {
     }
   }
 
-  /// «Создать хранилище из копии» с мастер-паролем [master].
-  Future<void> restoreAsNew(BackupContents contents, String master) async {
+  /// «Создать хранилище из копии» с мастер-паролем [master]. [keepHistory]
+  /// — перенести прежние пароли из копии и включить хронологию паролей.
+  Future<void> restoreAsNew(
+    BackupContents contents,
+    String master, {
+    bool keepHistory = false,
+  }) async {
     final bytes = SecretBytes.fromText(master);
     try {
-      await vault.createFromBackup(contents, bytes, params: kdfForTesting);
+      await vault.createFromBackup(
+        contents,
+        bytes,
+        params: kdfForTesting,
+        keepHistory: keepHistory,
+      );
     } finally {
       bytes.wipe();
     }
@@ -738,13 +801,13 @@ String vaultErrorText(VaultErrorCode code) => switch (code) {
       VaultErrorCode.rateLimited =>
         'Слишком много неверных попыток — подождите.',
       VaultErrorCode.corrupt =>
-        'Файл хранилища повреждён или подменён. Данные не тронуты.',
+        'Файл сейфа повреждён или подменён. Данные не тронуты.',
       VaultErrorCode.kdfInvalid =>
-        'В файле хранилища подозрительные параметры — его не открываем.',
+        'В файле сейфа подозрительные параметры — его не открываем.',
       VaultErrorCode.tooNew =>
-        'Хранилище создано более новой версией приложения — обновите его.',
-      VaultErrorCode.io => 'Не удалось прочитать или записать файл хранилища.',
-      VaultErrorCode.locked => 'Хранилище заперто.',
+        'Сейф создан более новой версией приложения — обновите его.',
+      VaultErrorCode.io => 'Не удалось прочитать или записать файл сейфа.',
+      VaultErrorCode.locked => 'Сейф заперт.',
       _ => 'Не получилось. Данные не пострадали.',
     };
 

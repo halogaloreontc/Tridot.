@@ -302,6 +302,10 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   List<ImportMatch> _matches = const <ImportMatch>[];
   List<ImportChoice> _choices = const <ImportChoice>[];
   bool _sameMaster = true;
+
+  /// «Создать из копии»: перенести прежние пароли и включить хронологию
+  /// паролей (ADR-015). По умолчанию — нет: опция выключена.
+  bool _keepHistory = false;
   bool _busy = false;
   String? _error;
   String? _done;
@@ -423,8 +427,12 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       _error = null;
     });
     try {
-      await kit.restoreAsNew(contents, master);
-      _finish('Хранилище восстановлено: '
+      await kit.restoreAsNew(
+        contents,
+        master,
+        keepHistory: _keepHistory && contents.hasHistory,
+      );
+      _finish('Сейф восстановлен: '
           '${countText(contents.items.length, 'запись', 'записи', 'записей')}.');
     } on VaultError catch (error) {
       if (mounted) setState(() => _error = vaultErrorText(error.code));
@@ -461,7 +469,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       if (mounted) setState(() => _error = vaultErrorText(error.code));
     } on Object {
       if (mounted) {
-        setState(() => _error = 'Объединить не вышло. Хранилище не изменено.');
+        setState(() => _error = 'Объединить не вышло. Сейф не изменён.');
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -477,7 +485,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         backgroundColor: AssistantColors.raised,
         title: const Text('Заменить всё?'),
         content: const Text(
-          'Текущее хранилище не сотрётся, а уйдёт в архив. Вместо него будут '
+          'Текущий сейф не сотрётся, а уйдёт в архив. Вместо него будут '
           'записи из копии — с тем же мастер-паролем.',
         ),
         actions: <Widget>[
@@ -497,7 +505,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     final ok = await askMaster(
       context,
       title: 'Заменить всё',
-      text: 'Подтвердите мастер-паролем этого хранилища.',
+      text: 'Подтвердите мастер-паролем этого сейфа.',
       check: (String master) async {
         _replacing = true;
         try {
@@ -508,7 +516,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       },
     );
     if (ok) {
-      _finish('Хранилище заменено копией. Прежнее — в архиве.');
+      _finish('Сейф заменён копией. Прежний — в архиве.');
     } else if (mounted && !kit.isUnlocked) {
       // Замена сорвалась после архивации — хранилище заперто: закрываем.
       _onKit();
@@ -557,7 +565,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     } else {
       children = const <Widget>[
         Text(
-          'Сначала откройте хранилище.',
+          'Сначала откройте сейф.',
           style: TextStyle(color: AssistantColors.text),
         ),
       ];
@@ -636,13 +644,19 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             'Пропущено ${contents.skipped}: не прошли проверку.',
             style: const TextStyle(color: AssistantColors.warning),
           ),
+        if (kit.isUnlocked && contents.hasHistory && !kit.historyEnabled)
+          const Text(
+            'Прежние пароли из копии не перенесены: хронология выключена.',
+            key: ValueKey<String>('restore-history-dropped'),
+            style: TextStyle(color: AssistantColors.muted),
+          ),
         const SizedBox(height: 8),
       ];
 
   List<Widget> _newView(BackupContents contents) => <Widget>[
         ..._summary(contents),
         const Text(
-          'Создать хранилище из копии. Настройки защиты не переносятся — '
+          'Создать сейф из копии. Настройки защиты не переносятся — '
           'они по умолчанию; вход по отпечатку можно включить заново.',
           style: TextStyle(color: AssistantColors.text),
         ),
@@ -659,6 +673,25 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             style: TextStyle(color: AssistantColors.text),
           ),
         ),
+        if (contents.hasHistory)
+          CheckboxListTile(
+            key: const ValueKey<String>('restore-keep-history'),
+            value: _keepHistory,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            onChanged: _busy
+                ? null
+                : (bool? v) => setState(() => _keepHistory = v ?? false),
+            title: const Text(
+              'Включить хронологию паролей?',
+              style: TextStyle(color: AssistantColors.text),
+            ),
+            subtitle: const Text(
+              'В копии есть прежние пароли. Включено: они перенесутся и '
+              'будут храниться зашифрованными. Выключено: не перенесутся.',
+              style: TextStyle(color: AssistantColors.muted),
+            ),
+          ),
         if (!_sameMaster) ...<Widget>[
           SecretField(
             key: const ValueKey<String>('restore-master'),
@@ -687,7 +720,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   List<Widget> _mergeView(BackupContents contents) => <Widget>[
         ..._summary(contents),
         const Text(
-          'Объединить с текущим хранилищем. При разных паролях по умолчанию '
+          'Объединить с текущим сейфом. При разных паролях по умолчанию '
           'остаются обе записи.',
           style: TextStyle(color: AssistantColors.text),
         ),

@@ -96,7 +96,7 @@ final class _PasswordsStub implements Connector {
   ConnectorInfo get info => const ConnectorInfo(
         id: 'passwords',
         title: 'Пароли',
-        description: 'Хранилище паролей на устройстве.',
+        description: 'Сейф паролей на устройстве.',
         kind: ExtensionKind.skill,
         defaultEnabled: false,
         access: ConnectorAccess.readWrite,

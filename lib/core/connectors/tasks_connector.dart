@@ -4,6 +4,7 @@ import '../models/task.dart';
 import '../replies/reply_library.dart';
 import '../scenario/scenario_parser.dart';
 import '../services/task_service.dart';
+import '../skills/data/data_phrases.dart';
 import '../skills/talk/talk_phrases.dart';
 import 'connector.dart';
 import 'task_chat_phrases.dart';
@@ -163,6 +164,15 @@ final class TasksConnector
     };
     if (command.intent == CommandIntent.unknown) return null;
     if (_isTalk(utterance, command)) return null;
+    // Догадка «это завершение задачи» по форме слов уступает просьбе о
+    // копии или восстановлении данных: «восстанови из копии, а то всё
+    // пропало» — не задача «Восстанови из копии», а вопрос «Данных»
+    // (решение владельца 3).
+    if (command.intent == CommandIntent.completeTask &&
+        command.implicit &&
+        DataPhrases.parse(utterance) != null) {
+      return null;
+    }
     return ConnectorMatch(
       connectorId: id,
       commandId: commandId,

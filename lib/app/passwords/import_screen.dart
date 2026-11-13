@@ -260,8 +260,8 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
     } on Object {
       if (mounted) {
         setState(
-          () => _message = 'Импорт не получился. Хранилище не '
-              'изменено.',
+          () => _message = 'Импорт не получился. Сейф не '
+              'изменён.',
         );
       }
     } finally {

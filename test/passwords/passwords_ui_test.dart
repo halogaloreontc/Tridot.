@@ -206,9 +206,9 @@ void main() {
       await seed();
       vault.lock();
       await tester.pumpWidget(app(PasswordsScreen(kit: kit)));
-      expect(find.text('Хранилище заперто'), findsOneWidget);
+      expect(find.text('Сейф заперт'), findsOneWidget);
       expect(
-        find.text('На Windows хранилище открывается только мастер-паролем.'),
+        find.text('На Windows сейф открывается только мастер-паролем.'),
         findsOneWidget,
       );
       expectSecretFieldsSafe(tester);
@@ -458,7 +458,7 @@ void main() {
       vault.lock();
       await tester.pumpAndSettle();
       expect(find.byType(EntryScreen), findsNothing);
-      expect(find.text('Хранилище заперто'), findsOneWidget);
+      expect(find.text('Сейф заперт'), findsOneWidget);
       expect(id, isNotEmpty);
       await finish(tester);
     });
@@ -539,7 +539,7 @@ void main() {
           ),
         ),
       );
-      expect(find.text('Хранилище заперто.'), findsOneWidget);
+      expect(find.text('Сейф заперт.'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey<String>('secure-card-open')));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -550,7 +550,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(PasswordsScreen), findsNothing);
       expect(commands, <String>[SecureCardCommand.resume]);
-      expect(find.text('Хранилище открыто.'), findsOneWidget);
+      expect(find.text('Сейф открыт.'), findsOneWidget);
       await finish(tester);
     });
 
@@ -594,12 +594,12 @@ void main() {
       await tester.pump();
       expect(canary(Canary.password), findsOneWidget);
       expect(commands, <String>[SecureCardCommand.revealed]);
-      // Заперли — карточка «Хранилище заперто», пароля нет.
+      // Заперли — карточка «Сейф заперт», пароля нет.
       vault.lock();
       await tester.pump();
       expect(canary(Canary.password), findsNothing);
       expect(canary(Canary.hint), findsNothing);
-      expect(find.text('Хранилище заперто.'), findsOneWidget);
+      expect(find.text('Сейф заперт.'), findsOneWidget);
       await finish(tester);
     });
 

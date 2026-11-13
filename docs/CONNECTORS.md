@@ -13,11 +13,15 @@
   с ConfirmationAnswer (см. «Подтверждение изменяющих действий»), конец
 → если ждёт и понимает уточнение ответа (ConfirmationFollowUp: «кроме хлеба»):
   run этого коннектора с его совпадением, конец
+→ если ждёт уточняющий вопрос с вариантами (Clarification) и текст — вариант:
+  заново весь разбор канонической фразы варианта, конец
 → каждый коннектор: match(utterance) → ConnectorMatch? (без ввода-вывода)
 → «да, …»/«нет, …» с пояснением и без явных совпадений: тоже ответ владельцу
 → совпадения на крайний случай (fallback, беседа) отбрасываются, если есть любые другие
 → совпадения без маркера (implicit) отбрасываются, если есть явные
-→ выбор самого уверенного совпадения (или уточнение, если спорно)
+→ выбор самого уверенного совпадения (или уточнение, если спорно; в споре
+  выигрывает коннектор из контекста сессии) — RoutePolicy.pick
+→ если победитель отдаёт фразу другому навыку (Reroute): разбор его фразы
 → run(match, session) победителя (здесь можно ходить в сеть)
 → AssistantResponse → интерфейс
 ```
@@ -26,7 +30,7 @@
 
 | Файл | Что в нём |
 | --- | --- |
-| `connector.dart` | `Connector`, `ConnectorInfo`, `ConnectorAccess`, `ConnectorMatch`, `AssistantSession`, `PendingConfirmation`, `ConfirmationAnswer`, `ConfirmationReply`, `ConfirmationFollowUp`, `ConnectorHealth`, `HealthReport`, `HealthStatus`; реэкспортирует `Utterance`, `AssistantResponse`, `AssistantStatus` |
+| `connector.dart` | `Connector`, `ConnectorInfo`, `ConnectorAccess`, `ConnectorMatch`, `AssistantSession`, `PendingConfirmation`, `ConfirmationAnswer`, `ConfirmationReply`, `ConfirmationFollowUp`, `Reroute`, `ConnectorHealth`, `HealthReport`, `HealthStatus`; реэкспортирует `Utterance`, `AssistantResponse`, `AssistantStatus`, `Clarification`, `ClarifyOption` (`lib/core/models/clarification.dart`) |
 | `utterance.dart` | `Utterance` — общий разбор сообщения: слова, кавычки, метки, срок, коды |
 | `due_parser.dart` | `DueParser`, `DueParseResult`, `DueIssue`, `CharSpan` — сроки с фрагментами текста |
 | `verb_forms.dart` | `VerbForms` — инфинитив и прошедшее время по окончаниям, основа глагола; общие правила для сроков, команд без маркера и поиска задач |
@@ -37,7 +41,7 @@
 | `manifest/` | коннектор по описанию `assistant/1`: `ManifestDescription` (разбор и проверка), `ManifestMatcher`, `ManifestView`, `manifest_text.dart` (порт `core.mjs`), `ManifestConnector`, `ConnectionSlot`/`ConnectionSlots`, `ConnectionRecord`/`ConnectionStore`, `ConnectionService` (вход, описание, выход) |
 | `tasks_connector.dart` | `TasksConnector` — встроенные задачи, образец реального коннектора |
 
-Навык «Калькулятор» — `lib/core/skills/calculator/` (`CalculatorConnector`), навык «Беседа» — `lib/core/skills/talk/` (`TalkConnector`). Маршрутизатор — `lib/core/scenario/assistant_controller.dart` (`AssistantController`); он спрашивает только включённые коннекторы из `ExtensionRegistry` (`lib/core/extensions/`, `docs/EXTENSIONS.md`).
+Навык «Калькулятор» — `lib/core/skills/calculator/` (`CalculatorConnector`), навык «Беседа» — `lib/core/skills/talk/` (`TalkConnector`), навык «Данные» — `lib/core/skills/data/` (`DataConnector`, см. «Уточняющий вопрос с вариантами»). Правила выбора коннектора — одна функция `RoutePolicy.pick` (`lib/core/scenario/route_policy.dart`): её вызывают маршрутизатор, голос «обрабатывается…», корпусный тест и `tool/route_phrases.dart`. Маршрутизатор — `lib/core/scenario/assistant_controller.dart` (`AssistantController`); он спрашивает только включённые коннекторы из `ExtensionRegistry` (`lib/core/extensions/`, `docs/EXTENSIONS.md`).
 
 ## Интерфейс
 
@@ -179,6 +183,17 @@ abstract interface class Connector {
 2. **Коннектор** спрашивает сам (`needsClarification`), если фраза его, но данных не хватает или они неоднозначны: несколько кодов, несколько найденных товаров, нет обязательного параметра. Уточнение не меняет данных и не ходит в сеть, если ответ сети не нужен для вопроса.
 3. Не угадывайте: при сомнении — уточнение, а не действие.
 4. **Изменяющие действия** (`access: readWrite`, всё, что меняет данные внешнего приложения) выполняются только после явного подтверждения пользователя (ADR-004). Стандартный способ — ожидание подтверждения в сессии, см. следующий раздел.
+
+## Уточняющий вопрос с вариантами
+
+Когда фраза понятна, но двусмысленна по объекту — «сделай бэкап» (сейф с паролями или все данные?), «открой хранилище», — коннектор не отвечает «не понял», а спрашивает с вариантами (решение владельца 3). Механизм общий, текст вопроса — из каталога ответов.
+
+1. **Вопрос.** `run` кладёт в `session.requestConfirmation(PendingConfirmation(connectorId: id, commandId: '<id>.clarify', payload: Clarification(...)))` уточнение: `questionId` (запись каталога) и варианты `ClarifyOption(label, text, answers, connectorId)`. `label` — подпись кнопки («Пароли», «Все данные»), `text` — **каноническая команда** варианта («сделай резервную копию сейфа»): только шаблон коннектора, никогда не фраза пользователя. Ответ — `needsClarification` с тем же объектом в `AssistantResponse.clarification`: интерфейс рисует под ответом кнопки вариантов, пока вопрос ждёт ответа (`AssistantController.pendingClarification`). Нажатие кнопки отправляет подпись обычным сообщением — тот же путь, что набранный текст. В историю чата варианты не попадают (`ChatMessage.toJson` их не пишет).
+2. **Ответ.** Маршрутизатор разбирает его до «да»/«нет» (`Clarification.choose`): подпись варианта, слово варианта («паролей», «сейф», «все данные»), «первое»/«второе»/«1»/«2» — выбранный вариант разбирается **заново** как его `text`, со всеми правилами (SecretGuard; фраза о паролях не уходит сетевым коннекторам). Вопрос, отрицание («не пароли»), слова сразу двух вариантов — не выбор.
+3. «Нет», «отмена», «не надо» — `common.clarify.cancelled` («Хорошо, ничего не делаю.»). «Да», «хорошо», «спасибо» — не выбор: `common.clarify.unclear` с теми же вариантами, вопрос живёт ещё одно сообщение.
+4. Любая другая фраза снимает вопрос и разбирается как обычно. Остальной жизненный цикл — как у подтверждения: одно сообщение, снятие при смене чата и выключении коннектора, на ответ отвечает спросивший.
+
+**Контекст сессии.** Маршрутизатор помнит, какой коннектор последним выполнил фразу в этом чате (`Utterance.recentConnectorId`): не дальше двух обработанных сообщений (`AssistantController.contextMessages`) и не старше 10 минут (`contextWindow`). Только id и время, без текста, только в памяти. Беседа (`fallback`) тему не меняет; «не понял», «к чему относится команда?», скрытый пароль, уточняющий вопрос и смена чата контекст сбрасывают. Коннектор может опереться на него в `match`: «Данные» после разговора о паролях не спрашивают «копию чего?», а возвращают совпадение с `Reroute(text: 'сделай резервную копию сейфа', connectorId: 'passwords', noteReplyId: 'data.context.backup')` — маршрутизатор разбирает эту фразу заново (один раз) и начинает ответ с «Понял как копию паролей.» (слой 7, `docs/PLANS.md`). Если навык-адресат выключен, выполняется исходное совпадение с `Reroute.orElse`. В споре двух коннекторов с близкой уверенностью (`router.ambiguous`) выигрывает коннектор из контекста.
 
 ## Подтверждение изменяющих действий
 

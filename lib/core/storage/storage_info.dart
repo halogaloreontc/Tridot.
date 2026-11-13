@@ -2,7 +2,7 @@ import 'dart:io';
 
 import '../services/clock.dart';
 
-/// Сведения о хранилище для экрана «Хранилище».
+/// Сведения о месте данных для экрана «Данные».
 abstract interface class StorageInfo {
   /// Короткое описание: «JSON на этом устройстве».
   String get label;
@@ -104,5 +104,5 @@ final class MemoryStorageInfo implements StorageInfo {
 
   @override
   Future<String> backup() =>
-      Future<String>.error(UnsupportedError('Хранилище только в памяти'));
+      Future<String>.error(UnsupportedError('Данные только в памяти'));
 }
