@@ -10,11 +10,11 @@ abstract final class PersonaPalette {
   /// Светлой темы пока нет — цвет на будущее, контраст проверен тестом.
   static const int sadoOnLight = 0xFF6A40D8;
 
-  /// Лиорио: акцент и фон знака.
-  static const int liorio = 0xFF6CB8FF;
-  static const int liorioBg = 0xFF12304D;
+  /// Лиорио: акцент и фон знака. Пастельный лазурный.
+  static const int liorio = 0xFF8ED1F2;
+  static const int liorioBg = 0xFF10313F;
 
-  /// Нода: акцент и фон знака.
-  static const int noda = 0xFFFFAE63;
-  static const int nodaBg = 0xFF40280F;
+  /// Нода: акцент и фон знака. Нежно-розовый.
+  static const int noda = 0xFFF5A8CB;
+  static const int nodaBg = 0xFF46202F;
 }
