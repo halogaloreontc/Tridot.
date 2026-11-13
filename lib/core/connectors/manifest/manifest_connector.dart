@@ -8,6 +8,7 @@ import '../connector.dart';
 import '../http_transport.dart';
 import '../secret_store.dart';
 import '../social_prefix.dart';
+import '../verb_forms.dart';
 import 'connection.dart';
 import 'manifest_format.dart';
 import 'manifest_matcher.dart';
@@ -344,6 +345,16 @@ final class ManifestConnector
     'всё',
     'все',
     'помощь',
+    // Вопрос о состоянии: «склад работает?», «склад, ты жив?».
+    'работает',
+    'работаешь',
+    'работают',
+    'доступен',
+    'жив',
+    'живой',
+    'онлайн',
+    'подключен',
+    'ты',
   };
 
   /// Остаток после обращения — не запрос товара: команда задач («напомни
@@ -355,6 +366,8 @@ final class ManifestConnector
         .toList();
     if (words.isEmpty) return true;
     final first = words.first;
+    // Инфинитив — дело, а не товар: «склад: 64115 переместить в 215-1-2-1».
+    if (words.any(VerbForms.isInfinitive)) return true;
     if (_commandVerbs.contains(first) ||
         first.startsWith('напомн') ||
         first.startsWith('напомин')) {
@@ -388,7 +401,7 @@ final class ManifestConnector
     for (final candidate in candidates) {
       final asked = _asked(matcher, candidate, aliased: false);
       if (asked != null) return asked.match;
-      final rest = _withoutAlias(candidate);
+      final rest = _withoutAlias(candidate) ?? _withoutTrailingAlias(candidate);
       if (rest != null) {
         final aliased = _asked(matcher, rest, aliased: true);
         if (aliased != null) return aliased.match;
@@ -397,7 +410,7 @@ final class ManifestConnector
     for (final candidate in candidates) {
       final found = _matchText(matcher, utterance, candidate, aliased: false);
       if (found != null) return found.match;
-      final rest = _withoutAlias(candidate);
+      final rest = _withoutAlias(candidate) ?? _withoutTrailingAlias(candidate);
       if (rest != null) {
         final aliased = _matchText(matcher, utterance, rest, aliased: true);
         if (aliased != null) return aliased.match;
@@ -430,6 +443,16 @@ final class ManifestConnector
     return null;
   }
 
+  /// «приходы без фото за неделю, склад» → «приходы без фото».
+  String? _withoutTrailingAlias(String text) {
+    for (final alias in slot.aliases.map(askText)) {
+      final match = RegExp('^(.+?)\\s*[,—–-]\\s*${RegExp.escape(alias)}\$')
+          .firstMatch(text);
+      if (match != null) return match.group(1);
+    }
+    return null;
+  }
+
   _Found? _matchText(
     ManifestMatcher matcher,
     Utterance utterance,
@@ -454,7 +477,35 @@ final class ManifestConnector
       for (final hit in matcher.hits(pass)) {
         final verdict = _judge(hit, utterance, pass, aliased: aliased);
         if (verdict == null) continue;
-        if (verdict < 0) return const _Found(null);
+        if (verdict < 0) {
+          // «склад, 120734 срочно к завтрашнему дню где?»: срок и
+          // срочность при одном артикуле — не часть запроса.
+          final code = _codeOf(hit, utterance);
+          if (code != null) {
+            return _found(
+              hit.command.id,
+              code,
+              hit.how,
+              hit.rule!.literalWords == 1 ? 0.75 : 0.9,
+              aliased: aliased,
+            );
+          }
+          return const _Found(null);
+        }
+        return _found(
+          hit.command.id,
+          hit.slots,
+          hit.how,
+          verdict,
+          aliased: aliased,
+        );
+      }
+    }
+    final relaxed = _relaxed(matcher, utterance, bare.isNotEmpty ? bare : text);
+    if (relaxed != null) {
+      final (hit, pass) = relaxed;
+      final verdict = _judge(hit, utterance, pass, aliased: aliased);
+      if (verdict != null && verdict > 0) {
         return _found(
           hit.command.id,
           hit.slots,
@@ -495,6 +546,217 @@ final class ManifestConnector
   }
 
   static final RegExp _blank = RegExp(r'\s+');
+
+  /// Период у команды без полей: «приходы без фото за сегодня»,
+  /// «приходы за день без фото». «За день», «за сутки» — это сегодня.
+  static final RegExp _period = RegExp(
+    r'(?:^|\s)(?:за\s+)?(?:сегодня|вчера|день|сутки|неделю|7\s+дней)(?=\s|$)',
+  );
+
+  /// Связка «есть»: «без фото приходы есть за день?».
+  static final RegExp _linkWord = RegExp(r'(?:^|\s)есть(?=\s|$)');
+
+  /// Место в конце запроса: «венских стульев сколько на 215-3».
+  static final RegExp _placeTail = RegExp(r'^(.+?)\s+(?:на|в)\s+(\S+)$');
+
+  /// Вопрос о ячейке после неё: «ячейка 215-1-1-1 что в ней», «на 215-3
+  /// что стоит», «215а, что там?», «в ячейке без места что лежит».
+  static final RegExp _cellQuestion = RegExp(
+    r'^(?:(?:в|на)\s+(?:ячейке|стеллаже|складе)\s+|(?:ячейка|стеллаж)\s+|'
+    r'(?:в|на)\s+)?(.+?)\s*,?\s+что(?:\s+(?:лежит|стоит|есть|там|хранится))?'
+    r'(?:\s+(?:в|на)\s+(?:ней|нем))?$',
+  );
+
+  /// Совпадение с правилом описания после того, как фраза приведена к
+  /// его словам (порядок и уточнения — не часть запроса):
+  ///
+  /// - период у команды без полей: «приходы без фото за сегодня» →
+  ///   «приходы без фото» (у такой команды периода нет — его называет её
+  ///   ответ), «что пришло за день» → «что пришло за сегодня»;
+  /// - слова команды без полей в другом порядке: «без фото приходы есть»;
+  /// - артикул впереди: «120734 остатки» → «остатки 120734»;
+  /// - место в конце: «венских стульев сколько на 215-3» → без «на 215-3»
+  ///   (ответ и так разбит по ячейкам);
+  /// - вопрос после ячейки: «на 215-3 что стоит» → «215-3», «215а что в
+  ///   ячейке без места» → «что в ячейке без места».
+  ///
+  /// Значение — совпадение и текст, по которому оно найдено.
+  (ManifestHit, String)? _relaxed(
+    ManifestMatcher matcher,
+    Utterance utterance,
+    String text,
+  ) {
+    ManifestHit? first(String pass, bool Function(ManifestHit) keep) {
+      if (pass.isEmpty) return null;
+      for (final hit in matcher.hits(pass)) {
+        if (keep(hit)) return hit;
+      }
+      return null;
+    }
+
+    bool slotless(ManifestHit hit) =>
+        hit.rule != null && hit.rule!.names.isEmpty;
+    bool slotted(ManifestHit hit) =>
+        hit.rule != null && hit.rule!.names.isNotEmpty;
+
+    // Период: «за день» → «за сегодня»; без периода — только команды без
+    // своего периода («приходы без фото»): «за неделю что пришло» — не
+    // «что пришло» (сегодня).
+    final today = text
+        .replaceAll(RegExp(r'за\s+(?:день|сутки)(?=\s|$)'), 'за сегодня')
+        .replaceAll(_linkWord, ' ')
+        .replaceAll(_blank, ' ')
+        .trim();
+    final plain = text
+        .replaceAll(_period, ' ')
+        .replaceAll(_linkWord, ' ')
+        .replaceAll(_blank, ' ')
+        .trim();
+    bool timeless(ManifestHit hit) => slotless(hit) && !_hasPeriod(hit.command);
+    if (today != text) {
+      final hit = first(today, slotless);
+      if (hit != null) return (hit, today);
+    }
+    if (plain != text && plain != today) {
+      final hit = first(plain, timeless);
+      if (hit != null) return (hit, plain);
+    }
+    // Те же слова в другом порядке — только у фраз из двух слов и больше.
+    for (final (pass, periods) in <(String, bool)>[
+      (today, true),
+      (plain, false),
+    ]) {
+      final words = pass.split(' ').toSet();
+      if (words.length < 2) continue;
+      for (final rule in matcher.rules) {
+        if (rule.names.isNotEmpty || rule.literalWords < 2) continue;
+        if (!periods && _hasPeriod(rule.command)) continue;
+        final phrase = rule.phrase.split(' ').toSet();
+        if (phrase.length == words.length && phrase.containsAll(words)) {
+          return (
+            ManifestHit(
+              command: rule.command,
+              slots: const <String, String>{},
+              how: 'say',
+              rule: rule,
+            ),
+            rule.phrase,
+          );
+        }
+      }
+    }
+    // Артикул впереди.
+    final lead = RegExp(r'^(\d{5,6})[\s,]+(.+)$').firstMatch(text);
+    if (lead != null) {
+      final pass = '${lead.group(2)} ${lead.group(1)}';
+      final hit = first(pass, slotted);
+      if (hit != null) return (hit, pass);
+    }
+    // Место в конце: «на 215-3».
+    final place = _placeTail.firstMatch(text);
+    if (place != null && _isCell(matcher, place.group(2)!)) {
+      final pass = place.group(1)!;
+      final hit = first(pass, slotted) ??
+          (lead == null ? null : _relaxedCode(matcher, pass));
+      if (hit != null) return (hit, pass);
+    }
+    // Вопрос после ячейки.
+    final question = _cellQuestion.firstMatch(text);
+    if (question != null && _isCell(matcher, question.group(1)!)) {
+      final pass = question.group(1)!;
+      final hit = first(pass, (ManifestHit h) => _cellRule(h));
+      if (hit != null) return (hit, pass);
+    }
+    // Ячейка впереди и дальше целый вопрос: «215а что в ячейке без места».
+    final space = text.indexOf(' ');
+    if (space > 0 && _isCell(matcher, text.substring(0, space))) {
+      final pass = text.substring(space + 1).replaceFirst(RegExp(r'^,\s*'), '');
+      final hit = first(pass, slotted);
+      if (hit != null) return (hit, pass);
+    }
+    return null;
+  }
+
+  /// У команды свой период: среди её фраз есть «сегодня», «вчера», «за
+  /// неделю».
+  static bool _hasPeriod(ManifestCommand command) =>
+      command.say.any((String phrase) => _period.hasMatch(askText(phrase)));
+
+  /// «120734 остатки на 215а»: артикул впереди и место в конце сразу.
+  ManifestHit? _relaxedCode(ManifestMatcher matcher, String text) {
+    final lead = RegExp(r'^(\d{5,6})[\s,]+(.+)$').firstMatch(text);
+    if (lead == null) return null;
+    for (final hit in matcher.hits('${lead.group(2)} ${lead.group(1)}')) {
+      if (hit.rule != null && hit.rule!.names.isNotEmpty) return hit;
+    }
+    return null;
+  }
+
+  /// [value] — код ячейки по `shape` какого-нибудь поля-ячейки.
+  static bool _isCell(ManifestMatcher matcher, String value) {
+    for (final command in matcher.description.commands) {
+      for (final def in command.slots.values) {
+        if (def.type == 'cell' &&
+            def.shape != null &&
+            matcher.slotValue(def, value).isNotEmpty) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Правило — голое поле-ячейка: «{cell}».
+  static bool _cellRule(ManifestHit hit) {
+    final rule = hit.rule;
+    if (rule == null || rule.names.length != 1) return false;
+    return hit.command.slots[rule.names.first]?.type == 'cell';
+  }
+
+  /// Текстовые поля совпадения, если в каждом — один артикул, а остальное
+  /// — срок и срочность: «120734 срочно к завтрашнему дню» → «120734».
+  /// Иначе `null`.
+  Map<String, String>? _codeOf(ManifestHit hit, Utterance utterance) {
+    final rule = hit.rule;
+    if (rule == null || rule.names.isEmpty) return null;
+    // Обращение («склад, …») тоже не часть запроса.
+    final aliases = slot.aliases.map(askText).toSet();
+    final dueWords = <String>{
+      for (final token in utterance.tokens)
+        if (Utterance.isCovered(token, utterance.due.spans))
+          askText(token.text),
+    };
+    final out = <String, String>{};
+    for (final name in rule.names) {
+      final value = hit.slots[name] ?? '';
+      final def = hit.command.slots[name];
+      if (def?.type == 'cell' || def?.type == 'int') {
+        out[name] = value;
+        continue;
+      }
+      final words = askText(value)
+          .split(_wordSplit)
+          .where(
+            (String w) =>
+                w.isNotEmpty &&
+                !dueWords.contains(w) &&
+                !_urgency.contains(w) &&
+                !aliases.contains(w),
+          )
+          .toList();
+      if (words.length != 1 || !_code.hasMatch(words.single)) return null;
+      out[name] = words.single;
+    }
+    return out;
+  }
+
+  /// Срочность рядом с артикулом: «120734 срочно где».
+  static const Set<String> _urgency = <String>{
+    'срочно',
+    'быстро',
+    'сейчас',
+    'пожалуйста',
+  };
 
   /// Совпадение «спросить, что искать» для [text] или `null`.
   _Found? _asked(

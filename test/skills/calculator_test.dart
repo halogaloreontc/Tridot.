@@ -463,4 +463,65 @@ void main() {
       );
     });
   });
+
+  group('маркер и действие в конце, запятая', () {
+    const answers = <String, String>{
+      // Действие после запятой — над всем, что до неё.
+      'пять плюс семь, умножить на два': '24',
+      '10 - 4, разделить на 3': '2',
+      // Маркер в конце — как впереди.
+      '(3+4) в квадрате, посчитай': '49',
+      'квадрат 12 посчитай': '144',
+      // Просьба в конце — слабый маркер.
+      '5 в квадрате, быстро': '25',
+      '(8-3)÷5, помоги': '1',
+      'восьмерку в кубе дай': '512',
+      // Действие в конце: «X на Y разделить».
+      'тысячу на четыре разделить': '250',
+    };
+    for (final MapEntry(key: text, value: answer) in answers.entries) {
+      test(text, () {
+        final result = Calculator.calculate(text);
+        expect(result.failure, isNull);
+        expect(
+          result.answer.replaceAll(Calculator.groupSeparator, ' '),
+          answer,
+        );
+      });
+    }
+
+    test('не примеры', () {
+      // Десятичная запятая — не продолжение.
+      expect(Calculator.calculate('2,5 умножить на 4').answer, '10');
+      for (final text in <String>[
+        'купить 3 яблока, помоги',
+        'получил пятерку',
+        // «Квадрат» без маркера — размер, а не пример.
+        'квадрат 2 на 2',
+        'встречу на пятницу перенести',
+        '5 рублей дай',
+      ]) {
+        expect(Calculator.recognize(text)?.expression, isNull, reason: text);
+      }
+    });
+
+    test('пример в последней части после «, а …» уступает задачам', () {
+      CalcRecognition? recognize(String text) => CalculatorConnector.recognize(
+            Utterance.analyze(text, now: DateTime(2026, 11, 2, 16, 30)),
+          );
+      final clause = recognize('через 2 часа дедлайн, а 9×9 сколько?')!;
+      expect(clause.clause, isTrue);
+      expect(Calculator.evaluateRecognition(clause).answer, '81');
+      final match = const CalculatorConnector().match(
+        Utterance.analyze(
+          'через 2 часа дедлайн, а 9×9 сколько?',
+          now: DateTime(2026, 11, 2, 16, 30),
+        ),
+      )!;
+      expect(match.implicit, isTrue);
+      expect(match.confidence, CalculatorConnector.clauseConfidence);
+      // Без маркера в последней части — не пример.
+      expect(recognize('купить 2 кг муки, а 3 оставить'), isNull);
+    });
+  });
 }

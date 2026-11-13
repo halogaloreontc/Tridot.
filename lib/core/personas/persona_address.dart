@@ -38,6 +38,18 @@ final class PersonaAddressing {
     return PersonaAddressing(Personas.byAddressName(match.group(1)!)!, rest);
   }
 
+  /// [message] без обращения к помощнику в начале («Лиорио, …»), в конце
+  /// («…, Лиорио») и между запятыми («…, Лиорио, …»): разбор команды от
+  /// него не зависит. Одно имя без остального не трогается.
+  static String withoutAddress(String message) {
+    var value = message;
+    final leading = parse(value);
+    if (leading != null && leading.rest.isNotEmpty) value = leading.rest;
+    final trailing = parseTrailing(value);
+    if (trailing != null) value = trailing.rest;
+    return value.replaceAll(_between, ', ');
+  }
+
   /// Имена через «|», длинные раньше: «лиорио» проверяется до «лио».
   static String get _names {
     final names = <String>[
@@ -56,6 +68,12 @@ final class PersonaAddressing {
   static final RegExp _trailing = RegExp(
     '(?:\\s*,\\s*|\\s*[—–]\\s*|\\s+-\\s+)($_names)'
     r'\s*[!.…]*\s*$',
+    caseSensitive: false,
+    unicode: true,
+  );
+
+  static final RegExp _between = RegExp(
+    '\\s*,\\s*($_names)\\s*,\\s*',
     caseSensitive: false,
     unicode: true,
   );

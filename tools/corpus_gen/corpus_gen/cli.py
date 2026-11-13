@@ -364,12 +364,9 @@ def _promote(config: Config, store: CandidateStore, args: argparse.Namespace) ->
     prefix = "Будет добавлено" if args.dry_run else f"Добавлено в {target}"
     print(f"{prefix}: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
     if counts.get("known_gap") and not args.dry_run:
-        print("Фразы со status=known_gap парсер пока понимает неверно — это список работ.")
-    if counts.get("unverified") and not args.dry_run:
-        print(
-            "Фразы других коннекторов (unverified) записаны как active: проверьте их командой "
-            "flutter test test/scenario_corpus_test.dart."
-        )
+        print("Фразы со status=known_gap приложение пока понимает иначе — это список работ (причина в note).")
+    if counts.get("parser_error"):
+        print("Фразы, которые не удалось проверить приложением (parser_error), не перенесены: повторите promote.")
     return 0
 
 

@@ -141,7 +141,12 @@ final class CalcRecognition {
     required this.explicit,
     required this.expression,
     this.failure,
+    this.clause = false,
   });
+
+  /// Пример — последняя часть сообщения после «, а …»: «через 2 часа
+  /// дедлайн, а 9×9 сколько?». Такой пример уступает любой команде.
+  final bool clause;
 
   /// В сообщении есть маркер: «сколько будет», «посчитай», «= ?», «равно».
   final bool explicit;
@@ -295,8 +300,24 @@ abstract final class Calculator {
       text = text.substring(particle.end).trim();
       if (text.isEmpty) return null;
     }
-    // Хвост: «?», «=», «равно», «пожалуйста», «сколько», «дай ответ».
+    // Хвост: «?», «=», «равно», «пожалуйста», «сколько», «дай ответ»,
+    // «посчитай», «быстро».
     while (true) {
+      final markerTail = _markerTail.firstMatch(text);
+      if (markerTail != null && markerTail.start > 0) {
+        // «(3+4) в квадрате, посчитай» — маркер, как впереди.
+        explicit = true;
+        text = text.substring(0, markerTail.start).trimRight();
+        continue;
+      }
+      final politeTail = _politeTail.firstMatch(text);
+      if (politeTail != null && politeTail.start > 0) {
+        // «5 в квадрате, быстро», «(8-3)÷5, помоги» — слабый маркер:
+        // пример всё равно должен быть примером целиком.
+        weakMarker = true;
+        text = text.substring(0, politeTail.start).trimRight();
+        continue;
+      }
       final askTail = _askTail.firstMatch(text);
       if (askTail != null && askTail.start > 0) {
         // Слабый маркер, как «сколько» в конце: «купить 2 кг муки, дай
@@ -328,11 +349,36 @@ abstract final class Calculator {
       }
     }
     if (text.isEmpty) return null;
-    // «Умножить 3 на 4», «раздели 10 на 4»: действие впереди.
+    // «Умножить 3 на 4», «раздели 10 на 4»: действие впереди; «тысячу на
+    // четыре разделить» — в конце.
     final prefix = _prefixOperation.firstMatch(text);
+    final suffix = prefix == null ? _suffixOperation.firstMatch(text) : null;
     if (prefix != null) {
       final sign = prefix.group(1)!.contains('множ') ? '*' : '/';
       text = '(${prefix.group(2)}) $sign (${prefix.group(3)})';
+    } else if (suffix != null) {
+      final sign = suffix.group(3)!.contains('множ') ? '*' : '/';
+      text = '(${suffix.group(1)}) $sign (${suffix.group(2)})';
+    }
+    // «Пять плюс семь, умножить на два»: действие после запятой — над
+    // результатом всего, что до неё.
+    final next = _continuation.firstMatch(text);
+    if (next != null && _mathLike.hasMatch(next.group(1)!)) {
+      final verb = next.group(2)!;
+      final sign = verb.contains('множ')
+          ? '*'
+          : verb.contains('дел')
+              ? '/'
+              : (verb.startsWith('плюс') || verb.startsWith('приба'))
+                  ? '+'
+                  : '-';
+      text = '(${next.group(1)}) $sign (${next.group(3)})';
+    }
+    // «Квадрат 12», «куб числа 3» — только с маркером: «квадрат 2 на 2»
+    // без него — размер, а не пример.
+    final power = _powerPrefix.firstMatch(text);
+    if (power != null && (explicit || weakMarker)) {
+      text = '(${power.group(2)})^${power.group(1) == 'квадрат' ? 2 : 3}';
     }
     // Без маркера пример должен выглядеть как пример: без лишних слов.
     final mathLike = _mathLike.hasMatch(text);
@@ -473,6 +519,36 @@ abstract final class Calculator {
     r'^(умножь|умножить|помножь|помножить|раздели|разделить|подели|поделить|'
     r'дели|делить)'
     r'\s+(.+?)\s+на\s+(.+)$',
+  );
+
+  /// «X на Y разделить»: действие в конце, обе стороны — числа.
+  static final RegExp _suffixOperation = RegExp(
+    r'^(.+?)\s+на\s+(.+?)\s+(умножь|умножить|помножь|помножить|раздели|'
+    r'разделить|подели|поделить)$',
+  );
+
+  /// Действие после запятой: «…, умножить на два», «…, плюс 3».
+  static final RegExp _continuation = RegExp(
+    r'^(.+?),\s*(умножить|умножь|помножить|разделить|раздели|поделить|'
+    r'подели|плюс|прибавить|прибавь|минус|отнять|отними|вычесть|вычти)'
+    r'\s+(?:на\s+)?(.+)$',
+  );
+
+  /// «Квадрат 12», «куб числа 3».
+  static final RegExp _powerPrefix =
+      RegExp(r'^(квадрат|куб)\s+(?:числа\s+)?(.+)$');
+
+  /// Маркер в конце: «…, посчитай», «квадрат 12 посчитай».
+  static final RegExp _markerTail = RegExp(
+    r'(?:^|[,\s]+)(?:посчитай(?:те)?|подсчитай(?:те)?|сосчитай(?:те)?|'
+    r'вычисли(?:те)?|реши(?:те)?|рассчитай(?:те)?)$',
+  );
+
+  /// Просьба в конце — слабый маркер: «…, быстро», «…, помоги», «…
+  /// дай».
+  static final RegExp _politeTail = RegExp(
+    r'(?:^|[,\s]+)(?:быстро|срочно|помоги(?:те)?|подскажи(?:те)?|плиз|плз|'
+    r'дай|дайте)$',
   );
 
   /// Вопрос в конце: «5% от 3200, сколько?», «2 в степени 8 это
@@ -1035,6 +1111,28 @@ final class _Lexer {
     'одна': (1, 0),
     'одно': (1, 0),
     'два': (2, 0),
+    // Числа-существительные: «восьмёрку в кубе». Без действия они не
+    // пример («получил пятёрку»).
+    'единица': (1, 0),
+    'единицу': (1, 0),
+    'двойка': (2, 0),
+    'двойку': (2, 0),
+    'тройка': (3, 0),
+    'тройку': (3, 0),
+    'четверка': (4, 0),
+    'четверку': (4, 0),
+    'пятерка': (5, 0),
+    'пятерку': (5, 0),
+    'шестерка': (6, 0),
+    'шестерку': (6, 0),
+    'семерка': (7, 0),
+    'семерку': (7, 0),
+    'восьмерка': (8, 0),
+    'восьмерку': (8, 0),
+    'девятка': (9, 0),
+    'девятку': (9, 0),
+    'десятка': (10, 0),
+    'десятку': (10, 0),
     'две': (2, 0),
     'три': (3, 0),
     'четыре': (4, 0),
@@ -1111,7 +1209,12 @@ final class _Lexer {
     'девятисот': (900, 2),
   };
 
-  static const Set<String> _thousands = <String>{'тысяча', 'тысячи', 'тысяч'};
+  static const Set<String> _thousands = <String>{
+    'тысяча',
+    'тысячи',
+    'тысяч',
+    'тысячу',
+  };
 
   /// Множитель словом, как в таблице умножения: «дважды два», «трижды
   /// три», «пятью пять» — число и знак умножения.

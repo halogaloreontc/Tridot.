@@ -231,12 +231,16 @@ abstract final class TalkPhrases {
     'тормоз',
     'тормозишь',
     'ненавижу',
+    'урод',
+    'уродина',
   };
 
   /// Грубость из двух слов: «я тебя не люблю», «ты мне не нравишься».
   static const List<List<String>> _rudePairs = <List<String>>[
     <String>['не', 'люблю'],
     <String>['не', 'нравишься'],
+    // «Ну и бот» — пренебрежительно, как «ну ты и тупой».
+    <String>['ну', 'и', 'бот'],
   ];
 
   /// Слова, которые бывают рядом с грубостью: «ты совсем тупой».
@@ -260,6 +264,7 @@ abstract final class TalkPhrases {
     'я',
     'мне',
     'же',
+    'честно',
   };
 
   static const Map<String, TalkRequest> _phrases = <String, TalkRequest>{
@@ -289,6 +294,14 @@ abstract final class TalkPhrases {
     // Прощания.
     'пока': TalkRequest(TalkTopic.bye),
     'пока пока': TalkRequest(TalkTopic.bye),
+    'хорошего вечера': TalkRequest(TalkTopic.bye),
+    'хорошего тебе вечера': TalkRequest(TalkTopic.bye),
+    'хорошего вам вечера': TalkRequest(TalkTopic.bye),
+    'хорошего дня': TalkRequest(TalkTopic.bye),
+    'хорошего тебе дня': TalkRequest(TalkTopic.bye),
+    'хорошего вам дня': TalkRequest(TalkTopic.bye),
+    'удачного дня': TalkRequest(TalkTopic.bye),
+    'приятного вечера': TalkRequest(TalkTopic.bye),
     'до завтра': TalkRequest(TalkTopic.bye),
     'до свидания': TalkRequest(TalkTopic.bye),
     'до встречи': TalkRequest(TalkTopic.bye),
@@ -328,6 +341,8 @@ abstract final class TalkPhrases {
 
     // «Как дела?»
     'как дела': TalkRequest(TalkTopic.howAreYou),
+    'как дела сегодня': TalkRequest(TalkTopic.howAreYou),
+    'как ты сегодня': TalkRequest(TalkTopic.howAreYou),
     'как твои дела': TalkRequest(TalkTopic.howAreYou),
     'как ваши дела': TalkRequest(TalkTopic.howAreYou),
     'как у тебя дела': TalkRequest(TalkTopic.howAreYou),
@@ -369,6 +384,13 @@ abstract final class TalkPhrases {
     'ты что за бот': TalkRequest(TalkTopic.whoAreYou),
     'что ты за бот': TalkRequest(TalkTopic.whoAreYou),
     'ты бот': TalkRequest(TalkTopic.whoAreYou),
+    'ты живой': TalkRequest(TalkTopic.whoAreYou),
+    'ты человек': TalkRequest(TalkTopic.whoAreYou),
+    'ты робот': TalkRequest(TalkTopic.whoAreYou),
+    'ты живой или бот': TalkRequest(TalkTopic.whoAreYou),
+    'ты живой или робот': TalkRequest(TalkTopic.whoAreYou),
+    'ты бот или человек': TalkRequest(TalkTopic.whoAreYou),
+    'ты человек или бот': TalkRequest(TalkTopic.whoAreYou),
     'что ты такое': TalkRequest(TalkTopic.whoAreYou),
     // «Ты основной?» — вопрос, а не просьба: ответ «кто ты» говорит, кто
     // из помощников основной.
@@ -383,6 +405,8 @@ abstract final class TalkPhrases {
 
     // «Что умеешь?»
     'что ты умеешь': TalkRequest(TalkTopic.capabilities),
+    'что у тебя в арсенале': TalkRequest(TalkTopic.capabilities),
+    'что в твоем арсенале': TalkRequest(TalkTopic.capabilities),
     'что умеешь': TalkRequest(TalkTopic.capabilities),
     'что ты умеешь делать': TalkRequest(TalkTopic.capabilities),
     'что вы умеете': TalkRequest(TalkTopic.capabilities),
@@ -675,6 +699,20 @@ abstract final class TalkPhrases {
     'благодарю',
   ];
 
+  /// Отклик перед репликой: «хорошо, круто, давай на ты». Их может быть
+  /// несколько подряд, дальше — другая реплика, она и важнее.
+  static const Set<String> _reactionLeads = <String>{
+    'хорошо',
+    'круто',
+    'ок',
+    'окей',
+    'ладно',
+    'понятно',
+    'отлично',
+    'супер',
+    'класс',
+  };
+
   /// Связка между вступлением и репликой: «спасибо и пока».
   static const Set<String> _joiners = <String>{'и', 'а', 'ну'};
 
@@ -702,6 +740,9 @@ abstract final class TalkPhrases {
       return topic == null ? null : TalkRequest(topic);
     }
     if (words.length > maxWords) return null;
+    // Команда задачи где угодно — не беседа: «расскажи шутку для коллег —
+    // создай задачу» (как «добавь задачу рассказать шутку»).
+    if (_taskCommand.hasMatch(normalized)) return null;
     // Цифры — уже не беседа: «ок 15:00», «спасибо 2».
     if (words.any((String w) => RegExp(r'\d').hasMatch(w))) return null;
     _fixMisspelledNames(clauses);
@@ -719,6 +760,11 @@ abstract final class TalkPhrases {
   /// задачу» — не беседа.
   static TalkRequest? _withoutRemarks(List<List<String>> clauses) {
     var end = clauses.length;
+    // «Расскажи шутку про IT — вставь в презентацию»: что человек сделает
+    // с шуткой потом, просьбу не меняет. Только у шутки и только последней
+    // частью.
+    final jokeUse = end > 1 && _isJokeUse(clauses[end - 1]);
+    if (jokeUse) end--;
     while (end > 1 && _isRemark(clauses[end - 1])) {
       end--;
     }
@@ -726,17 +772,45 @@ abstract final class TalkPhrases {
     final head = <String>[for (final clause in clauses.take(end)) ...clause];
     final request = _recognizeAll(head);
     if (request == null || !_remarkTopics.contains(request.topic)) return null;
+    if (jokeUse && request.topic != TalkTopic.joke) return null;
     return request;
   }
 
+  /// Что сделать с шуткой: «вставь в презентацию», «перешлю коллегам»,
+  /// «использую в тосте». Глаголы — закрытый список; команда задачи
+  /// («создай задачу») отсеяна раньше ([_taskCommand]).
+  static bool _isJokeUse(List<String> words) =>
+      words.isNotEmpty &&
+      words.length <= _maxRemarkWords &&
+      _jokeUseVerbs.contains(words.first);
+
+  static const Set<String> _jokeUseVerbs = <String>{
+    'вставь',
+    'вставлю',
+    'вставим',
+    'использую',
+    'используем',
+    'перешлю',
+    'расскажу',
+    'покажу',
+  };
+
   /// Темы, к которым можно приписать хвост-замечание.
   static const Set<TalkTopic> _remarkTopics = <TalkTopic>{
+    TalkTopic.rude,
     TalkTopic.joke,
     TalkTopic.setting,
     TalkTopic.capabilities,
   };
 
   static final RegExp _clauseBreak = RegExp('[,;!?.…—–]');
+
+  /// Команда создать задачу: глагол рядом со словом «задача» или «в
+  /// задачи».
+  static final RegExp _taskCommand = RegExp(
+    r'(?:^|[\s,;—–-])(?:создай|добавь|запиши|поставь|заведи)(?:те)?\s+'
+    r'(?:\S+\s+)?(?:задач|напоминани)|(?:^|\s)в\s+(?:задачи|список\s+дел)',
+  );
 
   /// Слова хвоста-замечания: причина («а то ты сухой», «я не на работе»),
   /// одобрение («мне нравится»), «не смешно», «а ты подожди».
@@ -747,6 +821,7 @@ abstract final class TalkPhrases {
     'серьезный', 'серьезная', 'строгий', 'строгая', 'нравится', 'нравятся',
     'понравилось', 'работе', 'дома', 'отпуске', 'подожди', 'помолчи',
     'молчи', 'отдохни', 'отдыхай', 'ага', 'угу', 'ок', 'окей', 'ладно',
+    'но', 'хоть', 'зато', //
   };
 
   /// «Не смешно», «не смеюсь», «не улыбаюсь», «не усмехаюсь» (и с
@@ -839,6 +914,18 @@ abstract final class TalkPhrases {
   static TalkRequest? _recognizeAll(List<String> words) {
     final whole = _recognizeWords(words);
     if (whole != null) return whole;
+    // «Хорошо, круто, давай на ты»: отклики впереди, дальше — другая
+    // реплика.
+    var lead = _skipNames(words, 0);
+    var leads = 0;
+    while (lead < words.length && _reactionLeads.contains(words[lead])) {
+      lead = _skipNames(words, lead + 1);
+      leads++;
+    }
+    if (leads > 0 && lead < words.length) {
+      final rest = _recognizeWords(words.sublist(lead));
+      if (rest != null && rest.topic != TalkTopic.reaction) return rest;
+    }
     // «Привет, говори короче», «спасибо, пока», «спасибо и пока»: после
     // вступления — другая реплика, она и важнее.
     for (final prefix in _prefixes) {
@@ -945,6 +1032,11 @@ abstract final class TalkPhrases {
         if (word != _nameSlot) word,
     ];
     if (plain.isEmpty) return null;
+    // «Здорово, Лиорио!» — приветствие: «здорово» с обращением по имени.
+    // Без имени («здорово!») — отклик.
+    if (persona != null && plain.length == 1 && plain.first == 'здорово') {
+      return TalkRequest(TalkTopic.greet, persona: persona);
+    }
     final request = (persona == null ? null : _phrases[plain.join(' ')]) ??
         _chainRequest(plain) ??
         _settingRequest(plain) ??
@@ -1003,9 +1095,19 @@ abstract final class TalkPhrases {
         break;
       }
       if (found == null) return null;
-      if (first != null && found.topic != first.topic) return null;
+      if (first != null && found.topic != first.topic) {
+        // «Кто ты и что умеешь»: о себе и о возможностях — ответ о
+        // возможностях (он и представляет помощника).
+        const pair = <TalkTopic>{TalkTopic.whoAreYou, TalkTopic.capabilities};
+        if (!pair.contains(first.topic) || !pair.contains(found.topic)) {
+          return null;
+        }
+        if (found.topic == TalkTopic.capabilities) first = found;
+      }
       first ??= found;
       at += length;
+      // «Пока и до завтра»: «и» между фразами.
+      if (at < words.length - 1 && words[at] == 'и') at++;
     }
     // Одна фраза — не цепочка: её уже искали в [_phrases].
     return at > 0 && first != null && words.length > 1 ? first : null;

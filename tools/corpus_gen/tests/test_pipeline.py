@@ -189,6 +189,14 @@ def test_import_manual_strips_list_markers_but_keeps_quotes(project: Path) -> No
     assert store.rows[0]["family"] == "manual:kimi-web"
 
 
+def tasks_route(parse: dict[str, Any], connector: str | None = "tasks") -> dict[str, Any]:
+    """Ответ tool/route_phrases.dart: фразу забрал connector, parse — разбор ScenarioParser."""
+    matches = [] if connector is None else [
+        {"connector": connector, "command": "task.create", "confidence": 0.9, "implicit": False, "fallback": False}
+    ]
+    return {"connector": connector, "command": matches[0]["command"] if matches else None, "matches": matches, "parse": parse}
+
+
 def test_promote_marks_parser_mismatch_as_known_gap(project: Path) -> None:
     config = config_for(project)
     store = run_label(project, LABEL_CREATE, LABEL_CREATE)
@@ -198,23 +206,23 @@ def test_promote_marks_parser_mismatch_as_known_gap(project: Path) -> None:
     gap["final"] = {**{k: LABEL_CREATE.get(k) for k in prompts.LABEL_FIELDS}, "title": "Спорт", "due": "2026-11-09"}
     store.save()
 
-    def fake_parser(_config: Any, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    def fake_router(_config: Any, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         results = {}
         for item in items:
             final = dict(item["final"])
             if "понедельник" in item["text"]:
                 final["due"], final["precision"] = None, None
-            results[item["cid"]] = final
+            results[item["cid"]] = tasks_route(final)
         return results
 
-    counts = pipeline.promote(config, store, parser=fake_parser)
+    counts = pipeline.promote(config, store, router=fake_router)
     assert counts == {"active": 1, "known_gap": 1}
     lines = read_jsonl(config.corpus_dir / pipeline.GENERATED_FILE)
     assert "status" not in lines[0]
     assert lines[1]["status"] == "known_gap" and "due=None" in lines[1]["note"]
     assert all(l["id"].startswith("gen-") and l["source"] == "kimi-web" for l in lines)
     # Повторный перенос ничего не дублирует.
-    assert pipeline.promote(config, CandidateStore(config.work_dir), parser=fake_parser) == {}
+    assert pipeline.promote(config, CandidateStore(config.work_dir), router=fake_router) == {}
 
 
 def test_corpus_line_omits_defaults() -> None:

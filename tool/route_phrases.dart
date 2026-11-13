@@ -25,7 +25,10 @@
 // уверенности; parse — поля tool/parse_phrases.dart.
 //
 // Запуск из корня проекта: dart run tool/route_phrases.dart < phrases.jsonl
-// Использует tools/corpus_gen (проверка фраз с одним разметчиком).
+// Использует tools/corpus_gen: проверка фраз с одним разметчиком и promote
+// (каждая новая строка корпуса). Расхождений с корпусным тестом здесь быть
+// не должно: ошибка коннектора — ответ `error`, строки с `roles` и
+// `connected` не разбираются (см. [routeInput]).
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
@@ -40,10 +43,21 @@ import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 import '../test/connectors/manifest/fixtures.dart';
 import 'parse_phrases.dart';
 
-Future<void> main() => processLines(
-      (Map<String, dynamic> input, DateTime now) =>
-          routePhrase(input['text'] as String, now),
-    );
+Future<void> main() => processLines(routeInput);
+
+/// Строка входа → ответ [routePhrase]. Поля `roles` и `connected`
+/// корпусный тест собирает через ExtensionRegistry, а здесь их нет:
+/// такую строку не разбираем вовсе (ответ `error`, и promote оставляет её
+/// `accepted`), чтобы не выдать вердикт, который разойдётся с тестом.
+Map<String, Object?> routeInput(Map<String, dynamic> input, DateTime now) {
+  for (final field in const <String>['roles', 'connected']) {
+    if (input.containsKey(field)) {
+      throw UnsupportedError('поле $field не поддерживается: проверьте '
+          'строку корпусным тестом');
+    }
+  }
+  return routePhrase(input['text'] as String, now);
+}
 
 /// Коннекторы корпусного теста в его порядке (_connectorFactories в
 /// test/scenario_corpus_test.dart): при равной уверенности побеждает раньше
@@ -70,14 +84,11 @@ Map<String, Object?> routePhrase(String text, DateTime now) {
   final passwordsPhrase = PasswordPhrases.looksLike(utterance);
   for (final connector in appConnectors(now)) {
     if (passwordsPhrase && connector.info.requiresNetwork) continue;
-    final ConnectorMatch? match;
-    try {
-      match = connector.match(utterance);
-    } on Object {
-      // Как в маршрутизаторе: ошибка одного коннектора не ломает остальные.
-      continue;
-    }
-    if (match == null || match.confidence <= 0) continue;
+    // Как в корпусном тесте: ошибка коннектора — ошибка всей фразы (ответ
+    // `error` из processLines), совпадение с нулевой уверенностью тоже
+    // участвует в выборе.
+    final match = connector.match(utterance);
+    if (match == null) continue;
     candidates.add(match);
   }
   // Устойчивая сортировка: при равной уверенности — раньше подключённый.

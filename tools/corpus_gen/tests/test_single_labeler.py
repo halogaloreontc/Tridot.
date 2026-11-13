@@ -317,10 +317,7 @@ def test_app_agreed_rows_promote_as_active(project: Path) -> None:
     add_rows(config, store, [TASK_TEXT])
     run(config, store, LABEL_CREATE, FakeRouter({TASK_TEXT: ROUTED_CREATE}))
 
-    def fake_parser(_config: Any, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-        return {i["cid"]: ROUTED_CREATE["parse"] for i in items}
-
-    assert pipeline.promote(config, store, parser=fake_parser) == {"active": 1}
+    assert pipeline.promote(config, store, router=FakeRouter({TASK_TEXT: ROUTED_CREATE})) == {"active": 1}
 
 
 # --------------------------------------------- регрессии ревью: учитываются сохранённые разметки

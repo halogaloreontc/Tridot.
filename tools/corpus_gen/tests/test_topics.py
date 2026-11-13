@@ -13,7 +13,7 @@ from corpus_gen.providers import ProviderError
 from corpus_gen.store import CandidateStore, read_jsonl
 from corpus_gen.topics import DEFAULT_TOPICS_DIR, load_catalog, parse_connector, split_ref
 
-from test_pipeline import LABEL_CREATE, FakeProvider, config_for, label_responder, make_source, project  # noqa: F401
+from test_pipeline import LABEL_CREATE, FakeProvider, config_for, label_responder, make_source, project, tasks_route  # noqa: F401
 
 WAREHOUSE_TOML = '''
 connector = "warehouse"
@@ -241,17 +241,24 @@ def test_connector_propagates_from_import_to_corpus(project: Path) -> None:
     assert [r["status"] for r in store.rows] == ["agreed", "agreed"]
     assert any("коннектор «warehouse»" in s for s in systems)
 
-    parsed_ids: list[str] = []
+    routed_texts: list[str] = []
 
-    def fake_parser(_config: Any, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-        parsed_ids.extend(i["text"] for i in items)
-        return {i["cid"]: dict(i["final"]) for i in items}
+    def fake_router(_config: Any, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        routed_texts.extend(i["text"] for i in items)
+        results = {}
+        for i in items:
+            if i.get("connector") == "warehouse":
+                match = {"connector": "warehouse", "command": "whereIs", "confidence": 0.9, "implicit": False, "fallback": False}
+                results[i["cid"]] = {"connector": "warehouse", "command": "whereIs", "matches": [match], "parse": {}}
+            else:
+                results[i["cid"]] = tasks_route(dict(i["final"]))
+        return results
 
-    counts = pipeline.promote(config, store, parser=fake_parser)
-    assert counts == {"active": 1, "unverified": 1}
-    assert parsed_ids == ["добавь позвонить клиенту завтра в 10"]  # склад парсеру задач не отдаём
+    counts = pipeline.promote(config, store, router=fake_router)
+    assert counts == {"active": 2}
+    # Маршрутизатору отдаются фразы всех коннекторов, а не только tasks.
+    assert routed_texts == ["где лежит 64115", "добавь позвонить клиенту завтра в 10"]
     where, task = read_jsonl(config.corpus_dir / pipeline.GENERATED_FILE)
-    # Не known_gap: верно размеченная фраза уронила бы scenario_corpus_test.dart.
     assert where["connector"] == "warehouse" and "status" not in where
     assert where["intent"] == "whereIs" and "title" not in where and "due" not in where
     assert "connector" not in task
@@ -333,11 +340,11 @@ def test_promote_compares_target_title_with_target_query(project: Path) -> None:
     row["final"] = {"intent": "rescheduleTask", "title": "Звонок клиенту", "due": "2026-11-03", "precision": "date", "issue": "none", "titleIssue": "none"}
     store.save()
 
-    def fake_parser(_config: Any, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-        # Так отвечает tool/parse_phrases.dart: слова цели — в targetQuery, title пуст.
-        return {i["cid"]: {**i["final"], "title": None, "targetQuery": "Звонок клиенту"} for i in items}
+    def fake_router(_config: Any, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        # Так разбирает ScenarioParser: слова цели — в targetQuery, title пуст.
+        return {i["cid"]: tasks_route({**i["final"], "title": None, "targetQuery": "Звонок клиенту"}) for i in items}
 
-    assert pipeline.promote(config, store, parser=fake_parser) == {"active": 1}
+    assert pipeline.promote(config, store, router=fake_router) == {"active": 1}
     (line,) = read_jsonl(config.corpus_dir / pipeline.GENERATED_FILE)
     assert "status" not in line and line["title"] == "Звонок клиенту"
 

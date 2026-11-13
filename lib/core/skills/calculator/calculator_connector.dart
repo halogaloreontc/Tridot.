@@ -55,8 +55,33 @@ final class CalculatorConnector implements Connector, ConnectorHealth {
         (whole == null || withoutPrefix.expression != null)) {
       return withoutPrefix;
     }
-    return whole;
+    return whole ?? _lastClause(utterance.original);
   }
+
+  /// Пример в последней части после «, а …» с маркером: «через 2 часа
+  /// дедлайн, а 9×9 сколько?». Без маркера («купить 2 кг, а 3 оставить») —
+  /// не пример.
+  static CalcRecognition? _lastClause(String message) {
+    final clause = _clause.firstMatch(message);
+    if (clause == null) return null;
+    final recognition = Calculator.recognize(clause.group(1)!);
+    if (recognition == null ||
+        recognition.expression == null ||
+        !recognition.explicit) {
+      return null;
+    }
+    return CalcRecognition(
+      explicit: true,
+      expression: recognition.expression,
+      clause: true,
+    );
+  }
+
+  static final RegExp _clause = RegExp(r',\s*а\s+([^,]+)$');
+
+  /// Пример в последней части сообщения ([CalcRecognition.clause]):
+  /// ниже задач, чтобы явная команда в начале выигрывала.
+  static const double clauseConfidence = 0.6;
 
   @override
   ConnectorMatch? match(Utterance utterance) {
@@ -68,11 +93,13 @@ final class CalculatorConnector implements Connector, ConnectorHealth {
       commandId: commandId,
       confidence: !parsed
           ? malformedConfidence
-          : recognition.explicit
-              ? explicitConfidence
-              : expressionConfidence,
+          : recognition.clause
+              ? clauseConfidence
+              : recognition.explicit
+                  ? explicitConfidence
+                  : expressionConfidence,
       payload: recognition,
-      implicit: !parsed,
+      implicit: !parsed || recognition.clause,
     );
   }
 

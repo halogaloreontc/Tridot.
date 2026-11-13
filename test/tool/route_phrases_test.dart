@@ -64,6 +64,31 @@ void main() {
     expect(routed('сегодня')['connector'], isNull);
   });
 
+  test('строку с roles или connected не разбирает: в тесте они иначе', () {
+    // Корпусный тест собирает коннекторы строки через ExtensionRegistry с
+    // её ролями и подключением склада; здесь их нет, и вердикт разошёлся
+    // бы с тестом — лучше ошибка (promote оставит строку accepted).
+    for (final field in <String, Object>{
+      'roles': <String>['personal'],
+      'connected': true,
+    }.entries) {
+      expect(
+        () => routeInput(
+          <String, dynamic>{
+            'text': 'что пришло сегодня',
+            field.key: field.value,
+          },
+          now,
+        ),
+        throwsUnsupportedError,
+        reason: field.key,
+      );
+    }
+    final plain =
+        routeInput(<String, dynamic>{'text': 'что пришло сегодня'}, now);
+    expect(plain['command'], 'warehouse.today');
+  });
+
   test('фраза из одних кавычек не роняет разбор', () {
     for (final text in ['«купить хлеб»', '"спасибо"', '👍']) {
       final parse = routed(text)['parse']! as Map<String, Object?>;

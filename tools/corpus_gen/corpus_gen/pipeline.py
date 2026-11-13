@@ -23,7 +23,6 @@ from .secret_filter import looks_secret
 from .store import CandidateStore, Checkpoint, append_jsonl, candidate_id, clean_phrase, corpus_rows, normalize_text
 
 ProviderFactory = Callable[[Source], Provider]
-ParserRunner = Callable[[Config, list[dict[str, Any]]], dict[str, dict[str, Any]]]
 # Прогон фраз через маршрутизатор приложения (tool/route_phrases.dart): cid → результат.
 RouterRunner = Callable[[Config, list[dict[str, Any]]], dict[str, dict[str, Any]]]
 
@@ -761,15 +760,6 @@ def decide(row: dict[str, Any], labelers: list[Source]) -> str:
 # ------------------------------------------------------- перенос в корпус
 
 
-def run_dart_parser(config: Config, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Прогоняет фразы через текущий ScenarioParser (tool/parse_phrases.dart)."""
-    results = _run_dart_tool(config, "tool/parse_phrases.dart", items)
-    missing = [i["cid"] for i in items if i["cid"] not in results]
-    if missing:
-        raise RuntimeError(f"парсер не вернул результат для {missing[:5]}")
-    return results
-
-
 def run_dart_router(config: Config, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Прогоняет фразы через маршрутизатор с коннекторами приложения (tool/route_phrases.dart).
 
@@ -810,16 +800,18 @@ def promote(
     store: CandidateStore,
     *,
     dry_run: bool = False,
-    parser: ParserRunner = run_dart_parser,
+    router: RouterRunner = run_dart_router,
     catalog: Catalog | None = None,
 ) -> Counter[str]:
     """Переносит принятые фразы в generated.jsonl.
 
-    Фразы коннектора tasks сверяются с ScenarioParser (tool/parse_phrases.dart): совпало —
-    active, нет — known_gap. Фразы других коннекторов отсюда проверить нечем, поэтому они
-    пишутся как active: их маршрутизацию и commandId проверяет test/scenario_corpus_test.dart.
-    Писать их как known_gap нельзя — верно размеченная фраза уронила бы этот тест («смените
-    status на active»). Коннектор должен быть зарегистрирован в _connectorFactories теста.
+    Каждая фраза — любого коннектора и с любой отметкой (две модели, разметчик и
+    приложение, ручная разметка в review) — сверяется с маршрутизатором приложения
+    (tool/route_phrases.dart) по правилам test/scenario_corpus_test.dart (app_mismatches):
+    кто забрал фразу, commandId, а у tasks — поля ScenarioParser. Совпало — active, нет —
+    known_gap с причиной в note. Так корпусный тест не падает на только что перенесённых
+    строках: active совпадает с приложением, known_gap — расходится. Коннектор должен быть
+    зарегистрирован в _connectorFactories теста.
     """
     counts: Counter[str] = Counter()
     secret = reject_secrets(store) if not dry_run else 0
@@ -833,12 +825,10 @@ def promote(
     if not ready:
         return counts
     catalog = catalog or catalog_for(config)
-    for_parser = [r for r in ready if row_connector(r) == DEFAULT_CONNECTOR]
-    parsed = parser(config, for_parser) if for_parser else {}
     existing = corpus_rows(config.corpus_dir)
     existing_ids = {r.get("id") for r in existing}
     existing_texts = {normalize_text(r["text"]) for r in existing if "text" in r}
-    lines: list[dict[str, Any]] = []
+    new_rows: list[tuple[dict[str, Any], ConnectorTopics]] = []
     for row in ready:
         corpus_id = f"gen-{row['cid']}"
         if corpus_id in existing_ids or normalize_text(row["text"]) in existing_texts:
@@ -851,21 +841,28 @@ def promote(
             counts["unknown_connector"] += 1
             row.setdefault("errors", []).append(str(error))
             continue
-        line = corpus_line(row, connector)
-        if connector.id != DEFAULT_CONNECTOR:
-            counts["unverified"] += 1
-            lines.append(line)
-            row["status"] = "promoted"
-            continue
-        result = parsed[row["cid"]]
-        if "error" in result:
+        new_rows.append((row, connector))
+    # Все фразы — одним процессом dart; если он упал, исключение уходит наверх и
+    # ничего не записывается: без проверки строка в корпус не попадает.
+    routed = router(config, [row for row, _ in new_rows]) if new_rows else {}
+    lines: list[dict[str, Any]] = []
+    for row, connector in new_rows:
+        result = routed.get(row["cid"])
+        if result is None or "error" in result:
             counts["parser_error"] += 1
-            row.setdefault("errors", []).append("парсер упал на фразе: " + _short(str(result["error"])))
+            reason = "нет результата для фразы" if result is None else _short(str(result["error"]))
+            row.setdefault("errors", []).append("проверка приложением не удалась: " + reason)
             continue
-        mismatches = parser_mismatches(line, row["final"], result)
+        line = corpus_line(row, connector)
+        try:
+            mismatches = app_mismatches(row["final"], connector, result)
+        except (AttributeError, KeyError, TypeError) as error:
+            counts["parser_error"] += 1
+            row.setdefault("errors", []).append(f"проверка приложением не удалась: непонятный ответ ({error})")
+            continue
         if mismatches:
             line["status"] = "known_gap"
-            line["note"] = "парсер сейчас: " + ", ".join(mismatches)
+            line["note"] = "приложение сейчас: " + ", ".join(mismatches)
             counts["known_gap"] += 1
         else:
             counts["active"] += 1

@@ -56,6 +56,7 @@ const List<List<String>> _groups = <List<String>>[
     'сбербанк',
     'сбербанка',
     'сбербанк онлайн',
+    'сбером',
     'sber',
     'sberbank',
   ],
@@ -71,7 +72,7 @@ const List<List<String>> _groups = <List<String>>[
     'tinkoff',
     'tbank',
   ],
-  <String>['Озон', 'озон', 'озона', 'озоне', 'ozon', 'ozon.ru'],
+  <String>['Озон', 'озон', 'озона', 'озоне', 'озоном', 'ozon', 'ozon.ru'],
   <String>[
     'Wildberries',
     'wildberries',
@@ -121,6 +122,16 @@ abstract final class ServiceAliases {
       }
     }
     return raw.trim();
+  }
+
+  /// [raw] — сервис из таблицы синонимов в любом записанном падеже:
+  /// «сбером», «почтой», «роутера».
+  static bool isKnown(String raw) {
+    final key = _key(raw);
+    return _groups.any(
+      (List<String> group) =>
+          group.any((String name) => name.toLowerCase() == key),
+    );
   }
 
   /// Все написания, по которым искать запись для [raw]: сам запрос и его

@@ -248,7 +248,9 @@ def test_reject_secrets_keeps_human_accepted_rows_but_promote_skips_them(project
     assert pipeline.reject_secrets(store) == 1
     assert (row["status"], row["check"], row["labels"]) == ("accepted", pipeline.SECRET_CHECK, {"gemma": HINT_LABEL})
     assert pipeline.reject_secrets(store) == 0  # уже помечена
-    assert pipeline.promote(config, store) == {}
+    router = FakeRouter()
+    assert pipeline.promote(config, store, router=router) == {}
+    assert router.calls == []  # похожая на секрет фраза не уходит и в dart
     assert not (config.corpus_dir / pipeline.GENERATED_FILE).exists() or "CANARY" not in (
         config.corpus_dir / pipeline.GENERATED_FILE
     ).read_text(encoding="utf-8")
@@ -360,7 +362,7 @@ def test_single_labeler_check_routes_passwords_phrases(project: Path) -> None:
     assert by_text["покажи пароль от wifi"]["check"] == "приложение: intent=passwords.reveal"
 
     # promote: в generated.jsonl с "connector": "passwords" — корпусный тест включает навык.
-    assert pipeline.promote(config, store) == {"unverified": 2}
+    assert pipeline.promote(config, store, router=router) == {"active": 2}
     lines = read_jsonl(config.corpus_dir / pipeline.GENERATED_FILE)
     assert {line["connector"] for line in lines} == {"passwords"}
     assert {line["intent"] for line in lines} == {"passwords.hint", "unknown"}
