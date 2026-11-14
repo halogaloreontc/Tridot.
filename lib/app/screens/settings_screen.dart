@@ -1,3 +1,5 @@
+import '../security/app_lock.dart';
+import '../security/security_section.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_info.dart';
@@ -14,6 +16,7 @@ import '../widgets/extensions_section.dart';
 import '../widgets/personas_section.dart';
 import '../widgets/roles_section.dart';
 import '../widgets/task_tile.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Экран «Настройки»: поведение интерфейса, помощники, роли, расширения,
 /// история сессий, данные, о приложении. В оболочке «Д» — вкладка
@@ -34,6 +37,7 @@ class SettingsScreen extends StatelessWidget {
     this.voice,
     this.ffmpeg,
     this.ytdl,
+    this.appLock,
   });
 
   /// Заголовок «Настройки» над экраном.
@@ -72,6 +76,10 @@ class SettingsScreen extends StatelessWidget {
   /// Загрузчик видео: «Настроить» в плитке «Загрузчик видео».
   final YtdlKit? ytdl;
 
+  /// Вход в приложение по отпечатку / Face ID (ADR-025); `null` — раздела
+  /// «Защита» нет.
+  final AppLockController? appLock;
+
   static const applicationName = AppInfo.name;
 
   Future<void> _confirmClear(BuildContext context) async {
@@ -79,7 +87,7 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AssistantColors.raised,
-        title: const Text('Очистить историю сессий?'),
+        title: const WholeWordText('Очистить историю сессий?'),
         content: const Text(
           'Сообщения всех сессий, в том числе сессий задач, будут удалены. '
           'Задачи останутся на месте, проекты — пустыми.',
@@ -130,8 +138,11 @@ class SettingsScreen extends StatelessWidget {
               SwitchListTile(
                 key: const ValueKey<String>('setting-reduce-motion'),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                title: const Text('Уменьшить анимацию', style: switchTitle),
-                subtitle: const Text(
+                title: const WholeWordText(
+                  'Уменьшить анимацию',
+                  style: switchTitle,
+                ),
+                subtitle: const WholeWordText(
                   'Кубик и переходы без движения',
                   style: metaTextStyle,
                 ),
@@ -142,7 +153,10 @@ class SettingsScreen extends StatelessWidget {
               SwitchListTile(
                 key: const ValueKey<String>('setting-timestamps'),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                title: const Text('Время под сообщениями', style: switchTitle),
+                title: const WholeWordText(
+                  'Время под сообщениями',
+                  style: switchTitle,
+                ),
                 value: settings.showTimestamps,
                 onChanged: (value) =>
                     onChanged(settings.copyWith(showTimestamps: value)),
@@ -152,6 +166,13 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: onChanged,
                 voice: voice,
               ),
+              if (appLock case final AppLockController lock)
+                SecuritySection(
+                  settings: settings,
+                  onChanged: onChanged,
+                  lock: lock,
+                  hasVault: passwords != null,
+                ),
               if (includePersonas)
                 PersonasSection(
                   settings: settings,
@@ -210,7 +231,7 @@ class SettingsScreen extends StatelessWidget {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                   minTileHeight: 48,
                   leading: const Icon(Icons.save_outlined),
-                  title: const Text(
+                  title: const WholeWordText(
                     'Данные и резервная копия',
                     style: switchTitle,
                   ),

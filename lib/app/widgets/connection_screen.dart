@@ -5,6 +5,7 @@ import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/connectors/manifest/manifest_format.dart';
 import '../assistant_theme.dart';
 import 'task_tile.dart';
+import 'whole_word_text.dart';
 
 /// Статус подключения одной строкой: «Подключён: ivanov · под своим
 /// логином», «Не подключён».
@@ -151,7 +152,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       builder: (dialogContext) => AlertDialog(
         scrollable: true,
         backgroundColor: AssistantColors.raised,
-        title: Text('Выйти из «${_service.slot.title}»?'),
+        title: WholeWordText('Выйти из «${_service.slot.title}»?'),
         content: const Text(
           'Пароль склада и личный ключ будут удалены с устройства. Адрес '
           'и описание останутся.',

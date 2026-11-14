@@ -40,6 +40,15 @@ enum VaultErrorCode {
   /// Хранилище заперто (или навык выключен).
   locked,
 
+  /// Ключа устройства для этого сейфа нет (ADR-025): приложение
+  /// переустановили, ключ удалён системой или файл перенесли на другое
+  /// устройство. Открыть — только кодом восстановления.
+  deviceKeyLost,
+
+  /// Путь по ПИН-коду сейфа закрыт после 10 неверных вводов (ADR-025):
+  /// открыть — только кодом восстановления.
+  pinLocked,
+
   /// Слишком много неверных вводов: пауза ([VaultRateLimited.until]).
   rateLimited,
 }
@@ -55,6 +64,9 @@ sealed class VaultError implements Exception {
   static const VaultError tooNew = VaultFailure(VaultErrorCode.tooNew);
   static const VaultError io = VaultFailure(VaultErrorCode.io);
   static const VaultError locked = VaultFailure(VaultErrorCode.locked);
+  static const VaultError deviceKeyLost =
+      VaultFailure(VaultErrorCode.deviceKeyLost);
+  static const VaultError pinLocked = VaultFailure(VaultErrorCode.pinLocked);
 
   VaultErrorCode get code;
 

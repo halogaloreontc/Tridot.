@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,12 +12,19 @@ import '../assistant_theme.dart';
 import 'entry_screens.dart';
 import 'passwords_files.dart';
 import 'passwords_kit.dart';
+import 'recovery_code_view.dart';
 import 'secret_widgets.dart';
+import 'vault_confirm.dart';
+import '../widgets/whole_word_text.dart';
 
 /// «Резервная копия» (5.7): только из открытого хранилища и с мастер-
 /// паролем. Пароль копии — мастер-пароль или отдельный (с теми же
 /// требованиями). Копия проверяется чтением; после записи файл ещё раз
 /// читается и сравнивается — не совпало, файл удаляется.
+///
+/// Сейф, защищённый устройством (ADR-025): копия закрывается кодом
+/// восстановления (его вводят здесь — заодно проверка, что код сохранён)
+/// или отдельным паролем копии после подтверждения. ПИН-кодом — никогда.
 class BackupExportScreen extends StatefulWidget {
   const BackupExportScreen({super.key, required this.kit});
 
@@ -79,8 +87,16 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
       _separateError = null;
       _failure = null;
     });
-    if (_master.text.isEmpty) {
-      setState(() => _masterError = 'Введите мастер-пароль.');
+    final protectedVault = kit.isProtected;
+    // Защищённый сейф с отдельным паролем копии: код не нужен, хватит
+    // подтверждения.
+    final needsSecret = !protectedVault || !_own;
+    if (needsSecret && _master.text.isEmpty) {
+      setState(
+        () => _masterError = protectedVault
+            ? 'Введите код восстановления.'
+            : 'Введите мастер-пароль.',
+      );
       return;
     }
     if (_own) {
@@ -89,13 +105,43 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
         return;
       }
     }
-    final master = _master.text;
+    final master = needsSecret ? _master.text : null;
     final separate = _own ? _separate.text : null;
     setState(() => _busy = true);
     try {
-      final Uint8List bytes;
+      Uint8List? bytes;
       try {
-        bytes = await kit.exportBackup(master, separate: separate);
+        if (master != null) {
+          bytes = await kit.exportBackup(master, separate: separate);
+        } else {
+          String? problem;
+          final ok = await askVaultConfirm(
+            context,
+            kit: kit,
+            title: 'Сделать копию',
+            text: 'Копия с отдельным паролем: подтвердите, что это вы.',
+            check: (VaultProof proof) async {
+              try {
+                bytes = await kit.exportBackup(
+                  null,
+                  separate: separate,
+                  proof: proof,
+                );
+                return true;
+              } on BackupProblem catch (rejected) {
+                problem = rejected.text;
+                return true;
+              } on VaultError {
+                return false;
+              }
+            },
+          );
+          if (problem != null) throw BackupProblem(problem!);
+          if (!ok || bytes == null) {
+            if (mounted) setState(() => _failure = 'Копия не сделана.');
+            return;
+          }
+        }
       } on BackupProblem catch (problem) {
         if (mounted) setState(() => _separateError = problem.text);
         return;
@@ -103,13 +149,16 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
         if (!mounted) return;
         setState(() {
           if (error.code == VaultErrorCode.wrongPassword) {
-            _masterError = 'Мастер-пароль не подошёл.';
+            _masterError = protectedVault
+                ? 'Код восстановления не подошёл.'
+                : 'Мастер-пароль не подошёл.';
           } else {
             _failure = vaultErrorText(error.code);
           }
         });
         return;
       }
+      final data = bytes!;
       _clear();
       if (!mounted) return;
       final String? path;
@@ -118,7 +167,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
           context,
           title: 'Куда сохранить копию',
           fileName: VaultBackup.fileName(kit.vault.clock.now()),
-          bytes: bytes,
+          bytes: data,
         );
       } on Object {
         if (mounted) {
@@ -132,7 +181,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
       }
       // Проверка записанного: файл читается и совпадает байт в байт.
       final written = await kit.files.read(path);
-      if (written == null || !listEquals(written, bytes)) {
+      if (written == null || !listEquals(written, data)) {
         await kit.files.delete(path);
         if (mounted) {
           setState(
@@ -208,13 +257,21 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                       ),
                     ),
                   const SizedBox(height: 16),
-                  SecretField(
-                    key: const ValueKey<String>('backup-master'),
-                    controller: _master,
-                    label: 'Мастер-пароль',
-                    error: _masterError,
-                    enabled: !_busy,
-                  ),
+                  if (!kit.isProtected || !_own)
+                    SecretField(
+                      key: const ValueKey<String>('backup-master'),
+                      controller: _master,
+                      label: kit.isProtected
+                          ? 'Код восстановления'
+                          : 'Мастер-пароль',
+                      helper: kit.isProtected
+                          ? 'Копия будет закрыта этим кодом: на новом '
+                              'телефоне её откроет он.'
+                          : null,
+                      allowShow: kit.isProtected,
+                      error: _masterError,
+                      enabled: !_busy,
+                    ),
                   CheckboxListTile(
                     key: const ValueKey<String>('backup-own'),
                     value: _own,
@@ -223,14 +280,17 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                     onChanged: _busy
                         ? null
                         : (bool? v) => setState(() => _own = v ?? false),
-                    title: const Text(
+                    title: const WholeWordText(
                       'Отдельный пароль для копии',
                       style: TextStyle(color: AssistantColors.text),
                     ),
-                    subtitle: const Text(
-                      'По умолчанию копия закрыта мастер-паролем — меньше '
-                      'запоминать.',
-                      style: TextStyle(color: AssistantColors.muted),
+                    subtitle: WholeWordText(
+                      kit.isProtected
+                          ? 'По умолчанию копия закрыта кодом '
+                              'восстановления — он у вас уже записан.'
+                          : 'По умолчанию копия закрыта мастер-паролем — '
+                              'меньше запоминать.',
+                      style: const TextStyle(color: AssistantColors.muted),
                     ),
                   ),
                   if (_own) ...<Widget>[
@@ -238,8 +298,9 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                       key: const ValueKey<String>('backup-separate'),
                       controller: _separate,
                       label: 'Пароль копии',
-                      helper: 'Те же требования, что у мастер-пароля: копию '
-                          'могут перебирать офлайн. Запишите его на бумаге.',
+                      helper: 'Не короче 12 символов, хорошо подходит фраза '
+                          'из нескольких слов: копию могут перебирать '
+                          'офлайн. Запишите его на бумаге.',
                       error: _separateError,
                       enabled: !_busy,
                     ),
@@ -406,6 +467,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   Future<void> _restoreAsNew() async {
     final contents = _contents;
     if (contents == null || _busy) return;
+    if (kit.deviceProtection) return _restoreProtected(contents);
     final master = _sameMaster ? _pass.text : _master.text;
     if (!_sameMaster && _master.text != _repeat.text) {
       setState(() => _error = 'Мастер-пароли не совпадают.');
@@ -452,11 +514,12 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     ];
     // «Взять из копии» для важной записи — правка (15.2).
     if (kit.importNeedsConfirm(decisions)) {
-      final ok = await askMaster(
+      final ok = await askVaultConfirm(
         context,
+        kit: kit,
         title: 'Заменить важные записи',
-        text: 'Замена важной записи подтверждается мастер-паролем.',
-        check: kit.confirm,
+        text: 'Замену важной записи нужно подтвердить.',
+        check: kit.confirmProof,
       );
       if (!ok || !mounted) return;
     }
@@ -483,10 +546,14 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       context: context,
       builder: (BuildContext context) => AlertDialog(
         backgroundColor: AssistantColors.raised,
-        title: const Text('Заменить всё?'),
-        content: const Text(
-          'Текущий сейф не сотрётся, а уйдёт в архив. Вместо него будут '
-          'записи из копии — с тем же мастер-паролем.',
+        title: const WholeWordText('Заменить всё?'),
+        content: Text(
+          kit.isProtected
+              ? 'Текущий сейф не сотрётся, а уйдёт в архив. Вместо него будут '
+                  'записи из копии — с новым кодом восстановления; ПИН-код и '
+                  'вход по отпечатку включите заново.'
+              : 'Текущий сейф не сотрётся, а уйдёт в архив. Вместо него будут '
+                  'записи из копии — с тем же мастер-паролем.',
         ),
         actions: <Widget>[
           TextButton(
@@ -502,14 +569,24 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       ),
     );
     if (go != true || !mounted) return;
-    final ok = await askMaster(
+    String? code;
+    final protectedVault = kit.isProtected;
+    final ok = await askVaultConfirm(
       context,
+      kit: kit,
       title: 'Заменить всё',
-      text: 'Подтвердите мастер-паролем этого сейфа.',
-      check: (String master) async {
+      text: 'Подтвердите замену этого сейфа.',
+      check: (VaultProof proof) async {
         _replacing = true;
         try {
-          return await kit.replaceAll(contents, master);
+          if (protectedVault) {
+            code = await kit.replaceAllProtected(contents, proof);
+            return code != null;
+          }
+          final master = proof is SecretProof
+              ? utf8.decode(proof.secret.unsafeBytes)
+              : null;
+          return master != null && await kit.replaceAll(contents, master);
         } finally {
           _replacing = false;
         }
@@ -517,9 +594,36 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     );
     if (ok) {
       _finish('Сейф заменён копией. Прежний — в архиве.');
+      final shown = code;
+      if (shown != null && mounted) await showRecoveryCode(context, kit, shown);
     } else if (mounted && !kit.isUnlocked) {
       // Замена сорвалась после архивации — хранилище заперто: закрываем.
       _onKit();
+    }
+  }
+
+  /// «Создать сейф из копии» с защитой устройством (ADR-025): мастер-
+  /// пароль не нужен, новый код восстановления — один раз.
+  Future<void> _restoreProtected(BackupContents contents) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final code = await kit.restoreAsNewProtected(
+        contents,
+        keepHistory: _keepHistory && contents.hasHistory,
+      );
+      final count = contents.items.length;
+      _finish('Сейф восстановлен: '
+          '${countText(count, 'запись', 'записи', 'записей')}.');
+      if (mounted) await showRecoveryCode(context, kit, code);
+    } on VaultError catch (error) {
+      if (mounted) setState(() => _error = vaultErrorText(error.code));
+    } on Object {
+      if (mounted) setState(() => _error = 'Восстановить не вышло.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -547,7 +651,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          kit.platform.unlockNote,
+          kit.protectionNote,
           style: const TextStyle(color: AssistantColors.muted),
         ),
         const SizedBox(height: 16),
@@ -598,8 +702,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
 
   List<Widget> _openView() => <Widget>[
         const Text(
-          'Выберите файл копии (.relaybak) и введите её пароль — мастер-'
-          'пароль или отдельный пароль копии.',
+          'Выберите файл копии (.relaybak) и введите её пароль — код '
+          'восстановления, мастер-пароль (старые копии) или отдельный '
+          'пароль копии.',
           style: TextStyle(color: AssistantColors.text),
         ),
         const SizedBox(height: 4),
@@ -655,24 +760,30 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
 
   List<Widget> _newView(BackupContents contents) => <Widget>[
         ..._summary(contents),
-        const Text(
-          'Создать сейф из копии. Настройки защиты не переносятся — '
-          'они по умолчанию; вход по отпечатку можно включить заново.',
-          style: TextStyle(color: AssistantColors.text),
+        Text(
+          kit.deviceProtection
+              ? 'Создать сейф из копии. Он будет защищён этим устройством, '
+                  'а после создания я покажу новый код восстановления. '
+                  'Настройки защиты не переносятся — ПИН-код и вход по '
+                  'отпечатку можно включить заново.'
+              : 'Создать сейф из копии. Настройки защиты не переносятся — '
+                  'они по умолчанию; вход по отпечатку можно включить заново.',
+          style: const TextStyle(color: AssistantColors.text),
         ),
-        CheckboxListTile(
-          key: const ValueKey<String>('restore-same-master'),
-          value: _sameMaster,
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          onChanged: _busy
-              ? null
-              : (bool? v) => setState(() => _sameMaster = v ?? true),
-          title: const Text(
-            'Мастер-пароль — тот же, что пароль копии',
-            style: TextStyle(color: AssistantColors.text),
+        if (!kit.deviceProtection)
+          CheckboxListTile(
+            key: const ValueKey<String>('restore-same-master'),
+            value: _sameMaster,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            onChanged: _busy
+                ? null
+                : (bool? v) => setState(() => _sameMaster = v ?? true),
+            title: const WholeWordText(
+              'Мастер-пароль — тот же, что пароль копии',
+              style: TextStyle(color: AssistantColors.text),
+            ),
           ),
-        ),
         if (contents.hasHistory)
           CheckboxListTile(
             key: const ValueKey<String>('restore-keep-history'),
@@ -682,17 +793,17 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             onChanged: _busy
                 ? null
                 : (bool? v) => setState(() => _keepHistory = v ?? false),
-            title: const Text(
+            title: const WholeWordText(
               'Включить хронологию паролей?',
               style: TextStyle(color: AssistantColors.text),
             ),
-            subtitle: const Text(
+            subtitle: const WholeWordText(
               'В копии есть прежние пароли. Включено: они перенесутся и '
               'будут храниться зашифрованными. Выключено: не перенесутся.',
               style: TextStyle(color: AssistantColors.muted),
             ),
           ),
-        if (!_sameMaster) ...<Widget>[
+        if (!_sameMaster && !kit.deviceProtection) ...<Widget>[
           SecretField(
             key: const ValueKey<String>('restore-master'),
             controller: _master,

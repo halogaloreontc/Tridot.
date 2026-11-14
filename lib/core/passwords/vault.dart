@@ -12,11 +12,16 @@ import 'password_strength.dart' show Utf8Runes;
 import 'password_training.dart';
 import 'secret_bytes.dart';
 import 'vault_backup.dart';
+import 'vault_codes.dart';
 import 'vault_crypto.dart';
+import 'vault_device_key.dart';
 import 'vault_errors.dart';
 import 'vault_format.dart';
 import 'vault_prefs.dart';
+import 'vault_proof.dart';
 import 'vault_store.dart';
+
+export 'vault_proof.dart';
 
 /// Состояние хранилища (раздел 3.6).
 enum VaultState {
@@ -73,11 +78,25 @@ final class VaultPolicy {
 }
 
 /// Итог открытия.
+/// Новый код восстановления ([Vault.regenerateRecovery]): [code] показать
+/// один раз и затереть; [rotated] — сменился ли и ключ сейфа.
+final class RecoveryRegen {
+  const RecoveryRegen(this.code, {required this.rotated});
+
+  final SecretBytes code;
+  final bool rotated;
+
+  @override
+  String toString() => 'RecoveryRegen(•••, rotated: $rotated)';
+}
+
 final class VaultUnlockResult {
   const VaultUnlockResult({
     required this.rev,
     required this.rolledBack,
     this.variantHit = false,
+    this.recoveryCode,
+    this.recovered = false,
   });
 
   /// Версия открытого файла (для `passwords.seen_rev`).
@@ -90,6 +109,44 @@ final class VaultUnlockResult {
   /// Подошёл не сам ввод, а его вариант (D25): другая раскладка, Caps
   /// Lock, регистр первой буквы, пробелы по краям.
   final bool variantHit;
+
+  /// Сейф с мастер-паролем перешёл на защиту устройством (ADR-025): новый
+  /// код восстановления для показа — один раз. Вызывающий затирает.
+  final SecretBytes? recoveryCode;
+
+  /// Открыли кодом восстановления: ключ устройства создан заново, ПИН-код
+  /// и биометрия сняты — их можно включить снова.
+  final bool recovered;
+}
+
+/// Чем можно открыть запертый сейф — по конверту, без ключей (ADR-025).
+final class VaultLockInfo {
+  const VaultLockInfo({
+    required this.pwKind,
+    this.device = false,
+    this.pin = false,
+    this.bio = false,
+  });
+
+  /// [VaultFormat.pwMaster] — старый сейф с мастер-паролем;
+  /// [VaultFormat.pwRecovery] — защита устройством и код восстановления.
+  final String pwKind;
+  final bool device;
+  final bool pin;
+  final bool bio;
+
+  bool get usesMaster => pwKind == VaultFormat.pwMaster;
+
+  factory VaultLockInfo.of(VaultEnvelope envelope) => VaultLockInfo(
+        pwKind: envelope.pwKind ?? VaultFormat.pwMaster,
+        device: envelope.slots.containsKey(VaultFormat.slotDevice),
+        pin: envelope.slots.containsKey(VaultFormat.slotPin),
+        bio: envelope.slots.containsKey(VaultFormat.slotBio),
+      );
+
+  @override
+  String toString() =>
+      'VaultLockInfo($pwKind, dev: $device, pin: $pin, bio: $bio)';
 }
 
 /// Хранилище паролей: конверт с ключом, индекс и секреты записей
@@ -108,6 +165,7 @@ final class Vault {
     this.allowTestingKdf = false,
     this.device = VaultDevice.desktop,
     this.totalMemory,
+    this.deviceKey,
   }) : monotonic = monotonic ??
             (clock is MonotonicClock
                 ? clock as MonotonicClock
@@ -132,6 +190,11 @@ final class Vault {
   /// Для калибровки и потолка параметров копии.
   final VaultDevice device;
   final int? totalMemory;
+
+  /// Ключ устройства (ADR-025). Есть — новый сейф защищён устройством и
+  /// кодом восстановления, а сейф с мастер-паролем переходит на это после
+  /// одного ввода мастер-пароля. Нет — прежний режим мастер-пароля.
+  final VaultDeviceKey? deviceKey;
 
   /// Оценка надёжности и флаги записей (5.5). Ставит `lib/app`, когда
   /// загрузились словари; без неё оценка и флаги не пересчитываются.
@@ -248,6 +311,88 @@ final class Vault {
     });
   }
 
+  /// Новый сейф, защищённый устройством (ADR-025): ключ сейфа обёрнут
+  /// ключом устройства (слот `dev`) и ключом из нового кода
+  /// восстановления. Возвращает код в виде для показа — один раз;
+  /// вызывающий затирает. Без [params] — калибровка Argon2id. После
+  /// создания хранилище открыто; код ещё не подтверждён
+  /// ([recoveryConfirmed]).
+  Future<SecretBytes> createProtected({VaultKdfParams? params}) {
+    final epoch = _epoch;
+    return _op(() async {
+      await _ensureLoaded();
+      _requireEnabled();
+      _stillWanted(epoch);
+      if (deviceKey == null) throw StateError('нет ключа устройства');
+      if (_exists || await store.hasVault()) {
+        _exists = true;
+        throw StateError('хранилище уже есть');
+      }
+      final kdf = params ?? await _calibrate();
+      _checkParams(kdf);
+      return _withNewCode(
+        (SecretBytes canonical) async => _install(
+          await _build(canonical, kdf, withDevice: true),
+          epoch: epoch,
+        ),
+      );
+    });
+  }
+
+  /// «Создать сейф из копии» с защитой устройством (ADR-025): как
+  /// [createFromBackup], но вместо мастер-пароля — ключ устройства и новый
+  /// код восстановления (возвращается для показа; вызывающий затирает).
+  Future<SecretBytes> createFromBackupProtected(
+    BackupContents contents, {
+    VaultKdfParams? params,
+    bool keepHistory = false,
+  }) {
+    final epoch = _epoch;
+    return _op(() async {
+      await _ensureLoaded();
+      _requireEnabled();
+      _stillWanted(epoch);
+      if (deviceKey == null) throw StateError('нет ключа устройства');
+      if (_exists || await store.hasVault()) {
+        _exists = true;
+        throw StateError('хранилище уже есть');
+      }
+      final kdf = params ?? await _calibrate();
+      _checkParams(kdf);
+      return _withNewCode(
+        (SecretBytes canonical) async => _install(
+          await _build(
+            canonical,
+            kdf,
+            kFp: contents.kFp,
+            items: contents.items,
+            keepHistory: keepHistory,
+            withDevice: true,
+          ),
+          epoch: epoch,
+        ),
+      );
+    });
+  }
+
+  /// Новый код восстановления: [use] получает его в виде без дефисов (для
+  /// Argon2id); в ответе — вид для показа. Сбой — код затирается.
+  Future<SecretBytes> _withNewCode(
+    Future<void> Function(SecretBytes canonical) use,
+  ) async {
+    final code = RecoveryCode.generate(crypto);
+    final canonical = RecoveryCode.canonical(code)!;
+    try {
+      await use(canonical);
+      return code;
+    } catch (_) {
+      code.wipe();
+      rethrow;
+    } finally {
+      canonical.wipe();
+    }
+  }
+
   /// «Заменить всё» из копии (5.7): только с верным мастер-паролем
   /// [master]; текущее хранилище не стирается, а уходит в
   /// `archive/replaced-<дата>.relayvault`. Новое — с тем же мастер-паролем
@@ -260,60 +405,95 @@ final class Vault {
   ) =>
       _op(() async {
         final open = _requireOpen();
-        final vk = await _unwrap(
-          master,
-          open.envelope,
-          VaultKeys.header(open.envelope),
-        );
-        vk.dispose();
-        _alive(open);
-        final kdf = VaultKdfParams.checkLoaded(
-          open.envelope.kdf,
-          allowTesting: allowTestingKdf,
-        );
-        final built = await _build(
-          master,
-          kdf,
-          kFp: contents.kFp,
-          items: contents.items,
-          keepHistory: VaultPrefs.passwordHistory.of(open.index.prefs),
-        );
-        final String name;
-        try {
-          _alive(open);
-          name = await _archiveName('replaced');
-          await store.archiveVault(name);
-        } catch (_) {
-          built.dispose();
-          rethrow;
+        if (open.envelope.isRecoveryKind) {
+          throw StateError('сейф защищён устройством');
         }
-        // Текущее отложено: ключи прежнего хранилища больше не нужны.
-        _open = null;
-        open.dispose();
-        _notify(VaultSignal.hide);
-        _notify(VaultSignal.locked);
-        try {
-          await _install(built, epoch: _epoch, replacePrevious: true);
-          final installed = _open;
-          if (installed != null) _confirmed(installed);
-        } catch (_) {
-          // Прежнее уже в архиве: его можно открыть из «Старых хранилищ».
-          _exists = await store.hasVault();
-          _notify(VaultSignal.changed);
-          rethrow;
-        }
-        return name;
+        (await _unwrap(master, open.envelope)).dispose();
+        return _replaceAll(open, contents, master);
       });
+
+  /// «Заменить всё» у сейфа, защищённого устройством (ADR-025): после
+  /// подтверждения [proof] новое хранилище из копии — со своим ключом
+  /// устройства и новым кодом восстановления (второе в ответе; показать
+  /// один раз, вызывающий затирает). ПИН-код и биометрию прежнего сейфа
+  /// новый не наследует — их включают заново. Первое — имя в архиве.
+  Future<(String, SecretBytes)> replaceWithBackupProtected(
+    BackupContents contents,
+    VaultProof proof,
+  ) =>
+      _op(() async {
+        final open = _requireOpen();
+        if (!open.envelope.isRecoveryKind || deviceKey == null) {
+          throw StateError('сейф не защищён устройством');
+        }
+        await _proofCheck(open, proof);
+        late String name;
+        final code = await _withNewCode(
+          (SecretBytes canonical) async =>
+              name = await _replaceAll(open, contents, canonical),
+        );
+        return (name, code);
+      });
+
+  Future<String> _replaceAll(
+    _Open open,
+    BackupContents contents,
+    SecretBytes secret,
+  ) async {
+    _alive(open);
+    final kdf = VaultKdfParams.checkLoaded(
+      open.envelope.kdf,
+      allowTesting: allowTestingKdf,
+    );
+    final built = await _build(
+      secret,
+      kdf,
+      kFp: contents.kFp,
+      items: contents.items,
+      keepHistory: VaultPrefs.passwordHistory.of(open.index.prefs),
+      withDevice: open.envelope.isRecoveryKind,
+    );
+    final String name;
+    try {
+      _alive(open);
+      name = await _archiveName('replaced');
+      await store.archiveVault(name);
+    } catch (_) {
+      built.dispose();
+      await _forget(built.aliases);
+      rethrow;
+    }
+    // Текущее отложено: ключи прежнего хранилища больше не нужны.
+    _open = null;
+    open.dispose();
+    _notify(VaultSignal.hide);
+    _notify(VaultSignal.locked);
+    try {
+      await _install(built, epoch: _epoch, replacePrevious: true);
+      final installed = _open;
+      if (installed != null) _confirmed(installed);
+    } catch (_) {
+      // Прежнее уже в архиве: его можно открыть из «Старых хранилищ».
+      _exists = await store.hasVault();
+      _notify(VaultSignal.changed);
+      rethrow;
+    }
+    return name;
+  }
 
   /// Новое хранилище в памяти: ключи, индекс (с записями [items]) и
   /// конверт. Ещё не записано. [keepHistory] — с хронологией паролей
   /// записей (и включённой опцией).
+  ///
+  /// [withDevice] — сейф защищён устройством (ADR-025): [master] — код
+  /// восстановления (25 знаков без дефисов), слот `dev` создаётся здесь.
   Future<_Built> _build(
     SecretBytes master,
     VaultKdfParams kdf, {
     SecretBytes? kFp,
     List<ImportItem> items = const <ImportItem>[],
     bool keepHistory = false,
+    bool withDevice = false,
   }) async {
     final now = clock.now();
     final salt = crypto.bytes(VaultFormat.saltBytes);
@@ -323,15 +503,32 @@ final class Vault {
         ? SecretBytes.adopt(crypto.bytes(VaultFormat.keyBytes))
         : kFp.clone();
     final kFpKey = crypto.importKey(kFpBytes.clone());
+    final pwKind = withDevice ? VaultFormat.pwRecovery : VaultFormat.pwMaster;
+    final aliases = <String>[];
     try {
       final kek = await crypto.derive(master, salt, kdf);
       final record = KdfRecord(ops: kdf.ops, mem: kdf.mem, salt: salt);
-      final header = _headerFor(VaultFormat.kindVault, vaultId, record);
       final SealedBox wrap;
       try {
-        wrap = crypto.sealKey(kek, ring.vk, VaultKeys.wrapPwAd(header));
+        wrap = crypto.sealKey(
+          kek,
+          ring.vk,
+          VaultKeys.wrapPwAdOf(
+            version: VaultFormat.version,
+            kind: VaultFormat.kindVault,
+            vaultId: vaultId,
+            kdf: record,
+            pwKind: pwKind,
+          ),
+        );
       } finally {
         kek.dispose();
+      }
+      final slots = <String, VaultSlot>{};
+      if (withDevice) {
+        final slot = await _makeSlot(VaultFormat.slotDevice, ring.vk, vaultId);
+        aliases.add(slot.alias);
+        slots[VaultFormat.slotDevice] = slot;
       }
       final base = VaultEnvelope(
         kind: VaultFormat.kindVault,
@@ -410,7 +607,9 @@ final class Vault {
         rev: 1,
         kFp: kFpBytes,
         entries: List<VaultEntry>.unmodifiable(entries),
-        master: <String, Object?>{'last_typed': _iso(now)},
+        master: withDevice
+            ? <String, Object?>{_rcConfirmedKey: false}
+            : <String, Object?>{'last_typed': _iso(now)},
         prefs: keepHistory
             ? <String, Object?>{VaultPrefs.passwordHistory.key: true}
             : const <String, Object?>{},
@@ -423,6 +622,8 @@ final class Vault {
         index: index,
         secrets: secrets,
         history: history,
+        pwKind: pwKind,
+        slots: slots,
       );
       final bytes = envelope.encode();
       try {
@@ -430,11 +631,12 @@ final class Vault {
       } on Object {
         throw ArgumentError('запись не помещается в формат хранилища');
       }
-      return _Built(envelope, index, ring, kFpKey, bytes, now);
+      return _Built(envelope, index, ring, kFpKey, bytes, now, aliases);
     } catch (_) {
       ring.dispose();
       kFpKey.dispose();
       kFpBytes.wipe();
+      await _forget(aliases);
       rethrow;
     }
   }
@@ -445,9 +647,11 @@ final class Vault {
     required int epoch,
     bool replacePrevious = false,
   }) async {
+    var written = false;
     try {
       _stillWanted(epoch);
       await store.writeVault(built.bytes, replacePrevious: replacePrevious);
+      written = true;
       _exists = true;
       // Заперли или выключили, пока шла запись: файл есть, ключей нет.
       _stillWanted(epoch);
@@ -460,6 +664,9 @@ final class Vault {
       );
     } catch (_) {
       built.dispose();
+      // Файл не записан (или записан, но сейф заперли — тогда ключ нужен):
+      // ключи устройства убираем, только если записи не было.
+      if (!written) await _forget(built.aliases);
       rethrow;
     }
     _schedule();
@@ -495,12 +702,20 @@ final class Vault {
 
   // --------------------------------------------------------- открытие
 
-  /// Открывает хранилище мастер-паролем. Ошибки: [VaultRateLimited]
+  /// Открывает хранилище мастер-паролем или кодом восстановления (у сейфа,
+  /// защищённого устройством, ADR-025). Ошибки: [VaultRateLimited]
   /// (пауза, D25), `wrongPassword`, `corrupt`, `kdfInvalid`, `tooNew`,
   /// `io`, `locked` (навык выключен). [seenRev] — `passwords.seen_rev`
-  /// из настроек: по нему видно откат файла. При неверном вводе сразу
-  /// пробуются его варианты ([MasterVariants], D25) — это одна попытка
-  /// счётчика.
+  /// из настроек: по нему видно откат файла. При неверном мастер-пароле
+  /// сразу пробуются его варианты ([MasterVariants], D25) — это одна
+  /// попытка счётчика; код восстановления приводится к своему виду
+  /// ([RecoveryCode.canonical]) и вариантов не требует.
+  ///
+  /// Сейф с мастер-паролем при ключе устройства ([deviceKey]) сразу
+  /// переходит на защиту устройством: новый ключ сейфа, слот `dev` и код
+  /// восстановления ([VaultUnlockResult.recoveryCode]). Открыли кодом
+  /// восстановления — ключ устройства создаётся заново, ПИН-код и
+  /// биометрия снимаются ([VaultUnlockResult.recovered]).
   Future<VaultUnlockResult> unlock(SecretBytes master, {int? seenRev}) {
     // Эпоха — в момент вызова, а не когда очередь дойдёт: запирание,
     // пришедшее, пока ввод ждал в очереди (двойное нажатие + фон), не
@@ -519,32 +734,30 @@ final class Vault {
           rolledBack: false,
         );
       }
-      final bytes = await store.readVault();
-      if (bytes == null) {
-        _exists = false;
-        throw VaultError.io;
-      }
-      final envelope = VaultEnvelope.decode(bytes);
-      if (envelope.kind != VaultFormat.kindVault) throw VaultError.corrupt;
-      final header = VaultKeys.header(envelope);
+      final (bytes, envelope) = await _readEnvelope();
+      final recovery = envelope.isRecoveryKind;
       // Мигрированный файл пишется текущей версией: обёртку ключа нужно
-      // запечатать заново с новым header (в нём версия формата).
+      // запечатать заново с AD текущей версии.
       SealedBox? rewrapped;
-      final variants = MasterVariants.of(master);
+      final variants =
+          recovery ? const <SecretBytes>[] : MasterVariants.of(master);
       final VaultKey vk;
       final bool variantHit;
       try {
         (vk, variantHit) = await _unwrapAny(
           master,
           envelope,
-          header,
           variants: variants,
           withKek: envelope.migrated
               ? (VaultKey kek, VaultKey vk) => rewrapped = crypto.sealKey(
                     kek,
                     vk,
-                    VaultKeys.wrapPwAd(
-                      _headerFor(envelope.kind, envelope.vaultId, envelope.kdf),
+                    VaultKeys.wrapPwAdOf(
+                      version: VaultFormat.version,
+                      kind: envelope.kind,
+                      vaultId: envelope.vaultId,
+                      kdf: envelope.kdf,
+                      pwKind: envelope.pwKind,
                     ),
                   )
               : null,
@@ -554,65 +767,197 @@ final class Vault {
           variant.wipe();
         }
       }
-      final ring = VaultKeyRing.from(crypto, vk);
-      VaultIndex? index;
-      VaultKey? kFp;
-      _Open? opened;
-      try {
-        // Пока шёл Argon2id, хранилище заперли (фон, выключение навыка):
-        // ключи не остаются в памяти.
-        _stillWanted(epoch);
-        final body = crypto.open(
-          ring.index,
-          envelope.index,
-          VaultKeys.indexAd(header, envelope.rev),
-        );
-        if (body == null) throw VaultError.corrupt;
-        index = VaultIndex.decodePadded(body);
-        VaultKeys.checkConsistency(envelope, index);
-        kFp = crypto.importKey(index.kFp.clone());
-        final open = opened = _Open(
-          envelope: envelope,
-          index: index,
-          ring: ring,
-          kFp: kFp,
-          unlockedAt: _moment(),
-        );
-        _open = open;
-        _confirmed(open);
-        // Мастер-пароль введён: метка внутри индекса; заодно запись
-        // мигрированной версии.
-        try {
-          await _afterUnlock(open, original: bytes, wrapPw: rewrapped);
-        } on VaultFailure catch (error) {
-          // Только для чтения (диск полон, нет прав): открыть всё равно
-          // можно, метка запишется в следующий раз. Но не мигрированный
-          // файл: в памяти — обёртка и секреты со старыми AD, и любая
-          // следующая запись дала бы файл, который не открыть.
-          if (error.code != VaultErrorCode.io ||
-              envelope.migrated ||
-              index.migrated) {
-            rethrow;
+      return _finishOpen(
+        bytes,
+        envelope,
+        vk,
+        epoch: epoch,
+        seenRev: seenRev,
+        confirmed: true,
+        variantHit: variantHit,
+        after: (_Open open) async {
+          // Ввод проверен: метка внутри индекса; заодно запись
+          // мигрированной версии.
+          try {
+            await _afterUnlock(open, original: bytes, wrapPw: rewrapped);
+          } on VaultFailure catch (error) {
+            // Только для чтения (диск полон, нет прав): открыть всё равно
+            // можно, метка запишется в следующий раз. Но не мигрированный
+            // файл: в памяти — обёртка и секреты со старыми AD, и любая
+            // следующая запись дала бы файл, который не открыть.
+            if (error.code != VaultErrorCode.io ||
+                envelope.migrated ||
+                open.index.migrated) {
+              rethrow;
+            }
           }
-        }
-        if (!identical(_open, open)) throw VaultError.locked;
-        _stillWanted(epoch);
-      } catch (_) {
-        if (opened != null && identical(_open, opened)) _open = null;
+          if (deviceKey == null) return (code: null, recovered: false);
+          if (recovery) {
+            return (code: null, recovered: await _afterRecovery(open));
+          }
+          try {
+            return (code: await _migrateToDevice(open), recovered: false);
+          } on VaultFailure catch (error) {
+            // Ключ устройства сейчас не создать (сбой системы) или не
+            // записать файл: сейф открыт по-старому, мастер-паролем, и
+            // перейдёт на защиту устройством при следующем вводе.
+            if (error.code == VaultErrorCode.corrupt) rethrow;
+            return (code: null, recovered: false);
+          }
+        },
+      );
+    });
+  }
+
+  /// Открыть ключом устройства (слот `dev`): без ввода, пока приложение
+  /// открыто (ADR-025). Ошибки: `deviceKeyLost` (ключа нет — только код
+  /// восстановления), `corrupt`, `io`, `locked`.
+  Future<VaultUnlockResult> unlockDevice({int? seenRev}) => _unlockWith(
+        const DeviceProof(),
+        seenRev: seenRev,
+        open: (VaultEnvelope envelope) =>
+            _openSlot(envelope, VaultFormat.slotDevice),
+      );
+
+  /// Открыть ПИН-кодом сейфа (слот `pin`, ADR-025). Счётчик свой
+  /// ([PinAttempts]): с 5-й ошибки паузы, 10-я закрывает путь по ПИН-коду
+  /// (`pinLocked`, дальше — только код восстановления).
+  Future<VaultUnlockResult> unlockPin(SecretBytes pin, {int? seenRev}) =>
+      _unlockWith(
+        PinProof(pin),
+        seenRev: seenRev,
+        confirmed: true,
+        open: (VaultEnvelope envelope) => _openPin(envelope, pin),
+      );
+
+  /// Открыть биометрией (слот `bio`, ADR-025): система спросит отпечаток,
+  /// лицо или блокировку экрана с причиной [reason]. Отмена — `bioCanceled`
+  /// (не попытка); ключ сброшен системой — `bioInvalidated`, слот снят.
+  Future<VaultUnlockResult> unlockBio(String reason, {int? seenRev}) =>
+      _unlockWith(
+        BioProof(reason),
+        seenRev: seenRev,
+        confirmed: true,
+        open: (VaultEnvelope envelope) =>
+            _openSlot(envelope, VaultFormat.slotBio, reason: reason),
+      );
+
+  Future<VaultUnlockResult> _unlockWith(
+    VaultProof proof, {
+    required Future<VaultKey> Function(VaultEnvelope envelope) open,
+    int? seenRev,
+    bool confirmed = false,
+  }) {
+    final epoch = _epoch;
+    return _op(() async {
+      await _ensureLoaded();
+      _requireEnabled();
+      _stillWanted(epoch);
+      final current = _open;
+      if (current != null) {
+        await _proofCheck(current, proof);
+        return VaultUnlockResult(
+          rev: current.envelope.rev,
+          rolledBack: false,
+        );
+      }
+      final (bytes, envelope) = await _readEnvelope();
+      final vk = await open(envelope);
+      return _finishOpen(
+        bytes,
+        envelope,
+        vk,
+        epoch: epoch,
+        seenRev: seenRev,
+        confirmed: confirmed,
+      );
+    });
+  }
+
+  /// Файл хранилища и его конверт.
+  Future<(Uint8List, VaultEnvelope)> _readEnvelope() async {
+    final bytes = await store.readVault();
+    if (bytes == null) {
+      _exists = false;
+      throw VaultError.io;
+    }
+    final envelope = VaultEnvelope.decode(bytes);
+    if (envelope.kind != VaultFormat.kindVault) throw VaultError.corrupt;
+    return (bytes, envelope);
+  }
+
+  /// Ключ сейфа снят: индекс, проверка согласованности, открытое состояние.
+  /// [after] — запись после открытия (метка, миграция, переход на ключ
+  /// устройства); без него мигрированный файл пишется текущей версией.
+  Future<VaultUnlockResult> _finishOpen(
+    Uint8List bytes,
+    VaultEnvelope envelope,
+    VaultKey vk, {
+    required int epoch,
+    int? seenRev,
+    bool confirmed = false,
+    bool variantHit = false,
+    Future<({SecretBytes? code, bool recovered})> Function(_Open open)? after,
+  }) async {
+    final header = VaultKeys.header(envelope);
+    final ring = VaultKeyRing.from(crypto, vk);
+    VaultIndex? index;
+    VaultKey? kFp;
+    _Open? opened;
+    SecretBytes? code;
+    var recovered = false;
+    try {
+      // Пока шёл Argon2id (или системный запрос), хранилище заперли (фон,
+      // выключение навыка): ключи не остаются в памяти.
+      _stillWanted(epoch);
+      final body = crypto.open(
+        ring.index,
+        envelope.index,
+        VaultKeys.indexAd(header, envelope.rev),
+      );
+      if (body == null) throw VaultError.corrupt;
+      index = VaultIndex.decodePadded(body);
+      VaultKeys.checkConsistency(envelope, index);
+      kFp = crypto.importKey(index.kFp.clone());
+      final open = opened = _Open(
+        envelope: envelope,
+        index: index,
+        ring: ring,
+        kFp: kFp,
+        unlockedAt: _moment(),
+      );
+      _open = open;
+      if (confirmed) _confirmed(open);
+      if (after != null) {
+        (:code, :recovered) = await after(open);
+      } else if (envelope.migrated || index.migrated) {
+        await _afterUnlock(open, original: bytes);
+      }
+      if (!identical(_open, open)) throw VaultError.locked;
+      _stillWanted(epoch);
+    } catch (_) {
+      code?.wipe();
+      final open = opened;
+      if (open != null) {
+        if (identical(_open, open)) _open = null;
+        open.dispose();
+      } else {
         ring.dispose();
         kFp?.dispose();
         index?.kFp.wipe();
-        rethrow;
       }
-      _exists = true;
-      _schedule();
-      _notify(VaultSignal.changed);
-      return VaultUnlockResult(
-        rev: _open!.envelope.rev,
-        rolledBack: seenRev != null && envelope.rev < seenRev,
-        variantHit: variantHit,
-      );
-    });
+      rethrow;
+    }
+    _exists = true;
+    _schedule();
+    _notify(VaultSignal.changed);
+    return VaultUnlockResult(
+      rev: _open!.envelope.rev,
+      rolledBack: seenRev != null && envelope.rev < seenRev,
+      variantHit: variantHit,
+      recoveryCode: code,
+      recovered: recovered,
+    );
   }
 
   Future<void> _afterUnlock(
@@ -667,24 +1012,23 @@ final class Vault {
     }
   }
 
-  /// Проверка мастер-пароля через общий счётчик ошибок (открытие,
-  /// тренировка, обязательный ввод, смена мастер-пароля).
-  ///
-  /// [withKek] получает KEK и VK до освобождения KEK (переобёртка ключа
-  /// при миграции: AD обёртки содержит версию формата).
-  Future<VaultKey> _unwrap(
-    SecretBytes master,
-    VaultEnvelope envelope,
-    Uint8List header,
-  ) async =>
-      (await _unwrapAny(master, envelope, header)).$1;
+  /// Проверка мастер-пароля (или кода восстановления) через общий счётчик
+  /// ошибок (открытие, тренировка, обязательный ввод, смена мастер-пароля).
+  Future<VaultKey> _unwrap(SecretBytes master, VaultEnvelope envelope) async =>
+      (await _unwrapAny(master, envelope)).$1;
 
   /// Как [_unwrap], но после неверного [master] пробует [variants] в той же
   /// попытке счётчика. Второе в ответе — подошёл вариант.
+  ///
+  /// [withKek] получает KEK и VK до освобождения KEK (переобёртка ключа
+  /// при миграции: AD обёртки до версии 3 содержит версию формата).
+  ///
+  /// У сейфа с кодом восстановления ввод сначала приводится к виду кода
+  /// ([RecoveryCode.canonical]); не код вовсе — `wrongPassword` без
+  /// попытки в счётчике (Argon2id не считается).
   Future<(VaultKey, bool)> _unwrapAny(
     SecretBytes master,
-    VaultEnvelope envelope,
-    Uint8List header, {
+    VaultEnvelope envelope, {
     List<SecretBytes> variants = const <SecretBytes>[],
     void Function(VaultKey kek, VaultKey vk)? withKek,
   }) async {
@@ -700,31 +1044,45 @@ final class Vault {
     }
     final until = attempts.blockedUntil(now);
     if (until != null) throw VaultRateLimited(until);
-    // Попытка засчитывается до вывода ключа: убитое посреди Argon2id
-    // приложение не получает бесплатную попытку. Записать не вышло —
-    // не проверяем вовсе (без счётчика перебор был бы без пауз).
-    await store.writeAttempts(attempts.failed(now).encode());
-    final candidates = <SecretBytes>[master, ...variants];
-    for (var i = 0; i < candidates.length; i++) {
-      final kek = await crypto.derive(candidates[i], envelope.kdf.salt, params);
-      final VaultKey? vk;
-      try {
-        vk = crypto.openKey(kek, envelope.wrapPw, VaultKeys.wrapPwAd(header));
-        if (vk != null) withKek?.call(kek, vk);
-      } finally {
-        kek.dispose();
-      }
-      if (vk == null) continue;
-      try {
-        await store.writeAttempts(const VaultAttempts().encode());
-      } on Object {
-        // Не сбросился счётчик — лишняя ошибка в нём, не дыра.
-      }
-      return (vk, i > 0);
+    final canonical =
+        envelope.isRecoveryKind ? RecoveryCode.canonical(master) : null;
+    if (envelope.isRecoveryKind && canonical == null) {
+      throw VaultError.wrongPassword;
     }
-    // Та же попытка, время — конец проверки (пауза от него).
-    await store.writeAttempts(attempts.failed(clock.now()).encode());
-    throw VaultError.wrongPassword;
+    try {
+      // Попытка засчитывается до вывода ключа: убитое посреди Argon2id
+      // приложение не получает бесплатную попытку. Записать не вышло —
+      // не проверяем вовсе (без счётчика перебор был бы без пауз).
+      await store.writeAttempts(attempts.failed(now).encode());
+      final candidates = <SecretBytes>[
+        canonical ?? master,
+        if (canonical == null) ...variants,
+      ];
+      final ad = VaultKeys.wrapPwAdFor(envelope);
+      for (var i = 0; i < candidates.length; i++) {
+        final kek =
+            await crypto.derive(candidates[i], envelope.kdf.salt, params);
+        final VaultKey? vk;
+        try {
+          vk = crypto.openKey(kek, envelope.wrapPw, ad);
+          if (vk != null) withKek?.call(kek, vk);
+        } finally {
+          kek.dispose();
+        }
+        if (vk == null) continue;
+        try {
+          await store.writeAttempts(const VaultAttempts().encode());
+        } on Object {
+          // Не сбросился счётчик — лишняя ошибка в нём, не дыра.
+        }
+        return (vk, i > 0);
+      }
+      // Та же попытка, время — конец проверки (пауза от него).
+      await store.writeAttempts(attempts.failed(clock.now()).encode());
+      throw VaultError.wrongPassword;
+    } finally {
+      canonical?.wipe();
+    }
   }
 
   /// Верен ли мастер-пароль открытого хранилища (тренировка, обязательный
@@ -736,11 +1094,7 @@ final class Vault {
   Future<bool> _verifyMaster(SecretBytes master) => _guard(() async {
         final open = _requireOpen();
         try {
-          final vk = await _unwrap(
-            master,
-            open.envelope,
-            VaultKeys.header(open.envelope),
-          );
+          final vk = await _unwrap(master, open.envelope);
           vk.dispose();
         } on VaultFailure catch (error) {
           if (error.code == VaultErrorCode.wrongPassword) return false;
@@ -760,6 +1114,847 @@ final class Vault {
         touch();
         return true;
       });
+
+  // ------------------------------------- защита устройством (ADR-025)
+
+  /// Ключ индекса: подтвердил ли человек, что сохранил код
+  /// восстановления («Я сохранил»).
+  static const String _rcConfirmedKey = 'rc_ok';
+
+  /// Чем открыт или открывается сейф — для экрана замка и настроек.
+  /// Заперто — по конверту на диске (без ключей); файла нет — `null`.
+  Future<VaultLockInfo?> lockInfo() => _serial(
+        () => _guard(() async {
+          await _ensureLoaded();
+          final open = _open;
+          if (open != null) return VaultLockInfo.of(open.envelope);
+          final bytes = await store.readVault();
+          if (bytes == null) return null;
+          final envelope = VaultEnvelope.decode(bytes);
+          if (envelope.kind != VaultFormat.kindVault) throw VaultError.corrupt;
+          return VaultLockInfo.of(envelope);
+        }),
+      );
+
+  /// Защита открытого сейфа (или `null`, пока заперто).
+  VaultLockInfo? get protection {
+    final open = _open;
+    return open == null ? null : VaultLockInfo.of(open.envelope);
+  }
+
+  /// Сейф открыт и защищён устройством и кодом восстановления.
+  bool get isProtected => _open?.envelope.isRecoveryKind ?? false;
+
+  /// Код восстановления открытого сейфа подтверждён («Я сохранил»). У
+  /// сейфа с мастер-паролем — всегда `true`.
+  bool get recoveryConfirmed {
+    final open = _open;
+    if (open == null || !open.envelope.isRecoveryKind) return true;
+    return open.index.master[_rcConfirmedKey] != false;
+  }
+
+  /// Человек подтвердил, что сохранил код восстановления.
+  Future<void> confirmRecovery() => _op(() async {
+        final open = _requireOpen();
+        if (open.index.master[_rcConfirmedKey] == true) return;
+        await _commit(
+          open,
+          entries: open.index.entries,
+          secrets: open.envelope.secrets,
+          master: <String, Object?>{
+            ...open.index.master,
+            _rcConfirmedKey: true,
+          },
+        );
+        _notify(VaultSignal.changed);
+      });
+
+  /// Счётчик неверных ПИН-кодов сейфа (для «Осталось попыток»).
+  Future<PinAttempts> pinAttempts() => _guard(() async {
+        final alias = (_open?.envelope ??
+                await () async {
+                  final bytes = await store.readVault();
+                  return bytes == null ? null : VaultEnvelope.decode(bytes);
+                }())
+            ?.slots[VaultFormat.slotPin]
+            ?.alias;
+        if (alias == null) return const PinAttempts();
+        final stored = PinAttempts.decode(await store.readPinAttempts());
+        return stored.of(alias).at(clock.now());
+      });
+
+  /// Новый код восстановления (ADR-025): после подтверждения [proof] —
+  /// НОВЫЙ ключ сейфа (все записи перешифрованы), обёрнутый ключом из
+  /// нового кода; слоты устройства запечатаны заново новыми ключами
+  /// устройства, прежние удалены. Так прежний код не откроет ни этот файл,
+  /// ни его старые копии вместе с новыми данными (`vault.prev` и
+  /// `vault.v<N>.bak` перезаписаны). Слот `pin` переделывается ПИН-кодом из
+  /// [proof] ([PinProof]), слот `bio` — ещё одним системным запросом с
+  /// причиной [reason].
+  ///
+  /// Если ключ сейфа сменить нельзя (ПИН-код включён, а подтвердили не
+  /// им), ключ сейфа прежний и лишь заново обёрнут новым кодом: старая
+  /// копия файла вместе с прежним кодом тогда даёт доступ — поэтому
+  /// [RecoveryRegen.rotated] `false`, приложение говорит об этом.
+  /// Копии, выгруженные раньше, открываются тем, чем были закрыты.
+  /// Код в ответе — для показа один раз; вызывающий затирает.
+  Future<RecoveryRegen> regenerateRecovery(
+    VaultProof proof, {
+    String reason = 'Новый код восстановления',
+  }) =>
+      _op(() async {
+        final open = _requireOpen();
+        if (!open.envelope.isRecoveryKind) {
+          throw StateError('сейф не защищён кодом восстановления');
+        }
+        await _proofCheck(open, proof);
+        final kdf = VaultKdfParams.checkLoaded(
+          open.envelope.kdf,
+          allowTesting: allowTestingKdf,
+        );
+        final names = open.envelope.slots.keys.toSet();
+        final pin = proof is PinProof ? proof.pin : null;
+        final canRotate = deviceKey != null &&
+            !open.envelope.migrated &&
+            (!names.contains(VaultFormat.slotPin) || pin != null);
+        if (canRotate) {
+          final code = await _withNewCode(
+            (SecretBytes canonical) => _rekey(
+              open,
+              canonical,
+              kdf,
+              pwKind: VaultFormat.pwRecovery,
+              remake: names,
+              pin: pin,
+              reason: proof is BioProof ? proof.reason : reason,
+              newCode: true,
+            ),
+          );
+          return RecoveryRegen(code, rotated: true);
+        }
+        final code = await _withNewCode((SecretBytes canonical) async {
+          final salt = crypto.bytes(VaultFormat.saltBytes);
+          final record = KdfRecord(ops: kdf.ops, mem: kdf.mem, salt: salt);
+          final kek = await crypto.derive(canonical, salt, kdf);
+          final SealedBox wrap;
+          try {
+            wrap = crypto.sealKey(
+              kek,
+              open.ring.vk,
+              VaultKeys.wrapPwAdOf(
+                version: VaultFormat.version,
+                kind: VaultFormat.kindVault,
+                vaultId: open.envelope.vaultId,
+                kdf: record,
+                pwKind: VaultFormat.pwRecovery,
+              ),
+            );
+          } finally {
+            kek.dispose();
+          }
+          _alive(open);
+          await _rewrite(
+            open,
+            kdf: record,
+            wrapPw: wrap,
+            master: <String, Object?>{
+              ...open.index.master,
+              _rcConfirmedKey: false,
+            },
+          );
+        });
+        return RecoveryRegen(code, rotated: false);
+      });
+
+  /// Можно ли включить ПИН-код сейфа на этом устройстве.
+  bool get pinAllowed => deviceKey?.pinAllowed ?? false;
+
+  /// Включить ПИН-код сейфа (ADR-025): слот `pin` (Argon2id от ПИН-кода и
+  /// ключ устройства вместе) вместо `dev`. Дальше сейф без ПИН-кода (или
+  /// биометрии, или кода восстановления) не открыть. Слабый ПИН-код —
+  /// `ArgumentError` ([VaultPin.problem] проверяет приложение заранее).
+  Future<void> enablePin(SecretBytes pin) => _op(() async {
+        final open = _requireOpen();
+        _requireProtected(open);
+        if (!pinAllowed) throw StateError('ПИН-код здесь недоступен');
+        if (open.envelope.slots.containsKey(VaultFormat.slotPin)) {
+          throw StateError('ПИН-код уже включён');
+        }
+        if (VaultPin.problem(pin) != null) {
+          throw ArgumentError('ПИН-код не годится');
+        }
+        await _replaceSlot(open, VaultFormat.slotPin, pin: pin);
+        _rememberPin(pin);
+      });
+
+  /// Сменить ПИН-код: верный [current] (счётчик ПИН-кода), новый ключ
+  /// устройства и новый слот; прежний ключ удаляется — прежний ПИН-код не
+  /// откроет и старые копии файла.
+  Future<void> changePin(SecretBytes current, SecretBytes next) =>
+      _op(() async {
+        final open = _requireOpen();
+        _requireProtected(open);
+        if (VaultPin.problem(next) != null) {
+          throw ArgumentError('ПИН-код не годится');
+        }
+        (await _openPin(open.envelope, current)).dispose();
+        _alive(open);
+        _confirmed(open);
+        await _replaceSlot(open, VaultFormat.slotPin, pin: next);
+        _rememberPin(next);
+      });
+
+  /// Выключить ПИН-код (ослабление защиты): после подтверждения [proof]
+  /// слот `pin` снимается; без биометрии сейф снова открывается ключом
+  /// устройства.
+  Future<void> disablePin(VaultProof proof) => _op(() async {
+        final open = _requireOpen();
+        _requireProtected(open);
+        await _proofCheck(open, proof);
+        await _dropSlot(open, VaultFormat.slotPin);
+        _forgetPin();
+      });
+
+  /// Можно ли привязать сейф к биометрии на этом устройстве.
+  Future<bool> bioAvailable() async {
+    final key = deviceKey;
+    if (key == null) return false;
+    try {
+      return await key.bioAvailable();
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Включить вход в сейф по биометрии (ADR-025): ключ устройства с
+  /// проверкой личности, слот `bio` вместо `dev`. Система сразу спросит
+  /// отпечаток, лицо или блокировку экрана ([reason]). Отмена —
+  /// `bioCanceled`, ничего не меняется.
+  Future<void> enableBio(String reason) => _op(() async {
+        final open = _requireOpen();
+        _requireProtected(open);
+        if (open.envelope.slots.containsKey(VaultFormat.slotBio)) {
+          throw StateError('биометрия уже включена');
+        }
+        await _replaceSlot(open, VaultFormat.slotBio, reason: reason);
+      });
+
+  /// Выключить вход по биометрии (ослабление защиты): после [proof].
+  Future<void> disableBio(VaultProof proof) => _op(() async {
+        final open = _requireOpen();
+        _requireProtected(open);
+        await _proofCheck(open, proof);
+        await _dropSlot(open, VaultFormat.slotBio);
+      });
+
+  /// Проверить подтверждение [proof] открытого сейфа (переспрос для
+  /// важных, ослабление настроек). `false` — не подошло; пауза и закрытый
+  /// путь по ПИН-коду — ошибки ([VaultRateLimited], `pinLocked`).
+  Future<bool> verify(VaultProof proof) => _op(() async {
+        final open = _requireOpen();
+        try {
+          await _proofCheck(open, proof);
+        } on VaultFailure catch (error) {
+          if (error.code == VaultErrorCode.wrongPassword) return false;
+          rethrow;
+        }
+        touch();
+        return true;
+      });
+
+  /// Смена мастер-пароля и «Перешифровать всё» — только у сейфа с
+  /// мастер-паролем: у защищённого устройством новый ключ сейфа снял бы
+  /// слоты ПИН-кода и биометрии.
+  void _requireMaster(_Open open) {
+    if (open.envelope.isRecoveryKind) {
+      throw StateError('у сейфа нет мастер-пароля');
+    }
+  }
+
+  /// Ключ отпечатка ПИН-кода — случайный, только в памяти этого запуска.
+  VaultKey? _pinKey;
+  Uint8List? _pinPrint;
+
+  Uint8List _pinHash(SecretBytes pin) {
+    final key = _pinKey ??= crypto.randomKey();
+    final bytes = pin.unsafeBytes;
+    final message = Uint8List(bytes.length + 4)
+      ..setRange(0, 4, ascii.encode('pin|'))
+      ..setRange(4, 4 + bytes.length, bytes);
+    try {
+      return crypto.keyedHash(key, message);
+    } finally {
+      message.fillRange(0, message.length, 0);
+    }
+  }
+
+  /// Верный ПИН-код: запомнить отпечаток для `SecretGuard` (ПИН-код,
+  /// написанный в чат, скрывается).
+  void _rememberPin(SecretBytes pin) {
+    _forgetPin();
+    _pinPrint = _pinHash(pin);
+  }
+
+  void _forgetPin() {
+    final print = _pinPrint;
+    if (print != null) print.fillRange(0, print.length, 0);
+    _pinPrint = null;
+    for (final seen in _pinSeen) {
+      seen.fillRange(0, seen.length, 0);
+    }
+    _pinSeen.clear();
+  }
+
+  /// Сколько РАЗНЫХ наборов из 6 цифр сверить с ПИН-кодом за один верный
+  /// ввод. Иначе чат — оракул без счётчика: вставь в него миллион
+  /// вариантов и смотри, какой скрыт (ADR-025). Повтор того же набора
+  /// (одно сообщение проходит фильтр несколько раз) бюджет не тратит.
+  /// Бюджет кончился — отпечаток забыт, ПИН-код в чате больше не
+  /// распознаётся до следующего верного ввода (защита только слабеет,
+  /// подсказки не даёт).
+  static const int pinGuardBudget = 5;
+
+  /// Отпечатки уже сверенных наборов (тем же ключом этого запуска).
+  final List<Uint8List> _pinSeen = <Uint8List>[];
+
+  bool _pinMatches(String token) {
+    final print = _pinPrint;
+    if (print == null || token.length != VaultPin.length) return false;
+    if (!RegExp(r'^[0-9]{6}$').hasMatch(token)) return false;
+    final candidate = SecretBytes.fromText(token);
+    try {
+      final hash = _pinHash(candidate);
+      if (crypto.equal(hash, print)) {
+        hash.fillRange(0, hash.length, 0);
+        return true;
+      }
+      if (_pinSeen.any((seen) => crypto.equal(seen, hash))) {
+        hash.fillRange(0, hash.length, 0);
+        return false;
+      }
+      _pinSeen.add(hash);
+      if (_pinSeen.length >= pinGuardBudget) _forgetPin();
+      return false;
+    } catch (_) {
+      return false;
+    } finally {
+      candidate.wipe();
+    }
+  }
+
+  void _requireProtected(_Open open) {
+    if (!open.envelope.isRecoveryKind || deviceKey == null) {
+      throw StateError('сейф не защищён устройством');
+    }
+  }
+
+  /// Мастер-пароль из старого API или подтверждение.
+  static VaultProof _proofOf(SecretBytes? master, VaultProof? proof) {
+    if (proof != null) return proof;
+    if (master != null) return SecretProof(master);
+    throw ArgumentError('нужно подтверждение');
+  }
+
+  /// Проверка подтверждения [proof]: мастер-пароль или код — общий счётчик
+  /// (D25); ПИН-код — свой счётчик; биометрия — системный запрос;
+  /// устройство — только у сейфа со слотом `dev`. Верно — окно свежего
+  /// подтверждения ([isGuarded]) начинается заново.
+  Future<void> _proofCheck(_Open open, VaultProof proof) async {
+    final envelope = open.envelope;
+    switch (proof) {
+      case SecretProof(:final secret):
+        (await _unwrap(secret, envelope)).dispose();
+      case PinProof(:final pin):
+        (await _openPin(envelope, pin)).dispose();
+      case BioProof(:final reason):
+        (await _openSlot(envelope, VaultFormat.slotBio, reason: reason))
+            .dispose();
+      case DeviceProof():
+        if (!envelope.isRecoveryKind ||
+            !envelope.slots.containsKey(VaultFormat.slotDevice)) {
+          throw ArgumentError('нужен ПИН-код, биометрия или код');
+        }
+    }
+    _alive(open);
+    _confirmed(open);
+  }
+
+  /// Слот [name] (`pin` или `bio`) — новый ключ устройства и новая
+  /// обёртка; `dev` снимается (иначе ПИН-код и биометрия ничего бы не
+  /// защищали). Прежние ключи слота [name] и `dev` удаляются после
+  /// записи.
+  Future<void> _replaceSlot(
+    _Open open,
+    String name, {
+    SecretBytes? pin,
+    String? reason,
+  }) async {
+    final envelope = open.envelope;
+    KdfRecord? pinKdf;
+    if (pin != null) {
+      final kdf = VaultKdfParams.checkLoaded(
+        envelope.kdf,
+        allowTesting: allowTestingKdf,
+      );
+      pinKdf = KdfRecord(
+        ops: kdf.ops,
+        mem: kdf.mem,
+        salt: crypto.bytes(VaultFormat.saltBytes),
+      );
+    }
+    final slot = await _makeSlot(
+      name,
+      open.ring.vk,
+      envelope.vaultId,
+      pin: pin,
+      pinKdf: pinKdf,
+      reason: reason,
+    );
+    final old = <String>[
+      for (final key in <String>[name, VaultFormat.slotDevice])
+        if (envelope.slots[key] case final VaultSlot s) s.alias,
+    ];
+    try {
+      _alive(open);
+      await _rewrite(
+        open,
+        slots: <String, VaultSlot>{
+          for (final MapEntry(:key, :value) in envelope.slots.entries)
+            if (key != VaultFormat.slotDevice && key != name) key: value,
+          name: slot,
+        },
+      );
+    } catch (_) {
+      await _forget(<String>[slot.alias]);
+      rethrow;
+    }
+    await _forget(old);
+    if (name == VaultFormat.slotPin) await _resetPinAttempts(slot.alias);
+    touch();
+    _notify(VaultSignal.changed);
+  }
+
+  /// Снять слот [name]; не осталось ни ПИН-кода, ни биометрии — снова
+  /// `dev` (новый ключ устройства).
+  Future<void> _dropSlot(_Open open, String name) async {
+    final envelope = open.envelope;
+    final gone = envelope.slots[name];
+    if (gone == null) return;
+    final rest = <String, VaultSlot>{
+      for (final MapEntry(:key, :value) in envelope.slots.entries)
+        if (key != name) key: value,
+    };
+    VaultSlot? device;
+    if (!rest.containsKey(VaultFormat.slotPin) &&
+        !rest.containsKey(VaultFormat.slotBio) &&
+        !rest.containsKey(VaultFormat.slotDevice)) {
+      device = await _makeSlot(
+        VaultFormat.slotDevice,
+        open.ring.vk,
+        envelope.vaultId,
+      );
+      rest[VaultFormat.slotDevice] = device;
+    }
+    try {
+      _alive(open);
+      await _rewrite(open, slots: rest);
+    } catch (_) {
+      if (device != null) await _forget(<String>[device.alias]);
+      rethrow;
+    }
+    await _forget(<String>[gone.alias]);
+    touch();
+    _notify(VaultSignal.changed);
+  }
+
+  /// Новая версия файла без старых копий: `vault.prev` и `vault.v<N>.bak`
+  /// перезаписываются ею же (снятый слот, прежний код не живут в копиях).
+  Future<void> _rewrite(
+    _Open open, {
+    Map<String, VaultSlot>? slots,
+    KdfRecord? kdf,
+    SealedBox? wrapPw,
+    Map<String, Object?>? master,
+  }) async {
+    final written = await _commit(
+      open,
+      entries: open.index.entries,
+      secrets: open.envelope.secrets,
+      slots: slots,
+      kdf: kdf,
+      wrapPw: wrapPw,
+      master: master,
+      replacePrevious: true,
+    );
+    // Основной файл и .prev уже новые: сбой копий не отменяет операцию
+    // (иначе новый код восстановления, уже запечатавший файл, не показали
+    // бы). Старая копия перезапишется при следующей записи.
+    try {
+      for (final version in await store.backupVersions()) {
+        await store.writeBackup(version, written);
+      }
+    } on Object {
+      // См. выше.
+    }
+  }
+
+  /// Сейф с мастер-паролем → защита устройством (ADR-025): новый ключ
+  /// сейфа (старые копии файла, закрытые мастер-паролем, не дают ключа к
+  /// новым данным), слот `dev`, новый код восстановления — он в ответе.
+  /// Мастер-пароль больше не используется.
+  Future<SecretBytes> _migrateToDevice(_Open open) => _withNewCode(
+        (SecretBytes canonical) async {
+          final kdf = VaultKdfParams.checkLoaded(
+            open.envelope.kdf,
+            allowTesting: allowTestingKdf,
+          );
+          await _rekey(
+            open,
+            canonical,
+            kdf,
+            pwKind: VaultFormat.pwRecovery,
+            withDevice: true,
+          );
+        },
+      );
+
+  /// Открыли кодом восстановления: ключ устройства — заново (слот `dev`),
+  /// ПИН-код и биометрия сняты, их ключи удалены, счётчик ПИН-кода
+  /// сброшен. `true` — всё записано.
+  Future<bool> _afterRecovery(_Open open) async {
+    final envelope = open.envelope;
+    final old = <String>[for (final slot in envelope.slots.values) slot.alias];
+    final VaultSlot device;
+    try {
+      device = await _makeSlot(
+        VaultFormat.slotDevice,
+        open.ring.vk,
+        envelope.vaultId,
+      );
+    } on VaultError {
+      // Ключ устройства не создать (сбой системы): сейф открыт, следующий
+      // вход — снова кодом.
+      return false;
+    }
+    try {
+      _alive(open);
+      await _rewrite(
+        open,
+        slots: <String, VaultSlot>{VaultFormat.slotDevice: device},
+      );
+    } on VaultFailure catch (error) {
+      await _forget(<String>[device.alias]);
+      if (error.code == VaultErrorCode.io) return false;
+      rethrow;
+    }
+    await _forget(old);
+    _forgetPin();
+    try {
+      await store.writePinAttempts(const PinAttempts().encode());
+    } on Object {
+      // Счётчик прежнего ключа ни на что не влияет.
+    }
+    return true;
+  }
+
+  Future<void> _resetPinAttempts(String alias) async {
+    try {
+      await store.writePinAttempts(PinAttempts(alias: alias).encode());
+    } on Object {
+      // Не сбросился — лишняя ошибка в счётчике, не дыра.
+    }
+  }
+
+  /// Ключ сейфа из слота ПИН-кода. Попытка засчитывается до Argon2id;
+  /// 10-я ошибка закрывает путь по ПИН-коду: ключ устройства удаляется,
+  /// слот снимается — дальше только код восстановления (`pinLocked`).
+  Future<VaultKey> _openPin(VaultEnvelope envelope, SecretBytes pin) async {
+    final slot = envelope.slots[VaultFormat.slotPin];
+    if (slot == null) throw VaultError.pinLocked;
+    // Не 6 цифр — не ПИН-код вовсе: попытку не тратим.
+    if (!VaultPin.isWellFormed(pin)) throw VaultError.wrongPassword;
+    final now = clock.now();
+    final stored = PinAttempts.decode(await store.readPinAttempts());
+    final attempts = stored.of(slot.alias).at(now);
+    if (!identical(attempts, stored)) {
+      await store.writePinAttempts(attempts.encode());
+    }
+    if (attempts.closed) {
+      await _closePin(envelope);
+      throw VaultError.pinLocked;
+    }
+    final until = attempts.blockedUntil(now);
+    if (until != null) throw VaultRateLimited(until);
+    await store.writePinAttempts(attempts.failed(now).encode());
+    try {
+      final vk = await _openSlot(envelope, VaultFormat.slotPin, pin: pin);
+      await _resetPinAttempts(slot.alias);
+      _rememberPin(pin);
+      return vk;
+    } on VaultFailure catch (error) {
+      if (error.code != VaultErrorCode.wrongPassword) {
+        // Не ПИН-код виноват (ключа нет, сбой системы): попытка не в счёт.
+        try {
+          await store.writePinAttempts(attempts.encode());
+        } on Object {
+          // Лишняя ошибка в счётчике — не дыра.
+        }
+        rethrow;
+      }
+      final after = attempts.failed(clock.now());
+      await store.writePinAttempts(after.encode());
+      if (after.closed) {
+        await _closePin(envelope);
+        throw VaultError.pinLocked;
+      }
+      throw VaultError.wrongPassword;
+    }
+  }
+
+  /// Путь по ПИН-коду закрыт: ключ устройства ПИН-кода удаляется (это и
+  /// есть замок — старые копии файла его тоже теряют), слот снимается из
+  /// файла.
+  Future<void> _closePin(VaultEnvelope envelope) async {
+    final slot = envelope.slots[VaultFormat.slotPin];
+    if (slot == null) return;
+    _forgetPin();
+    await _forget(<String>[slot.alias]);
+    await _dropSlotsLocked(<String>{VaultFormat.slotPin}, envelope);
+  }
+
+  /// Убрать мёртвые слоты [names] из файла без ключей сейфа: меняется
+  /// только список слотов конверта (шифротексты те же, `rev` тот же).
+  /// Не вышло — не беда: ключ слота уже удалён.
+  ///
+  /// [keepCopies]: `vault.prev` и `.bak` не трогать — слот снят только из
+  /// основного файла. Так при «ключ потерян» (а это могла быть и ошибка
+  /// классификации) прежние версии со слотом остаются для отката.
+  Future<void> _dropSlotsLocked(
+    Set<String> names,
+    VaultEnvelope envelope, {
+    bool keepCopies = false,
+  }) async {
+    try {
+      final open = _open;
+      final base = open != null && open.envelope.vaultId == envelope.vaultId
+          ? open.envelope
+          : envelope;
+      // Мигрированный конверт так не переписать: он записался бы новой
+      // версией со старыми AD.
+      if (base.migrated) return;
+      final next = base.withSlots(<String, VaultSlot>{
+        for (final MapEntry(:key, :value) in base.slots.entries)
+          if (!names.contains(key)) key: value,
+      });
+      final bytes = next.encode();
+      await store.writeVault(bytes, replacePrevious: !keepCopies);
+      if (!keepCopies) {
+        for (final version in await store.backupVersions()) {
+          await store.writeBackup(version, bytes);
+        }
+      }
+      if (open != null && identical(open.envelope, base)) open.envelope = next;
+    } on Object {
+      // Ключ слота уже удалён: слот в файле ничего не открывает.
+    }
+  }
+
+  /// Ключ сейфа из слота [name]. Ключ устройства потерян или сброшен
+  /// системой — слот снимается из файла, ошибка выходит наружу
+  /// (`deviceKeyLost`, `bioInvalidated`).
+  Future<VaultKey> _openSlot(
+    VaultEnvelope envelope,
+    String name, {
+    SecretBytes? pin,
+    String? reason,
+  }) async {
+    final slot = envelope.slots[name];
+    if (slot == null) throw ArgumentError('у сейфа нет такого слота');
+    final key = deviceKey;
+    // Файл перенесли на другое устройство или систему: здесь этого ключа
+    // нет и не будет.
+    if (key == null || key.kind != slot.kind) throw VaultError.deviceKeyLost;
+    final VaultKey kek;
+    try {
+      kek = await _slotKek(
+        name,
+        slot.alias,
+        envelope.vaultId,
+        pin: pin,
+        kdf: slot.kdf,
+        reason: reason,
+      );
+    } on VaultFailure catch (error) {
+      if (error.code == VaultErrorCode.deviceKeyLost) {
+        // Ключа нет — удалять нечего; а если «потерян» — ошибочная
+        // классификация сбоя, удаление сделало бы её необратимой. Слот
+        // снимается только из основного файла, копии остаются.
+        await _dropSlotsLocked(<String>{name}, envelope, keepCopies: true);
+      } else if (error.code == VaultErrorCode.bioInvalidated) {
+        // Ключ сброшен системой и больше ничего не посчитает.
+        await _forget(<String>[slot.alias]);
+        await _dropSlotsLocked(<String>{name}, envelope);
+      }
+      rethrow;
+    }
+    final VaultKey? vk;
+    try {
+      vk = crypto.openKey(
+        kek,
+        slot.box,
+        VaultKeys.slotAd(
+          slot: name,
+          vaultId: envelope.vaultId,
+          kind: slot.kind,
+          alias: slot.alias,
+          kdf: slot.kdf,
+        ),
+      );
+    } finally {
+      kek.dispose();
+    }
+    if (vk == null) {
+      // Неверный ПИН-код даёт другой ответ ключа устройства; у слотов без
+      // ввода это подмена файла.
+      throw name == VaultFormat.slotPin
+          ? VaultError.wrongPassword
+          : VaultError.corrupt;
+    }
+    return vk;
+  }
+
+  /// KEK слота: `BLAKE2b(key = HMAC_устройства(alias, сообщение), метка)`.
+  /// У ПИН-кода в сообщении — Argon2id от ПИН-кода (перебор возможен только
+  /// на этом устройстве, с ключом в его защищённом хранилище).
+  Future<VaultKey> _slotKek(
+    String name,
+    String alias,
+    String vaultId, {
+    SecretBytes? pin,
+    KdfRecord? kdf,
+    String? reason,
+  }) async {
+    final key = deviceKey;
+    if (key == null) throw VaultError.deviceKeyLost;
+    SecretBytes? input;
+    if (name == VaultFormat.slotPin) {
+      if (pin == null || kdf == null) throw ArgumentError('нужен ПИН-код');
+      final params =
+          VaultKdfParams.checkLoaded(kdf, allowTesting: allowTestingKdf);
+      final derived = await crypto.derive(pin, kdf.salt, params);
+      try {
+        input = crypto.exportKey(derived);
+      } finally {
+        derived.dispose();
+      }
+    }
+    final message = VaultKeys.slotMessage(
+      name,
+      vaultId,
+      input?.unsafeBytes ?? Uint8List(0),
+    );
+    input?.wipe();
+    final Uint8List mac;
+    try {
+      mac = await key.mac(alias, message, reason: reason);
+    } on DeviceKeyException catch (error) {
+      throw _deviceError(error.failure);
+    } finally {
+      message.fillRange(0, message.length, 0);
+    }
+    if (mac.length != VaultFormat.keyBytes) {
+      mac.fillRange(0, mac.length, 0);
+      throw VaultError.io;
+    }
+    final macKey = crypto.importKey(SecretBytes.adopt(mac));
+    try {
+      return crypto.importKey(
+        SecretBytes.adopt(
+          crypto.keyedHash(macKey, VaultKeys.slotLabel(name)),
+        ),
+      );
+    } finally {
+      macKey.dispose();
+    }
+  }
+
+  /// Новый слот [name] для ключа сейфа [vk]: новый ключ устройства (у
+  /// `bio` — с проверкой личности) и обёртка.
+  Future<VaultSlot> _makeSlot(
+    String name,
+    VaultKey vk,
+    String vaultId, {
+    SecretBytes? pin,
+    KdfRecord? pinKdf,
+    String? reason,
+  }) async {
+    final key = deviceKey;
+    if (key == null) throw StateError('нет ключа устройства');
+    final String alias;
+    try {
+      alias = await key.create(userAuth: name == VaultFormat.slotBio);
+    } on DeviceKeyException catch (error) {
+      throw _deviceError(error.failure);
+    }
+    try {
+      final kek = await _slotKek(
+        name,
+        alias,
+        vaultId,
+        pin: pin,
+        kdf: pinKdf,
+        reason: reason,
+      );
+      try {
+        return VaultSlot(
+          kind: key.kind,
+          alias: alias,
+          kdf: pinKdf,
+          box: crypto.sealKey(
+            kek,
+            vk,
+            VaultKeys.slotAd(
+              slot: name,
+              vaultId: vaultId,
+              kind: key.kind,
+              alias: alias,
+              kdf: pinKdf,
+            ),
+          ),
+        );
+      } finally {
+        kek.dispose();
+      }
+    } catch (_) {
+      await _forget(<String>[alias]);
+      rethrow;
+    }
+  }
+
+  /// Удалить ключи устройства (ошибки не мешают: ключ без слота ничего не
+  /// открывает).
+  Future<void> _forget(Iterable<String> aliases) async {
+    final key = deviceKey;
+    if (key == null) return;
+    for (final alias in aliases) {
+      try {
+        await key.delete(alias);
+      } on Object {
+        // Не удалился — останется ключом без слота.
+      }
+    }
+  }
+
+  static VaultError _deviceError(DeviceKeyFailure failure) => switch (failure) {
+        DeviceKeyFailure.lost => VaultError.deviceKeyLost,
+        DeviceKeyFailure.invalidated =>
+          const VaultFailure(VaultErrorCode.bioInvalidated),
+        DeviceKeyFailure.canceled =>
+          const VaultFailure(VaultErrorCode.bioCanceled),
+        DeviceKeyFailure.lockout =>
+          const VaultFailure(VaultErrorCode.bioLockedOut),
+        DeviceKeyFailure.unavailable => VaultError.io,
+      };
 
   /// «Начать заново» (5.11): мастер-пароль не нужен — кто держит
   /// устройство, и так может удалить файл. Хранилище запирается, а файл
@@ -912,8 +2107,10 @@ final class Vault {
     return value is String ? DateTime.tryParse(value) : null;
   }
 
-  /// Пора ввести мастер-пароль (раз в 72 ч по умолчанию).
+  /// Пора ввести мастер-пароль (раз в 72 ч по умолчанию). У сейфа,
+  /// защищённого устройством (ADR-025), мастер-пароля нет — никогда.
   bool get masterDue {
+    if (isProtected) return false;
     final typed = masterTypedAt;
     if (typed == null) return _open != null;
     final hours = _open?.index.prefs['master_every_h'];
@@ -1018,6 +2215,7 @@ final class Vault {
     List<String>? urls,
     bool? important,
     SecretBytes? master,
+    VaultProof? proof,
   }) =>
       updateEntry(
         id,
@@ -1027,6 +2225,7 @@ final class Vault {
         urls: urls,
         important: important,
         master: master,
+        proof: proof,
       );
 
   /// Правка записи одной операцией (редактор): поля, новый пароль
@@ -1053,6 +2252,7 @@ final class Vault {
     SecretBytes? password,
     SecretBytes? note,
     SecretBytes? master,
+    VaultProof? proof,
   }) =>
       _op(() async {
         final open = _requireOpen();
@@ -1064,15 +2264,7 @@ final class Vault {
         if (important == false &&
             entry.important &&
             VaultPrefs.repromptImportant.of(open.index.prefs)) {
-          if (master == null) throw ArgumentError('нужен мастер-пароль');
-          final vk = await _unwrap(
-            master,
-            open.envelope,
-            VaultKeys.header(open.envelope),
-          );
-          vk.dispose();
-          _alive(open);
-          _confirmed(open);
+          await _proofCheck(open, _proofOf(master, proof));
         }
         // Любая правка охраняемой важной записи (15.2) — только после
         // мастер-пароля: новая подсказка сверяется с её паролем (4-граммы),
@@ -1692,7 +2884,11 @@ final class Vault {
   /// (`SecretGuard` при открытом хранилище, повтор мастер-пароля).
   /// Охраняемые важные записи не сравниваются ([entriesMatching]): иначе
   /// «скрыл / не скрыл» в чате — оракул без предела. Заперто — `false`.
+  ///
+  /// Отдельный токен из 6 цифр, равный ПИН-коду сейфа, верно введённому в
+  /// этом запуске, — тоже `true` (и при запертом сейфе, ADR-025).
   bool matchesKnownSecret(String token) {
+    if (_pinMatches(token)) return true;
     if (_open == null || token.isEmpty) return false;
     final candidate = SecretBytes.fromText(token);
     try {
@@ -1720,19 +2916,13 @@ final class Vault {
   Future<void> setPrefs(
     Map<String, Object?> changes, {
     SecretBytes? master,
+    VaultProof? proof,
   }) =>
       _op(() async {
         final open = _requireOpen();
         VaultPrefs.check(changes);
         if (VaultPrefs.weakens(open.index.prefs, changes)) {
-          if (master == null) throw ArgumentError('нужен мастер-пароль');
-          final vk = await _unwrap(
-            master,
-            open.envelope,
-            VaultKeys.header(open.envelope),
-          );
-          vk.dispose();
-          _alive(open);
+          await _proofCheck(open, _proofOf(master, proof));
         }
         await _commit(
           open,
@@ -2048,22 +3238,24 @@ final class Vault {
   /// важные записи уже не охраняются, [isGuarded]): проверка повтора
   /// пароля копии — только после мастер-пароля, иначе это оракул.
   /// Непустой ответ отменяет выгрузку ([VaultRejected]).
+  ///
+  /// У сейфа с кодом восстановления (ADR-025) [master] — код: копия
+  /// закрывается им же (в виде без дефисов). С отдельным паролем копии
+  /// [passphrase] вместо кода годится и подтверждение [proof] (ПИН-код,
+  /// биометрия, устройство). ПИН-кодом копия не закрывается никогда.
   Future<Uint8List> exportBackup({
-    required SecretBytes master,
+    SecretBytes? master,
+    VaultProof? proof,
     SecretBytes? passphrase,
     VaultKdfParams? params,
     String? Function()? afterVerify,
   }) =>
       _op(() async {
         final open = _requireOpen();
-        final check = await _unwrap(
-          master,
-          open.envelope,
-          VaultKeys.header(open.envelope),
-        );
-        check.dispose();
-        _alive(open);
-        _confirmed(open);
+        if (master == null && (proof == null || passphrase == null)) {
+          throw ArgumentError('нужен код восстановления или пароль копии');
+        }
+        await _proofCheck(open, master != null ? SecretProof(master) : proof!);
         final rejected = afterVerify?.call();
         if (rejected != null) throw VaultRejected(rejected);
         final vaultKdf = VaultKdfParams.checkLoaded(
@@ -2079,17 +3271,28 @@ final class Vault {
         if (open.index.entries.length > VaultBackup.maxEntries) {
           throw ArgumentError('слишком много записей для копии');
         }
-        final secret = passphrase ?? master;
+        final code = passphrase == null && open.envelope.isRecoveryKind
+            ? RecoveryCode.canonical(master!)
+            : null;
+        final secret = passphrase ?? code ?? master!;
         final salt = crypto.bytes(VaultFormat.saltBytes);
         final vaultId = base64.encode(crypto.bytes(VaultFormat.idBytes));
         final record = KdfRecord(ops: kdf.ops, mem: kdf.mem, salt: salt);
         final ring = VaultKeyRing.from(crypto, crypto.randomKey());
         try {
-          final header = _headerFor(VaultFormat.kindBackup, vaultId, record);
           final kek = await crypto.derive(secret, salt, kdf);
           final SealedBox wrap;
           try {
-            wrap = crypto.sealKey(kek, ring.vk, VaultKeys.wrapPwAd(header));
+            wrap = crypto.sealKey(
+              kek,
+              ring.vk,
+              VaultKeys.wrapPwAdOf(
+                version: VaultFormat.version,
+                kind: VaultFormat.kindBackup,
+                vaultId: vaultId,
+                kdf: record,
+              ),
+            );
           } finally {
             kek.dispose();
           }
@@ -2153,6 +3356,7 @@ final class Vault {
           return bytes;
         } finally {
           ring.dispose();
+          code?.wipe();
         }
       });
 
@@ -2207,12 +3411,32 @@ final class Vault {
       allowTesting: allowTestingKdf,
     );
     final header = VaultKeys.header(envelope);
-    final kek = await crypto.derive(passphrase, envelope.kdf.salt, params);
-    final VaultKey? vk;
+    // Копия, закрытая кодом восстановления (ADR-025), открывается кодом в
+    // любом написании: сначала — приведённый к виду кода ввод, затем ввод
+    // как есть (отдельный пароль копии мог быть похож на код).
+    final code = RecoveryCode.canonical(passphrase);
+    VaultKey? vk;
     try {
-      vk = crypto.openKey(kek, envelope.wrapPw, VaultKeys.wrapPwAd(header));
+      for (final candidate in <SecretBytes>[
+        if (code != null) code,
+        if (code == null ||
+            !crypto.equal(code.unsafeBytes, passphrase.unsafeBytes))
+          passphrase,
+      ]) {
+        final kek = await crypto.derive(candidate, envelope.kdf.salt, params);
+        try {
+          vk = crypto.openKey(
+            kek,
+            envelope.wrapPw,
+            VaultKeys.wrapPwAdFor(envelope),
+          );
+        } finally {
+          kek.dispose();
+        }
+        if (vk != null) break;
+      }
     } finally {
-      kek.dispose();
+      code?.wipe();
     }
     if (vk == null) throw VaultError.wrongPassword;
     final ring = VaultKeyRing.from(crypto, vk);
@@ -2374,11 +3598,8 @@ final class Vault {
   }) =>
       _op(() async {
         final open = _requireOpen();
-        final check = await _unwrap(
-          current,
-          open.envelope,
-          VaultKeys.header(open.envelope),
-        );
+        _requireMaster(open);
+        final check = await _unwrap(current, open.envelope);
         check.dispose();
         _alive(open);
         _confirmed(open);
@@ -2394,11 +3615,8 @@ final class Vault {
   /// соль, прежние параметры Argon2id.
   Future<void> reencryptAll(SecretBytes master) => _op(() async {
         final open = _requireOpen();
-        final check = await _unwrap(
-          master,
-          open.envelope,
-          VaultKeys.header(open.envelope),
-        );
+        _requireMaster(open);
+        final check = await _unwrap(master, open.envelope);
         check.dispose();
         _alive(open);
         final params = VaultKdfParams.checkLoaded(
@@ -2408,23 +3626,92 @@ final class Vault {
         await _rekey(open, master, params);
       });
 
+  /// Новый ключ сейфа и новая обёртка `wrap_pw` секретом [master] (вид
+  /// [pwKind], по умолчанию прежний). [withDevice] — сразу и слот `dev`
+  /// (переход на защиту устройством, ADR-025).
+  ///
+  /// [remake] — слоты устройства, которые запечатать заново под новый ключ
+  /// сейфа (новые ключи устройства; `pin` — ПИН-кодом [pin], `bio` —
+  /// системным запросом с причиной [reason]). Прежние ключи устройства
+  /// удаляются после записи. [newCode] — новый код восстановления: метка
+  /// «код подтверждён» сбрасывается.
   Future<void> _rekey(
     _Open open,
     SecretBytes master,
-    VaultKdfParams kdf,
-  ) async {
+    VaultKdfParams kdf, {
+    String? pwKind,
+    bool withDevice = false,
+    Set<String> remake = const <String>{},
+    SecretBytes? pin,
+    String? reason,
+    bool newCode = false,
+  }) async {
+    final kind = pwKind ?? open.envelope.pwKind ?? VaultFormat.pwMaster;
     final salt = crypto.bytes(VaultFormat.saltBytes);
     final record = KdfRecord(ops: kdf.ops, mem: kdf.mem, salt: salt);
     final ring = VaultKeyRing.from(crypto, crypto.randomKey());
+    final created = <String>[];
+    final slots = <String, VaultSlot>{};
+    final old = <String>[
+      for (final name in remake)
+        if (open.envelope.slots[name] case final VaultSlot s) s.alias,
+    ];
     try {
-      final header =
-          _headerFor(VaultFormat.kindVault, open.envelope.vaultId, record);
       final kek = await crypto.derive(master, salt, kdf);
       final SealedBox wrap;
       try {
-        wrap = crypto.sealKey(kek, ring.vk, VaultKeys.wrapPwAd(header));
+        wrap = crypto.sealKey(
+          kek,
+          ring.vk,
+          VaultKeys.wrapPwAdOf(
+            version: VaultFormat.version,
+            kind: VaultFormat.kindVault,
+            vaultId: open.envelope.vaultId,
+            kdf: record,
+            pwKind: kind,
+          ),
+        );
       } finally {
         kek.dispose();
+      }
+      _alive(open);
+      if (withDevice) {
+        final slot = await _makeSlot(
+          VaultFormat.slotDevice,
+          ring.vk,
+          open.envelope.vaultId,
+        );
+        created.add(slot.alias);
+        slots[VaultFormat.slotDevice] = slot;
+      }
+      // Порядок: сначала без запроса, биометрия — последней (отмена не
+      // оставит лишних ключей надолго: их удалит catch).
+      for (final name in <String>[
+        VaultFormat.slotDevice,
+        VaultFormat.slotPin,
+        VaultFormat.slotBio,
+      ]) {
+        if (!remake.contains(name)) continue;
+        KdfRecord? pinKdf;
+        if (name == VaultFormat.slotPin) {
+          if (pin == null) throw StateError('нужен ПИН-код');
+          pinKdf = KdfRecord(
+            ops: kdf.ops,
+            mem: kdf.mem,
+            salt: crypto.bytes(VaultFormat.saltBytes),
+          );
+        }
+        final slot = await _makeSlot(
+          name,
+          ring.vk,
+          open.envelope.vaultId,
+          pin: name == VaultFormat.slotPin ? pin : null,
+          pinKdf: pinKdf,
+          reason: name == VaultFormat.slotBio ? reason : null,
+        );
+        created.add(slot.alias);
+        slots[name] = slot;
+        _alive(open);
       }
       _alive(open);
       final base = VaultEnvelope(
@@ -2451,21 +3738,41 @@ final class Vault {
         entries: open.index.entries,
         secrets: secrets,
         history: _resealHistory(open, ring, base),
-        master: <String, Object?>{
-          ...open.index.master,
-          'last_typed': _iso(clock.now()),
-        },
+        master: withDevice || newCode
+            ? <String, Object?>{
+                for (final MapEntry(:key, :value) in open.index.master.entries)
+                  if (key != 'last_typed') key: value,
+                _rcConfirmedKey: false,
+              }
+            : <String, Object?>{
+                ...open.index.master,
+                'last_typed': _iso(clock.now()),
+              },
         ring: ring,
         kdf: record,
         wrapPw: wrap,
+        pwKind: kind,
+        slots: slots,
         replacePrevious: true,
       );
-      for (final version in await store.backupVersions()) {
-        await store.writeBackup(version, written);
+      // Новый файл уже записан: сбой копий ниже не отменяет его (иначе
+      // показанный код или новые ключи потерялись бы, а файл остался под
+      // ними). Копии перезаписываются по возможности.
+      try {
+        for (final version in await store.backupVersions()) {
+          await store.writeBackup(version, written);
+        }
+      } on Object {
+        // Старая копия останется до следующей записи.
       }
     } catch (_) {
       if (!identical(open.ring, ring)) ring.dispose();
+      await _forget(created);
       rethrow;
+    }
+    await _forget(old);
+    if (slots[VaultFormat.slotPin] case final VaultSlot s) {
+      await _resetPinAttempts(s.alias);
     }
     touch();
     _notify(VaultSignal.changed);
@@ -2776,6 +4083,8 @@ final class Vault {
     Map<String, SealedBox> history = const <String, SealedBox>{},
     BioWrap? wrapBio,
     String kind = VaultFormat.kindVault,
+    String? pwKind,
+    Map<String, VaultSlot> slots = const <String, VaultSlot>{},
   }) {
     final header = _headerFor(kind, vaultId, kdf);
     final body = index.encodePadded();
@@ -2786,6 +4095,10 @@ final class Vault {
         kdf: kdf,
         wrapPw: wrapPw,
         wrapBio: wrapBio,
+        pwKind: kind == VaultFormat.kindVault
+            ? pwKind ?? VaultFormat.pwMaster
+            : null,
+        slots: Map<String, VaultSlot>.unmodifiable(slots),
         rev: index.rev,
         index:
             crypto.seal(ring.index, body, VaultKeys.indexAd(header, index.rev)),
@@ -2810,6 +4123,8 @@ final class Vault {
     VaultKeyRing? ring,
     KdfRecord? kdf,
     SealedBox? wrapPw,
+    String? pwKind,
+    Map<String, VaultSlot>? slots,
     bool replacePrevious = false,
   }) async {
     final rev = open.envelope.rev + 1;
@@ -2827,6 +4142,8 @@ final class Vault {
       wrapPw: wrapPw ?? open.envelope.wrapPw,
       // Обёртка биометрией живёт, пока VK тот же.
       wrapBio: ring == null && wrapPw == null ? open.envelope.wrapBio : null,
+      pwKind: pwKind ?? open.envelope.pwKind,
+      slots: slots ?? open.envelope.slots,
       index: index,
       secrets: secrets,
       history: history ?? open.envelope.history,
@@ -2888,7 +4205,18 @@ final class Vault {
 
 /// Собранное в памяти, но ещё не записанное хранилище.
 final class _Built {
-  _Built(this.envelope, this.index, this.ring, this.kFp, this.bytes, this.now);
+  _Built(
+    this.envelope,
+    this.index,
+    this.ring,
+    this.kFp,
+    this.bytes,
+    this.now, [
+    this.aliases = const <String>[],
+  ]);
+
+  /// Ключи устройства, созданные для этого сейфа (убрать, если не записан).
+  final List<String> aliases;
 
   final VaultEnvelope envelope;
   final VaultIndex index;

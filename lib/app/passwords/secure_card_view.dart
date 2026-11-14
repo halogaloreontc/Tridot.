@@ -477,8 +477,8 @@ class _SecureCardViewState extends State<SecureCardView> {
     );
   }
 
-  /// «Удалить»: важную запись — после мастер-пароля в окне поверх чата
-  /// (3.6); в чат он не вводится. Отменили — ничего не уходит навыку.
+  /// «Удалить»: важную запись — после подтверждения в окне поверх чата
+  /// (3.6, ADR-025); в чат ни ПИН-код, ни мастер-пароль не вводятся. Отменили — ничего не уходит навыку.
   Future<void> _confirmDelete(String id) async {
     if (!await confirmDelete(context, kit, id) || !mounted) return;
     widget.onCommand(card, SecureCardCommand.delete, entryId: id);
@@ -520,12 +520,16 @@ class _SecureCardViewState extends State<SecureCardView> {
   Widget _recovery() => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const _Line(
+          _Line(
             icon: Icons.info_outline,
-            text: 'Восстановить мастер-пароль нельзя. Вход по отпечатку и '
-                'восстановление из копии появятся в следующих обновлениях. '
-                'Можно начать заново: старый сейф уйдёт в архив, не '
-                'сотрётся.',
+            text: kit.deviceProtection
+                ? 'Если ключ устройства, ПИН-код и отпечаток не подходят, '
+                    'сейф откроет код восстановления — «Восстановить по '
+                    'коду» на замке. Без кода расшифровать сейф нельзя. Можно '
+                    'и начать заново: старый сейф уйдёт в архив, не сотрётся.'
+                : 'Восстановить мастер-пароль нельзя. Есть резервная копия — '
+                    'пароли вернёт она. Можно и начать заново: старый сейф '
+                    'уйдёт в архив, не сотрётся.',
           ),
           const SizedBox(height: 6),
           Align(

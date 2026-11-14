@@ -208,7 +208,7 @@ void main() {
       await tester.pumpWidget(app(PasswordsScreen(kit: kit)));
       expect(find.text('Сейф заперт'), findsOneWidget);
       expect(
-        find.text('На Windows сейф открывается только мастер-паролем.'),
+        find.text('Сейф открывается мастер-паролем.'),
         findsOneWidget,
       );
       expectSecretFieldsSafe(tester);

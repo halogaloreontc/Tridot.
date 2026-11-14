@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../assistant_theme.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Выбранный файл: путь и байты. Байты затирает тот, кто их разбирает.
 final class PickedFile {
@@ -251,7 +252,7 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
     final parent = p.dirname(_dir);
     return AlertDialog(
       backgroundColor: AssistantColors.raised,
-      title: Text(widget.title),
+      title: WholeWordText(widget.title),
       content: SizedBox(
         width: 480,
         height: 420,
@@ -277,7 +278,7 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
               ListTile(
                 dense: true,
                 leading: const Icon(Icons.arrow_upward, size: 18),
-                title: const Text('Вверх'),
+                title: const WholeWordText('Вверх'),
                 onTap: () => unawaited(_list(parent)),
               ),
             if (_failed)

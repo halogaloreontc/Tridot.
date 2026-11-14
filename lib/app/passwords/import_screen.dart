@@ -11,7 +11,7 @@ import 'entry_screens.dart';
 import 'passwords_files.dart';
 import 'passwords_kit.dart';
 import 'recall_views.dart';
-import 'secret_widgets.dart';
+import 'vault_confirm.dart';
 
 enum _Step { pick, encoding, mapping, preview, done }
 
@@ -233,11 +233,12 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
     ];
     // «Заменить» важную запись — правка, как в редакторе (15.2).
     if (kit.importNeedsConfirm(decisions)) {
-      final ok = await askMaster(
+      final ok = await askVaultConfirm(
         context,
+        kit: kit,
         title: 'Заменить важные записи',
-        text: 'Замена важной записи подтверждается мастер-паролем.',
-        check: kit.confirm,
+        text: 'Замену важной записи нужно подтвердить.',
+        check: kit.confirmProof,
       );
       if (!ok || !mounted) return;
     }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/extensions/tools/tool_spec.dart';
 import '../assistant_theme.dart';
 import 'tool_kit.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Мегабайты для подписей: «12 из 161 МБ».
 String toolMegabytes(int bytes) => (bytes / (1024 * 1024)).round().toString();
@@ -107,7 +108,7 @@ Future<bool> showToolOffer(
     builder: (BuildContext context) => AlertDialog(
       scrollable: true,
       backgroundColor: AssistantColors.raised,
-      title: Text('Скачать ${copy.name}?'),
+      title: WholeWordText('Скачать ${copy.name}?'),
       content: Text(
         '${copy.offerBody} Загрузка ~${toolMegabytes(spec.bytes)} МБ, после '
         'установки займёт ~${toolMegabytes(spec.binaryBytes)} МБ. Источник '
@@ -219,7 +220,7 @@ final class _ToolScreenState extends State<ToolScreen> {
       context: context,
       builder: (BuildContext context) => AlertDialog(
         backgroundColor: AssistantColors.raised,
-        title: Text('Удалить ${widget.copy.name}?'),
+        title: WholeWordText('Удалить ${widget.copy.name}?'),
         content: Text(widget.copy.deleteBody),
         actions: <Widget>[
           TextButton(

@@ -63,6 +63,11 @@ final class _LoggingStore implements VaultStore {
   }
 
   @override
+  Future<Uint8List?> readPinAttempts() => inner.readPinAttempts();
+  @override
+  Future<void> writePinAttempts(Uint8List bytes) =>
+      inner.writePinAttempts(bytes);
+  @override
   Future<Uint8List?> readAttempts() => inner.readAttempts();
   @override
   Future<void> writeAttempts(Uint8List bytes) => inner.writeAttempts(bytes);
@@ -84,11 +89,11 @@ void main() {
   /// Кольцо ключей файла [file] по паролю [master] или `null`.
   Future<VaultKeyRing?> ringFor(Uint8List file, String master) async {
     final envelope = VaultEnvelope.decode(file);
-    final header = VaultKeys.header(envelope);
     final password = secret(master);
     final kek = await crypto.derive(password, envelope.kdf.salt, fastKdf);
     password.wipe();
-    final vk = crypto.openKey(kek, envelope.wrapPw, VaultKeys.wrapPwAd(header));
+    final vk =
+        crypto.openKey(kek, envelope.wrapPw, VaultKeys.wrapPwAdFor(envelope));
     kek.dispose();
     return vk == null ? null : VaultKeyRing.from(crypto, vk);
   }
@@ -126,7 +131,17 @@ void main() {
     final master = secret(Canary.master);
     final kek = await crypto.derive(master, salt, fastKdf);
     final ring = VaultKeyRing.from(crypto, crypto.randomKey());
-    final wrap = crypto.sealKey(kek, ring.vk, VaultKeys.wrapPwAd(header));
+    final wrap = crypto.sealKey(
+      kek,
+      ring.vk,
+      VaultKeys.wrapPwAdOf(
+        version: version,
+        kind: kind,
+        vaultId: vaultId,
+        kdf: KdfRecord(ops: fastKdf.ops, mem: fastKdf.mem, salt: salt),
+        pwKind: version >= 3 ? VaultFormat.pwMaster : null,
+      ),
+    );
     final kFpBytes = SecretBytes.adopt(crypto.bytes(32));
     final kFp = crypto.importKey(kFpBytes.clone());
     final id = VaultIds.hex(crypto.bytes(16));
@@ -162,6 +177,7 @@ void main() {
       'vault_id': vaultId,
       'kdf': KdfRecord(ops: fastKdf.ops, mem: fastKdf.mem, salt: salt).toJson(),
       'wrap_pw': wrap.toJson(),
+      if (version >= 3) 'pw_kind': VaultFormat.pwMaster,
       'rev': 3,
       'index':
           crypto.seal(ring.index, body, VaultKeys.indexAd(header, 3)).toJson(),
@@ -304,7 +320,8 @@ void main() {
       await vault.unlock(secret(Canary.master));
       expect(store.log, <String>['bak1', 'vault', '-bak1']);
       final migrated = _json((await store.readVault())!);
-      expect(migrated['v'], 2);
+      expect(migrated['v'], VaultFormat.version);
+      expect(migrated['pw_kind'], VaultFormat.pwMaster);
       expect(migrated.containsKey('history'), isFalse);
       expect(vault.entry(id)!.history, isEmpty);
       final value = await vault.readSecret(id);

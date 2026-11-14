@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -21,7 +21,7 @@ enum VoiceButtonMode {
   /// включить.
   off,
 
-  /// Готов: на телефоне — удерживать и говорить, на компьютере — нажать.
+  /// Готов: нажать (или долго нажать на пустое поле) и говорить.
   idle,
 
   /// Загружается модель или запрашивается доступ к микрофону.
@@ -31,15 +31,10 @@ enum VoiceButtonMode {
   listening,
 }
 
-/// Голосовой ввод на компьютере — нажатием, а не удержанием: держать
-/// кнопку мыши, пока говоришь, неудобно.
-bool get voiceToggleByDefault => switch (defaultTargetPlatform) {
-      TargetPlatform.windows ||
-      TargetPlatform.macOS ||
-      TargetPlatform.linux =>
-        true,
-      _ => false,
-    };
+/// Долгое нажатие на пустое поле ввода, после которого начинается
+/// голосовой ввод: короче системного долгого нажатия (0,5 с), чтобы
+/// успеть раньше меню «Вставить» поля.
+const Duration voiceLongPressDuration = Duration(milliseconds: 400);
 
 /// Файл, выбранный для следующего сообщения: чип над полем ввода.
 final class PendingAttachmentChip {
@@ -83,12 +78,11 @@ final class CommandComposer extends StatefulWidget {
     this.onRemovePending,
     this.header,
     this.voiceMode = VoiceButtonMode.hidden,
-    this.onVoiceStart,
-    this.onVoiceStop,
     this.onVoiceTap,
+    this.onVoiceLongPress,
+    this.onVoiceCancel,
     this.voicePartial,
     this.voiceNotice,
-    this.desktopToggle,
   });
 
   final TextEditingController controller;
@@ -129,29 +123,28 @@ final class CommandComposer extends StatefulWidget {
   /// озвучивания ответов.
   final VoiceButtonMode voiceMode;
 
-  /// Палец лёг на микрофон: начать слушать (телефон, удержание).
-  final VoidCallback? onVoiceStart;
-
-  /// Палец отпущен или жест прерван: закончить.
-  final VoidCallback? onVoiceStop;
-
   /// Нажатие на микрофон: при [VoiceButtonMode.off] — предложение
-  /// включить, на компьютере — начать или закончить, для экранного
-  /// диктора — то же.
+  /// включить, иначе — начать слушать, а пока слушает — закончить с
+  /// итогом (на всех платформах, и для экранного диктора).
   final VoidCallback? onVoiceTap;
+
+  /// Долгое нажатие пальцем на пустое поле ввода (только в
+  /// [VoiceButtonMode.idle]): начать слушать. С текстом, с файлами и
+  /// мышью — обычное выделение и меню «Вставить».
+  final VoidCallback? onVoiceLongPress;
+
+  /// Крестик на месте «+», пока слушает или готовится: прервать без
+  /// итога.
+  final VoidCallback? onVoiceCancel;
 
   /// Промежуточный распознанный текст: серой строкой над полем, пока
   /// слушает.
   final String? voicePartial;
 
-  /// Подсказка голосового ввода («Удерживайте микрофон…», «Нет доступа к
-  /// микрофону…»): строкой над полем, а не всплывающим уведомлением —
+  /// Подсказка голосового ввода («Нет доступа к микрофону…», «Микрофон
+  /// выключен…»): строкой над полем, а не всплывающим уведомлением —
   /// уведомление закрыло бы сам микрофон.
   final String? voiceNotice;
-
-  /// Нажатием, а не удержанием; `null` — по платформе
-  /// ([voiceToggleByDefault]).
-  final bool? desktopToggle;
 
   /// Прошлая и следующая команда из истории для ↑/↓; null — нет.
   final String? Function() previousCommand;
@@ -270,10 +263,19 @@ final class _CommandComposerState extends State<CommandComposer> {
         final voiceActive = voiceMode == VoiceButtonMode.listening ||
             voiceMode == VoiceButtonMode.loading;
         // Пустое поле — микрофон для голосового ввода, с текстом — кнопка
-        // отправки. Пока слушает, микрофон остаётся на месте: под пальцем
-        // ждут, когда его отпустят.
+        // отправки. Пока слушает, на месте микрофона — «стоп»: им же
+        // заканчивают.
         final voice = voiceMode != VoiceButtonMode.hidden &&
             (voiceActive || (!hasText && !widget.sending));
+        // Долгое нажатие на пустое поле — тоже голосовой ввод, но только
+        // когда он готов: выключенный не перехватывает «Вставить».
+        // Именно пустое: пробелы в поле — уже текст, долгое нажатие
+        // оставляет меню «Вставить».
+        final longPressVoice = voiceMode == VoiceButtonMode.idle &&
+            widget.controller.text.isEmpty &&
+            widget.pending.isEmpty &&
+            !widget.sending &&
+            widget.onVoiceLongPress != null;
         final partial = widget.voicePartial?.trim() ?? '';
         final notice = widget.voiceNotice?.trim() ?? '';
         final showPartial =
@@ -320,7 +322,7 @@ final class _CommandComposerState extends State<CommandComposer> {
                   ),
                 ),
               // Что слышно сейчас: серым, пока говорят. В поле текст
-              // попадает только после того, как микрофон отпущен.
+              // попадает только после того, как нажат «стоп».
               if (showPartial)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
@@ -359,30 +361,70 @@ final class _CommandComposerState extends State<CommandComposer> {
                     ),
                   ),
                 ),
-              TextField(
-                key: const Key('assistant-input'),
-                controller: widget.controller,
-                focusNode: widget.focusNode,
-                // Две строки, как в макете «Д»: высота поля не прыгает,
-                // когда текст переносится на вторую строку.
-                minLines: 2,
-                maxLines: 6,
-                textInputAction: TextInputAction.send,
-                textCapitalization: TextCapitalization.sentences,
-                onSubmitted: (_) {
-                  if (!widget.sending) widget.onSend();
-                },
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: AssistantColors.textStrong,
-                ),
-                decoration: InputDecoration(
-                  hintText: hint,
-                  hintMaxLines: 1,
-                  hintStyle: const TextStyle(color: AssistantColors.muted),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
-                  isDense: true,
+              // Обёртка есть всегда, меняется только набор жестов: если
+              // оборачивать поле по условию, оно пересоздаётся на первой
+              // букве и теряет фокус и клавиатуру.
+              RawGestureDetector(
+                key: const Key('assistant-input-gestures'),
+                behavior: HitTestBehavior.deferToChild,
+                gestures: longPressVoice
+                    ? <Type, GestureRecognizerFactory>{
+                        LongPressGestureRecognizer:
+                            GestureRecognizerFactoryWithHandlers<
+                                LongPressGestureRecognizer>(
+                          () => LongPressGestureRecognizer(
+                            duration: voiceLongPressDuration,
+                            // Мышью долгое нажатие — обычное выделение.
+                            supportedDevices: const <PointerDeviceKind>{
+                              PointerDeviceKind.touch,
+                              PointerDeviceKind.stylus,
+                            },
+                            debugOwner: this,
+                          ),
+                          (LongPressGestureRecognizer recognizer) {
+                            recognizer.onLongPress = () {
+                              Feedback.forLongPress(context);
+                              widget.onVoiceLongPress?.call();
+                            };
+                          },
+                        ),
+                      }
+                    : const <Type, GestureRecognizerFactory>{},
+                // Тоже всегда на месте (меняется только подсказка): жест
+                // для экранного диктора.
+                child: Semantics(
+                  key: const Key('assistant-input-semantics'),
+                  hint: longPressVoice
+                      ? 'Долгое нажатие на пустое поле — голосовой ввод'
+                      : null,
+                  child: TextField(
+                    key: const Key('assistant-input'),
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
+                    // Две строки, как в макете «Д»: высота поля не прыгает,
+                    // когда текст переносится на вторую строку.
+                    minLines: 2,
+                    maxLines: 6,
+                    textInputAction: TextInputAction.send,
+                    textCapitalization: TextCapitalization.sentences,
+                    onSubmitted: (_) {
+                      if (!widget.sending) widget.onSend();
+                    },
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: AssistantColors.textStrong,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: hint,
+                      // Подсказка не режется многоточием: обычно она в двух
+                      // строках поля, на 320 px с шрифтом 200 % — в трёх.
+                      hintMaxLines: 3,
+                      hintStyle: const TextStyle(color: AssistantColors.muted),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
+                      isDense: true,
+                    ),
+                  ),
                 ),
               ),
               LayoutBuilder(
@@ -396,14 +438,31 @@ final class _CommandComposerState extends State<CommandComposer> {
                       child: const _RoundIcon(icon: Icons.add),
                     ),
                   );
-                  final send = voice
-                      ? _VoiceButton(
-                          mode: voiceMode,
-                          toggle: widget.desktopToggle ?? voiceToggleByDefault,
-                          onStart: widget.onVoiceStart,
-                          onStop: widget.onVoiceStop,
-                          onTap: widget.onVoiceTap,
+                  // Пока слушает или готовится, на месте «+» — крестик:
+                  // прервать без итога.
+                  final Widget left = voiceActive
+                      ? Tooltip(
+                          message: 'Отменить без текста',
+                          // Подсказка — только наведением мыши: долгое
+                          // касание у Tooltip отняло бы нажатие.
+                          triggerMode: TooltipTriggerMode.manual,
+                          child: Semantics(
+                            button: true,
+                            label: 'Отменить голосовой ввод',
+                            onTap: widget.onVoiceCancel,
+                            excludeSemantics: true,
+                            child: InkResponse(
+                              key: const Key('voice-abort'),
+                              onTap: widget.onVoiceCancel,
+                              onLongPress: widget.onVoiceCancel,
+                              radius: 24,
+                              child: const _RoundIcon(icon: Icons.close),
+                            ),
+                          ),
                         )
+                      : plus;
+                  final send = voice
+                      ? _VoiceButton(mode: voiceMode, onTap: widget.onVoiceTap)
                       : IconButton(
                           key: const Key('assistant-send'),
                           onPressed: widget.sending ? null : widget.onSend,
@@ -443,7 +502,7 @@ final class _CommandComposerState extends State<CommandComposer> {
                       Expanded(
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: plus,
+                          child: left,
                         ),
                       ),
                       _ModeSwitch(
@@ -470,39 +529,28 @@ final class _CommandComposerState extends State<CommandComposer> {
 }
 
 /// Микрофон (ADR-023), 44×44 — как кнопка отправки на его месте. На
-/// телефоне — удержание: палец лёг — слушает, отпущен — текст в поле. На
-/// компьютере — нажатие: начать и закончить. Экранный диктор нажимает
-/// двойным касанием — это тоже начать и закончить.
+/// всех платформах — нажатие: нажал — слушает (красный «стоп»), нажал
+/// снова — итог в поле. Держать палец, пока говоришь, не нужно. Экранный
+/// диктор нажимает двойным касанием — то же самое.
 final class _VoiceButton extends StatelessWidget {
-  const _VoiceButton({
-    required this.mode,
-    required this.toggle,
-    required this.onStart,
-    required this.onStop,
-    required this.onTap,
-  });
+  const _VoiceButton({required this.mode, required this.onTap});
 
   final VoiceButtonMode mode;
-  final bool toggle;
-  final VoidCallback? onStart;
-  final VoidCallback? onStop;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final listening = mode == VoiceButtonMode.listening;
-    final hold = !toggle && mode != VoiceButtonMode.off;
+    final loading = mode == VoiceButtonMode.loading;
+    final off = mode == VoiceButtonMode.off;
     final tooltip = switch (mode) {
       VoiceButtonMode.off => 'Голосовой ввод',
-      VoiceButtonMode.listening => toggle
-          ? 'Говорите… нажмите, чтобы закончить'
-          : 'Говорите… отпустите, чтобы закончить',
-      VoiceButtonMode.loading => 'Готовлю распознавание…',
-      _ => toggle
-          ? 'Голосовой ввод: нажмите и говорите'
-          : 'Голосовой ввод: удерживайте и говорите',
+      VoiceButtonMode.listening => 'Говорите… нажмите, чтобы закончить',
+      VoiceButtonMode.loading => 'Готовлю распознавание… нажмите, чтобы '
+          'отменить',
+      _ => 'Голосовой ввод: нажмите и говорите',
     };
-    final Widget icon = mode == VoiceButtonMode.loading
+    final Widget icon = loading
         ? const SizedBox(
             width: 16,
             height: 16,
@@ -512,13 +560,9 @@ final class _VoiceButton extends StatelessWidget {
             ),
           )
         : Icon(
-            listening ? Icons.mic : Icons.mic_none,
-            size: 20,
-            color: listening
-                ? AssistantColors.onPrimary
-                : mode == VoiceButtonMode.off
-                    ? AssistantColors.textStrong
-                    : AssistantColors.onPrimary,
+            listening ? Icons.stop_rounded : Icons.mic_none,
+            size: listening ? 22 : 20,
+            color: off ? AssistantColors.textStrong : AssistantColors.onPrimary,
           );
     final circle = AnimatedContainer(
       duration: const Duration(milliseconds: 120),
@@ -529,40 +573,42 @@ final class _VoiceButton extends StatelessWidget {
         shape: BoxShape.circle,
         color: listening
             ? AssistantColors.danger
-            : mode == VoiceButtonMode.off
+            : off
                 ? Colors.transparent
                 : AssistantColors.primary,
-        border: mode == VoiceButtonMode.off
-            ? Border.all(color: AssistantColors.border)
-            : null,
+        border: off ? Border.all(color: AssistantColors.border) : null,
       ),
       child: icon,
     );
-    final Widget body = hold
-        // Listener, а не onLongPress: слушать начинает сразу, без
-        // полусекундной задержки.
-        ? Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: (_) => onStart?.call(),
-            onPointerUp: (_) => onStop?.call(),
-            onPointerCancel: (_) => onStop?.call(),
-            child: circle,
-          )
-        : InkResponse(
-            onTap: onTap,
-            radius: 24,
-            child: circle,
-          );
     return Semantics(
       button: true,
       label: 'Голосовой ввод',
-      value: listening ? 'слушаю' : null,
+      value: listening
+          ? 'слушаю'
+          : loading
+              ? 'готовлю'
+              : null,
+      hint: listening
+          ? 'нажмите, чтобы закончить'
+          : loading
+              ? 'нажмите, чтобы отменить'
+              : null,
       onTap: onTap,
       excludeSemantics: true,
       child: Tooltip(
         message: tooltip,
         excludeFromSemantics: true,
-        child: KeyedSubtree(key: const Key('assistant-voice'), child: body),
+        // Подсказка — только наведением мыши. Долгое касание Tooltip
+        // забрал бы себе, и удержание микрофона (старая привычка «нажал и
+        // держи») не делало бы ничего; удержание здесь — то же нажатие.
+        triggerMode: TooltipTriggerMode.manual,
+        child: InkResponse(
+          key: const Key('assistant-voice'),
+          onTap: onTap,
+          onLongPress: onTap,
+          radius: 24,
+          child: circle,
+        ),
       ),
     );
   }

@@ -12,7 +12,10 @@ import 'app/extensions/ytdl_kit.dart';
 import 'app/files/file_opener.dart';
 import 'app/jobs/job_picker.dart';
 import 'app/home_page.dart';
+import 'app/passwords/device_keys.dart';
 import 'app/passwords/passwords_kit.dart';
+import 'app/security/app_lock.dart';
+import 'app/security/device_auth.dart';
 import 'app/voice/voice_kit.dart';
 import 'app/voice/vosk_voice_recognizer.dart';
 import 'core/app_info.dart';
@@ -126,7 +129,12 @@ Future<void> main() async {
   // (D20). Транспорт ему не передаётся. Навык видит только VaultFacade;
   // показ, копирование и ввод — экраны и карточки lib/app. Если libsodium
   // не загрузилась — навык честно говорит, что хранилище недоступно.
-  final vault = await _openVault(p.join(support.path, 'assistant', 'vault'));
+  // Ключ устройства для сейфа (ADR-025): Android Keystore, DPAPI на
+  // Windows, файл в <поддержка>/assistant/vault_keys на macOS и Linux.
+  final vault = await _openVault(
+    p.join(support.path, 'assistant', 'vault'),
+    keys: p.join(support.path, 'assistant', 'vault_keys'),
+  );
   final passwords = vault == null ? null : PasswordsKit(vault: vault);
   // Словари генератора и оценки — встроенные файлы, без сети.
   await passwords?.loadWordlists(rootBundle.loadString);
@@ -239,13 +247,23 @@ Future<void> main() async {
     clock: clock,
     knownSecret: passwords?.facade.knownSecret,
   );
+  // Вход в приложение по отпечатку / Face ID (ADR-025): включён — экран
+  // закрыт с первого кадра, до загрузки остального интерфейса.
+  final settingsStore = JsonSettingsStore(p.join(folder, 'settings.json'));
+  final early = await settingsStore.load();
+  final appLock = AppLockController(
+    auth: DeviceAuth.current,
+    enabled: early.appLock,
+    after: Duration(seconds: early.appLockAfter),
+  );
   runApp(
     AssistantApp(
       assistant: assistant,
       tasks: tasks,
       clock: clock,
       storage: JsonStorageInfo(tasksPath, chatsDirectory: chatsPath),
-      settingsStore: JsonSettingsStore(p.join(folder, 'settings.json')),
+      settingsStore: settingsStore,
+      appLock: appLock,
       chatStore: JsonChatStore(chatsPath),
       connections: connections,
       passwords: passwords,
@@ -283,14 +301,16 @@ Future<void> _dropJobTemp() async {
 }
 
 /// Хранилище паролей или `null`, если libsodium недоступна.
-Future<Vault?> _openVault(String directory) async {
+Future<Vault?> _openVault(String directory, {required String keys}) async {
   try {
+    final crypto = await SodiumVaultCrypto.load();
     final vault = Vault(
       store: FileVaultStore(directory),
-      crypto: await SodiumVaultCrypto.load(),
+      crypto: crypto,
       device: Platform.isAndroid || Platform.isIOS
           ? VaultDevice.mobile
           : VaultDevice.desktop,
+      deviceKey: deviceKeyFor(keys, crypto),
     );
     await vault.load();
     return vault;
@@ -338,6 +358,7 @@ final class AssistantApp extends StatelessWidget {
     this.fileOpener,
     this.ffmpeg,
     this.ytdl,
+    this.appLock,
   });
 
   final AssistantController assistant;
@@ -365,9 +386,19 @@ final class AssistantApp extends StatelessWidget {
   /// Загрузчик видео; `null` — нет в этой сборке или на платформе.
   final YtdlKit? ytdl;
 
+  /// Вход в приложение по отпечатку / Face ID; `null` — нет замка.
+  final AppLockController? appLock;
+
   @override
   Widget build(BuildContext context) {
+    final lock = appLock;
     return MaterialApp(
+      builder: lock == null
+          ? null
+          : (BuildContext context, Widget? child) => AppLockGate(
+                controller: lock,
+                child: child ?? const SizedBox.shrink(),
+              ),
       title: AppInfo.name,
       debugShowCheckedModeBanner: false,
       theme: AssistantTheme.dark(),
@@ -386,6 +417,7 @@ final class AssistantApp extends StatelessWidget {
         fileOpener: fileOpener,
         ffmpeg: ffmpeg,
         ytdl: ytdl,
+        appLock: appLock,
       ),
     );
   }

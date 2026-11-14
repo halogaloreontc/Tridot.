@@ -10,6 +10,8 @@ import 'entry_screens.dart';
 import 'passwords_kit.dart';
 import 'passwords_screen.dart';
 import 'secret_widgets.dart';
+import 'vault_confirm.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Ответ «Проверить себя» словами (5.2). Только эти ответы — ни длины,
 /// ни «насколько близко».
@@ -578,23 +580,41 @@ class CheckView extends StatelessWidget {
               if (lists.length > 1)
                 Text('Группа ${index + 1}', style: metaTextStyle),
               for (final entry in list)
-                EntryTile(
-                  entry: entry,
-                  trailing: TextButton(
-                    key: ValueKey<String>('check-change-${entry.id}'),
-                    onPressed: () => unawaited(
-                      Navigator.of(context).push<void>(
-                        MaterialPageRoute<void>(
-                          builder: (BuildContext context) => EntryEditorScreen(
-                            kit: kit,
-                            id: entry.id,
-                            passwordOnly: true,
+                LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints box) {
+                    void change() => unawaited(
+                          Navigator.of(context).push<void>(
+                            MaterialPageRoute<void>(
+                              builder: (BuildContext context) =>
+                                  EntryEditorScreen(
+                                kit: kit,
+                                id: entry.id,
+                                passwordOnly: true,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    child: const Text('Сменить'),
-                  ),
+                        );
+                    final key = ValueKey<String>('check-change-${entry.id}');
+                    // Узко и крупный шрифт: «Сменить» словом отняло бы
+                    // место у названия записи — тогда кнопка значком.
+                    final roomy =
+                        lineWidth(context, 'Сменить') + 24 <= box.maxWidth * .3;
+                    return EntryTile(
+                      entry: entry,
+                      trailing: roomy
+                          ? TextButton(
+                              key: key,
+                              onPressed: change,
+                              child: const Text('Сменить'),
+                            )
+                          : IconButton(
+                              key: key,
+                              tooltip: 'Сменить',
+                              onPressed: change,
+                              icon: const Icon(Icons.edit_outlined),
+                            ),
+                    );
+                  },
                 ),
             ],
         ],
@@ -651,11 +671,12 @@ class _CheckScreenState extends State<CheckScreen> {
 
   /// Мастер-пароль — и полная проверка уже с важными записями (15.2).
   Future<void> _confirm() async {
-    final ok = await askMaster(
+    final ok = await askVaultConfirm(
       context,
+      kit: widget.kit,
       title: 'Проверить важные записи',
-      text: 'Надёжность важных записей проверяется после мастер-пароля.',
-      check: widget.kit.confirm,
+      text: 'Надёжность важных записей проверяется после подтверждения.',
+      check: widget.kit.confirmProof,
     );
     if (ok && mounted) await _run();
   }

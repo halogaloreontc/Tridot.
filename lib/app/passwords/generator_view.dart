@@ -10,6 +10,7 @@ import 'entry_screens.dart';
 import 'passwords_kit.dart';
 import 'passwords_screen.dart';
 import 'secret_widgets.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Генератор паролей (5.4): режим «слова» (только английский словарь EFF
 /// large, решение владельца №6) и «символы». Значение — только
@@ -316,7 +317,7 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
           dense: true,
           value: o.capital,
           onChanged: (bool v) => _change(o.copyWith(capital: v)),
-          title: const Text('Одно слово с заглавной'),
+          title: const WholeWordText('Одно слово с заглавной'),
         ),
         _Stepper(
           key: const ValueKey<String>('generator-digits'),
@@ -390,7 +391,9 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
   ) =>
       FilterChip(
         key: ValueKey<String>(key),
-        label: Text(label),
+        // Подпись в одну строку целиком: на узком экране с крупным
+        // шрифтом уменьшается, а не срезается краем (ADR-021).
+        label: fitSingleWord(label),
         selected: value,
         onSelected: (bool v) => _change(next(v)),
       );

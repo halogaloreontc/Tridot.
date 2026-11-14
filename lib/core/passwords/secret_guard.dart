@@ -1,3 +1,4 @@
+import 'vault_codes.dart';
 import 'vault_format.dart';
 
 /// Проверка: совпадает ли токен по отпечатку с паролем записи открытого
@@ -38,7 +39,12 @@ final class GuardResult {
 ///   знаками препинания), совпавший по отпечатку с паролем записи
 ///   ([known]);
 /// - в фразе «пароль от X …» — токены после названия сервиса, похожие на
-///   пароль: «пароль от почты Kx9!mq2z».
+///   пароль: «пароль от почты Kx9!mq2z»;
+/// - код восстановления сейфа (ADR-025) — всегда, без всяких слов: пять
+///   групп по пять знаков или 25 знаков подряд с цифрами и буквами;
+/// - ПИН-код сейфа — отдельный токен из 6 цифр, совпавший с ПИН-кодом,
+///   введённым в этом запуске приложения ([known], `Vault`). До первого
+///   ввода голый ПИН-код не узнать (честно в ADR-025).
 ///
 /// Ложные пропуски возможны (честно в docs/PASSWORDS.md): при запертом
 /// хранилище пароль без слова «пароль» и без разделителя не распознать.
@@ -116,6 +122,11 @@ abstract final class SecretGuard {
 
   static final RegExp _token = RegExp(r'\S+');
 
+  static final RegExp _sixDigits = RegExp(r'^[0-9]{6}$');
+
+  /// Токен, в котором есть отдельный набор ровно из 6 цифр.
+  static final RegExp _sixDigitsInside = RegExp(r'(?<![0-9])[0-9]{6}(?![0-9])');
+
   static final RegExp _edgePunctuation =
       RegExp(r'^[«»"“”„(\[]+|[«»"“”„.,!?;:)\]]+$');
 
@@ -169,10 +180,30 @@ abstract final class SecretGuard {
         }
       }
     }
+    for (final match in RecoveryCode.matches(text)) {
+      ranges.add((match.start, match.end));
+    }
     if (known != null) {
+      var sixHit = false;
       for (final token in _token.allMatches(text)) {
-        if (_knownParts(token.group(0)!, known).isNotEmpty) {
+        final parts = _knownParts(token.group(0)!, known);
+        if (parts.isNotEmpty) {
           ranges.add((token.start, token.end));
+          final raw = token.group(0)!;
+          if (parts
+              .any((p) => _sixDigits.hasMatch(raw.substring(p.$1, p.$2)))) {
+            sixHit = true;
+          }
+        }
+      }
+      // Совпал набор из 6 цифр (ПИН-код сейфа или такой же пароль): скрыть
+      // ВСЕ такие наборы сообщения — по маске не понять, какой совпал
+      // (ADR-025, чат не оракул ПИН-кода).
+      if (sixHit) {
+        for (final token in _token.allMatches(text)) {
+          if (_sixDigitsInside.hasMatch(token.group(0)!)) {
+            ranges.add((token.start, token.end));
+          }
         }
       }
     }

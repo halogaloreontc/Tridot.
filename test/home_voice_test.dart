@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -107,12 +108,29 @@ CommandInputController _input(WidgetTester tester) =>
     tester.widget<TextField>(find.byKey(_inputKey)).controller!
         as CommandInputController;
 
-/// Палец на микрофоне: распознаватель начал слушать.
-Future<TestGesture> _hold(WidgetTester tester) async {
-  final gesture = await tester.startGesture(tester.getCenter(find.byKey(_mic)));
+/// Нажатие на микрофон: начать или закончить.
+Future<void> _tapMic(WidgetTester tester) async {
+  await tester.tap(find.byKey(_mic));
   await tester.pump();
   await tester.pump();
-  return gesture;
+}
+
+/// Ctrl+Shift+M с аппаратной клавиатуры.
+Future<void> _shortcut(WidgetTester tester) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+  await tester.sendKeyEvent(LogicalKeyboardKey.keyM);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+  await tester.pump();
+  await tester.pump();
+}
+
+/// Долгое нажатие пальцем на поле ввода.
+Future<void> _longPressInput(WidgetTester tester) async {
+  await tester.longPress(find.byKey(_inputKey));
+  await tester.pump();
+  await tester.pump();
 }
 
 void main() {
@@ -252,14 +270,18 @@ void main() {
     expect(find.text('Включить голосовой ввод?'), findsOneWidget);
   });
 
-  testWidgets('удержание: серый промежуточный текст, затем текст в поле',
-      (tester) async {
+  testWidgets(
+      'нажатие начинает, повторное заканчивает: серый промежуточный '
+      'текст, затем текст в поле', (tester) async {
     final rig = await _pump(tester, installed: true, settings: _ready);
-    final gesture = await _hold(tester);
+    await _tapMic(tester);
     expect(rig.recognizer.permissionCalls, 1);
     expect(rig.recognizer.loadCalls, 1);
     expect(rig.recognizer.isListening, isTrue);
-    expect(find.byIcon(Icons.mic), findsOneWidget);
+    // Слушает — красный «стоп» на месте микрофона, крестик на месте «+».
+    expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
+    expect(find.byKey(const Key('voice-abort')), findsOneWidget);
+    expect(find.byKey(const Key('templates-button')), findsNothing);
 
     rig.recognizer.emit(const VoicePartial('покажи'));
     await tester.pump();
@@ -272,29 +294,72 @@ void main() {
     rig.recognizer
       ..emit(const VoicePartial('покажи задачи'))
       ..finalText = 'покажи   задачи';
-    await tester.pump(const Duration(milliseconds: 400));
-    await gesture.up();
     await tester.pump();
+    // Держать не нужно: палец давно убран, а микрофон слушает.
+    await tester.pump(const Duration(seconds: 3));
+    expect(rig.recognizer.isListening, isTrue);
+    await _tapMic(tester);
     expect(rig.recognizer.stopCalls, 1);
+    expect(rig.recognizer.cancelCalls, 0);
     expect(find.byKey(const Key('voice-partial')), findsNothing);
     expect(_inputText(tester), 'Покажи задачи');
     // Подсветка команды, как у набранного текста.
     await tester.pump(const Duration(milliseconds: 200));
     expect(_input(tester).spans, isNotEmpty);
     // Ничего не отправлено: текст ждёт правки, на месте микрофона —
-    // отправка.
+    // отправка, «+» вернулся.
     expect(find.byKey(const Key('assistant-send')), findsOneWidget);
+    expect(find.byKey(const Key('templates-button')), findsOneWidget);
+    expect(find.byKey(const Key('voice-abort')), findsNothing);
     expect(find.text('Активных задач пока нет.'), findsNothing);
+  });
+
+  testWidgets('вид и семантика: готов, слушаю, «стоп»', (tester) async {
+    final handle = tester.ensureSemantics();
+    final rig = await _pump(tester, installed: true, settings: _ready);
+    expect(find.byIcon(Icons.mic_none), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(_mic)),
+      matchesSemantics(
+        label: 'Голосовой ввод',
+        isButton: true,
+        hasTapAction: true,
+      ),
+    );
+    await _tapMic(tester);
+    expect(rig.recognizer.isListening, isTrue);
+    expect(find.text('Говорите…'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(_mic)),
+      matchesSemantics(
+        label: 'Голосовой ввод',
+        value: 'слушаю',
+        hint: 'нажмите, чтобы закончить',
+        isButton: true,
+        hasTapAction: true,
+      ),
+    );
+    final circle = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: find.byKey(_mic),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    expect(
+      (circle.decoration! as BoxDecoration).color,
+      AssistantColors.danger,
+    );
+    await _tapMic(tester);
+    expect(find.byIcon(Icons.mic_none), findsOneWidget);
+    handle.dispose();
   });
 
   testWidgets('модель загружается один раз', (tester) async {
     final rig = await _pump(tester, installed: true, settings: _ready);
     for (var i = 0; i < 2; i++) {
-      final gesture = await _hold(tester);
+      await _tapMic(tester);
       rig.recognizer.finalText = '';
-      await tester.pump(const Duration(milliseconds: 400));
-      await gesture.up();
-      await tester.pump();
+      await _tapMic(tester);
     }
     expect(rig.recognizer.loadCalls, 1);
     expect(rig.recognizer.startCalls, 2);
@@ -302,15 +367,44 @@ void main() {
     expect(find.text('Не удалось распознать речь'), findsOneWidget);
   });
 
-  testWidgets('короткое касание не слушает и подсказывает удерживать',
+  testWidgets('два быстрых нажатия: начал и закончил, ничего не зависло',
       (tester) async {
     final rig = await _pump(tester, installed: true, settings: _ready);
-    final gesture = await _hold(tester);
-    await gesture.up();
+    await tester.tap(find.byKey(_mic));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.byKey(_mic));
+    await tester.pump();
+    await tester.pump();
+    expect(rig.recognizer.startCalls, 1);
+    expect(rig.recognizer.stopCalls, 1);
+    expect(rig.recognizer.isListening, isFalse);
+    expect(find.text('Не удалось распознать речь'), findsOneWidget);
+    expect(_inputText(tester), isEmpty);
+    // Следующее нажатие снова слушает.
+    await _tapMic(tester);
+    expect(rig.recognizer.startCalls, 2);
+    expect(rig.recognizer.isListening, isTrue);
+    await _tapMic(tester);
+  });
+
+  testWidgets('крестик прерывает без текста', (tester) async {
+    final rig = await _pump(tester, installed: true, settings: _ready);
+    await _tapMic(tester);
+    rig.recognizer
+      ..emit(const VoicePartial('покажи задачи'))
+      ..finalText = 'покажи задачи';
+    await tester.pump();
+    expect(find.byKey(const Key('voice-partial')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('voice-abort')));
+    await tester.pump();
     await tester.pump();
     expect(rig.recognizer.cancelCalls, 1);
     expect(rig.recognizer.stopCalls, 0);
-    expect(find.text('Удерживайте микрофон, пока говорите'), findsOneWidget);
+    expect(rig.recognizer.isListening, isFalse);
+    expect(find.byKey(const Key('voice-partial')), findsNothing);
+    expect(find.byKey(const Key('voice-abort')), findsNothing);
+    expect(find.byIcon(Icons.mic_none), findsOneWidget);
     expect(_inputText(tester), isEmpty);
   });
 
@@ -318,17 +412,16 @@ void main() {
       'подсказка — над полем, а не поверх микрофона: можно сразу '
       'нажать снова', (tester) async {
     final rig = await _pump(tester, installed: true, settings: _ready);
-    final short = await _hold(tester);
-    await short.up();
-    await tester.pump();
+    await _tapMic(tester);
+    await _tapMic(tester);
     // Подсказка в поле ввода, всплывающего уведомления нет.
     expect(find.byKey(const Key('voice-notice')), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
     final notice = tester.getRect(find.byKey(const Key('voice-notice')));
     final mic = tester.getRect(find.byKey(_mic));
     expect(notice.overlaps(mic), isFalse);
-    // Сразу же — удержание, и микрофон слушает.
-    final gesture = await _hold(tester);
+    // Сразу же — нажатие, и микрофон слушает.
+    await _tapMic(tester);
     expect(rig.recognizer.startCalls, 2);
     expect(rig.recognizer.isListening, isTrue);
     // Пока слушает, поле говорит об этом, а подсказка уступает место.
@@ -338,9 +431,7 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('voice-notice')), findsNothing);
     rig.recognizer.finalText = '';
-    await tester.pump(const Duration(milliseconds: 400));
-    await gesture.up();
-    await tester.pump();
+    await _tapMic(tester);
     expect(find.text('Не удалось распознать речь'), findsOneWidget);
     // Через несколько секунд подсказка исчезает сама.
     await tester.pump(const Duration(seconds: 5));
@@ -354,7 +445,7 @@ void main() {
     expect(rig.recognizer.startCalls, 0);
   });
 
-  testWidgets('отпустили, пока модель загружалась: честное сообщение',
+  testWidgets('нажали снова, пока модель загружалась: отмена, не слушает',
       (tester) async {
     final gate = Completer<void>();
     final rig = await _pump(
@@ -363,20 +454,21 @@ void main() {
       settings: _ready,
       recognizer: FakeVoiceRecognizer()..loadGate = gate,
     );
-    final gesture = await _hold(tester);
+    await _tapMic(tester);
     expect(rig.recognizer.isListening, isFalse);
     expect(find.text('Готовлю распознавание…'), findsOneWidget);
+    expect(find.byKey(const Key('voice-abort')), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 1500));
-    await gesture.up();
-    await tester.pump();
+    await _tapMic(tester);
+    // Сразу снова готов: ожидание загрузки не держит экран.
+    expect(find.byIcon(Icons.mic_none), findsOneWidget);
+    expect(find.text('Готовлю распознавание…'), findsNothing);
     gate.complete();
     await tester.pump();
     await tester.pump();
     expect(rig.recognizer.startCalls, 0);
-    expect(
-      find.textContaining('Распознавание ещё готовилось'),
-      findsOneWidget,
-    );
+    expect(rig.recognizer.isListening, isFalse);
+    expect(find.byKey(const Key('voice-notice')), findsNothing);
     expect(find.byIcon(Icons.mic_none), findsOneWidget);
   });
 
@@ -390,25 +482,22 @@ void main() {
       settings: _ready,
       recognizer: FakeVoiceRecognizer()..loadGate = gate,
     );
-    final first = await _hold(tester);
+    await _tapMic(tester);
     // Шторка уведомлений: приложение неактивно и снова активно.
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
-    await first.up();
-    await tester.pump();
-    final second = await _hold(tester);
+    expect(find.byIcon(Icons.mic_none), findsOneWidget);
+    await _tapMic(tester);
     gate.complete();
     await tester.pump();
     await tester.pump();
     expect(rig.recognizer.startCalls, 1);
     expect(rig.recognizer.isListening, isTrue);
-    expect(find.byIcon(Icons.mic), findsOneWidget);
-    // Отпускание заканчивает именно эту попытку: итог приходит.
+    expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
+    // «Стоп» заканчивает именно эту попытку: итог приходит.
     rig.recognizer.finalText = 'покажи задачи';
-    await tester.pump(const Duration(milliseconds: 400));
-    await second.up();
-    await tester.pump();
+    await _tapMic(tester);
     expect(rig.recognizer.stopCalls, 1);
     expect(rig.recognizer.isListening, isFalse);
     expect(_inputText(tester), 'Покажи задачи');
@@ -422,7 +511,7 @@ void main() {
       settings: _ready,
       recognizer: FakeVoiceRecognizer()..permissionGate = gate,
     );
-    final gesture = await _hold(tester);
+    await _tapMic(tester);
     // Диалог Android делает приложение неактивным.
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pump();
@@ -434,9 +523,7 @@ void main() {
     expect(rig.recognizer.startCalls, 1);
     expect(rig.recognizer.isListening, isTrue);
     rig.recognizer.finalText = 'покажи';
-    await tester.pump(const Duration(milliseconds: 400));
-    await gesture.up();
-    await tester.pump();
+    await _tapMic(tester);
     expect(_inputText(tester), 'Покажи');
   });
 
@@ -447,11 +534,9 @@ void main() {
       installed: true,
       settings: _ready.copyWith(voiceSendImmediately: true),
     );
-    final gesture = await _hold(tester);
+    await _tapMic(tester);
     rig.recognizer.finalText = 'покажи задачи';
-    await tester.pump(const Duration(milliseconds: 400));
-    await gesture.up();
-    await tester.pump();
+    await _tapMic(tester);
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
     expect(_inputText(tester), isEmpty);
@@ -466,11 +551,9 @@ void main() {
       installed: true,
       settings: _ready.copyWith(voiceSendImmediately: true),
     );
-    final gesture = await _hold(tester);
+    await _tapMic(tester);
     rig.recognizer.finalText = 'покажи пароли';
-    await tester.pump(const Duration(milliseconds: 400));
-    await gesture.up();
-    await tester.pump();
+    await _tapMic(tester);
     expect(_inputText(tester), 'Покажи пароли');
     expect(
       find.text('Похоже на пароль — проверьте текст и отправьте вручную'),
@@ -488,15 +571,14 @@ void main() {
       settings: _ready,
       recognizer: FakeVoiceRecognizer(permission: VoicePermission.denied),
     );
-    final gesture = await _hold(tester);
-    await gesture.up();
-    await tester.pump();
+    await _tapMic(tester);
     expect(rig.recognizer.startCalls, 0);
     expect(
       find.text('Нет доступа к микрофону. Разрешите его в настройках Android'),
       findsOneWidget,
     );
     expect(find.byIcon(Icons.mic_none), findsOneWidget);
+    expect(find.byKey(const Key('voice-abort')), findsNothing);
   });
 
   testWidgets('первый раз — объяснение, зачем микрофон, затем запрос',
@@ -514,13 +596,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(rig.recognizer.permissionCalls, 1);
     expect(rig.recognizer.startCalls, 0);
-    expect(find.textContaining('Микрофон доступен'), findsOneWidget);
+    expect(
+      find.text('Микрофон доступен. Нажмите на него и говорите'),
+      findsOneWidget,
+    );
     expect((await rig.store.load()).voiceMicExplained, isTrue);
   });
 
   testWidgets('фон прерывает распознавание без итога', (tester) async {
     final rig = await _pump(tester, installed: true, settings: _ready);
-    final gesture = await _hold(tester);
+    await _tapMic(tester);
     rig.recognizer.emit(const VoicePartial('покажи'));
     await tester.pump();
     expect(find.byKey(const Key('voice-partial')), findsOneWidget);
@@ -532,14 +617,200 @@ void main() {
     expect(rig.recognizer.cancelCalls, greaterThanOrEqualTo(1));
     expect(rig.recognizer.isListening, isFalse);
     expect(find.byKey(const Key('voice-partial')), findsNothing);
-    await gesture.up();
-    await tester.pump();
     expect(rig.recognizer.stopCalls, 0);
     expect(_inputText(tester), isEmpty);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
+    // Таймеры автостопа прерванной попытки не срабатывают позже.
+    await tester.pump(const Duration(seconds: 61));
+    expect(rig.recognizer.stopCalls, 0);
+    expect(find.byKey(const Key('voice-notice')), findsNothing);
+  });
+
+  group('долгое нажатие на пустое поле', () {
+    testWidgets('начинает голосовой ввод без клавиатуры и меню',
+        (tester) async {
+      final rig = await _pump(tester, installed: true, settings: _ready);
+      await _longPressInput(tester);
+      expect(rig.recognizer.startCalls, 1);
+      expect(rig.recognizer.isListening, isTrue);
+      expect(find.text('Говорите…'), findsOneWidget);
+      // Поле не забрало жест: ни фокуса с клавиатурой, ни «Вставить».
+      final field = tester.widget<TextField>(find.byKey(_inputKey));
+      expect(field.focusNode!.hasFocus, isFalse);
+      expect(find.text('Вставить'), findsNothing);
+      expect(find.text('Paste'), findsNothing);
+      // Заканчивает нажатие на «стоп».
+      rig.recognizer.finalText = 'покажи задачи';
+      await _tapMic(tester);
+      expect(_inputText(tester), 'Покажи задачи');
+    });
+
+    testWidgets('с текстом — обычное выделение, голос не включается',
+        (tester) async {
+      final rig = await _pump(tester, installed: true, settings: _ready);
+      await tester.enterText(find.byKey(_inputKey), 'покажи задачи');
+      await tester.pump();
+      await tester.longPress(find.byKey(_inputKey));
+      await tester.pumpAndSettle();
+      expect(rig.recognizer.startCalls, 0);
+      // Слово под пальцем выделено, меню поля открыто.
+      final selection = _input(tester).selection;
+      expect(selection.isCollapsed, isFalse);
+      expect(find.byType(AdaptiveTextSelectionToolbar), findsOneWidget);
+    });
+
+    testWidgets('первая буква не сбрасывает фокус и клавиатуру',
+        (tester) async {
+      await _pump(tester, installed: true, settings: _ready);
+      await tester.tap(find.byKey(_inputKey));
+      await tester.pump();
+      final field = tester.widget<TextField>(find.byKey(_inputKey));
+      final node = field.focusNode!;
+      expect(node.hasFocus, isTrue);
+      final editable = tester.state<EditableTextState>(
+        find.byType(EditableText),
+      );
+      tester.testTextInput.enterText('п');
+      await tester.pump();
+      expect(node.hasFocus, isTrue);
+      // Тот же State поля: TextField не пересоздан.
+      expect(
+        tester.state<EditableTextState>(find.byType(EditableText)),
+        same(editable),
+      );
+      expect(tester.testTextInput.isVisible, isTrue);
+      tester.testTextInput.enterText('');
+      await tester.pump();
+      expect(node.hasFocus, isTrue);
+      expect(
+        tester.state<EditableTextState>(find.byType(EditableText)),
+        same(editable),
+      );
+    });
+
+    testWidgets('выключенный голосовой ввод не перехватывает жест',
+        (tester) async {
+      final rig = await _pump(tester);
+      await _longPressInput(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Включить голосовой ввод?'), findsNothing);
+      expect(rig.recognizer.startCalls, 0);
+    });
+
+    testWidgets('мышью — обычное долгое нажатие', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        final rig = await _pump(
+          tester,
+          size: _desktop,
+          installed: true,
+          settings: _ready,
+        );
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(_inputKey)),
+          kind: PointerDeviceKind.mouse,
+        );
+        await tester.pump(const Duration(seconds: 1));
+        await gesture.up();
+        await tester.pump();
+        expect(rig.recognizer.startCalls, 0);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  });
+
+  group('автостоп', () {
+    testWidgets('8 с тишины после речи: стоп с итогом и подсказка',
+        (tester) async {
+      final rig = await _pump(tester, installed: true, settings: _ready);
+      await _tapMic(tester);
+      rig.recognizer
+        ..emit(const VoicePartial('покажи'))
+        ..finalText = 'покажи задачи';
+      await tester.pump();
+      // Новые слова продлевают ожидание.
+      await tester.pump(const Duration(seconds: 7));
+      rig.recognizer.emit(const VoicePartial('покажи задачи'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 7));
+      expect(rig.recognizer.isListening, isTrue);
+      // Тот же промежуточный текст — не речь.
+      rig.recognizer.emit(const VoicePartial('покажи задачи'));
+      await tester.pump(const Duration(seconds: 1, milliseconds: 100));
+      await tester.pump();
+      expect(rig.recognizer.stopCalls, 1);
+      expect(rig.recognizer.cancelCalls, 0);
+      expect(rig.recognizer.isListening, isFalse);
+      expect(_inputText(tester), 'Покажи задачи');
+      expect(
+        find.text('Микрофон выключен: долго не было речи'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('10 с без речи: стоп, «речи не слышно»', (tester) async {
+      final rig = await _pump(tester, installed: true, settings: _ready);
+      await _tapMic(tester);
+      await tester.pump(const Duration(seconds: 9));
+      expect(rig.recognizer.isListening, isTrue);
+      await tester.pump(const Duration(seconds: 1, milliseconds: 100));
+      await tester.pump();
+      expect(rig.recognizer.stopCalls, 1);
+      expect(rig.recognizer.isListening, isFalse);
+      expect(_inputText(tester), isEmpty);
+      expect(find.text('Микрофон выключен: речи не слышно'), findsOneWidget);
+      expect(find.byIcon(Icons.mic_none), findsOneWidget);
+    });
+
+    testWidgets('минута речи без пауз: стоп с итогом', (tester) async {
+      final rig = await _pump(tester, installed: true, settings: _ready);
+      await _tapMic(tester);
+      rig.recognizer.finalText = 'покажи задачи';
+      for (var i = 1; i <= 12; i++) {
+        rig.recognizer.emit(VoicePartial('слово ' * i));
+        await tester.pump(const Duration(seconds: 5));
+      }
+      await tester.pump();
+      expect(rig.recognizer.stopCalls, 1);
+      expect(rig.recognizer.isListening, isFalse);
+      expect(find.text('Микрофон выключен: прошла минута'), findsOneWidget);
+      expect(_inputText(tester), 'Покажи задачи');
+    });
+
+    testWidgets('итог похож на пароль — предупреждение важнее', (tester) async {
+      final rig = await _pump(
+        tester,
+        installed: true,
+        settings: _ready.copyWith(voiceSendImmediately: true),
+      );
+      await _tapMic(tester);
+      rig.recognizer
+        ..emit(const VoicePartial('покажи'))
+        ..finalText = 'покажи пароли';
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 8, milliseconds: 100));
+      await tester.pump();
+      expect(_inputText(tester), 'Покажи пароли');
+      expect(
+        find.text('Похоже на пароль — проверьте текст и отправьте вручную'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  testWidgets('телефон с клавиатурой: Ctrl+Shift+M начинает и заканчивает',
+      (tester) async {
+    final rig = await _pump(tester, installed: true, settings: _ready);
+    await _shortcut(tester);
+    expect(rig.recognizer.isListening, isTrue);
+    rig.recognizer.finalText = 'покажи';
+    await _shortcut(tester);
+    expect(rig.recognizer.stopCalls, 1);
+    expect(_inputText(tester), 'Покажи');
   });
 
   testWidgets('компьютер: нажатие начинает и заканчивает, Ctrl+Shift+M тоже',
@@ -552,39 +823,25 @@ void main() {
         installed: true,
         settings: _ready,
       );
-      await tester.tap(find.byKey(_mic));
-      await tester.pump();
-      await tester.pump();
+      await _tapMic(tester);
       expect(rig.recognizer.isListening, isTrue);
       rig.recognizer
         ..emit(const VoicePartial('покажи'))
         ..finalText = 'покажи';
       await tester.pump();
       expect(find.byKey(const Key('voice-partial')), findsOneWidget);
-      // Нажатие на компьютере — переключатель, даже быстрое.
-      await tester.tap(find.byKey(_mic));
-      await tester.pump();
+      await _tapMic(tester);
       expect(rig.recognizer.stopCalls, 1);
       expect(_inputText(tester), 'Покажи');
 
       // С черновиком микрофона нет, но сочетание клавиш работает и
       // дописывает через пробел.
       expect(find.byKey(_mic), findsNothing);
-      Future<void> shortcut() async {
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-        await tester.sendKeyEvent(LogicalKeyboardKey.keyM);
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-        await tester.pump();
-        await tester.pump();
-      }
-
-      await shortcut();
+      await _shortcut(tester);
       expect(rig.recognizer.startCalls, 2);
       expect(rig.recognizer.isListening, isTrue);
       rig.recognizer.finalText = 'задачи';
-      await shortcut();
+      await _shortcut(tester);
       expect(rig.recognizer.stopCalls, 2);
       expect(_inputText(tester), 'Покажи задачи');
     } finally {

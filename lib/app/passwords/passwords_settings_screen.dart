@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/passwords/vault.dart';
 import '../../core/passwords/vault_errors.dart';
 import '../../core/passwords/vault_prefs.dart';
 import '../assistant_theme.dart';
@@ -10,11 +11,15 @@ import 'entry_screens.dart';
 import 'passwords_kit.dart';
 import 'passwords_screen.dart';
 import 'secret_widgets.dart';
+import 'vault_access.dart';
+import 'vault_confirm.dart';
+import '../widgets/whole_word_text.dart';
 
 /// «Пароли → Настройки» (раздел 9). Защитные настройки живут внутри
 /// зашифрованного индекса: меняются только в открытом хранилище, а
 /// ослабление (дольше, реже, подсказки или логин в истории, без
-/// переспроса) — только после ввода мастер-пароля.
+/// переспроса) — только после подтверждения (ПИН-код, биометрия,
+/// блокировка экрана; у старого сейфа — мастер-пароль, ADR-025).
 class PasswordsSettingsScreen extends StatefulWidget {
   const PasswordsSettingsScreen({super.key, required this.kit});
 
@@ -57,12 +62,12 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
     setState(() => _busy = true);
     try {
       if (kit.vault.prefsWeaken(changes)) {
-        ok = await askMaster(
+        ok = await askVaultConfirm(
           context,
+          kit: kit,
           title: 'Ослабить защиту?',
-          text: 'Эта настройка делает сейф менее защищённым. '
-              'Подтвердите мастер-паролем.',
-          check: (String master) => kit.setPrefs(changes, master: master),
+          text: 'Эта настройка делает сейф менее защищённым. Подтвердите.',
+          check: (VaultProof proof) => kit.setPrefs(changes, proof: proof),
         );
       } else {
         ok = await kit.setPrefs(changes);
@@ -82,7 +87,10 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
     return ListTile(
       key: ValueKey<String>('prefs-${pref.key}'),
       contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-      title: Text(title, style: const TextStyle(color: AssistantColors.text)),
+      title: WholeWordText(
+        title,
+        style: const TextStyle(color: AssistantColors.text),
+      ),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Wrap(
@@ -127,8 +135,11 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 8),
       value: pref.of(kit.vault.prefs),
       onChanged: _busy ? null : (bool v) => unawaited(_set(pref.key, v)),
-      title: Text(title, style: const TextStyle(color: AssistantColors.text)),
-      subtitle: Text(
+      title: WholeWordText(
+        title,
+        style: const TextStyle(color: AssistantColors.text),
+      ),
+      subtitle: WholeWordText(
         subtitle,
         style: const TextStyle(color: AssistantColors.muted),
       ),
@@ -143,13 +154,14 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
     var ok = false;
     try {
       if (enabled) {
-        ok = await askMaster(
+        ok = await askVaultConfirm(
           context,
+          kit: kit,
           title: 'Хранить прежние пароли?',
           text: 'Прежние пароли будут храниться в сейфе зашифрованными — '
-              'это ослабляет защиту. Подтвердите мастер-паролем.',
-          check: (String master) =>
-              kit.setPasswordHistory(true, master: master),
+              'это ослабляет защиту. Подтвердите.',
+          check: (VaultProof proof) =>
+              kit.setPasswordHistory(true, proof: proof),
         );
       } else {
         bool? purge = false;
@@ -159,7 +171,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
             builder: (BuildContext context) => AlertDialog(
               scrollable: true,
               backgroundColor: AssistantColors.raised,
-              title: const Text(
+              title: const WholeWordText(
                 'Удалить сохранённые прежние пароли всех записей?',
               ),
               content: const Text(
@@ -232,11 +244,14 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 32),
             children: <Widget>[
               const SectionLabel('ЗАЩИТА'),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Text(
-                  'Эти настройки хранятся внутри зашифрованного сейфа. '
-                  'Ослабить защиту можно только мастер-паролем.',
+                  kit.isProtected
+                      ? 'Эти настройки хранятся внутри зашифрованного сейфа. '
+                          'Ослабить защиту можно только с подтверждением.'
+                      : 'Эти настройки хранятся внутри зашифрованного сейфа. '
+                          'Ослабить защиту можно только мастер-паролем.',
                   style: metaTextStyle,
                 ),
               ),
@@ -245,7 +260,12 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                 VaultPrefs.autolockMinutes,
                 'мин',
               ),
-              _choice('Мастер-пароль каждые', VaultPrefs.masterEveryHours, 'ч'),
+              if (!kit.isProtected)
+                _choice(
+                  'Мастер-пароль каждые',
+                  VaultPrefs.masterEveryHours,
+                  'ч',
+                ),
               _choice('Время показа пароля', VaultPrefs.revealSeconds, 'с'),
               if (kit.canCopySecrets)
                 _choice(
@@ -255,7 +275,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                 ),
               _flag(
                 'Переспрашивать для важных',
-                'Показ и копирование важных записей — с мастер-паролем.',
+                'Показ и копирование важных записей — с подтверждением.',
                 VaultPrefs.repromptImportant,
               ),
               SwitchListTile(
@@ -263,17 +283,18 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                 value: kit.historyEnabled,
                 onChanged: _busy ? null : (bool v) => unawaited(_setHistory(v)),
-                title: const Text(
+                title: const WholeWordText(
                   'Хранить прежние пароли (хронология)',
                   style: TextStyle(color: AssistantColors.text),
                 ),
-                subtitle: const Text(
+                subtitle: const WholeWordText(
                   'Выключено: старый пароль стирается при смене. Включено: '
                   'прежние пароли хранятся зашифрованными в записи, '
                   'ошибочные можно удалить.',
                   style: TextStyle(color: AssistantColors.muted),
                 ),
               ),
+              VaultAccessSection(kit: kit),
               const SectionLabel('ЧТО ПОПАДАЕТ В ИСТОРИЮ'),
               _flag(
                 'Подсказки можно хранить в истории',
@@ -297,18 +318,19 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                   style: metaTextStyle,
                 ),
               ),
-              const SectionLabel('МАСТЕР-ПАРОЛЬ'),
-              ListTile(
-                key: const ValueKey<String>('prefs-change-master'),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                leading: const Icon(Icons.key_outlined),
-                title: const Text('Сменить мастер-пароль'),
-                subtitle: const Text(
-                  'Сейф перешифруется новым ключом: старый мастер-пароль '
-                  'больше ничего не откроет.',
+              SectionLabel(kit.isProtected ? 'СЕЙФ' : 'МАСТЕР-ПАРОЛЬ'),
+              if (!kit.isProtected)
+                ListTile(
+                  key: const ValueKey<String>('prefs-change-master'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  leading: const Icon(Icons.key_outlined),
+                  title: const WholeWordText('Сменить мастер-пароль'),
+                  subtitle: const WholeWordText(
+                    'Сейф перешифруется новым ключом: старый мастер-пароль '
+                    'больше ничего не откроет.',
+                  ),
+                  onTap: () => unawaited(_changeMaster()),
                 ),
-                onTap: () => unawaited(_changeMaster()),
-              ),
               ListTile(
                 key: const ValueKey<String>('prefs-start-over'),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 8),
@@ -316,17 +338,26 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                   Icons.inventory_2_outlined,
                   color: AssistantColors.danger,
                 ),
-                title: const Text('Отложить сейф в архив'),
-                subtitle: const Text(
-                  'Для тех, кто забыл мастер-пароль: файл не стирается, '
-                  'можно начать заново.',
+                title: const WholeWordText('Отложить сейф в архив'),
+                subtitle: WholeWordText(
+                  kit.isProtected
+                      ? 'Начать заново с пустым сейфом: файл не стирается.'
+                      : 'Для тех, кто забыл мастер-пароль: файл не стирается, '
+                          'можно начать заново.',
                 ),
                 onTap: () => unawaited(showRecovery(context, kit)),
               ),
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(kit.platform.unlockNote, style: metaTextStyle),
+                child: Text(
+                  kit.protectionNoteFor(
+                    pin: kit.vault.protection?.pin ?? false,
+                    bio: kit.vault.protection?.bio ?? false,
+                    inSettings: true,
+                  ),
+                  style: metaTextStyle,
+                ),
               ),
             ],
           ),
@@ -411,7 +442,7 @@ class _ChangeMasterDialogState extends State<_ChangeMasterDialog> {
     return AlertDialog(
       scrollable: true,
       backgroundColor: AssistantColors.raised,
-      title: const Text('Сменить мастер-пароль'),
+      title: const WholeWordText('Сменить мастер-пароль'),
       content: SizedBox(
         width: 420,
         child: Column(

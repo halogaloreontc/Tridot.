@@ -7,10 +7,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as hash;
 import 'package:local_assistant/core/passwords/password_wordlists.dart';
 import 'package:local_assistant/core/passwords/secret_bytes.dart';
 import 'package:local_assistant/core/passwords/vault.dart';
 import 'package:local_assistant/core/passwords/vault_crypto.dart';
+import 'package:local_assistant/core/passwords/vault_device_key.dart';
 import 'package:local_assistant/core/passwords/vault_store.dart';
 import 'package:local_assistant/core/services/clock.dart';
 
@@ -44,12 +46,14 @@ final class TestClock implements Clock, MonotonicClock {
 /// Мастер-пароль и прочее из текста (только в тестах).
 SecretBytes secret(String text) => SecretBytes.fromText(text);
 
-/// Хранилище на [store] с тестовыми параметрами KDF.
+/// Хранилище на [store] с тестовыми параметрами KDF. С [deviceKey] —
+/// защита устройством (ADR-025), без него — прежний мастер-пароль.
 Vault testVault(
   VaultStore store,
   VaultCrypto crypto, {
   Clock? clock,
   VaultPolicy policy = const VaultPolicy(),
+  VaultDeviceKey? deviceKey,
 }) =>
     Vault(
       store: store,
@@ -57,7 +61,135 @@ Vault testVault(
       clock: clock ?? TestClock(),
       policy: policy,
       allowTestingKdf: true,
+      deviceKey: deviceKey,
     );
+
+/// Ключ устройства в памяти (ADR-025): HMAC-SHA256 ключами, которые не
+/// выходят наружу; умеет «потерять» и «сбросить» ключ, считает запросы.
+final class FakeDeviceKey implements VaultDeviceKey {
+  FakeDeviceKey({
+    this.kind = VaultDeviceKinds.androidKeystore,
+    this.pinAllowed = true,
+    this.bio = true,
+  });
+
+  @override
+  final String kind;
+
+  @override
+  final bool pinAllowed;
+
+  /// Есть ли биометрия (или блокировка экрана) на «устройстве».
+  bool bio;
+
+  final Map<String, Uint8List> _keys = <String, Uint8List>{};
+  final Set<String> _userAuth = <String>{};
+  final Set<String> _invalidated = <String>{};
+  var _next = 0;
+
+  /// Сколько раз система спрашивала отпечаток (ключи с проверкой личности).
+  int prompts = 0;
+
+  /// Сколько раз вызывали [mac].
+  int macCalls = 0;
+
+  /// Последняя причина запроса.
+  String? lastReason;
+
+  /// Следующий системный запрос закончится так (отмена, блокировка).
+  DeviceKeyFailure? nextPrompt;
+
+  /// Вызывается при каждом [mac] до ответа.
+  void Function()? onMac;
+
+  /// Следующий [mac] любого ключа закончится так (сбой хранилища ключей,
+  /// ошибочно названный «потерей»).
+  DeviceKeyFailure? nextMac;
+
+  /// Хранилище ключей сейчас недоступно: [create] падает.
+  bool failCreate = false;
+
+  /// Имена живых ключей.
+  Set<String> get aliases => _keys.keys.toSet();
+
+  /// Ключи с проверкой личности.
+  Set<String> get bioAliases => _userAuth.intersection(aliases);
+
+  /// Ключ пропал (переустановка, сброс хранилища ключей).
+  void lose(String alias) => _keys.remove(alias);
+
+  /// Все ключи с проверкой личности сброшены (добавили отпечаток).
+  void invalidateBio() => _invalidated.addAll(_userAuth);
+
+  @override
+  Future<bool> bioAvailable() async => bio;
+
+  @override
+  Future<String> create({bool userAuth = false}) async {
+    if (failCreate) {
+      throw const DeviceKeyException(DeviceKeyFailure.unavailable);
+    }
+    final alias = 'fake-${_next++}';
+    _keys[alias] = Uint8List.fromList(
+      List<int>.generate(32, (int i) => (i * 31 + _next * 17) & 0xFF),
+    );
+    if (userAuth) _userAuth.add(alias);
+    return alias;
+  }
+
+  @override
+  Future<Uint8List> mac(
+    String alias,
+    Uint8List message, {
+    String? reason,
+  }) async {
+    macCalls++;
+    onMac?.call();
+    final forced = nextMac;
+    nextMac = null;
+    if (forced != null) throw DeviceKeyException(forced);
+    final key = _keys[alias];
+    if (key == null) throw const DeviceKeyException(DeviceKeyFailure.lost);
+    if (_userAuth.contains(alias)) {
+      if (_invalidated.contains(alias)) {
+        throw const DeviceKeyException(DeviceKeyFailure.invalidated);
+      }
+      prompts++;
+      lastReason = reason;
+      final failure = nextPrompt;
+      nextPrompt = null;
+      if (failure != null) throw DeviceKeyException(failure);
+    }
+    return Uint8List.fromList(
+      hash.Hmac(hash.sha256, key).convert(message).bytes,
+    );
+  }
+
+  @override
+  Future<void> delete(String alias) async {
+    _keys.remove(alias);
+    _userAuth.remove(alias);
+  }
+}
+
+/// ПИН-код для тестов: цифры считаются, а не пишутся текстом, чтобы их не
+/// было ни в названиях тестов, ни в исходниках. [n] — какой по счёту.
+String canaryPin([int n = 0]) {
+  final digits = <int>[5, 8, 3, 9, 1, 7];
+  return String.fromCharCodes(<int>[
+    for (var i = 0; i < digits.length; i++)
+      0x30 + (digits[i] + n * (i + 1)) % 10,
+  ]);
+}
+
+/// Неверный ПИН-код (той же формы): отличается от [canaryPin] последней
+/// цифрой.
+String wrongPin([int n = 0]) {
+  final pin = canaryPin();
+  final last = pin.codeUnitAt(5) - 0x30;
+  return pin.substring(0, 5) +
+      String.fromCharCode(0x30 + (last + 1 + n % 9) % 10);
+}
 
 const VaultKdfParams fastKdf = VaultKdfParams.forTesting();
 
@@ -152,6 +284,9 @@ final class FailingVaultStore implements VaultStore {
   final InMemoryVaultStore inner = InMemoryVaultStore();
   bool fail = false;
 
+  /// Запись `vault.v<N>.bak` падает.
+  bool failBackup = false;
+
   @override
   Future<bool> hasVault() => inner.hasVault();
   @override
@@ -171,10 +306,18 @@ final class FailingVaultStore implements VaultStore {
   @override
   Future<Uint8List?> readBackup(int version) => inner.readBackup(version);
   @override
-  Future<void> writeBackup(int version, Uint8List bytes) =>
-      inner.writeBackup(version, bytes);
+  Future<void> writeBackup(int version, Uint8List bytes) {
+    if (failBackup) throw const FileSystemException('диск');
+    return inner.writeBackup(version, bytes);
+  }
+
   @override
   Future<void> deleteBackup(int version) => inner.deleteBackup(version);
+  @override
+  Future<Uint8List?> readPinAttempts() => inner.readPinAttempts();
+  @override
+  Future<void> writePinAttempts(Uint8List bytes) =>
+      inner.writePinAttempts(bytes);
   @override
   Future<Uint8List?> readAttempts() => inner.readAttempts();
   @override

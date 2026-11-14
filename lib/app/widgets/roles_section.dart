@@ -8,6 +8,7 @@ import '../assistant_theme.dart';
 import 'connection_screen.dart';
 import 'extensions_section.dart' show connectionChanged;
 import 'task_tile.dart';
+import 'whole_word_text.dart';
 
 /// Раздел «Роли» в настройках, над «Расширениями» (ADR-012): карточка на
 /// роль — название, описание, что входит, переключатель, а у роли с
@@ -189,7 +190,7 @@ class _RolesSectionState extends State<RolesSection> {
       context: context,
       builder: (BuildContext context) => AlertDialog(
         key: const Key('role-actions-dialog'),
-        title: const Text('Разрешить действия?'),
+        title: const WholeWordText('Разрешить действия?'),
         content: Text(
           'Помощник сможет перемещать товар и отмечать проведение от имени '
           '$login, с правами этой учётной записи. Каждое действие — только '

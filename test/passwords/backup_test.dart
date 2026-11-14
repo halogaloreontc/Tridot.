@@ -431,7 +431,17 @@ void main() {
       final kek = await crypto.derive(secret(pass), salt, params);
       final vk = crypto.randomKey();
       final ring = VaultKeyRing.from(crypto, vk);
-      final wrap = crypto.sealKey(kek, vk, VaultKeys.wrapPwAd(header));
+      final wrap = crypto.sealKey(
+        kek,
+        vk,
+        VaultKeys.wrapPwAdOf(
+          version: VaultFormat.version,
+          kind: kind,
+          vaultId: vaultId,
+          kdf: KdfRecord(ops: params.ops, mem: params.mem, salt: salt),
+          pwKind: kind == VaultFormat.kindVault ? VaultFormat.pwMaster : null,
+        ),
+      );
       kek.dispose();
       final body = VaultPadding.pad(
         Uint8List.fromList(utf8.encode(jsonEncode(index))),
@@ -460,6 +470,7 @@ void main() {
         vaultId: vaultId,
         kdf: KdfRecord(ops: params.ops, mem: params.mem, salt: salt),
         wrapPw: wrap,
+        pwKind: kind == VaultFormat.kindVault ? VaultFormat.pwMaster : null,
         rev: rev,
         index: crypto.seal(ring.index, body, VaultKeys.indexAd(header, rev)),
         secrets: secrets,

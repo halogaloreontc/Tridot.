@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'secret_bytes.dart';
+import 'vault_device_key.dart';
 import 'vault_errors.dart';
 
 /// Формат файла хранилища `vault.relayvault` и копии `.relaybak`
@@ -18,8 +19,25 @@ abstract final class VaultFormat {
   static const String name = 'relay-vault';
 
   /// Текущая версия конверта. 2 — хронология паролей (ADR-015):
-  /// поле `history` конверта и `hist` записи индекса.
-  static const int version = 2;
+  /// поле `history` конверта и `hist` записи индекса. 3 — защита
+  /// устройством (ADR-025): `pw_kind` и `slots`.
+  static const int version = 3;
+
+  /// Чем закрыта обёртка `wrap_pw` сейфа (`pw_kind`, с версии 3): прежний
+  /// мастер-пароль или код восстановления.
+  static const String pwMaster = 'master';
+  static const String pwRecovery = 'rc';
+
+  /// Слоты ключа сейфа (`slots`, ADR-025): ключ устройства, ПИН-код вместе
+  /// с ключом устройства, биометрия (ключ устройства с проверкой
+  /// личности).
+  static const String slotDevice = 'dev';
+  static const String slotPin = 'pin';
+  static const String slotBio = 'bio';
+  static const Set<String> slotNames = <String>{slotDevice, slotPin, slotBio};
+
+  /// Имя ключа устройства в слоте.
+  static final RegExp alias = RegExp(r'^[A-Za-z0-9_.-]{1,80}$');
 
   /// Текущая схема индекса.
   static const int indexSchema = 1;
@@ -138,6 +156,33 @@ final class BioWrap {
       };
 }
 
+/// Слот ключа сейфа (ADR-025): ключ сейфа, обёрнутый ключом, который
+/// выводится из ответа ключа устройства [alias] (вида [kind]). У слота
+/// ПИН-кода — свои параметры Argon2id ([kdf]).
+final class VaultSlot {
+  VaultSlot({
+    required this.kind,
+    required this.alias,
+    required this.box,
+    this.kdf,
+  });
+
+  final String kind;
+  final String alias;
+  final SealedBox box;
+  final KdfRecord? kdf;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'kind': kind,
+        'alias': alias,
+        ...box.toJson(),
+        if (kdf != null) 'kdf': kdf!.toJson(),
+      };
+
+  @override
+  String toString() => 'VaultSlot($kind)';
+}
+
 /// Параметры Argon2id13 из файла: проверяются до вывода ключа
 /// (`VaultKdfParams.checkLoaded`).
 final class KdfRecord {
@@ -170,6 +215,8 @@ final class VaultEnvelope {
     required this.secrets,
     this.history = const <String, SealedBox>{},
     this.wrapBio,
+    this.pwKind,
+    this.slots = const <String, VaultSlot>{},
     this.sourceVersion = VaultFormat.version,
   });
 
@@ -181,6 +228,18 @@ final class VaultEnvelope {
   final KdfRecord kdf;
   final SealedBox wrapPw;
   final BioWrap? wrapBio;
+
+  /// Чем закрыта [wrapPw] у сейфа: [VaultFormat.pwMaster] или
+  /// [VaultFormat.pwRecovery]. У копии — `null`.
+  final String? pwKind;
+
+  /// Слоты ключа сейфа (ADR-025); у копии и сейфа с мастер-паролем пусто.
+  /// Слот `dev` не бывает вместе с `pin` или `bio`: иначе ПИН-код и
+  /// биометрия ничего бы не защищали.
+  final Map<String, VaultSlot> slots;
+
+  /// Сейф защищён устройством и кодом восстановления (ADR-025).
+  bool get isRecoveryKind => pwKind == VaultFormat.pwRecovery;
 
   /// Номер версии содержимого; совпадает с `rev` внутри индекса.
   final int rev;
@@ -212,6 +271,12 @@ final class VaultEnvelope {
             'kdf': kdf.toJson(),
             'wrap_pw': wrapPw.toJson(),
             if (wrapBio != null) 'wrap_bio': wrapBio!.toJson(),
+            if (pwKind != null) 'pw_kind': pwKind,
+            if (slots.isNotEmpty)
+              'slots': <String, Object?>{
+                for (final MapEntry(:key, :value) in slots.entries)
+                  key: value.toJson(),
+              },
             'rev': rev,
             'index': index.toJson(),
             'secrets': <String, Object?>{
@@ -283,6 +348,51 @@ final class VaultEnvelope {
         _box(bio, exact: VaultFormat.keyBytes + VaultFormat.macBytes),
       );
     }
+    final pwKind = json['pw_kind'];
+    if (kind == VaultFormat.kindVault) {
+      if (pwKind != VaultFormat.pwMaster && pwKind != VaultFormat.pwRecovery) {
+        throw VaultError.corrupt;
+      }
+    } else if (pwKind != null) {
+      throw VaultError.corrupt;
+    }
+    final slots = <String, VaultSlot>{};
+    if (json.containsKey('slots')) {
+      // Слоты — только у сейфа с кодом восстановления: у копии их нет
+      // никогда (её открывает только пароль копии или код).
+      if (kind != VaultFormat.kindVault || pwKind != VaultFormat.pwRecovery) {
+        throw VaultError.corrupt;
+      }
+      for (final MapEntry(:key, :value) in _map(json['slots']).entries) {
+        if (!VaultFormat.slotNames.contains(key)) throw VaultError.corrupt;
+        final slot = _map(value);
+        final slotKind = slot['kind'];
+        final alias = slot['alias'];
+        if (slotKind is! String || !VaultDeviceKinds.all.contains(slotKind)) {
+          throw VaultError.corrupt;
+        }
+        if (alias is! String || !VaultFormat.alias.hasMatch(alias)) {
+          throw VaultError.corrupt;
+        }
+        KdfRecord? slotKdf;
+        if (key == VaultFormat.slotPin) {
+          slotKdf = _kdf(slot['kdf']);
+        } else if (slot.containsKey('kdf')) {
+          throw VaultError.corrupt;
+        }
+        slots[key] = VaultSlot(
+          kind: slotKind,
+          alias: alias,
+          box: _box(slot, exact: VaultFormat.keyBytes + VaultFormat.macBytes),
+          kdf: slotKdf,
+        );
+      }
+      if (slots.containsKey(VaultFormat.slotDevice) &&
+          (slots.containsKey(VaultFormat.slotPin) ||
+              slots.containsKey(VaultFormat.slotBio))) {
+        throw VaultError.corrupt;
+      }
+    }
     final rev = json['rev'];
     if (rev is! int || rev < 0) throw VaultError.corrupt;
     final index = _box(json['index'], maxB64: VaultFormat.maxIndexB64);
@@ -316,11 +426,42 @@ final class VaultEnvelope {
       kdf: KdfRecord(ops: ops, mem: mem, salt: salt),
       wrapPw: wrapPw,
       wrapBio: wrapBio,
+      pwKind: pwKind as String?,
+      slots: Map<String, VaultSlot>.unmodifiable(slots),
       rev: rev,
       index: index,
       secrets: secrets,
       history: history,
       sourceVersion: sourceVersion,
+    );
+  }
+
+  /// Тот же конверт с другими слотами (без ключей: шифротексты те же).
+  VaultEnvelope withSlots(Map<String, VaultSlot> next) => VaultEnvelope(
+        kind: kind,
+        vaultId: vaultId,
+        kdf: kdf,
+        wrapPw: wrapPw,
+        wrapBio: wrapBio,
+        pwKind: pwKind,
+        slots: Map<String, VaultSlot>.unmodifiable(next),
+        rev: rev,
+        index: index,
+        secrets: secrets,
+        history: history,
+        sourceVersion: sourceVersion,
+      );
+
+  static KdfRecord _kdf(Object? value) {
+    final kdf = _map(value);
+    if (kdf['alg'] != KdfRecord.alg) throw VaultError.corrupt;
+    final ops = kdf['ops'];
+    final mem = kdf['mem'];
+    if (ops is! int || mem is! int) throw VaultError.corrupt;
+    return KdfRecord(
+      ops: ops,
+      mem: mem,
+      salt: _b64(kdf['salt'], VaultFormat.saltBytes),
     );
   }
 
@@ -454,6 +595,7 @@ abstract final class VaultMigrations {
       envelope = <int, Map<String, Object?> Function(Map<String, Object?>)>{
     0: _envelope0to1,
     1: _envelope1to2,
+    2: _envelope2to3,
   };
 
   /// Индекс: схема `from` → `from + 1`.
@@ -474,6 +616,18 @@ abstract final class VaultMigrations {
   /// в файле v1 её нет.
   static Map<String, Object?> _envelope1to2(Map<String, Object?> json) =>
       <String, Object?>{...json, 'v': 2};
+
+  /// v2 → v3: защита устройством (ADR-025). Сейф v2 закрыт мастер-паролем
+  /// (`pw_kind: master`); слотов нет. Содержимое то же; переход на ключ
+  /// устройства и код восстановления — отдельный шаг после ввода
+  /// мастер-пароля (`Vault.unlock`).
+  static Map<String, Object?> _envelope2to3(Map<String, Object?> json) =>
+      <String, Object?>{
+        ...json,
+        'v': 3,
+        if (json['kind'] == VaultFormat.kindVault)
+          'pw_kind': VaultFormat.pwMaster,
+      };
 
   /// Схема 0: название записи — `title`, а не `service`.
   static Map<String, Object?> _index0to1(Map<String, Object?> json) {

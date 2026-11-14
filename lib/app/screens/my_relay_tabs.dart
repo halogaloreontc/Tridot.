@@ -10,6 +10,7 @@ import '../shell/today_panel.dart';
 import '../widgets/activity_grid.dart';
 import '../widgets/personas_section.dart';
 import '../widgets/task_tile.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Сколько дел показывает «Сейчас и дальше» сверх сегодняшних и
 /// просроченных: те видны все (на телефоне это единственное место, где
@@ -695,13 +696,17 @@ final class _Fact extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
+          // Слово, которое не влезает в свою долю строки («Обращение» на
+          // 320 px с крупным шрифтом), чуть уменьшается, а не рвётся
+          // (ADR-021). WholeWordText, а не LayoutBuilder: карточки стоят и
+          // в IntrinsicHeight.
           Expanded(
             flex: 2,
-            child: Text(label, style: metaTextStyle),
+            child: WholeWordText(label, style: metaTextStyle),
           ),
           Expanded(
             flex: 3,
-            child: Text(
+            child: WholeWordText(
               value,
               textAlign: TextAlign.end,
               style: const TextStyle(color: AssistantColors.textStrong),

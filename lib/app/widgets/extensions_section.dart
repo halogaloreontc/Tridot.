@@ -17,6 +17,7 @@ import '../passwords/passwords_kit.dart';
 import '../passwords/passwords_screen.dart';
 import 'connection_screen.dart';
 import 'task_tile.dart';
+import 'whole_word_text.dart';
 
 /// Раздел «Расширения» в настройках: навыки, подключения и паки.
 ///
@@ -331,7 +332,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
         // уводить кнопки за край.
         scrollable: true,
         backgroundColor: AssistantColors.raised,
-        title: Text('Удалить пак «${info.title}»?'),
+        title: WholeWordText('Удалить пак «${info.title}»?'),
         content: const Text(
           'Его записи пропадут. Задачи и история сессий останутся.',
         ),
@@ -702,7 +703,7 @@ class _PackImportDialogState extends State<_PackImportDialog> {
         builder: (dialogContext) => AlertDialog(
           scrollable: true,
           backgroundColor: AssistantColors.raised,
-          title: const Text('Заменить пак?'),
+          title: const WholeWordText('Заменить пак?'),
           content: const Text(
             'Пак с таким id уже установлен. Заменить его новой версией?',
           ),
@@ -740,7 +741,7 @@ class _PackImportDialogState extends State<_PackImportDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AssistantColors.raised,
-      title: const Text('Добавить пак'),
+      title: const WholeWordText('Добавить пак'),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(

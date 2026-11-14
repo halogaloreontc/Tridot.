@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../core/extensions/role.dart';
 import '../assistant_theme.dart';
 import '../widgets/quick_dock.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Быстрое действие: подпись (она же ключ `quick-<подпись>`), иконка и
 /// что делать; `null` — недоступно (идёт отправка).
@@ -206,63 +209,92 @@ final class _BigRow extends StatelessWidget {
 
   final List<QuickAction> items;
 
+  static const TextStyle _label = TextStyle(
+    fontSize: 12,
+    height: 1.3,
+    color: AssistantColors.text,
+  );
+
+  Widget _button(QuickAction item) {
+    final (label, icon, onTap) = item;
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: InkWell(
+        key: Key('quick-$label'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: AssistantColors.raised,
+                shape: BoxShape.circle,
+                border: Border.all(color: AssistantColors.border),
+              ),
+              child: Icon(icon, size: 22, color: AssistantColors.textStrong),
+            ),
+            const SizedBox(height: 6),
+            fitSingleWord(
+              label,
+              alignment: Alignment.center,
+              textAlign: TextAlign.center,
+              style: _label,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Всегда одна строка (ADR-021): кнопка не уходит вниз и не прячется
+    // под полем ввода. Слот не уже 76 и растёт по подписи («Напомнить» с
+    // крупным шрифтом — целиком, без «Напомнит/ь»). Не влезает с зазором
+    // 28 — зазор 12 и равные слоты, а подпись шире слота уменьшается
+    // целиком.
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 28,
-        runSpacing: 12,
-        children: <Widget>[
-          for (final (label, icon, onTap) in items)
-            Semantics(
-              button: true,
-              enabled: onTap != null,
-              label: label,
-              onTap: onTap,
-              excludeSemantics: true,
-              child: InkWell(
-                key: Key('quick-$label'),
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(12),
-                child: SizedBox(
-                  width: 76,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: AssistantColors.raised,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AssistantColors.border),
-                        ),
-                        child: Icon(
-                          icon,
-                          size: 22,
-                          color: AssistantColors.textStrong,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        label,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          height: 1.3,
-                          color: AssistantColors.text,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final widths = <double>[
+            for (final (label, _, _) in items)
+              math.max(76, lineWidth(context, label, style: _label) + 2),
+          ];
+          const wideGap = 28.0;
+          const narrowGap = 12.0;
+          final natural = widths.fold<double>(0, (a, b) => a + b) +
+              wideGap * (items.length - 1);
+          if (!constraints.maxWidth.isFinite ||
+              natural <= constraints.maxWidth) {
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                for (var i = 0; i < items.length; i++) ...<Widget>[
+                  if (i > 0) const SizedBox(width: wideGap),
+                  SizedBox(width: widths[i], child: _button(items[i])),
+                ],
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              for (var i = 0; i < items.length; i++) ...<Widget>[
+                if (i > 0) const SizedBox(width: narrowGap),
+                Expanded(child: _button(items[i])),
+              ],
+            ],
+          );
+        },
       ),
     );
   }

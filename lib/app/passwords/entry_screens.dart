@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/passwords/hint_guard.dart';
 import '../../core/passwords/password_strength.dart';
 import '../../core/passwords/secret_bytes.dart';
+import '../../core/passwords/vault.dart';
 import '../../core/passwords/vault_errors.dart';
 import '../../core/passwords/vault_facade.dart';
 import '../../core/passwords/vault_format.dart';
@@ -14,6 +15,8 @@ import '../assistant_theme.dart';
 import 'generator_view.dart';
 import 'passwords_kit.dart';
 import 'secret_widgets.dart';
+import 'vault_confirm.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Закрывает экран, как только хранилище заперли (3.6: экраны хранилища
 /// закрываются, поля очищаются).
@@ -66,12 +69,12 @@ Future<bool> _reprompt(
   String id,
 ) async {
   if (!kit.needsReprompt(id)) return true;
-  return askMaster(
+  return askVaultConfirm(
     context,
+    kit: kit,
     title: 'Важная запись',
-    text: 'Для важных записей показ и копирование подтверждаются '
-        'мастер-паролем.',
-    check: kit.confirm,
+    text: 'Показ и копирование пароля важной записи нужно подтвердить.',
+    check: kit.confirmProof,
   );
 }
 
@@ -84,10 +87,16 @@ Future<bool> confirmDelete(
   PasswordsKit kit,
   String id, {
   String title = 'Удалить важную запись',
-  String text = 'Удаление важной записи подтверждается мастер-паролем.',
+  String text = 'Удаление важной записи нужно подтвердить.',
 }) async {
   if (!kit.needsReprompt(id, margin: PasswordsKit.saveMargin)) return true;
-  return askMaster(context, title: title, text: text, check: kit.confirm);
+  return askVaultConfirm(
+    context,
+    kit: kit,
+    title: title,
+    text: text,
+    check: kit.confirmProof,
+  );
 }
 
 /// Пароль записи для показа: важная запись при включённом переспросе
@@ -189,7 +198,7 @@ class _EntryScreenState extends State<EntryScreen>
       builder: (BuildContext context) => AlertDialog(
         scrollable: true,
         backgroundColor: AssistantColors.raised,
-        title: Text('Удалить «${entry.service}»?'),
+        title: WholeWordText('Удалить «${entry.service}»?'),
         content: const Text(
           'Вернуть запись можно будет только из резервной копии.',
         ),
@@ -233,7 +242,7 @@ class _EntryScreenState extends State<EntryScreen>
       builder: (BuildContext context) => AlertDialog(
         scrollable: true,
         backgroundColor: AssistantColors.raised,
-        title: Text(
+        title: WholeWordText(
           meta == null
               ? 'Очистить хронологию «${entry.service}»?'
               : 'Удалить этот пароль из хронологии?',
@@ -267,8 +276,7 @@ class _EntryScreenState extends State<EntryScreen>
           entry.id,
           title:
               meta == null ? 'Очистить хронологию' : 'Удалить прежний пароль',
-          text: 'У важной записи правка хронологии подтверждается '
-              'мастер-паролем.',
+          text: 'У важной записи правку хронологии нужно подтвердить.',
         ) ||
         !mounted) {
       return;
@@ -832,17 +840,18 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
         !dropping &&
         _changed(previous, service, hint) &&
         kit.needsReprompt(previous.id, margin: PasswordsKit.saveMargin)) {
-      final ok = await askMaster(
+      final ok = await askVaultConfirm(
         context,
+        kit: kit,
         title: 'Важная запись',
-        text: 'Правка важной записи подтверждается мастер-паролем.',
-        check: kit.confirm,
+        text: 'Правку важной записи нужно подтвердить.',
+        check: kit.confirmProof,
       );
       if (!mounted) return;
       if (!ok) {
         setState(
-          () => _failure = 'Не сохранено: для важной записи нужен '
-              'мастер-пароль.',
+          () => _failure = 'Не сохранено: правку важной записи нужно '
+              'подтвердить.',
         );
         return;
       }
@@ -862,12 +871,13 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
     final verdict = review.hint;
     if (verdict.block == HintProblem.needsConfirm) {
       setState(() => _hintError = verdict.message);
-      final ok = await askMaster(
+      final ok = await askVaultConfirm(
         context,
+        kit: kit,
         title: 'Проверить подсказку',
-        text: 'Без мастер-пароля подсказку больше не сверить с паролями '
+        text: 'Без подтверждения подсказку больше не сверить с паролями '
             'важных записей. Подтвердите — и сохраните ещё раз.',
-        check: kit.confirm,
+        check: kit.confirmProof,
       );
       if (!mounted || !ok) return;
       return _save();
@@ -908,13 +918,13 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
       // ничего.
       setState(() => _busy = true);
       String? failure;
-      final ok = await askMaster(
+      final ok = await askVaultConfirm(
         context,
+        kit: kit,
         title: 'Снять «Важный»?',
         text: 'Без этой отметки пароль покажут и скопируют без '
-            'подтверждения. Подтвердите мастер-паролем.',
-        check: (String master) async {
-          final bytes = SecretBytes.fromText(master);
+            'подтверждения.',
+        check: (VaultProof proof) async {
           try {
             failure = await _write(
               id: id,
@@ -924,13 +934,11 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
               urls: urls,
               password: password,
               note: note,
-              master: bytes,
+              proof: proof,
             );
             return true;
           } on VaultError {
             return false;
-          } finally {
-            bytes.wipe();
           }
         },
       );
@@ -938,7 +946,7 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
       if (!ok) {
         setState(() {
           _busy = false;
-          _failure = 'Отметка «Важный» не снята: нужен мастер-пароль.';
+          _failure = 'Отметка «Важный» не снята: нужно подтверждение.';
         });
         return;
       }
@@ -989,7 +997,7 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
     required List<String> urls,
     required String password,
     required String note,
-    SecretBytes? master,
+    VaultProof? proof,
   }) async {
     final passwordBytes =
         password.isEmpty ? null : SecretBytes.fromText(password);
@@ -1015,14 +1023,17 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
           important: _important,
           password: passwordBytes,
           note: noteBytes,
-          master: master,
+          proof: proof,
         );
       }
       return null;
     } on VaultError catch (error) {
-      if (master != null &&
+      if (proof != null &&
           (error.code == VaultErrorCode.wrongPassword ||
-              error.code == VaultErrorCode.rateLimited)) {
+              error.code == VaultErrorCode.rateLimited ||
+              error.code == VaultErrorCode.pinLocked ||
+              error.code == VaultErrorCode.bioCanceled ||
+              error.code == VaultErrorCode.bioInvalidated)) {
         rethrow;
       }
       return 'Не получилось сохранить.';
@@ -1030,7 +1041,7 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
       return 'Слишком длинное поле — сократите его.';
     } on StateError {
       // Окно подтверждения кончилось до записи: ничего не сохранено.
-      return 'Не сохранено: для важной записи нужен мастер-пароль. '
+      return 'Не сохранено: правку важной записи нужно подтвердить. '
           'Нажмите «Сохранить» ещё раз.';
     } on Object {
       return 'Не получилось сохранить.';
@@ -1165,10 +1176,10 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
                 value: _important,
                 onChanged:
                     _busy ? null : (bool v) => setState(() => _important = v),
-                title: const Text('Важный — тренировать память'),
-                subtitle: const Text(
-                  'Показ и копирование — с подтверждением мастер-паролем; '
-                  'иногда спрошу пароль по памяти.',
+                title: const WholeWordText('Важный — тренировать память'),
+                subtitle: const WholeWordText(
+                  'Показ и копирование — с подтверждением; иногда спрошу '
+                  'пароль по памяти.',
                 ),
               ),
               if (_failure != null)

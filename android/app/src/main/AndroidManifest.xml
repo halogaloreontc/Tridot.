@@ -3,10 +3,14 @@
     <!-- Подключения (склад) ходят в сеть: без этого release-сборка останется
          без интернета. Только https, кроме адресов локальной сети (ADR-011). -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Голосовой ввод (ADR-023): микрофон — только пока держат кнопку,
+    <!-- Голосовой ввод (ADR-023): микрофон — только пока идёт запись,
          звук распознаётся на телефоне, не сохраняется и никуда не
          отправляется. Разрешение запрашивается при первом нажатии. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Сейф и вход в приложение по отпечатку / Face ID (ADR-025): только
+         системный запрос BiometricPrompt; биометрические данные приложению
+         не передаются никогда. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <!-- Копия Android: задачи и чаты копируются, хранилище паролей и
          secrets.json — нет (res/xml/data_extraction_rules.xml, backup_rules.xml). -->
     <application

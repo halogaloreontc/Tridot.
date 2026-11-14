@@ -29,6 +29,8 @@ final class AppSettings {
     this.voiceInput = false,
     this.voiceSendImmediately = false,
     this.voiceMicExplained = false,
+    this.appLock = false,
+    this.appLockAfter = 60,
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -62,8 +64,16 @@ final class AppSettings {
       voiceInput: json['voice.enabled'] == true,
       voiceSendImmediately: json['voice.send_now'] == true,
       voiceMicExplained: json['voice.mic_explained'] == true,
+      appLock: json['security.app_lock'] == true,
+      appLockAfter: _lockAfter(json['security.app_lock_after']),
     );
   }
+
+  /// Варианты «запрашивать после фона» (секунды): сразу, 1 мин, 5 мин.
+  static const List<int> appLockAfterChoices = <int>[0, 60, 300];
+
+  static int _lockAfter(Object? value) =>
+      value is int && appLockAfterChoices.contains(value) ? value : 60;
 
   /// Номер версии хранилища: целое от 1, иначе `null`.
   static int? _rev(Object? value) =>
@@ -217,6 +227,13 @@ final class AppSettings {
   /// Зачем нужен микрофон, уже объяснено (перед первым запросом доступа).
   final bool voiceMicExplained;
 
+  /// «Вход в приложение по отпечатку / Face ID» (ADR-025). По умолчанию
+  /// выключен. Это проверка в интерфейсе, а не шифрование.
+  final bool appLock;
+
+  /// Через сколько секунд в фоне снова спрашивать ([appLockAfterChoices]).
+  final int appLockAfter;
+
   AppSettings copyWith({
     bool? reduceMotion,
     bool? showTimestamps,
@@ -236,6 +253,8 @@ final class AppSettings {
     bool? voiceInput,
     bool? voiceSendImmediately,
     bool? voiceMicExplained,
+    bool? appLock,
+    int? appLockAfter,
   }) =>
       AppSettings(
         reduceMotion: reduceMotion ?? this.reduceMotion,
@@ -257,6 +276,8 @@ final class AppSettings {
         voiceInput: voiceInput ?? this.voiceInput,
         voiceSendImmediately: voiceSendImmediately ?? this.voiceSendImmediately,
         voiceMicExplained: voiceMicExplained ?? this.voiceMicExplained,
+        appLock: appLock ?? this.appLock,
+        appLockAfter: appLockAfter ?? this.appLockAfter,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -293,6 +314,8 @@ final class AppSettings {
         if (voiceInput) 'voice.enabled': true,
         if (voiceSendImmediately) 'voice.send_now': true,
         if (voiceMicExplained) 'voice.mic_explained': true,
+        if (appLock) 'security.app_lock': true,
+        if (appLockAfter != 60) 'security.app_lock_after': appLockAfter,
       };
 }
 

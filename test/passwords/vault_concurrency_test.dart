@@ -288,6 +288,11 @@ final class _HookStore implements VaultStore {
   }
 
   @override
+  Future<Uint8List?> readPinAttempts() => inner.readPinAttempts();
+  @override
+  Future<void> writePinAttempts(Uint8List bytes) =>
+      inner.writePinAttempts(bytes);
+  @override
   Future<Uint8List?> readAttempts() => inner.readAttempts();
 
   @override

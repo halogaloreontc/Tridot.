@@ -66,11 +66,21 @@ final class AssistantTheme {
         linearTrackColor: AssistantColors.borderSoft,
         linearMinHeight: 4,
       ),
+      // Диалоги на телефоне — почти во всю ширину (поля 16, а не 40):
+      // с крупным шрифтом заголовок и кнопки не рвут слова (ADR-021).
+      dialogTheme: const DialogThemeData(
+        insetPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      ),
       snackBarTheme: const SnackBarThemeData(
         // Плавающее уведомление не прячет под собой поле ввода целиком.
         behavior: SnackBarBehavior.floating,
         backgroundColor: AssistantColors.divider,
-        contentTextStyle: TextStyle(color: AssistantColors.text),
+        // Шрифт явно: без него SnackBar берёт системный (Roboto), а не
+        // Inter (ADR-021).
+        contentTextStyle: TextStyle(
+          fontFamily: AppFonts.text,
+          color: AssistantColors.text,
+        ),
       ),
     );
   }

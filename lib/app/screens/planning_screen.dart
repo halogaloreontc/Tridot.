@@ -4,6 +4,7 @@ import '../../core/formatting/due_format.dart';
 import '../../core/models/task.dart';
 import '../assistant_theme.dart';
 import '../widgets/task_tile.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Вид секции повестки.
 enum AgendaKind { overdue, day, freeRun, later, noDate }
@@ -272,7 +273,7 @@ final class PlanningScreen extends StatelessWidget {
             children: <Widget>[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
+                child: WholeWordText(
                   'Планирование',
                   style: Theme.of(context)
                       .textTheme

@@ -48,6 +48,12 @@ abstract interface class VaultStore {
 
   Future<void> writeAttempts(Uint8List bytes);
 
+  /// `pin_attempts.json` (счётчик неверных ПИН-кодов сейфа, ADR-025) или
+  /// `null`.
+  Future<Uint8List?> readPinAttempts();
+
+  Future<void> writePinAttempts(Uint8List bytes);
+
   /// Остатки `.tmp` после сбоя (они зашифрованы, но не нужны).
   Future<void> removeTemporary();
 
@@ -84,6 +90,7 @@ final class FileVaultStore implements VaultStore {
   static const String vaultName = 'vault.relayvault';
   static const String previousName = 'vault.prev';
   static const String attemptsName = 'attempts.json';
+  static const String pinAttemptsName = 'pin_attempts.json';
 
   static const String archiveName = 'archive';
 
@@ -214,6 +221,13 @@ final class FileVaultStore implements VaultStore {
       _io(() => _atomic(attemptsName, bytes));
 
   @override
+  Future<Uint8List?> readPinAttempts() => _read(pinAttemptsName);
+
+  @override
+  Future<void> writePinAttempts(Uint8List bytes) =>
+      _io(() => _atomic(pinAttemptsName, bytes));
+
+  @override
   Future<void> removeTemporary() => _io(() async {
         final dir = Directory(directory);
         if (!await dir.exists()) return;
@@ -327,6 +341,14 @@ final class InMemoryVaultStore implements VaultStore {
   @override
   Future<void> writeAttempts(Uint8List bytes) async =>
       _put(FileVaultStore.attemptsName, bytes);
+
+  @override
+  Future<Uint8List?> readPinAttempts() async =>
+      _get(FileVaultStore.pinAttemptsName);
+
+  @override
+  Future<void> writePinAttempts(Uint8List bytes) async =>
+      _put(FileVaultStore.pinAttemptsName, bytes);
 
   @override
   Future<void> removeTemporary() async {}
@@ -445,4 +467,106 @@ final class VaultAttempts {
 
   @override
   String toString() => 'VaultAttempts($fails)';
+}
+
+/// Счётчик неверных ПИН-кодов сейфа (ADR-025, `pin_attempts.json`):
+/// число ошибок, время и имя ключа ПИН-кода ([alias]) — без цифр. Новый
+/// ключ (ПИН-код включили заново или сменили) — новый счётчик.
+///
+/// Ошибки 1–4 — без паузы; 5-я — 30 с, 6-я — 1 мин, 7-я — 5 мин, 8-я —
+/// 15 мин, 9-я — 1 ч; 10-я закрывает путь по ПИН-коду ([closed]): дальше
+/// сейф открывает только код восстановления.
+final class PinAttempts {
+  const PinAttempts({this.alias, this.fails = 0, this.nextAt, this.lastAt});
+
+  final String? alias;
+  final int fails;
+  final DateTime? nextAt;
+  final DateTime? lastAt;
+
+  /// После скольких ошибок путь по ПИН-коду закрывается.
+  static const int limit = 10;
+
+  /// С какой ошибки показывать «Осталось попыток».
+  static const int warnFrom = 5;
+
+  static Duration pauseFor(int fails) => switch (fails) {
+        < 5 => Duration.zero,
+        5 => const Duration(seconds: 30),
+        6 => const Duration(minutes: 1),
+        7 => const Duration(minutes: 5),
+        8 => const Duration(minutes: 15),
+        _ => const Duration(hours: 1),
+      };
+
+  /// Счётчик ключа [key]: чужой (прежний ключ) — с нуля.
+  PinAttempts of(String key) => alias == key ? this : PinAttempts(alias: key);
+
+  bool get closed => fails >= limit;
+
+  /// Сколько попыток осталось до закрытия.
+  int get left => limit - fails < 0 ? 0 : limit - fails;
+
+  /// Как [VaultAttempts.at]: часы назад паузу не снимают.
+  PinAttempts at(DateTime now) {
+    final last = lastAt;
+    if (last == null || !now.isBefore(last)) return this;
+    final pause = pauseFor(fails);
+    return PinAttempts(
+      alias: alias,
+      fails: fails,
+      lastAt: now,
+      nextAt: pause == Duration.zero ? null : now.add(pause),
+    );
+  }
+
+  DateTime? blockedUntil(DateTime now) {
+    final next = nextAt;
+    return next != null && now.isBefore(next) ? next : null;
+  }
+
+  PinAttempts failed(DateTime now) {
+    final count = fails + 1;
+    final pause = pauseFor(count);
+    return PinAttempts(
+      alias: alias,
+      fails: count,
+      lastAt: now,
+      nextAt: pause == Duration.zero ? null : now.add(pause),
+    );
+  }
+
+  Uint8List encode() => Uint8List.fromList(
+        utf8.encode(
+          jsonEncode(<String, Object?>{
+            if (alias != null) 'alias': alias,
+            'fails': fails,
+            if (nextAt != null) 'next_at': nextAt!.toUtc().toIso8601String(),
+            if (lastAt != null) 'last_at': lastAt!.toUtc().toIso8601String(),
+          }),
+        ),
+      );
+
+  /// Испорченный файл — пустой счётчик (удалить его можно только с
+  /// доступом к папке приложения: на Android — только с root, ADR-025).
+  static PinAttempts decode(Uint8List? bytes) {
+    if (bytes == null) return const PinAttempts();
+    try {
+      final json = jsonDecode(utf8.decode(bytes));
+      if (json is! Map<String, Object?>) return const PinAttempts();
+      final fails = json['fails'];
+      final alias = json['alias'];
+      return PinAttempts(
+        alias: alias is String ? alias : null,
+        fails: fails is int && fails >= 0 ? fails : 0,
+        nextAt: DateTime.tryParse('${json['next_at']}'),
+        lastAt: DateTime.tryParse('${json['last_at']}'),
+      );
+    } catch (_) {
+      return const PinAttempts();
+    }
+  }
+
+  @override
+  String toString() => 'PinAttempts($fails)';
 }

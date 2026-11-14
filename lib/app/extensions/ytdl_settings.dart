@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../assistant_theme.dart';
 import 'ytdl_kit.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Предупреждение перед включением загрузчика видео (решение владельца):
 /// правила площадок. `true` — «Понятно, включить».
@@ -14,7 +15,7 @@ Future<bool> showYtdlWarning(BuildContext context) async {
     builder: (BuildContext context) => AlertDialog(
       scrollable: true,
       backgroundColor: AssistantColors.raised,
-      title: const Text('Включить загрузчик видео?'),
+      title: const WholeWordText('Включить загрузчик видео?'),
       content: const Text(
         'Правила YouTube и других площадок запрещают скачивание без '
         'разрешения. Скачивайте только своё или то, на что есть права.\n\n'

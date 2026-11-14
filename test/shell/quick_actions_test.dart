@@ -14,9 +14,10 @@ Future<List<String>> _pump(
   VoidCallback? onPassword,
   bool hasSelection = false,
   List<RoleChip> chips = const <RoleChip>[],
+  Size size = const Size(390, 844),
 }) async {
   final calls = <String>[];
-  tester.view.physicalSize = const Size(390, 844);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
@@ -63,6 +64,27 @@ void main() {
       'template:${QuickActions.taskTemplate}',
       'template:${QuickActions.remindTemplate}',
     ]);
+  });
+
+  testWidgets('узкий телефон и крупный шрифт: три кнопки в одну строку',
+      (tester) async {
+    for (final scale in <double>[1.0, 1.15, 1.3, 2.0]) {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await _pump(
+        tester,
+        big: true,
+        onPassword: () {},
+        size: const Size(320, 640),
+      );
+      final ys = <double>{
+        for (final label in <String>['Задача', 'Напомнить', 'Пароль'])
+          tester.getTopLeft(find.byKey(Key('quick-$label'))).dy,
+      };
+      expect(ys, hasLength(1), reason: 'масштаб $scale');
+      final right = tester.getTopRight(find.byKey(const Key('quick-Пароль')));
+      expect(right.dx, lessThanOrEqualTo(320), reason: 'масштаб $scale');
+    }
   });
 
   testWidgets('после команд «Задачи», «Напомнить» и «Пароля» нет',

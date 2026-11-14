@@ -7,6 +7,7 @@ import '../../core/voice/voice_recognizer.dart';
 import '../assistant_theme.dart';
 import '../widgets/task_tile.dart';
 import 'voice_kit.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Мегабайты для подписей: «12 из 44 МБ».
 String voiceMegabytes(int bytes) => (bytes / (1024 * 1024)).round().toString();
@@ -29,7 +30,7 @@ Future<bool> showVoiceOffer(BuildContext context, VoiceKit voice) async {
     builder: (BuildContext context) => AlertDialog(
       scrollable: true,
       backgroundColor: AssistantColors.raised,
-      title: const Text('Включить голосовой ввод?'),
+      title: const WholeWordText('Включить голосовой ввод?'),
       content: Text(
         'Один раз скачается модель распознавания (${voiceModelSize(voice)}) '
         'с сайта $host. Распознавание работает без интернета: звук не '
@@ -60,7 +61,7 @@ Future<bool> showVoiceRationale(BuildContext context) async {
     builder: (BuildContext context) => AlertDialog(
       scrollable: true,
       backgroundColor: AssistantColors.raised,
-      title: const Text('Доступ к микрофону'),
+      title: const WholeWordText('Доступ к микрофону'),
       content: const Text(
         'Микрофон нужен, чтобы распознать речь прямо на телефоне. Звук не '
         'записывается в файл и никуда не отправляется.',
@@ -364,7 +365,7 @@ final class VoiceSettingsSection extends StatelessWidget {
         SwitchListTile(
           key: const Key('setting-voice'),
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          title: const Text('Голосовой ввод', style: _title),
+          title: const WholeWordText('Голосовой ввод', style: _title),
           subtitle: Text(
             installed
                 ? 'Модель скачана. Звук не сохраняется и никуда не '
@@ -414,8 +415,8 @@ final class VoiceSettingsSection extends StatelessWidget {
         SwitchListTile(
           key: const Key('setting-voice-send-now'),
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          title: const Text('Отправлять сразу', style: _title),
-          subtitle: const Text(
+          title: const WholeWordText('Отправлять сразу', style: _title),
+          subtitle: const WholeWordText(
             'Без правки в поле ввода. Похожее на пароль не отправляется '
             'автоматически',
             style: metaTextStyle,
@@ -482,7 +483,7 @@ final class VoiceSettingsSection extends StatelessWidget {
       builder: (BuildContext dialogContext) => AlertDialog(
         scrollable: true,
         backgroundColor: AssistantColors.raised,
-        title: const Text('Удалить модель распознавания?'),
+        title: const WholeWordText('Удалить модель распознавания?'),
         content: const Text(
           'Место освободится, голосовой ввод выключится. Чтобы снова '
           'говорить, модель придётся скачать заново.',

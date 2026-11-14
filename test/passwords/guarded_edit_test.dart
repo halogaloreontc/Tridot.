@@ -365,7 +365,7 @@ void main() {
       await tester.tap(find.text('Отмена'));
       await tester.pumpAndSettle();
       expect(vault.entry(id)!.service, 'Почта');
-      expect(find.textContaining('нужен мастер-пароль'), findsOneWidget);
+      expect(find.textContaining('нужно подтвер'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey<String>('editor-save')));
       await tester.pumpAndSettle();
       await tester.enterText(

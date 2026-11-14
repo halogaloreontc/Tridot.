@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
@@ -20,8 +21,10 @@ import '../../core/passwords/vault_errors.dart';
 import '../../core/passwords/vault_facade.dart';
 import '../../core/passwords/vault_format.dart';
 import '../../core/passwords/vault_prefs.dart';
+import '../../core/passwords/vault_store.dart';
 import '../../core/replies/reply_template.dart';
 import '../../core/settings/app_settings.dart';
+import '../security/device_auth.dart';
 import 'clipboard_guard.dart';
 import 'passwords_files.dart';
 import 'passwords_platform.dart';
@@ -35,12 +38,22 @@ final class UnlockOutcome {
     this.rolledBack = false,
     this.error,
     this.until,
+    this.recoveryCode,
+    this.recovered = false,
   });
 
   const UnlockOutcome.success({
     bool variantHit = false,
     bool rolledBack = false,
-  }) : this._(ok: true, variantHit: variantHit, rolledBack: rolledBack);
+    String? recoveryCode,
+    bool recovered = false,
+  }) : this._(
+          ok: true,
+          variantHit: variantHit,
+          rolledBack: rolledBack,
+          recoveryCode: recoveryCode,
+          recovered: recovered,
+        );
 
   const UnlockOutcome.failure(VaultErrorCode error, {DateTime? until})
       : this._(error: error, until: until);
@@ -57,6 +70,13 @@ final class UnlockOutcome {
 
   /// До какого времени пауза (D25).
   final DateTime? until;
+
+  /// Сейф с мастер-паролем перешёл на защиту устройством (ADR-025): новый
+  /// код восстановления — показать один раз ([RecoveryCodeView]).
+  final String? recoveryCode;
+
+  /// Открыли кодом восстановления: ПИН-код и биометрия сняты.
+  final bool recovered;
 }
 
 /// Всё, что нужно экранам и карточкам навыка «Пароли» в `lib/app`:
@@ -74,8 +94,10 @@ final class PasswordsKit extends ChangeNotifier {
     this.kdfForTesting,
     PasswordWordlists? wordlists,
     PasswordFiles? files,
+    DeviceAuth? auth,
   })  : platform = platform ?? PasswordsPlatform.current,
-        files = files ?? const IoPasswordFiles() {
+        files = files ?? const IoPasswordFiles(),
+        auth = auth ?? DeviceAuth.current {
     _useWordlists(wordlists ?? PasswordWordlists.empty());
     this.clipboard = clipboard ??
         ClipboardGuard(platform: this.platform, cipher: vault.crypto);
@@ -94,6 +116,10 @@ final class PasswordsKit extends ChangeNotifier {
 
   late final VaultFacade facade = VaultFacade(vault);
   final PasswordsPlatform platform;
+
+  /// Системная проверка личности (подтверждения при защите только
+  /// устройством, запрет снимков экрана).
+  final DeviceAuth auth;
 
   /// Открыть CSV и копию, сохранить копию.
   final PasswordFiles files;
@@ -413,16 +439,52 @@ final class PasswordsKit extends ChangeNotifier {
     if (rev != null) _remember(rev, fresh: true);
   }
 
-  /// Открыть мастер-паролем (с вариантами ввода, D25).
+  /// Открыть мастер-паролем (с вариантами ввода, D25) или кодом
+  /// восстановления (сейф, защищённый устройством, ADR-025). Сейф с
+  /// мастер-паролем при ключе устройства сразу переходит на защиту
+  /// устройством: в итоге — новый код восстановления для показа.
   Future<UnlockOutcome> unlock(String master) async {
     final bytes = SecretBytes.fromText(master);
     try {
-      final result = await vault.unlock(bytes, seenRev: seenRev);
+      return await _opened(() => vault.unlock(bytes, seenRev: seenRev));
+    } finally {
+      bytes.wipe();
+    }
+  }
+
+  /// Открыть ключом устройства — без ввода (ADR-025).
+  Future<UnlockOutcome> unlockDevice() =>
+      _opened(() => vault.unlockDevice(seenRev: seenRev));
+
+  /// Открыть ПИН-кодом сейфа. [pin] затирает вызывающий.
+  Future<UnlockOutcome> unlockPin(SecretBytes pin) =>
+      _opened(() => vault.unlockPin(pin, seenRev: seenRev));
+
+  /// Открыть по отпечатку / Face ID (системный запрос).
+  Future<UnlockOutcome> unlockBio() =>
+      _opened(() => vault.unlockBio(bioReason, seenRev: seenRev));
+
+  /// Причина системного запроса при входе в сейф.
+  static const String bioReason = 'Открыть сейф';
+
+  Future<UnlockOutcome> _opened(
+    Future<VaultUnlockResult> Function() open,
+  ) async {
+    try {
+      final result = await open();
       rolledBack = result.rolledBack;
-      _remember(result.rev);
+      _remember(result.rev, fresh: result.recoveryCode != null);
+      final code = result.recoveryCode;
+      String? text;
+      if (code != null) {
+        text = utf8.decode(code.unsafeBytes);
+        code.wipe();
+      }
       return UnlockOutcome.success(
         variantHit: result.variantHit,
         rolledBack: result.rolledBack,
+        recoveryCode: text,
+        recovered: result.recovered,
       );
     } on VaultRateLimited catch (error) {
       return UnlockOutcome.failure(error.code, until: error.until);
@@ -430,8 +492,139 @@ final class PasswordsKit extends ChangeNotifier {
       return UnlockOutcome.failure(error.code);
     } on ArgumentError {
       return const UnlockOutcome.failure(VaultErrorCode.wrongPassword);
+    } on StateError {
+      return const UnlockOutcome.failure(VaultErrorCode.locked);
+    }
+  }
+
+  // ------------------------------- защита устройством (ADR-025)
+
+  /// Новый сейф защищается устройством и кодом восстановления.
+  bool get deviceProtection => vault.deviceKey != null;
+
+  /// Честная строка о том, как здесь защищён сейф.
+  String get protectionNote => protectionNoteFor(
+        pin: vault.protection?.pin ?? false,
+        bio: vault.protection?.bio ?? false,
+      );
+
+  /// То же для запертого сейфа (по [VaultLockInfo]) или для настроек
+  /// сейфа ([inSettings]).
+  String protectionNoteFor({
+    bool pin = false,
+    bool bio = false,
+    bool inSettings = false,
+    bool codeOnly = false,
+  }) =>
+      deviceProtection
+          ? platform.deviceNote(
+              pin: pin,
+              bio: bio,
+              inSettings: inSettings,
+              codeOnly: codeOnly,
+            )
+          : platform.unlockNote;
+
+  /// Открытый сейф защищён устройством (а не мастер-паролем).
+  bool get isProtected => vault.isProtected;
+
+  /// Чем открывается сейф (по файлу, без ключей).
+  Future<VaultLockInfo?> lockInfo() async {
+    try {
+      return await vault.lockInfo();
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Новый сейф, защищённый устройством. Возвращает код восстановления —
+  /// показать один раз; дальше его нет нигде, кроме бумаги человека.
+  Future<String> createProtected() async {
+    final code = await vault.createProtected(params: kdfForTesting);
+    try {
+      return utf8.decode(code.unsafeBytes);
     } finally {
-      bytes.wipe();
+      code.wipe();
+      final rev = vault.rev;
+      if (rev != null) _remember(rev, fresh: true);
+    }
+  }
+
+  /// «Я сохранил»: код восстановления подтверждён.
+  Future<bool> confirmRecovery() => _quietly(vault.confirmRecovery);
+
+  /// Код восстановления открытого сейфа не подтверждён (приложение
+  /// закрыли раньше «Я сохранил»): показать баннер.
+  bool get recoveryUnconfirmed => vault.isUnlocked && !vault.recoveryConfirmed;
+
+  /// Новый код восстановления после подтверждения [proof]; `null` — не
+  /// подтвердили или не вышло. `rotated` — сменился и ключ сейфа (иначе
+  /// старая копия файла вместе с прежним кодом ещё открывает сейф).
+  Future<({String code, bool rotated})?> regenerateRecovery(
+    VaultProof proof,
+  ) async {
+    try {
+      final result = await vault.regenerateRecovery(proof);
+      try {
+        return (
+          code: utf8.decode(result.code.unsafeBytes),
+          rotated: result.rotated,
+        );
+      } finally {
+        result.code.wipe();
+      }
+    } on VaultError {
+      return null;
+    } on ArgumentError {
+      return null;
+    } on StateError {
+      return null;
+    }
+  }
+
+  /// Можно ли включить ПИН-код сейфа здесь (не там, где ключ лежит
+  /// файлом).
+  bool get pinAllowed => vault.pinAllowed;
+
+  /// Включить ПИН-код. Ошибка — исключение хранилища (как есть).
+  Future<void> enablePin(SecretBytes pin) => vault.enablePin(pin);
+
+  /// Сменить ПИН-код. Неверный текущий — `wrongPassword`.
+  Future<void> changePin(SecretBytes current, SecretBytes next) =>
+      vault.changePin(current, next);
+
+  /// Выключить ПИН-код (после подтверждения).
+  Future<bool> disablePin(VaultProof proof) =>
+      _quietly(() => vault.disablePin(proof));
+
+  /// Можно ли привязать сейф к биометрии.
+  Future<bool> bioAvailable() => vault.bioAvailable();
+
+  /// Включить вход в сейф по отпечатку / Face ID: система спросит сразу.
+  Future<void> enableBio() => vault.enableBio('Включить вход в сейф');
+
+  /// Выключить вход по биометрии (после подтверждения).
+  Future<bool> disableBio(VaultProof proof) =>
+      _quietly(() => vault.disableBio(proof));
+
+  /// Счётчик ошибок ПИН-кода (для «Осталось попыток»).
+  Future<PinAttempts> pinAttempts() async {
+    try {
+      return await vault.pinAttempts();
+    } on Object {
+      return const PinAttempts();
+    }
+  }
+
+  /// Подтверждение [proof] открытого сейфа (переспрос, ослабление).
+  /// `false` — не подошло, пауза или путь закрыт.
+  Future<bool> confirmProof(VaultProof proof) async {
+    try {
+      return await vault.verify(proof);
+    } on VaultError {
+      return false;
+    } on ArgumentError {
+      return false;
     }
   }
 
@@ -497,17 +690,26 @@ final class PasswordsKit extends ChangeNotifier {
 
   /// Снять с записи [id] отметку «Важный» — ослабление защиты, только с
   /// мастер-паролем (3.6). `false` — мастер-пароль не подошёл или пауза.
-  Future<bool> dropImportant(String id, String master) async {
-    final bytes = SecretBytes.fromText(master);
+  Future<bool> dropImportant(
+    String id, {
+    String? master,
+    VaultProof? proof,
+  }) async {
+    final bytes = master == null ? null : SecretBytes.fromText(master);
     try {
-      await vault.updateInfo(id, important: false, master: bytes);
+      await vault.updateInfo(
+        id,
+        important: false,
+        master: bytes,
+        proof: proof,
+      );
       return true;
     } on VaultError {
       return false;
     } on ArgumentError {
       return false;
     } finally {
-      bytes.wipe();
+      bytes?.wipe();
     }
   }
 
@@ -561,11 +763,13 @@ final class PasswordsKit extends ChangeNotifier {
   Future<bool> setPasswordHistory(
     bool enabled, {
     String? master,
+    VaultProof? proof,
     bool purge = false,
   }) async {
     final ok = await setPrefs(
       <String, Object?>{VaultPrefs.passwordHistory.key: enabled},
       master: master,
+      proof: proof,
     );
     if (!ok || enabled || !purge) return ok;
     return purgeHistory();
@@ -602,10 +806,14 @@ final class PasswordsKit extends ChangeNotifier {
   }
 
   /// Изменить защитные настройки. Ослабление — только с мастер-паролем.
-  Future<bool> setPrefs(Map<String, Object?> changes, {String? master}) async {
+  Future<bool> setPrefs(
+    Map<String, Object?> changes, {
+    String? master,
+    VaultProof? proof,
+  }) async {
     final bytes = master == null ? null : SecretBytes.fromText(master);
     try {
-      await vault.setPrefs(changes, master: bytes);
+      await vault.setPrefs(changes, master: bytes, proof: proof);
       return true;
     } on VaultError {
       return false;
@@ -667,16 +875,25 @@ final class PasswordsKit extends ChangeNotifier {
   /// Повтор пароля копии с записями — только после проверки мастер-пароля
   /// (15.2): до неё ответ «уже стоит у одной из записей» — оракул по
   /// важным записям без предела.
-  Future<Uint8List> exportBackup(String master, {String? separate}) async {
+  ///
+  /// У сейфа, защищённого устройством (ADR-025), [master] — код
+  /// восстановления; с отдельным паролем копии вместо кода годится
+  /// подтверждение [proof].
+  Future<Uint8List> exportBackup(
+    String? master, {
+    String? separate,
+    VaultProof? proof,
+  }) async {
     if (separate != null) {
       final problem = masterProblem(separate, strength: strength);
       if (problem != null) throw BackupProblem(problem);
     }
-    final from = SecretBytes.fromText(master);
+    final from = master == null ? null : SecretBytes.fromText(master);
     final pass = separate == null ? null : SecretBytes.fromText(separate);
     try {
       return await vault.exportBackup(
         master: from,
+        proof: proof,
         passphrase: pass,
         params: kdfForTesting,
         afterVerify: separate == null ? null : () => reusedProblem(separate),
@@ -684,7 +901,7 @@ final class PasswordsKit extends ChangeNotifier {
     } on VaultRejected catch (rejected) {
       throw BackupProblem(rejected.reason);
     } finally {
-      from.wipe();
+      from?.wipe();
       pass?.wipe();
     }
   }
@@ -723,6 +940,57 @@ final class PasswordsKit extends ChangeNotifier {
     }
     final rev = vault.rev;
     if (rev != null) _remember(rev, fresh: true);
+  }
+
+  /// «Создать сейф из копии» с защитой устройством (ADR-025). Возвращает
+  /// новый код восстановления — показать один раз.
+  Future<String> restoreAsNewProtected(
+    BackupContents contents, {
+    bool keepHistory = false,
+  }) async {
+    final code = await vault.createFromBackupProtected(
+      contents,
+      params: kdfForTesting,
+      keepHistory: keepHistory,
+    );
+    try {
+      return utf8.decode(code.unsafeBytes);
+    } finally {
+      code.wipe();
+      final rev = vault.rev;
+      if (rev != null) _remember(rev, fresh: true);
+    }
+  }
+
+  /// «Заменить всё» у сейфа, защищённого устройством: после
+  /// подтверждения [proof]. Новый код восстановления (показать один раз)
+  /// или `null` — не подтвердили.
+  Future<String?> replaceAllProtected(
+    BackupContents contents,
+    VaultProof proof,
+  ) async {
+    final (String, SecretBytes) result;
+    try {
+      result = await vault.replaceWithBackupProtected(contents, proof);
+    } on VaultError catch (error) {
+      if (error.code == VaultErrorCode.wrongPassword ||
+          error.code == VaultErrorCode.rateLimited ||
+          error.code == VaultErrorCode.pinLocked ||
+          error.code == VaultErrorCode.bioCanceled) {
+        return null;
+      }
+      rethrow;
+    } on ArgumentError {
+      return null;
+    }
+    final code = result.$2;
+    try {
+      return utf8.decode(code.unsafeBytes);
+    } finally {
+      code.wipe();
+      final rev = vault.rev;
+      if (rev != null) _remember(rev, fresh: true);
+    }
   }
 
   /// «Заменить всё»: текущее — в архив. `false` — мастер-пароль не
@@ -796,8 +1064,27 @@ final class BackupProblem extends PasswordProblem {
 }
 
 /// Текст для пользователя по коду ошибки хранилища: без подробностей.
-String vaultErrorText(VaultErrorCode code) => switch (code) {
-      VaultErrorCode.wrongPassword => 'Мастер-пароль не подошёл.',
+String vaultErrorText(VaultErrorCode code, {bool recovery = false}) =>
+    switch (code) {
+      VaultErrorCode.wrongPassword => recovery
+          ? 'Код восстановления не подошёл.'
+          : 'Мастер-пароль не подошёл.',
+      VaultErrorCode.deviceKeyLost =>
+        'Ключ этого устройства для сейфа не найден. Откройте сейф кодом '
+            'восстановления.',
+      VaultErrorCode.pinLocked =>
+        'ПИН-код больше не принимается: было 10 неверных попыток. Откройте '
+            'сейф кодом восстановления.',
+      VaultErrorCode.bioCanceled => 'Проверка отменена.',
+      VaultErrorCode.bioInvalidated =>
+        'Вход по отпечатку / Face ID на этом устройстве больше не работает '
+            '(изменились отпечатки или блокировка экрана). Откройте сейф '
+            'ПИН-кодом или кодом восстановления.',
+      VaultErrorCode.bioLockedOut =>
+        'Датчик временно заблокирован — попробуйте позже или откройте сейф '
+            'кодом восстановления.',
+      VaultErrorCode.bioUnavailable =>
+        'Вход по отпечатку / Face ID сейчас недоступен.',
       VaultErrorCode.rateLimited =>
         'Слишком много неверных попыток — подождите.',
       VaultErrorCode.corrupt =>
@@ -808,7 +1095,6 @@ String vaultErrorText(VaultErrorCode code) => switch (code) {
         'Сейф создан более новой версией приложения — обновите его.',
       VaultErrorCode.io => 'Не удалось прочитать или записать файл сейфа.',
       VaultErrorCode.locked => 'Сейф заперт.',
-      _ => 'Не получилось. Данные не пострадали.',
     };
 
 /// Нижняя граница оценки для фразы из ≥ 4 слов в [masterProblem]. Не

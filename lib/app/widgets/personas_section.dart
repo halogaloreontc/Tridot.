@@ -6,6 +6,7 @@ import '../../core/replies/reply_library.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
 import 'task_tile.dart';
+import 'whole_word_text.dart';
 
 /// Раздел «Помощники» в настройках: режим (Соло, Дуэт, Трио), помощник в
 /// дуэте, кто ведёт расширения и оповещения, имя, род и стиль каждого с
@@ -175,11 +176,11 @@ class _PersonasSectionState extends State<PersonasSection> {
         SwitchListTile(
           key: const ValueKey<String>('setting-emoji'),
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          title: const Text(
+          title: const WholeWordText(
             'Эмодзи в ответах',
             style: TextStyle(color: AssistantColors.text),
           ),
-          subtitle: const Text(
+          subtitle: const WholeWordText(
             'Если стиль ими пользуется',
             style: metaTextStyle,
           ),

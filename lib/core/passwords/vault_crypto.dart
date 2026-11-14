@@ -280,6 +280,76 @@ abstract final class VaultKeys {
 
   static Uint8List wrapPwAd(Uint8List header) => _join(header, '|wrap_pw');
 
+  /// AD обёртки `wrap_pw` конверта [envelope] (по версии, в которой он
+  /// записан).
+  static Uint8List wrapPwAdFor(VaultEnvelope envelope) => wrapPwAdOf(
+        version: envelope.sourceVersion,
+        kind: envelope.kind,
+        vaultId: envelope.vaultId,
+        kdf: envelope.kdf,
+        pwKind: envelope.pwKind,
+      );
+
+  /// AD обёртки `wrap_pw`. До версии 3 — `header|wrap_pw` (в header есть
+  /// версия формата). С версии 3 — без версии формата, но с `pw_kind`:
+  /// сейф, который открывается ключом устройства, мигрирует в будущие
+  /// версии без кода восстановления (обёртку нечем было бы запечатать
+  /// заново), а «мастер-пароль» и «код» не переставить друг на друга.
+  static Uint8List wrapPwAdOf({
+    required int version,
+    required String kind,
+    required String vaultId,
+    required KdfRecord kdf,
+    String? pwKind,
+  }) {
+    if (version < 3) {
+      return wrapPwAd(
+        headerOf(
+          version: version,
+          kind: kind,
+          vaultId: vaultId,
+          ops: kdf.ops,
+          mem: kdf.mem,
+          salt: kdf.salt,
+        ),
+      );
+    }
+    return _ascii(
+      'relay-vault-wrap|pw|$kind|$vaultId|${KdfRecord.alg}|${kdf.ops}|'
+      '${kdf.mem}|${base64.encode(kdf.salt)}|${pwKind ?? '-'}',
+    );
+  }
+
+  /// AD слота ключа сейфа (ADR-025): имя слота, сейф, вид и имя ключа
+  /// устройства, у ПИН-кода — параметры Argon2id. Без версии формата:
+  /// миграции не требуют ни ПИН-кода, ни биометрии.
+  static Uint8List slotAd({
+    required String slot,
+    required String vaultId,
+    required String kind,
+    required String alias,
+    KdfRecord? kdf,
+  }) =>
+      _ascii(
+        'relay-vault-slot|$slot|$vaultId|$kind|$alias'
+        '${kdf == null ? '' : '|${KdfRecord.alg}|${kdf.ops}|${kdf.mem}|'
+            '${base64.encode(kdf.salt)}'}',
+      );
+
+  /// Сообщение ключу устройства: `relay-vault|слот|vault_id|` + [input]
+  /// (для ПИН-кода — Argon2id от ПИН-кода, иначе пусто). Вызывающий
+  /// затирает.
+  static Uint8List slotMessage(String slot, String vaultId, Uint8List input) {
+    final prefix = ascii.encode('relay-vault|$slot|$vaultId|');
+    return Uint8List(prefix.length + input.length)
+      ..setRange(0, prefix.length, prefix)
+      ..setRange(prefix.length, prefix.length + input.length, input);
+  }
+
+  /// Метка ключа слота: `KEK = BLAKE2b(key = ответ ключа устройства,
+  /// метка)`.
+  static Uint8List slotLabel(String slot) => _ascii('relay-vault|kek|$slot');
+
   static Uint8List wrapBioAd(Uint8List header, String kind) =>
       _join(header, '|wrap_bio|$kind');
 

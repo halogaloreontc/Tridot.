@@ -57,6 +57,7 @@ import 'jobs/job_cards.dart';
 import 'jobs/job_hub.dart';
 import 'jobs/job_picker.dart';
 import 'passwords/entry_screens.dart';
+import 'security/app_lock.dart';
 import 'passwords/generator_view.dart';
 import 'passwords/passwords_kit.dart';
 import 'passwords/passwords_screen.dart';
@@ -92,6 +93,7 @@ import 'widgets/quick_dock.dart';
 import 'widgets/status_cube.dart';
 import 'widgets/task_chat_header.dart';
 import 'widgets/task_tile.dart';
+import 'widgets/whole_word_text.dart';
 
 /// Разделы оболочки «Д»: сессия (главный экран), задачи, проекты,
 /// экран одного проекта-папки, планирование и «Мой Tridot».
@@ -158,6 +160,7 @@ final class HomePage extends StatefulWidget {
     this.tempRoot,
     this.ffmpeg,
     this.ytdl,
+    this.appLock,
   });
 
   final AssistantController assistant;
@@ -209,6 +212,9 @@ final class HomePage extends StatefulWidget {
   /// в этой сборке или на этой платформе загрузчика нет (Android, macOS,
   /// сборка для Google Play).
   final YtdlKit? ytdl;
+
+  /// Вход в приложение по отпечатку / Face ID (ADR-025); `null` — нет.
+  final AppLockController? appLock;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -400,17 +406,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _voiceLoading = false;
   String _voicePartial = '';
 
-  /// Палец на микрофоне (или включено нажатием на компьютере).
-  bool _voiceHeld = false;
-
-  /// Начато нажатием (компьютер, Ctrl+Shift+M, экранный диктор), а не
-  /// удержанием.
-  bool _voiceToggle = false;
-
-  /// Удержание короче [_voiceMinHold] — случайное касание.
-  bool _voiceShort = false;
-  Timer? _voiceShortTimer;
-  static const Duration _voiceMinHold = Duration(milliseconds: 300);
   StreamSubscription<VoiceEvent>? _voiceEvents;
   bool _voiceOffering = false;
 
@@ -428,9 +423,19 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String? _voiceNotice;
   Timer? _voiceNoticeTimer;
 
-  /// Палец держали дольше случайного касания, пока шла подготовка.
-  Timer? _voiceHoldTimer;
-  bool _voiceHeldLong = false;
+  /// Автостоп (ADR-023): микрофон включается нажатием, и его легко
+  /// забыть включённым. Тишина — промежуточный текст не менялся
+  /// [_voiceSilence] (а речи ещё не было — [_voiceNoSpeech]); слушает
+  /// дольше [_voiceMaxListen] — тоже стоп. Стоп — с итогом, как нажатие.
+  Timer? _voiceSilenceTimer;
+  Timer? _voiceMaxTimer;
+  static const Duration _voiceSilence = Duration(seconds: 8);
+  static const Duration _voiceNoSpeech = Duration(seconds: 10);
+  static const Duration _voiceMaxListen = Duration(seconds: 60);
+
+  /// Почему микрофон выключился сам: строка для подсказки, когда придёт
+  /// итог.
+  String? _voiceAutoStop;
 
   /// Лист загрузки скрыт, а модель ещё качается: о готовности скажем.
   bool _voiceAwaitInstall = false;
@@ -605,9 +610,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     widget.voice?.removeListener(_onVoiceChanged);
     // Уходя, микрофон не оставляем включённым.
-    _voiceShortTimer?.cancel();
     _voiceNoticeTimer?.cancel();
-    _voiceHoldTimer?.cancel();
+    _voiceSilenceTimer?.cancel();
+    _voiceMaxTimer?.cancel();
     _voiceAttempt++;
     if (_voiceListening || _voiceLoading) {
       unawaited(_voiceEvents?.cancel());
@@ -819,6 +824,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       seenRev: settings.passwordsSeenRev,
       vaultExisted: settings.passwordsVaultExisted,
     );
+    _applyAppLock(settings);
     setState(() {
       _settings = settings;
       _settingsLoaded = true;
@@ -902,9 +908,33 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _changeSettings(AppSettings settings) {
     _applyExtensions(settings);
     widget.assistant.personas = settings.personas;
+    _applyAppLock(settings);
     setState(() => _settings = settings);
     unawaited(_settingsStore.save(settings));
     _preloadVoice();
+  }
+
+  /// Вход в приложение по отпечатку / Face ID: настройки — в замок. Замок
+  /// выключился сам (пропала блокировка экрана) — это и в настройки.
+  void _applyAppLock(AppSettings settings) {
+    final lock = widget.appLock;
+    if (lock == null) return;
+    lock.configure(
+      enabled: settings.appLock,
+      after: Duration(seconds: settings.appLockAfter),
+    );
+    lock.onDisabled = () {
+      if (!mounted || !_settings.appLock) return;
+      _changeSettings(_settings.copyWith(appLock: false));
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Блокировка экрана выключена — вход в приложение по отпечатку '
+            'отключён.',
+          ),
+        ),
+      );
+    };
   }
 
   /// Проверки при открытии и при смене дня: первый день для «Вместе N
@@ -1903,8 +1933,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   /// Модель загружается заранее, как только голосовой ввод включён и
-  /// модель скачана: первое удержание микрофона не ждёт загрузки и не
-  /// теряет сказанное.
+  /// модель скачана: первое нажатие на микрофон не ждёт загрузки.
   void _preloadVoice() {
     final voice = widget.voice;
     if (voice == null ||
@@ -1922,8 +1951,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Нажатие на микрофон: выключен — предложение включить; на компьютере
-  /// (и для экранного диктора) — начать или закончить.
+  /// Нажатие на микрофон, долгое нажатие на пустое поле, Ctrl+Shift+M:
+  /// выключен — предложение включить; готов — начать слушать; готовится —
+  /// отменить (сказать ещё ничего не успели); слушает — закончить с
+  /// итогом.
   void _voiceTap() {
     switch (_voiceMode) {
       case VoiceButtonMode.hidden:
@@ -1931,26 +1962,15 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case VoiceButtonMode.off:
         unawaited(_offerVoice());
       case VoiceButtonMode.idle:
-        unawaited(_startVoice(toggle: true));
+        unawaited(_startVoice());
       case VoiceButtonMode.loading:
+        unawaited(_cancelVoice());
       case VoiceButtonMode.listening:
-        unawaited(_stopVoice(toggle: true));
+        unawaited(_stopVoice());
     }
   }
 
-  /// Палец лёг на микрофон (телефон).
-  void _voiceDown() {
-    if (_voiceMode == VoiceButtonMode.off) {
-      unawaited(_offerVoice());
-      return;
-    }
-    unawaited(_startVoice(toggle: false));
-  }
-
-  /// Палец отпущен или жест прерван.
-  void _voiceUp() => unawaited(_stopVoice(toggle: false));
-
-  Future<void> _startVoice({required bool toggle}) async {
+  Future<void> _startVoice() async {
     final voice = widget.voice;
     if (voice == null || _sending || _voiceListening || _voiceLoading) return;
     if (!_settings.voiceInput || !voice.isInstalled) {
@@ -1959,7 +1979,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (!_settings.voiceMicExplained) {
       // Сначала объясняем, зачем микрофон, и спрашиваем доступ. Говорить —
-      // следующим нажатием: палец уже не на кнопке.
+      // следующим нажатием: человек ещё читает объяснение.
       final go = await showVoiceRationale(context);
       if (!mounted || !go) return;
       _changeSettings(_settings.copyWith(voiceMicExplained: true));
@@ -1972,23 +1992,14 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
       if (!mounted) return;
       if (permission == VoicePermission.granted) {
-        _voiceSay(
-          toggle
-              ? 'Микрофон доступен. Нажмите на него и говорите'
-              : 'Микрофон доступен. Удерживайте его и говорите',
-        );
+        _voiceSay('Микрофон доступен. Нажмите на него и говорите');
       } else {
         _announceNoMicrophone();
       }
       return;
     }
     final attempt = ++_voiceAttempt;
-    // Держали дольше случайного касания — значит, говорили.
-    _voiceHeldLong = false;
-    _voiceHoldTimer?.cancel();
-    _voiceHoldTimer = Timer(_voiceMinHold, () => _voiceHeldLong = true);
-    _voiceHeld = true;
-    _voiceToggle = toggle;
+    _voiceAutoStop = null;
     _voiceNoticeTimer?.cancel();
     setState(() {
       _voiceLoading = true;
@@ -2008,7 +2019,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (!mounted || attempt != _voiceAttempt) return;
     if (permission != VoicePermission.granted) {
-      _voiceHeld = false;
       _endVoice();
       _announceNoMicrophone();
       return;
@@ -2017,7 +2027,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       await voice.ensureLoaded();
     } on Object catch (error) {
       if (!mounted || attempt != _voiceAttempt) return;
-      _voiceHeld = false;
       _endVoice();
       _voiceSay(
         error is VoiceEngineException
@@ -2026,38 +2035,29 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
       return;
     }
+    // Отменили, пока готовилось (номер попытки устарел), или ушло
+    // сообщение — не слушаем и молчим: сказать ещё ничего не успели.
     if (!mounted || attempt != _voiceAttempt) return;
-    // Отпустили раньше, чем началось распознавание: не слушаем. Если
-    // держали долго — значит, говорили, пока модель загружалась: честно
-    // говорим, что сказанное не услышано.
-    final heldLong = _voiceHeldLong;
-    _voiceHoldTimer?.cancel();
-    _voiceHoldTimer = null;
-    if (!_voiceHeld || _sending) {
+    if (_sending) {
       _endVoice();
-      if (!_sending && heldLong) {
-        _voiceSay(
-          'Распознавание ещё готовилось — сказанное не услышано. '
-          'Удерживайте микрофон, пока он не станет красным',
-        );
-      }
       return;
     }
     final Stream<VoiceEvent> events;
     try {
       events = voice.recognizer.start();
     } on Object {
-      _voiceHeld = false;
       _endVoice();
       _voiceSay(VoiceErrorCode.engine.message);
       return;
     }
-    _voiceShort = !toggle;
-    _voiceShortTimer?.cancel();
-    _voiceShortTimer = Timer(_voiceMinHold, () => _voiceShort = false);
     setState(() {
       _voiceLoading = false;
       _voiceListening = true;
+    });
+    _armVoiceSilence(attempt, _voiceNoSpeech);
+    _voiceMaxTimer?.cancel();
+    _voiceMaxTimer = Timer(_voiceMaxListen, () {
+      _autoStopVoice(attempt, 'Микрофон выключен: прошла минута');
     });
     // События и конец потока касаются только своей попытки: поток прежней
     // попытки, закрывшись позже, не сбросит текущую.
@@ -2078,19 +2078,27 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _voiceEvents = subscription;
   }
 
-  Future<void> _stopVoice({required bool toggle}) async {
+  /// Тишина: таймер заново при каждом новом промежуточном тексте.
+  void _armVoiceSilence(int attempt, Duration after) {
+    _voiceSilenceTimer?.cancel();
+    _voiceSilenceTimer = Timer(after, () {
+      _autoStopVoice(attempt, 'Микрофон выключен: долго не было речи');
+    });
+  }
+
+  /// Автостоп — с итогом, как нажатие «стоп»; подсказка — почему.
+  void _autoStopVoice(int attempt, String reason) {
+    if (!mounted || attempt != _voiceAttempt || !_voiceListening) return;
+    _voiceAutoStop = reason;
+    unawaited(_stopVoice());
+  }
+
+  /// «Стоп»: распознаватель отдаёт итог, он попадает в поле.
+  Future<void> _stopVoice() async {
     final voice = widget.voice;
-    if (voice == null) return;
-    // На компьютере кнопка переключает: отпускание мыши ничего не значит.
-    if (!toggle && _voiceToggle) return;
-    _voiceHeld = false;
-    if (!_voiceListening) return;
-    if (_voiceShort) {
-      // Короткое касание: слушать нечего, итог не нужен.
-      _voiceSay('Удерживайте микрофон, пока говорите');
-      await _cancelVoice();
-      return;
-    }
+    if (voice == null || !_voiceListening) return;
+    _voiceSilenceTimer?.cancel();
+    _voiceMaxTimer?.cancel();
     final subscription = _voiceEvents;
     try {
       await voice.recognizer.stop();
@@ -2103,8 +2111,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// Прерывает распознавание без итога: фон, уход с экрана.
   Future<void> _cancelVoice() async {
-    _voiceHeld = false;
     _voiceAttempt++;
+    _voiceAutoStop = null;
     final active = _voiceListening || _voiceLoading;
     final subscription = _voiceEvents;
     final recognizer = widget.voice?.recognizer;
@@ -2120,12 +2128,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _endVoice() {
-    _voiceShortTimer?.cancel();
-    _voiceShortTimer = null;
-    _voiceHoldTimer?.cancel();
-    _voiceHoldTimer = null;
-    _voiceShort = false;
-    _voiceToggle = false;
+    _voiceSilenceTimer?.cancel();
+    _voiceSilenceTimer = null;
+    _voiceMaxTimer?.cancel();
+    _voiceMaxTimer = null;
     _voiceEvents = null;
     if (!mounted) return;
     if (!_voiceListening && !_voiceLoading && _voicePartial.isEmpty) return;
@@ -2140,11 +2146,26 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!mounted) return;
     switch (event) {
       case VoicePartial(:final text):
-        setState(() => _voicePartial = normalizeRecognized(text));
+        final partial = normalizeRecognized(text);
+        // Тишина считается от последнего нового слова.
+        if (partial.isNotEmpty && partial != _voicePartial) {
+          _armVoiceSilence(_voiceAttempt, _voiceSilence);
+        }
+        setState(() => _voicePartial = partial);
       case VoiceFinal(:final text):
+        final reason = _voiceAutoStop;
+        _voiceAutoStop = null;
         _endVoice();
+        if (reason != null && normalizeRecognized(text).isEmpty) {
+          _voiceSay('Микрофон выключен: речи не слышно');
+          return;
+        }
+        // Подсказка «почему выключился» — до вставки: предупреждение
+        // «Похоже на пароль» важнее и заменит её.
+        if (reason != null) _voiceSay(reason);
         _insertRecognized(text);
       case VoiceError(:final code):
+        _voiceAutoStop = null;
         _endVoice();
         _voiceSay(code.message);
     }
@@ -2251,9 +2272,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   /// Ctrl+Shift+M (на macOS — Cmd+Shift+M): начать или закончить голосовой
-  /// ввод на компьютере.
+  /// ввод с клавиатуры — на компьютере и с подключённой к телефону.
   bool _voiceShortcut(KeyEvent event) {
-    if (!voiceToggleByDefault) return false;
     final mode = _voiceMode;
     if (mode != VoiceButtonMode.idle &&
         mode != VoiceButtonMode.listening &&
@@ -3379,6 +3399,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         voice: widget.voice,
         ffmpeg: widget.ffmpeg,
         ytdl: widget.ytdl,
+        appLock: widget.appLock,
         showTitle: false,
         includePersonas: false,
         onOpenStorage: () => unawaited(
@@ -4074,7 +4095,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 key: Key('password-action-$index'),
                 minTileHeight: 52,
                 leading: Icon(icon),
-                title: Text(label),
+                title: WholeWordText(label),
                 onTap: () => Navigator.of(context).pop(index),
               ),
           ],
@@ -4247,9 +4268,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               voiceMode: _voiceMode,
               voicePartial: _voiceListening ? _voicePartial : null,
               voiceNotice: _voiceNotice,
-              onVoiceStart: _voiceDown,
-              onVoiceStop: _voiceUp,
               onVoiceTap: _voiceTap,
+              onVoiceLongPress: _voiceTap,
+              onVoiceCancel: () => unawaited(_cancelVoice()),
               previousCommand: _previousCommand,
               nextCommand: _nextCommand,
             ),
@@ -4933,11 +4954,14 @@ final class _SearchField extends StatelessWidget {
           ),
           decoration: InputDecoration(
             isDense: true,
-            labelText: 'Поиск по задачам…',
-            floatingLabelBehavior: FloatingLabelBehavior.never,
-            labelStyle: const TextStyle(
-              fontSize: 14,
-              color: AssistantColors.muted,
+            // Подсказка в одну строку целиком: не помещается —
+            // уменьшается, а не режется «Поиск по зада…» (ADR-021).
+            hint: fitSingleWord(
+              'Поиск по задачам…',
+              style: const TextStyle(
+                fontSize: 14,
+                color: AssistantColors.muted,
+              ),
             ),
             prefixIcon: const Icon(
               Icons.search,

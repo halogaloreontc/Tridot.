@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/chats/chat_models.dart';
 import '../assistant_theme.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Действие с сессией из меню долгого нажатия.
 enum SessionAction {
@@ -497,7 +498,7 @@ final class _RenameDialogState extends State<_RenameDialog> {
       // Крупный шрифт и открытая клавиатура (поле с autofocus) на узком
       // телефоне: окно прокручивается, а не вылезает за край.
       scrollable: true,
-      title: Text(widget.title),
+      title: WholeWordText(widget.title),
       content: TextField(
         key: const Key('rename-field'),
         controller: _text,
@@ -539,7 +540,7 @@ Future<bool> showDeleteSessionDialog(
     context: context,
     builder: (BuildContext context) => AlertDialog(
       backgroundColor: AssistantColors.raised,
-      title: const Text('Удалить сессию?'),
+      title: const WholeWordText('Удалить сессию?'),
       content: Text(
         'Удалить сессию «$title»? Это нельзя отменить.'
         '${task ? ' Задача останется.' : ''}',

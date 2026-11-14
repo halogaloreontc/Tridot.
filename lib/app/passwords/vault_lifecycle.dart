@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../core/extensions/extension_registry.dart';
 import '../../core/passwords/vault.dart';
+import '../security/device_auth.dart';
 import 'clipboard_guard.dart';
 
 /// Когда запирать хранилище (раздел 3.6): выключили навык, приложение
@@ -13,6 +14,7 @@ import 'clipboard_guard.dart';
 final class VaultLifecycle {
   VaultLifecycle({required this.vault, required this.clipboard}) {
     vault.addListener(_onSignal);
+    SystemAuthGuard.active.addListener(_onSystemAuth);
   }
 
   /// Id навыка в «Расширениях».
@@ -29,7 +31,28 @@ final class VaultLifecycle {
     _unfollow = vault.followExtension(registry, skillId);
   }
 
-  void onAppState(AppLifecycleState state) => vault.onAppState(
+  /// Состояние, пришедшее, пока шёл системный запрос личности (ADR-025):
+  /// экран отпечатка или PIN-кода экрана уводит приложение в фон, но
+  /// человек никуда не ушёл. Запрос закончился — состояние применяется.
+  AppLifecycleState? _pending;
+
+  void onAppState(AppLifecycleState state) {
+    if (SystemAuthGuard.busy && state != AppLifecycleState.resumed) {
+      _pending = state;
+      return;
+    }
+    _pending = null;
+    _apply(state);
+  }
+
+  void _onSystemAuth() {
+    if (SystemAuthGuard.busy) return;
+    final state = _pending;
+    _pending = null;
+    if (state != null) _apply(state);
+  }
+
+  void _apply(AppLifecycleState state) => vault.onAppState(
         switch (state) {
           AppLifecycleState.resumed => VaultAppState.resumed,
           AppLifecycleState.inactive => VaultAppState.inactive,
@@ -50,6 +73,7 @@ final class VaultLifecycle {
   }
 
   void dispose() {
+    SystemAuthGuard.active.removeListener(_onSystemAuth);
     _unfollow?.call();
     _unfollow = null;
     vault.removeListener(_onSignal);

@@ -15,6 +15,11 @@ import java.util.UUID
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Сейф (ADR-025): ключ устройства в Android Keystore, запрет снимков
+        // экрана на экранах ПИН-кода и кода восстановления; вход в
+        // приложение по отпечатку / Face ID.
+        VaultKeyChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        DeviceAuthChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         // «Открыть» у результата карточки расширения (ADR-024): копия во
         // временной папке и FileProvider только на чтение. Путь вне папок
         // приложения не открывается.

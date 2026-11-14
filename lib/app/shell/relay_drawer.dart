@@ -11,6 +11,7 @@ import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
 import '../widgets/app_name_text.dart';
 import '../widgets/personas_section.dart';
+import '../widgets/whole_word_text.dart';
 import 'session_hold_menu.dart';
 
 export 'session_hold_menu.dart' show SessionAction;
@@ -778,12 +779,14 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                               isDense: true,
                               border: InputBorder.none,
                               contentPadding: EdgeInsets.zero,
-                              hintText: 'Поиск по сессиям',
-                              hintMaxLines: 1,
-                              hintStyle: const TextStyle(
-                                fontSize: 14,
-                                color: AssistantColors.muted,
-                                overflow: TextOverflow.ellipsis,
+                              // Подсказка целиком: не помещается —
+                              // уменьшается, а не режется (ADR-021).
+                              hint: fitSingleWord(
+                                'Поиск по сессиям',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: AssistantColors.muted,
+                                ),
                               ),
                               semanticCounterText: '',
                               suffixText:
@@ -1055,7 +1058,9 @@ final class _MyRelayCard extends StatelessWidget {
                   RelayAvatars(personas: assistants, size: size),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text.rich(
+                    // «Мой» / «Tridot» на узком меню с крупным шрифтом:
+                    // слово не рвётся и не режется (ADR-021).
+                    child: WholeWordText.rich(
                       appNameSpan(
                         AppInfo.hubName,
                         TextStyle(
@@ -1389,6 +1394,12 @@ final class _SectionRow extends StatelessWidget {
     ].join(', ');
     // Просрочка — счётчик заметнее (рамка и текст ярче).
     final loud = alert != null;
+    final labelStyle = TextStyle(
+      fontSize: wide ? 15 : 16,
+      fontWeight: FontWeight.w500,
+      height: 1.35,
+      color: AssistantColors.textStrong,
+    );
     return Semantics(
       button: true,
       selected: selected,
@@ -1428,17 +1439,17 @@ final class _SectionRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: wide ? 15 : 16,
-                        fontWeight: FontWeight.w500,
-                        height: 1.35,
-                        color: AssistantColors.textStrong,
-                      ),
-                    ),
+                    // Одно слово («Планирование») при нехватке места
+                    // уменьшается, а не режется многоточием (ADR-021).
+                    if (label.contains(' '))
+                      Text(
+                        label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: labelStyle,
+                      )
+                    else
+                      fitSingleWord(label, style: labelStyle),
                     if (alert != null)
                       Text(
                         alert!,
@@ -1690,10 +1701,11 @@ final class _ExtensionRow extends StatelessWidget {
                       const SizedBox(width: 12),
                     ],
                     Expanded(
-                      child: Text(
+                      child: WholeWordText(
                         entry.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        firstWordOnly: true,
                         style: TextStyle(
                           fontSize: wide ? 15 : 16,
                           height: 1.35,
@@ -1994,10 +2006,11 @@ final class SessionRowBody extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: <Widget>[
                       Expanded(
-                        child: Text(
+                        child: WholeWordText(
                           entry.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+                          firstWordOnly: true,
                           style: TextStyle(
                             fontSize: wide ? 15 : 16,
                             fontWeight: FontWeight.w500,
@@ -2114,10 +2127,11 @@ final class _HitRow extends StatelessWidget {
               Row(
                 children: <Widget>[
                   Expanded(
-                    child: Text(
+                    child: WholeWordText(
                       hit.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      firstWordOnly: true,
                       style: const TextStyle(color: AssistantColors.textStrong),
                     ),
                   ),

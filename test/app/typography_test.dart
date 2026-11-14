@@ -119,6 +119,14 @@ Future<void> _say(WidgetTester tester, String text) async {
 
 void main() {
   group('стили', () {
+    test('уведомления (SnackBar) — Inter, а не системный шрифт', () {
+      final theme = AssistantTheme.dark();
+      expect(
+        theme.snackBarTheme.contentTextStyle?.fontFamily,
+        AppFonts.text,
+      );
+    });
+
     test('метаданные — Inter с табличными цифрами', () {
       expect(metaTextStyle.fontFamily, AppFonts.text);
       expect(

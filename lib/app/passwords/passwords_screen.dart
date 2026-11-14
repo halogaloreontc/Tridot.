@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/passwords/secret_bytes.dart';
 import '../../core/passwords/vault.dart';
 import '../../core/passwords/vault_errors.dart';
 import '../../core/passwords/vault_facade.dart';
@@ -14,8 +15,12 @@ import 'generator_view.dart';
 import 'import_screen.dart';
 import 'passwords_kit.dart';
 import 'passwords_settings_screen.dart';
+import 'pin_pad.dart';
 import 'recall_views.dart';
+import 'recovery_code_view.dart';
 import 'secret_widgets.dart';
+import 'vault_confirm.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Экран «Пароли» (раздел 8): создание хранилища, замок, список записей.
 ///
@@ -45,6 +50,10 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   /// Только что создали хранилище: ждём ввода «ещё раз по памяти».
   bool _recheck = false;
 
+  /// Код восстановления, который нужно показать (ADR-025): новый сейф или
+  /// переход с мастер-пароля.
+  String? _code;
+
   @override
   void initState() {
     super.initState();
@@ -69,7 +78,17 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
   Widget build(BuildContext context) {
     final state = kit.state;
     final Widget body;
-    if (_recheck && state == VaultState.unlocked) {
+    final code = _code;
+    if (code != null && state == VaultState.unlocked) {
+      body = RecoveryCodeView(
+        kit: kit,
+        code: code,
+        onDone: () {
+          setState(() => _code = null);
+          _done();
+        },
+      );
+    } else if (_recheck && state == VaultState.unlocked) {
       body = _RecheckView(
         kit: kit,
         onDone: () {
@@ -86,12 +105,22 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
             text: 'Данные сохранены и заперты. Включите навык в '
                 '«Настройки → Расширения», чтобы открыть сейф.',
           ),
-        VaultState.notCreated => _CreateView(
+        VaultState.notCreated => kit.deviceProtection
+            ? _ProtectedCreateView(
+                kit: kit,
+                onCode: (String code) => setState(() => _code = code),
+                onRestored: _done,
+              )
+            : _CreateView(
+                kit: kit,
+                onCreated: () => setState(() => _recheck = true),
+                onRestored: _done,
+              ),
+        VaultState.locked => _LockView(
             kit: kit,
-            onCreated: () => setState(() => _recheck = true),
-            onRestored: _done,
+            onUnlocked: _done,
+            onCode: (String code) => setState(() => _code = code),
           ),
-        VaultState.locked => _LockView(kit: kit, onUnlocked: _done),
         VaultState.unlocked => _ListView(kit: kit, now: widget.now),
       };
     }
@@ -101,7 +130,7 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         backgroundColor: AssistantColors.workspace,
         title: const Text('Пароли'),
         actions: <Widget>[
-          if (state == VaultState.unlocked && !_recheck)
+          if (state == VaultState.unlocked && !_recheck && _code == null)
             PopupMenuButton<String>(
               key: const ValueKey<String>('passwords-menu'),
               tooltip: 'Ещё',
@@ -249,7 +278,7 @@ class _Point extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
+            child: WholeWordText(
               text,
               style: TextStyle(
                 color:
@@ -421,7 +450,7 @@ class _CreateViewState extends State<_CreateView> {
           onChanged: _busy
               ? null
               : (bool? value) => setState(() => _understood = value ?? false),
-          title: const Text(
+          title: const WholeWordText(
             'Я понимаю: если забуду мастер-пароль, восстановить данные '
             'нельзя никак.',
             style: TextStyle(color: AssistantColors.text),
@@ -527,13 +556,452 @@ class _RecheckViewState extends State<_RecheckView> {
   }
 }
 
+// ------------------------------------------- защита устройством (ADR-025)
+
+/// Создание сейфа, защищённого устройством: без мастер-пароля. Сразу
+/// после — код восстановления, один раз ([RecoveryCodeView]).
+class _ProtectedCreateView extends StatefulWidget {
+  const _ProtectedCreateView({
+    required this.kit,
+    required this.onCode,
+    required this.onRestored,
+  });
+
+  final PasswordsKit kit;
+  final ValueChanged<String> onCode;
+  final VoidCallback onRestored;
+
+  @override
+  State<_ProtectedCreateView> createState() => _ProtectedCreateViewState();
+}
+
+class _ProtectedCreateViewState extends State<_ProtectedCreateView> {
+  bool _busy = false;
+  String? _failure;
+
+  Future<void> _restore() async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (BuildContext context) => BackupRestoreScreen(kit: widget.kit),
+      ),
+    );
+    if (mounted && widget.kit.isUnlocked) widget.onRestored();
+  }
+
+  Future<void> _create() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _failure = null;
+    });
+    try {
+      final code = await widget.kit.createProtected();
+      if (mounted) widget.onCode(code);
+    } on VaultError catch (error) {
+      if (mounted) setState(() => _failure = vaultErrorText(error.code));
+    } on Object {
+      if (mounted) setState(() => _failure = 'Не получилось создать сейф.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final kit = widget.kit;
+    final restore = kit.vaultExisted
+        ? FilledButton.icon(
+            key: const ValueKey<String>('passwords-restore'),
+            onPressed: _busy ? null : () => unawaited(_restore()),
+            icon: const Icon(Icons.restore, size: 18),
+            label: const Text('Восстановить из копии'),
+          )
+        : OutlinedButton.icon(
+            key: const ValueKey<String>('passwords-restore'),
+            onPressed: _busy ? null : () => unawaited(_restore()),
+            icon: const Icon(Icons.restore, size: 18),
+            label: const Text('Восстановить из копии'),
+          );
+    return _Column(
+      children: <Widget>[
+        if (kit.vaultExisted)
+          const _Banner(
+            key: ValueKey<String>('passwords-not-found'),
+            text: 'Сейф на этом устройстве не найден. Если есть '
+                'резервная копия, пароли вернёт только она (вместе с кодом '
+                'восстановления). Можно и создать новый сейф.',
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: restore,
+          ),
+        ),
+        const Text(
+          'Создать сейф паролей',
+          style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
+        ),
+        const SizedBox(height: 14),
+        const _Point(
+          Icons.phone_android_outlined,
+          'Пароли хранятся только на этом устройстве, зашифрованными, и '
+          'никуда не отправляются.',
+        ),
+        const _Point(
+          Icons.lock_open_outlined,
+          'Отдельного пароля не нужно: сейф открывается ключом этого '
+          'устройства, пока открыто приложение. ПИН-код сейфа и вход по '
+          'отпечатку / Face ID можно включить в настройках сейфа.',
+        ),
+        const _Point(
+          Icons.warning_amber_outlined,
+          'После создания покажу код восстановления — один раз. Сохраните '
+          'его: без него при смене телефона или сбросе блокировки экрана '
+          'пароли не восстановить.',
+          strong: true,
+        ),
+        if (_failure != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              _failure!,
+              style: const TextStyle(color: AssistantColors.danger),
+            ),
+          ),
+        const SizedBox(height: 8),
+        FilledButton(
+          key: const ValueKey<String>('create-submit'),
+          onPressed: _busy ? null : () => unawaited(_create()),
+          child: Text(_busy ? 'Готовлю ключ…' : 'Создать'),
+        ),
+        if (_busy)
+          const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+      ],
+    );
+  }
+}
+
+/// Замок сейфа, защищённого устройством: ключ устройства открывает сам;
+/// ПИН-код — набором; биометрия — системным запросом; всегда можно
+/// «Восстановить по коду».
+class _ProtectedLock extends StatefulWidget {
+  const _ProtectedLock({
+    required this.kit,
+    required this.info,
+    required this.onUnlocked,
+  });
+
+  final PasswordsKit kit;
+  final VaultLockInfo info;
+  final ValueChanged<UnlockOutcome> onUnlocked;
+
+  @override
+  State<_ProtectedLock> createState() => _ProtectedLockState();
+}
+
+class _ProtectedLockState extends State<_ProtectedLock> {
+  final TextEditingController _code = TextEditingController();
+  late VaultLockInfo _info = widget.info;
+  bool _busy = false;
+  bool _useCode = false;
+  String? _error;
+
+  /// Пауза ПИН-кода: пульт сам ведёт отсчёт и не нажимается.
+  DateTime? _until;
+
+  PasswordsKit get kit => widget.kit;
+
+  @override
+  void initState() {
+    super.initState();
+    _useCode = !_info.device && !_info.pin && !_info.bio;
+    if (_info.pin) unawaited(_loadPause());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_info.device) {
+        unawaited(_device());
+      } else if (_info.bio) {
+        unawaited(_bio());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _code
+      ..clear()
+      ..dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPause() async {
+    final attempts = await kit.pinAttempts();
+    final until = attempts.blockedUntil(DateTime.now());
+    if (!mounted || until == null) return;
+    setState(() => _until = until);
+  }
+
+  Future<void> _refresh() async {
+    final info = await kit.lockInfo();
+    if (!mounted || info == null) return;
+    setState(() {
+      _info = info;
+      if (!info.device && !info.pin && !info.bio) _useCode = true;
+    });
+  }
+
+  Future<void> _attempt(
+    Future<UnlockOutcome> Function() open, {
+    bool pin = false,
+    bool code = false,
+  }) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final outcome = await open();
+    if (!mounted) return;
+    if (outcome.ok) {
+      setState(() => _busy = false);
+      if (outcome.recovered) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(
+            content: WholeWordText(
+              'Сейф открыт кодом восстановления. ПИН-код и вход по '
+              'отпечатку сняты — их можно включить снова в настройках '
+              'сейфа.',
+            ),
+          ),
+        );
+      }
+      widget.onUnlocked(outcome);
+      return;
+    }
+    final error = outcome.error ?? VaultErrorCode.wrongPassword;
+    String text;
+    DateTime? until;
+    if (pin &&
+        (error == VaultErrorCode.wrongPassword ||
+            error == VaultErrorCode.rateLimited ||
+            error == VaultErrorCode.pinLocked)) {
+      final result = await pinError(kit);
+      text = result.text;
+      until = result.until;
+    } else if (code && error == VaultErrorCode.rateLimited) {
+      text = _waitText(outcome.until) ?? vaultErrorText(error);
+    } else if (error == VaultErrorCode.bioCanceled) {
+      text = '';
+    } else {
+      text = vaultErrorText(error, recovery: code);
+    }
+    if (error == VaultErrorCode.deviceKeyLost ||
+        error == VaultErrorCode.bioInvalidated ||
+        error == VaultErrorCode.pinLocked) {
+      await _refresh();
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = text.isEmpty || until != null ? null : text;
+      _until = until;
+      if (error == VaultErrorCode.deviceKeyLost) _useCode = true;
+    });
+  }
+
+  static String? _waitText(DateTime? until) {
+    if (until == null) return null;
+    final left = until.difference(DateTime.now());
+    if (left <= Duration.zero) return null;
+    final minutes = left.inMinutes;
+    final seconds = (left.inSeconds % 60).toString().padLeft(2, '0');
+    return 'Следующая попытка через $minutes:$seconds.';
+  }
+
+  Future<void> _device() => _attempt(kit.unlockDevice);
+
+  Future<void> _bio() => _attempt(kit.unlockBio);
+
+  Future<void> _pin(SecretBytes pin) =>
+      _attempt(() => kit.unlockPin(pin), pin: true);
+
+  Future<void> _recover() async {
+    if (_code.text.isEmpty) return;
+    final text = _code.text;
+    _code.clear();
+    await _attempt(() => kit.unlock(text), code: true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final info = _info;
+    final error = _error;
+    return SecureWindowScope(
+      auth: kit.auth,
+      child: _Column(
+        children: <Widget>[
+          const SizedBox(height: 8),
+          const Icon(
+            Icons.lock_outline,
+            size: 36,
+            color: AssistantColors.muted,
+          ),
+          const SizedBox(height: 12),
+          const WholeWordText(
+            'Сейф заперт',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
+          ),
+          const SizedBox(height: 20),
+          if (_useCode) ...<Widget>[
+            const WholeWordText(
+              'Откройте сейф кодом восстановления — тем, что был показан при '
+              'создании сейфа.',
+              style: TextStyle(color: AssistantColors.text),
+            ),
+            const SizedBox(height: 12),
+            SecretField(
+              key: const ValueKey<String>('lock-code'),
+              controller: _code,
+              label: 'Код восстановления',
+              helper: 'XXXXX-XXXXX-XXXXX-XXXXX-XXXXX, регистр не важен.',
+              error: error,
+              allowShow: true,
+              autofocus: true,
+              enabled: !_busy,
+              onSubmitted: (_) => unawaited(_recover()),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              key: const ValueKey<String>('lock-code-submit'),
+              onPressed: _busy ? null : () => unawaited(_recover()),
+              child: Text(_busy ? 'Открываю…' : 'Открыть'),
+            ),
+          ] else if (info.pin) ...<Widget>[
+            const WholeWordText(
+              'Введите ПИН-код сейфа',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AssistantColors.text),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: PinPad(
+                now: kit.vault.clock.now,
+                key: const ValueKey<String>('lock-pin'),
+                enabled: !_busy,
+                error: error,
+                until: _until,
+                onPauseEnd: () => setState(() {
+                  _until = null;
+                  _error = null;
+                }),
+                onComplete: _pin,
+              ),
+            ),
+          ] else if (info.device) ...<Widget>[
+            if (_busy)
+              const WholeWordText(
+                'Открываю…',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AssistantColors.text),
+              ),
+            if (error != null) ...<Widget>[
+              WholeWordText(
+                error,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AssistantColors.danger),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (!_busy)
+              FilledButton(
+                key: const ValueKey<String>('lock-device'),
+                onPressed: () => unawaited(_device()),
+                child: const Text('Открыть'),
+              ),
+          ] else if (error != null)
+            WholeWordText(
+              error,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AssistantColors.danger),
+            ),
+          if (info.bio && !_useCode)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: OutlinedButton.icon(
+                key: const ValueKey<String>('lock-bio'),
+                onPressed: _busy ? null : () => unawaited(_bio()),
+                icon: const Icon(Icons.fingerprint, size: 18),
+                label: const Text('По отпечатку / Face ID'),
+              ),
+            ),
+          if (_busy)
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+          const SizedBox(height: 16),
+          if (!_useCode)
+            TextButton(
+              key: const ValueKey<String>('lock-recover'),
+              onPressed: _busy
+                  ? null
+                  : () => setState(() {
+                        _useCode = true;
+                        _error = null;
+                      }),
+              child: const Text('Восстановить по коду'),
+            )
+          else if (info.device || info.pin || info.bio)
+            TextButton(
+              key: const ValueKey<String>('lock-back'),
+              onPressed: _busy
+                  ? null
+                  : () => setState(() {
+                        _useCode = false;
+                        _error = null;
+                      }),
+              child: Text(info.pin ? 'Ввести ПИН-код' : 'Назад'),
+            ),
+          WholeWordText(
+            kit.protectionNoteFor(
+              pin: info.pin,
+              bio: info.bio,
+              codeOnly: !info.device && !info.pin && !info.bio,
+            ),
+            textAlign: TextAlign.center,
+            style: metaTextStyle,
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            key: const ValueKey<String>('lock-forgot'),
+            onPressed: () => unawaited(showRecovery(context, kit)),
+            child: const Text('Нет кода восстановления?'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // --------------------------------------------------------------- замок
 
 class _LockView extends StatefulWidget {
-  const _LockView({required this.kit, required this.onUnlocked});
+  const _LockView({
+    required this.kit,
+    required this.onUnlocked,
+    required this.onCode,
+  });
 
   final PasswordsKit kit;
   final VoidCallback onUnlocked;
+
+  /// Сейф с мастер-паролем перешёл на защиту устройством: новый код.
+  final ValueChanged<String> onCode;
 
   @override
   State<_LockView> createState() => _LockViewState();
@@ -545,6 +1013,35 @@ class _LockViewState extends State<_LockView> {
   String? _error;
   DateTime? _until;
   Timer? _tick;
+
+  /// Чем открывается сейф (ADR-025). Пока не прочитано — у сборки с
+  /// ключом устройства ждём, без него — прежний мастер-пароль.
+  VaultLockInfo? _info;
+  bool _infoLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.kit.deviceProtection) unawaited(_loadInfo());
+  }
+
+  Future<void> _loadInfo() async {
+    final info = await widget.kit.lockInfo();
+    if (!mounted) return;
+    setState(() {
+      _info = info;
+      _infoLoaded = true;
+    });
+  }
+
+  void _opened(UnlockOutcome outcome) {
+    final code = outcome.recoveryCode;
+    if (code != null) {
+      widget.onCode(code);
+    } else {
+      widget.onUnlocked();
+    }
+  }
 
   @override
   void dispose() {
@@ -575,7 +1072,7 @@ class _LockViewState extends State<_LockView> {
           ),
         );
       }
-      widget.onUnlocked();
+      _opened(outcome);
       return;
     }
     final until = outcome.until;
@@ -612,6 +1109,14 @@ class _LockViewState extends State<_LockView> {
 
   @override
   Widget build(BuildContext context) {
+    final kit = widget.kit;
+    if (kit.deviceProtection && !_infoLoaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final info = _info;
+    if (info != null && !info.usesMaster) {
+      return _ProtectedLock(kit: kit, info: info, onUnlocked: _opened);
+    }
     final wait = _waitText;
     return _Column(
       children: <Widget>[
@@ -623,6 +1128,18 @@ class _LockViewState extends State<_LockView> {
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
         ),
+        if (kit.deviceProtection)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'Введите мастер-пароль в последний раз: дальше сейф будет '
+              'открываться ключом этого устройства, а на случай потери я '
+              'покажу код восстановления.',
+              key: ValueKey<String>('lock-migrate-note'),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AssistantColors.text),
+            ),
+          ),
         const SizedBox(height: 20),
         SecretField(
           key: const ValueKey<String>('lock-master'),
@@ -645,11 +1162,13 @@ class _LockViewState extends State<_LockView> {
             child: LinearProgressIndicator(minHeight: 2),
           ),
         const SizedBox(height: 16),
-        Text(
-          widget.kit.platform.unlockNote,
-          textAlign: TextAlign.center,
-          style: metaTextStyle,
-        ),
+        // При переходе всё сказано сверху (lock-migrate-note).
+        if (!kit.deviceProtection)
+          Text(
+            kit.platform.unlockNote,
+            textAlign: TextAlign.center,
+            style: metaTextStyle,
+          ),
         const SizedBox(height: 8),
         TextButton(
           key: const ValueKey<String>('lock-forgot'),
@@ -705,33 +1224,39 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
   Widget build(BuildContext context) {
     final exists = widget.kit.state == VaultState.locked ||
         widget.kit.state == VaultState.unlocked;
+    final protectedVault = widget.kit.deviceProtection;
     return AlertDialog(
       key: const ValueKey<String>('recovery-dialog'),
       scrollable: true,
       backgroundColor: AssistantColors.raised,
-      title: const Text('Забыли мастер-пароль?'),
+      title: WholeWordText(
+        protectedVault ? 'Нет кода восстановления?' : 'Забыли мастер-пароль?',
+      ),
       content: SizedBox(
         width: 460,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Text(
-              'Восстановить нельзя: без мастер-пароля сейф не '
-              'расшифровать — ни мне, ни кому-либо ещё.',
-              style: TextStyle(color: AssistantColors.textStrong),
+            Text(
+              protectedVault
+                  ? 'Если ключ этого устройства, ПИН-код и отпечаток сейф уже '
+                      'не открывают, то без кода восстановления его не '
+                      'расшифровать — ни мне, ни кому-либо ещё.'
+                  : 'Восстановить нельзя: без мастер-пароля сейф не '
+                      'расшифровать — ни мне, ни кому-либо ещё.',
+              style: const TextStyle(color: AssistantColors.textStrong),
             ),
             const SizedBox(height: 10),
-            const Text(
-              'Часто пароль вспоминается через день-два. Попробуйте '
-              'вспомнить, где и когда вы его придумывали, — и не спешите.',
-              style: TextStyle(color: AssistantColors.text),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Вход по отпечатку и восстановление из резервной копии '
-              'появятся в следующих обновлениях.',
-              style: TextStyle(color: AssistantColors.muted),
+            Text(
+              protectedVault
+                  ? 'Поищите записанный код: он из пяти групп по пять знаков. '
+                      'Есть резервная копия — её откроет тот же код или '
+                      'отдельный пароль копии.'
+                  : 'Часто пароль вспоминается через день-два. Попробуйте '
+                      'вспомнить, где и когда вы его придумывали, — и не '
+                      'спешите.',
+              style: const TextStyle(color: AssistantColors.text),
             ),
             if (exists) ...<Widget>[
               const SizedBox(height: 16),
@@ -777,9 +1302,10 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
 }
 
 class _Banner extends StatelessWidget {
-  const _Banner({super.key, required this.text});
+  const _Banner({super.key, required this.text, this.action});
 
   final String text;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -801,9 +1327,15 @@ class _Banner extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(color: AssistantColors.text),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  text,
+                  style: const TextStyle(color: AssistantColors.text),
+                ),
+                if (action != null) action!,
+              ],
             ),
           ),
         ],
@@ -836,6 +1368,34 @@ class _ListViewState extends State<_ListView> {
   Future<void> _open(Widget screen) => Navigator.of(context).push<void>(
         MaterialPageRoute<void>(builder: (BuildContext context) => screen),
       );
+
+  /// Код не подтвердили (приложение закрыли раньше «Я сохранил»): новый.
+  Future<void> _newCode() async {
+    final kit = widget.kit;
+    String? code;
+    var rotated = true;
+    final ok = await askVaultConfirm(
+      context,
+      kit: kit,
+      title: 'Новый код восстановления',
+      text: 'Прежний код (если вы его всё же записали) перестанет '
+          'открывать сейф.',
+      check: (VaultProof proof) async {
+        final result = await kit.regenerateRecovery(proof);
+        code = result?.code;
+        rotated = result?.rotated ?? true;
+        return result != null;
+      },
+    );
+    final shown = code;
+    if (!ok || shown == null || !mounted) return;
+    await showRecoveryCode(context, kit, shown);
+    if (!rotated && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text(recoveryNotRotatedNote)),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -913,6 +1473,30 @@ class _ListViewState extends State<_ListView> {
                 ],
               ),
             ),
+            if (kit.recoveryUnconfirmed)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _Banner(
+                  key: const ValueKey<String>('passwords-code-unconfirmed'),
+                  text: 'Код восстановления не подтверждён. Если вы его не '
+                      'записали, получите новый — без него при смене '
+                      'телефона пароли не восстановить.',
+                  action: TextButton(
+                    key: const ValueKey<String>('passwords-new-code'),
+                    onPressed: () => unawaited(_newCode()),
+                    child: const Text('Новый код'),
+                  ),
+                ),
+              ),
+            if (kit.isProtected && kit.platform.fileKeyOnly)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: _Banner(
+                  key: ValueKey<String>('passwords-file-key'),
+                  text: 'На этом компьютере пароли защищены только вашей '
+                      'учётной записью.',
+                ),
+              ),
             if (kit.rolledBack)
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
@@ -1042,7 +1626,7 @@ class EntryTile extends StatelessWidget {
           style: const TextStyle(color: AssistantColors.textStrong),
         ),
       ),
-      title: Text(
+      title: WholeWordText(
         entry.service,
         style: const TextStyle(color: AssistantColors.textStrong),
       ),

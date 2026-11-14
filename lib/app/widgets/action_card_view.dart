@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../../core/models/action_card.dart';
 import '../assistant_theme.dart';
+import 'whole_word_text.dart';
 
 /// Карточка действия с записью под ответом помощника (ADR-013): что
 /// изменится, от чьего имени, до какого времени, кнопки «Подтвердить» и
@@ -186,7 +188,7 @@ class _ActionCardViewState extends State<ActionCardView> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
+                      child: WholeWordText(
                         _title,
                         key: const Key('action-title'),
                         style: const TextStyle(
@@ -205,7 +207,34 @@ class _ActionCardViewState extends State<ActionCardView> {
                   ],
                 ),
               ),
-              for (final line in card.lines) _line(line),
+              LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) {
+                  // Колонка подписей — по самой длинной подписи при нынешнем
+                  // шрифте (не уже 76), но не шире 40 % строки; не влезает —
+                  // подпись над значением: «Откуда» не рвётся (ADR-021).
+                  final row = constraints.maxWidth - 28;
+                  var longest = 0.0;
+                  for (final line in card.lines) {
+                    longest = math.max(
+                      longest,
+                      lineWidth(
+                        context,
+                        ActionCardView.labelOf(line.label),
+                        style: metaTextStyle,
+                      ),
+                    );
+                  }
+                  final column = math.max(76.0, longest + 8);
+                  final stacked = column > row * .4;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      for (final line in card.lines)
+                        _line(line, stacked ? null : column),
+                    ],
+                  );
+                },
+              ),
               for (final warn in card.warn)
                 if (ActionCardView.noteOf(warn) case final String note
                     when note.isNotEmpty && warn != 'to_empty')
@@ -286,44 +315,47 @@ class _ActionCardViewState extends State<ActionCardView> {
     );
   }
 
-  Widget _line(ActionCardLine line) {
+  /// Строка карточки: подпись в колонке шириной [column] слева от
+  /// значения, `null` — подпись над значением (узко и крупный шрифт).
+  Widget _line(ActionCardLine line, double? column) {
     final note = ActionCardView.noteOf(line.note);
+    final label = WholeWordText(
+      ActionCardView.labelOf(line.label),
+      style: metaTextStyle,
+    );
+    final value = Text(
+      // Второй раз чистим: значение — одна строка без
+      // управляющих знаков, что бы ни пришло.
+      ActionCard.cardText(line.value),
+      key: ValueKey<String>('action-value-${line.label}'),
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        fontSize: 14,
+        color: AssistantColors.text,
+      ),
+    );
     return Padding(
       key: ValueKey<String>('action-line-${line.label}'),
       padding: const EdgeInsets.fromLTRB(14, 3, 14, 3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              SizedBox(
-                width: 76,
-                child: Text(
-                  ActionCardView.labelOf(line.label),
-                  style: metaTextStyle,
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  // Второй раз чистим: значение — одна строка без
-                  // управляющих знаков, что бы ни пришло.
-                  ActionCard.cardText(line.value),
-                  key: ValueKey<String>('action-value-${line.label}'),
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AssistantColors.text,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          if (column == null) ...<Widget>[
+            label,
+            value,
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                SizedBox(width: column, child: label),
+                Expanded(child: value),
+              ],
+            ),
           if (note.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(left: 76),
+              padding: EdgeInsets.only(left: column ?? 0),
               child: _warningText(
                 note,
                 ValueKey<String>('action-note-${line.label}'),

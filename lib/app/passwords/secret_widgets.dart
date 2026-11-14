@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/passwords/secret_bytes.dart';
 import '../assistant_theme.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Скрытое поле для пароля или заметки (раздел 8): без подсказок,
 /// автоисправления и обучения клавиатуры, без `autofillHints` и вне
@@ -433,7 +434,7 @@ class _MasterDialogState extends State<_MasterDialog> {
     return AlertDialog(
       scrollable: true,
       backgroundColor: AssistantColors.raised,
-      title: Text(widget.title),
+      title: WholeWordText(widget.title),
       content: SizedBox(
         width: 420,
         child: Column(

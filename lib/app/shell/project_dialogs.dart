@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/chats/chat_projects.dart';
 import '../../core/formatting/plural.dart';
 import '../assistant_theme.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Название и описание проекта из окна «Новый проект» / «Описание».
 typedef ProjectDraft = ({String name, String? description});
@@ -76,7 +77,7 @@ final class _ProjectDialogState extends State<_ProjectDialog> {
     return AlertDialog(
       backgroundColor: AssistantColors.raised,
       scrollable: true,
-      title: Text(widget.title),
+      title: WholeWordText(widget.title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -206,7 +207,7 @@ Future<ProjectMove?> showMoveToProjectSheet(
                 Icons.create_new_folder_outlined,
                 color: AssistantColors.icon,
               ),
-              title: const Text('Новый проект…'),
+              title: const WholeWordText('Новый проект…'),
               onTap: () => Navigator.of(context)
                   .pop<ProjectMove>(const MoveToNewProject()),
             ),
@@ -217,7 +218,7 @@ Future<ProjectMove?> showMoveToProjectSheet(
                   Icons.folder_off_outlined,
                   color: AssistantColors.icon,
                 ),
-                title: const Text('Убрать из проекта'),
+                title: const WholeWordText('Убрать из проекта'),
                 onTap: () => Navigator.of(context)
                     .pop<ProjectMove>(const MoveOutOfProject()),
               ),
@@ -252,7 +253,7 @@ Future<ProjectDeleteChoice?> showDeleteProjectDialog(
     builder: (BuildContext context) => AlertDialog(
       backgroundColor: AssistantColors.raised,
       scrollable: true,
-      title: const Text('Удалить проект?'),
+      title: const WholeWordText('Удалить проект?'),
       content: Text(
         sessions == 0
             ? 'Удалить проект «$name»? В нём нет сессий.'
@@ -349,7 +350,7 @@ final class _TagDialogState extends State<_TagDialog> {
     return AlertDialog(
       backgroundColor: AssistantColors.raised,
       scrollable: true,
-      title: const Text('Метка задач'),
+      title: const WholeWordText('Метка задач'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,

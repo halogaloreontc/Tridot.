@@ -113,9 +113,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   List<Widget> _buildFolders() {
     final open = widget.onOpenFolder;
     return <Widget>[
-      Row(
+      // Перенос, а не сжатие: на узком экране с крупным шрифтом «Новый
+      // проект» уходит на свою строку, «Папки» не рвётся (ADR-021).
+      Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: <Widget>[
-          const Expanded(child: SectionLabel('Папки')),
+          const SectionLabel('Папки'),
           if (widget.onNewFolder != null)
             TextButton.icon(
               key: const Key('projects-new'),
