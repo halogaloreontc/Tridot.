@@ -25,6 +25,7 @@ abstract final class ZipOps {
     required String outputDir,
     ZipLimits limits = ZipLimits.desktop,
     String? explicitTarget,
+    String? level,
   }) {
     switch (action) {
       case ExtensionForms.zip:
@@ -46,6 +47,15 @@ abstract final class ZipOps {
           target: target,
           temp: JobPlacement.tempFile(target, cardId),
           limits: limits,
+          options: <String, String>{
+            if (level != null &&
+                ExtensionForms.validDefault(
+                  ExtensionForms.archiver,
+                  'level',
+                  level,
+                ))
+              'level': level,
+          },
         );
       case ExtensionForms.extract:
         final name = JobPlacement.safeName(
@@ -116,7 +126,11 @@ abstract final class ZipOps {
     );
     reporter.progress(0, 'Сжатие');
     final encoder = ZipFileEncoder();
-    encoder.create(part);
+    // Сжатие из карточки: обычное (6), сильное (9) или без сжатия (0).
+    encoder.create(
+      part,
+      level: ExtensionForms.zipLevel(request.options['level']),
+    );
     var done = 0;
     try {
       for (final folder in folders) {

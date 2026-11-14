@@ -6,7 +6,8 @@
 /// stderr (в нём пути) наружу не уходит: только код ошибки.
 ///
 /// Только Windows и Linux: на Android запуск скачанных программ запрещён
-/// системой (W^X, targetSdk ≥ 29), на macOS — песочницей.
+/// системой (W^X, targetSdk ≥ 29), на macOS — песочницей; там звук и видео
+/// делает система (ADR-026).
 library;
 
 import 'dart:async';
@@ -24,13 +25,37 @@ abstract final class FfmpegArgs {
   /// Список аргументов для цели [target]: [input] → [output]. Пути идут
   /// отдельными элементами: оболочки нет, разбирать их некому. Кадр
   /// берётся на первой секунде; [seek] `false` — самый первый кадр (видео
-  /// короче секунды).
+  /// короче секунды). [options] — качество и размер ([ConvertQuality]).
   static List<String> build({
     required String target,
     required String input,
     required String output,
     bool seek = true,
+    ConvertOptions options = ConvertOptions.defaults,
   }) {
+    final quality = options.videoQuality;
+    final side = ConvertQuality.longSide(options.videoRes);
+    // Длинная сторона не больше [side], пропорции те же, размеры чётные
+    // (H.264 и VP9 иначе не кодируют); меньшее видео не растягивается.
+    // Один элемент списка: кавычки разбирает сам ffmpeg, не оболочка.
+    final scale = side == null
+        ? const <String>[]
+        : <String>[
+            '-vf',
+            "scale='min($side,iw)':'min($side,ih)':"
+                'force_original_aspect_ratio=decrease:force_divisible_by=2',
+          ];
+    final h264 = <String>[
+      '-map', '0:v:0', //
+      '-map', '0:a:0?',
+      ...scale,
+      '-c:v', 'libopenh264',
+      '-pix_fmt', 'yuv420p',
+      '-b:v', '${ConvertQuality.videoKbps(options.videoRes, quality)}k',
+      '-c:a', 'aac',
+      '-b:a', '${ConvertQuality.videoAudioKbps(quality)}k',
+      '-movflags', '+faststart',
+    ];
     return <String>[
       '-hide_banner',
       '-nostdin',
@@ -48,24 +73,28 @@ abstract final class FfmpegArgs {
             '-map', '0:a:0', //
             '-vn',
             '-c:a', 'libmp3lame',
-            '-q:a', '2',
+            '-b:a', '${options.audioKbps}k',
           ],
-        ConvertTargets.mp4 => <String>[
-            '-map', '0:v:0', //
-            '-map', '0:a:0?',
-            '-c:v', 'libopenh264',
-            '-pix_fmt', 'yuv420p',
-            '-b:v', '4M',
+        ConvertTargets.m4a => <String>[
+            '-map', '0:a:0', //
+            '-vn',
             '-c:a', 'aac',
-            '-b:a', '160k',
+            '-b:a', '${options.audioKbps}k',
             '-movflags', '+faststart',
           ],
+        ConvertTargets.wav => <String>[
+            '-map', '0:a:0', //
+            '-vn',
+            '-c:a', 'pcm_s16le',
+          ],
+        ConvertTargets.mp4 || ConvertTargets.mov => h264,
         ConvertTargets.webm => <String>[
             '-map', '0:v:0', //
             '-map', '0:a:0?',
+            ...scale,
             '-c:v', 'libvpx-vp9',
             '-b:v', '0',
-            '-crf', '33',
+            '-crf', '${ConvertQuality.webmCrf(quality)}',
             '-deadline', 'good',
             '-cpu-used', '4',
             '-row-mt', '1',
@@ -77,7 +106,7 @@ abstract final class FfmpegArgs {
             '-frames:v', '1',
             '-update', '1',
             '-c:v', 'mjpeg',
-            '-q:v', '2',
+            '-q:v', '${ConvertQuality.ffmpegJpegQ(options.jpegQuality)}',
           ],
         ConvertTargets.framePng => <String>[
             '-map', '0:v:0', //
@@ -97,13 +126,16 @@ abstract final class FfmpegArgs {
   }
 
   /// Цель — кадр из видео.
-  static bool isFrame(String target) =>
-      target == ConvertTargets.frameJpeg || target == ConvertTargets.framePng;
+  static bool isFrame(String target) => ConvertTargets.isFrame(target);
 
   /// Формат вывода (`-f`): временный файл без своего расширения.
   static String formatOf(String target) => switch (target) {
         ConvertTargets.mp3 => 'mp3',
+        // `ipod` — MPEG-4 для звука (.m4a).
+        ConvertTargets.m4a => 'ipod',
+        ConvertTargets.wav => 'wav',
         ConvertTargets.mp4 => 'mp4',
+        ConvertTargets.mov => 'mov',
         ConvertTargets.webm => 'webm',
         ConvertTargets.frameJpeg || ConvertTargets.framePng => 'image2',
         _ => throw ArgumentError.value(target, 'target'),
@@ -270,6 +302,11 @@ final class FfmpegJobRunner implements JobRunner {
         input: input,
         output: temp,
         seek: seek,
+        options: ConvertOptions.fromMap(
+          run.request.options,
+          run.request.action,
+          ConvertTargets.kindOf(run.request.sources.single.name),
+        ),
       ),
     );
     run.process = process;

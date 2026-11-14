@@ -37,11 +37,24 @@ abstract final class JobCodes {
   /// Формат файла не поддерживается (HEIC, неизвестный).
   static const String unsupported = 'unsupported';
 
-  /// Картинка больше 50 мегапикселей или файл слишком большой.
+  /// Картинка больше 50 мегапикселей (или файл картинки больше 200 МБ).
   static const String tooBig = 'tooBig';
+
+  /// WAV получается больше 4 ГБ (предел формата).
+  static const String tooBigWav = 'tooBigWav';
+
+  /// Не хватило памяти устройства (система телефона или Mac).
+  static const String noMemory = 'noMemory';
 
   /// Файл не прочитать: повреждён или внутри не то, что в имени.
   static const String media = 'media';
+
+  /// Система телефона или Mac не открывает этот файл: контейнер или кодек
+  /// ей неизвестен (ADR-026).
+  static const String mediaOpen = 'mediaOpen';
+
+  /// Системный кодировщик (или встроенный LAME) отказал.
+  static const String encoder = 'encoder';
 
   /// Нужной внешней программы (ffmpeg) нет или она не прошла проверку.
   static const String noTool = 'noTool';
@@ -75,10 +88,19 @@ abstract final class JobCodes {
         unsafe => 'В архиве опасные пути — распаковка остановлена, ничего '
             'не записано вне временной папки',
         missing => 'Исходного файла больше нет — выберите его заново',
-        unsupported => 'Этот формат пока не поддерживается',
-        tooBig => 'Файл слишком большой: картинки — до 50 мегапикселей',
+        unsupported => 'Этот формат здесь не поддерживается',
+        tooBig => 'Картинка слишком большая: можно до 50 мегапикселей и '
+            '200 МБ',
+        tooBigWav => 'WAV получается больше 4 ГБ — это предел формата; '
+            'выберите MP3 или M4A',
+        noMemory => 'Не хватило памяти устройства — попробуйте файл '
+            'поменьше или качество ниже',
         media => 'Не удалось прочитать файл: он повреждён или внутри не тот '
             'формат',
+        mediaOpen => 'Этот файл не открывается на этом устройстве: система '
+            'не знает его формат или кодек',
+        encoder => 'Кодировщик устройства отказал — попробуйте другое '
+            'качество или формат',
         noStream => 'В файле нет нужной дорожки: например, у видео нет звука',
         noTool => 'ffmpeg не установлен или не прошёл проверку — скачайте '
             'его заново: Настройки → Расширения → Конвертер → Настроить',
@@ -156,6 +178,7 @@ final class JobRequest {
     this.temp,
     this.url,
     this.limits = ZipLimits.desktop,
+    this.options = const <String, String>{},
   });
 
   final String cardId;
@@ -177,6 +200,10 @@ final class JobRequest {
   final String? url;
 
   final ZipLimits limits;
+
+  /// Настройки задачи из карточки (только допустимые значения): качество
+  /// конвертера (`audio_kbps` → `320`), сжатие архива (`level`).
+  final Map<String, String> options;
 
   /// Временные пути, которые нужно убрать, если задача не закончилась.
   List<String> get cleanup => <String>[if (temp != null) temp!];

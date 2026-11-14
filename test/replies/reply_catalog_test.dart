@@ -68,6 +68,12 @@ const Map<String, String> facts = <String, String>{
   'minutes': '5',
   'seconds': '15',
   'code': 'io',
+  // Конвертер (ADR-026).
+  'format': 'WebM',
+  'formats': 'картинки png, jpeg, webp, bmp, gif — в png или jpeg; звук и '
+      'видео — в mp3, m4a, wav, mp4',
+  'quality': 'MP3, 320 кбит/с',
+  'reason': 'в системе нет кодировщика для WebM — подойдёт MP4',
   'strength': 'высокая',
   'bits': '76',
   'weak': '2',

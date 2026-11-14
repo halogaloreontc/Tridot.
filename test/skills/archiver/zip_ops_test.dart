@@ -85,6 +85,47 @@ void main() {
       );
     });
 
+    test('сжатие: без сжатия, обычное, сильное — читается одинаково', () {
+      final text = List<String>.generate(4000, (int i) => 'line $i ').join();
+      final source = file('много.txt', text);
+      final sizes = <String, int>{};
+      for (final level in <String>['store', 'normal', 'strong']) {
+        final request = ZipOps.plan(
+          cardId: 'j_$level',
+          action: ExtensionForms.zip,
+          sources: <JobSource>[JobSource(source.path, 'много.txt')],
+          outputDir: p.join(temp.path, level),
+          level: level,
+        );
+        expect(request.options, <String, String>{'level': level});
+        Directory(request.outputDir).createSync(recursive: true);
+        final done = ZipOps.run(request, _Reporter());
+        expect(read(done.outputs.single), <String, String>{'много.txt': text});
+        sizes[level] = File(done.outputs.single).lengthSync();
+      }
+      expect(sizes['store'], greaterThan(sizes['normal']!));
+      expect(sizes['strong'], lessThanOrEqualTo(sizes['normal']!));
+      // Без сжатия — метод «stored».
+      final stored = ZipDecoder().decodeBytes(
+        File(p.join(temp.path, 'store', 'много.zip')).readAsBytesSync(),
+      );
+      expect(stored.files.single.compression, CompressionType.none);
+      // Неизвестное значение в задачу не попадает.
+      expect(
+        ZipOps.plan(
+          cardId: 'x',
+          action: ExtensionForms.zip,
+          sources: <JobSource>[JobSource(source.path, 'много.txt')],
+          outputDir: temp.path,
+          level: '11',
+        ).options,
+        isEmpty,
+      );
+      expect(ExtensionForms.zipLevel('strong'), 9);
+      expect(ExtensionForms.zipLevel('store'), 0);
+      expect(ExtensionForms.zipLevel(null), 6);
+    });
+
     test('несколько файлов — «Архив.zip», совпадение имени — «(2)»', () {
       final a = file('a.txt', 'a');
       final b = file('b.txt', 'b');

@@ -45,10 +45,23 @@ abstract final class JobPlacement {
   }
 
   /// Временный файл результата [target] задачи карточки [cardId]: скрытый,
-  /// рядом с ним, с id карточки в имени (`.<имя>.<id>.part`) — две
-  /// задачи с одинаковым именем результата не пишут в один файл.
-  static String tempFile(String target, String cardId) =>
-      p.join(p.dirname(target), '.${p.basename(target)}.$cardId.part');
+  /// рядом с ним, с номером запуска и id карточки в имени
+  /// (`.<имя>.<запуск>.<id>.part`). Две задачи с одинаковым именем
+  /// результата не пишут в один файл, а «Повторить» сразу после отмены не
+  /// попадёт в файл, который ещё убирает прежний запуск.
+  static String tempFile(String target, String cardId) => p.join(
+        p.dirname(target),
+        '.${p.basename(target)}.${_runTag()}.$cardId.part',
+      );
+
+  static int _runSerial = 0;
+
+  /// Метка запуска: время и счётчик — разная у каждого вызова.
+  static String _runTag() {
+    _runSerial = (_runSerial + 1) % 1296;
+    final time = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+    return 'r$time${_runSerial.toRadixString(36).padLeft(2, '0')}';
+  }
 
   /// Временная папка распаковки в [dir]: `.<имя>.tmp-<id>`.
   static String tempFolder(String dir, String name, String cardId) =>

@@ -6,6 +6,7 @@ library;
 
 import '../build_flags.dart';
 import '../skills/converter/convert_targets.dart';
+
 import '../skills/ytdl/ytdl_formats.dart';
 import 'extension_card.dart';
 
@@ -123,6 +124,18 @@ abstract final class ExtensionForms {
   static String runLabel(String extensionId) =>
       extensionId == ytdl ? 'Скачать' : 'Запустить';
 
+  /// Сжатие нового архива: обычное, сильное, без сжатия.
+  static const String levelNormal = 'normal';
+  static const String levelStrong = 'strong';
+  static const String levelStore = 'store';
+
+  /// Уровень deflate для сжатия [level]: 6, 9 или 0 (без сжатия).
+  static int zipLevel(String? level) => switch (level) {
+        levelStrong => 9,
+        levelStore => 0,
+        _ => 6,
+      };
+
   static const List<FieldSpec> _archiverFields = <FieldSpec>[
     FieldSpec(code: 'files', kind: FieldKind.files, label: 'Файлы'),
     FieldSpec(
@@ -130,6 +143,13 @@ abstract final class ExtensionForms {
       kind: FieldKind.choice,
       label: 'Действие',
       options: _archiverActions,
+    ),
+    FieldSpec(
+      code: 'level',
+      kind: FieldKind.choice,
+      label: 'Сжатие',
+      required: false,
+      options: _archiverLevels,
     ),
   ];
 
@@ -152,35 +172,40 @@ abstract final class ExtensionForms {
     ];
   }
 
-  static const List<FieldSpec> _converterFields = <FieldSpec>[
-    FieldSpec(code: 'file', kind: FieldKind.file, label: 'Файл'),
-    FieldSpec(
+  static const List<Choice> _levels = <Choice>[
+    Choice(levelNormal, 'Обычное'),
+    Choice(levelStrong, 'Сильное — дольше, файл меньше'),
+    Choice(levelStore, 'Без сжатия — быстрее'),
+  ];
+
+  /// Сжатие — только у «Создать архив».
+  static List<Choice> _archiverLevels(
+    ExtensionCard card,
+    JobPlatform platform,
+    Set<String> tools,
+  ) =>
+      (card.choice('action') ?? zip) == zip ? _levels : const <Choice>[];
+
+  static final List<FieldSpec> _converterFields = <FieldSpec>[
+    const FieldSpec(code: 'file', kind: FieldKind.file, label: 'Файл'),
+    const FieldSpec(
       code: 'target',
       kind: FieldKind.choice,
       label: 'Во что',
       options: _converterTargets,
       emptyHint: 'Сначала выберите файл',
     ),
+    for (final quality in ConvertQuality.fields)
+      FieldSpec(
+        code: quality.code,
+        kind: FieldKind.choice,
+        label: quality.label,
+        required: false,
+        options:
+            (ExtensionCard card, JobPlatform platform, Set<String> tools) =>
+                _qualityOptions(quality, card, platform, tools),
+      ),
   ];
-
-  /// Платформы, где конвертер может запускать ffmpeg (ADR-024): только
-  /// Windows и Linux. На Android запуск скачанных программ запрещён
-  /// системой, на macOS — песочницей; там конвертируются только картинки.
-  static bool ffmpegPlatform(JobPlatform platform) =>
-      platform == JobPlatform.windows || platform == JobPlatform.linux;
-
-  /// Почему цель, которой нужен ffmpeg, сейчас недоступна; `null` —
-  /// доступна.
-  static String? ffmpegReason(JobPlatform platform, Set<String> tools) {
-    if (!ffmpegPlatform(platform)) {
-      return 'На этой платформе недоступно: здесь конвертируются только '
-          'картинки';
-    }
-    if (!tools.contains(ConvertTargets.ffmpeg)) {
-      return 'Нужен ffmpeg: Настройки → Расширения → Конвертер → Настроить';
-    }
-    return null;
-  }
 
   static List<Choice> _converterTargets(
     ExtensionCard card,
@@ -189,16 +214,155 @@ abstract final class ExtensionForms {
   ) {
     final file = card.files('file').firstOrNull;
     if (file == null) return const <Choice>[];
+    return ConvertCaps.targetChoices(
+      file.name,
+      platform,
+      tools,
+      keep: card.choice('target'),
+    );
+  }
+
+  /// Тип исходника карточки конвертера; файла нет — `null`.
+  static MediaKind? _sourceKind(ExtensionCard card) {
+    final file = card.files('file').firstOrNull;
+    return file == null ? null : ConvertTargets.kindOf(file.name);
+  }
+
+  /// Варианты поля качества: только когда оно что-то меняет у выбранной
+  /// цели и цель здесь вообще делается (у WebM на телефоне — нет; пока
+  /// не скачан ffmpeg — показываются: его можно скачать). 1080p — только
+  /// если система умеет его кодировать.
+  static List<Choice> _qualityOptions(
+    QualityField quality,
+    ExtensionCard card,
+    JobPlatform platform,
+    Set<String> tools,
+  ) {
+    final target = card.choice('target');
+    final file = card.files('file').firstOrNull;
+    if (target == null ||
+        !ConvertQuality.codesFor(target, _sourceKind(card))
+            .contains(quality.code)) {
+      return const <Choice>[];
+    }
+    if (file != null) {
+      final block = ConvertCaps.route(
+        platform: platform,
+        tools: tools,
+        source: ConvertTargets.kindOf(file.name),
+        target: target,
+        sourceName: file.name,
+      ).block;
+      if (block != null && block != ConvertBlock.noTool) {
+        return const <Choice>[];
+      }
+    }
+    final native = NativeMediaCaps.fromTools(tools);
     return <Choice>[
-      for (final target in ConvertTargets.targetsFor(file.name))
+      for (final (value, label) in quality.values)
         Choice(
-          target,
-          ConvertTargets.label(target),
-          disabledReason: ConvertTargets.needsFfmpegFor(file.name, target)
-              ? ffmpegReason(platform, tools)
+          value,
+          label,
+          disabledReason: quality.code == ConvertQuality.videoRes &&
+                  value == '1080' &&
+                  native.targets.contains(target) &&
+                  !native.video1080
+              ? 'Телефон не умеет кодировать 1080p'
               : null,
         ),
     ];
+  }
+
+  /// Поля, чей последний выбор запоминается (`AppSettings.formDefaults`).
+  static bool rememberable(String extensionId, String code) =>
+      (extensionId == converter && ConvertQuality.field(code) != null) ||
+      (extensionId == archiver && code == 'level');
+
+  /// Значение [value] годится для запоминаемого поля [code].
+  static bool validDefault(String extensionId, String code, String value) {
+    if (!rememberable(extensionId, code)) return false;
+    if (extensionId == archiver) {
+      return _levels.any((Choice c) => c.value == value);
+    }
+    return ConvertQuality.field(code)!.accepts(value);
+  }
+
+  /// Значение по умолчанию поля [code], если его не выбирали.
+  static String? builtInDefault(String extensionId, String code) =>
+      extensionId == archiver && code == 'level'
+          ? levelNormal
+          : extensionId == converter
+              ? ConvertQuality.field(code)?.defaultValue
+              : null;
+
+  /// Необязательные поля-выборы карточки: лишние (не к этой цели или
+  /// действию) убираются, пустые заполняются — значением из фразы, иначе
+  /// последним выбором [remembered] (`<расширение>.<поле>`), иначе
+  /// значением по умолчанию. Конвертер с единственной целью получает её
+  /// сам. `true` — что-то поменялось.
+  static bool resolve(
+    ExtensionCard card,
+    JobPlatform platform, {
+    Set<String> tools = const <String>{},
+    Map<String, String> remembered = const <String, String>{},
+  }) {
+    final fields = of(card.extensionId);
+    if (fields == null || card.state != CardState.form) return false;
+    var changed = false;
+    if (card.extensionId == converter && card.choice('target') == null) {
+      final targets = _converterTargets(card, platform, tools);
+      if (targets.length == 1) {
+        card.setValue('target', targets.single.value);
+        changed = true;
+      }
+    }
+    // Цели ещё нет: значения из фразы («320») ждут её; убирается только
+    // то, что не подойдёт ни одной цели этого файла.
+    if (card.extensionId == converter && card.choice('target') == null) {
+      final file = card.files('file').firstOrNull;
+      if (file == null) return changed;
+      final kind = ConvertTargets.kindOf(file.name);
+      final useful = <String>{
+        for (final target in ConvertTargets.targetsFor(file.name))
+          ...ConvertQuality.codesFor(target, kind),
+      };
+      for (final quality in ConvertQuality.fields) {
+        if (!useful.contains(quality.code) &&
+            card.values.containsKey(quality.code)) {
+          card.setValue(quality.code, null);
+          changed = true;
+        }
+      }
+      return changed;
+    }
+    for (final field in fields) {
+      if (field.kind != FieldKind.choice || field.required) continue;
+      final options =
+          field.options?.call(card, platform, tools) ?? const <Choice>[];
+      final value = card.choice(field.code);
+      if (options.isEmpty) {
+        if (card.values.containsKey(field.code)) {
+          card.setValue(field.code, null);
+          changed = true;
+        }
+        continue;
+      }
+      bool ok(String? v) =>
+          v != null && options.any((Choice c) => c.value == v && c.enabled);
+      if (ok(value)) continue;
+      final saved = remembered['${card.extensionId}.${field.code}'];
+      final fallback = builtInDefault(card.extensionId, field.code);
+      final next = ok(saved)
+          ? saved
+          : ok(fallback)
+              ? fallback
+              : options.where((Choice c) => c.enabled).firstOrNull?.value;
+      if (next != value) {
+        card.setValue(field.code, next);
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   static const List<FieldSpec> _ytdlFields = <FieldSpec>[
@@ -305,7 +469,12 @@ abstract final class ExtensionForms {
           }
           final chosen =
               options.where((Choice c) => c.value == value).firstOrNull;
-          if (chosen == null) return 'Выберите: ${field.label.toLowerCase()}';
+          if (chosen == null) {
+            // Необязательное поле с прежним значением, которое к этой цели
+            // не относится (`audio_kbps` у png), запуск не держит.
+            if (!field.required) continue;
+            return 'Выберите: ${field.label.toLowerCase()}';
+          }
           if (chosen.disabledReason case final String reason) return reason;
         case FieldKind.folder:
           final value = card.values[field.code];

@@ -124,7 +124,23 @@ const Set<String> _allowedKeys = <String>{
   'roles',
   'connected',
   'after',
+  'form',
 };
+
+/// Что карточка конвертера получит из фразы: цель и качество, ключи по
+/// порядку (`target=mp3, audio_kbps=320`).
+String? _formOf(Object? payload) => switch (payload) {
+      final ConvertRequest r => _sortedForm(<String, String>{
+          if (r.target case final String target) 'target': target,
+          if (r.unoffered case final String format) 'unoffered': format,
+          ...r.options,
+        }),
+      _ => null,
+    };
+
+String _sortedForm(Map<String, String> form) => <String>[
+      for (final key in form.keys.toList()..sort()) '$key=${form[key]}',
+    ].join(', ');
 
 /// Роли строки без поля `roles`: все встроенные.
 final List<String> _defaultRoles = <String>[
@@ -323,6 +339,15 @@ void _validate(Map<String, dynamic> json, String location) {
   if (connected != null && connected is! bool) {
     fail('поле connected — true или false');
   }
+  final form = json['form'];
+  if (form != null) {
+    if (form is! Map || form.values.any((Object? v) => v is! String)) {
+      fail('поле form — объект «поле: значение» строками');
+    }
+    if (connector != ConverterConnector.id) {
+      fail('поле form бывает только у connector «converter»');
+    }
+  }
   final after = json['after'];
   if (after != null && (after is! String || !_connectorIds.contains(after))) {
     fail('поле after — id коннектора: $_connectorIds');
@@ -435,6 +460,13 @@ final class _Case {
       );
       if (json['answer'] case final String answer) {
         compare('answer', _calcAnswer(utterance), answer);
+      }
+      if (json['form'] case final Map<String, dynamic> form) {
+        compare(
+          'form',
+          _formOf(own.isEmpty ? null : own.first.payload),
+          _sortedForm(form.cast<String, String>()),
+        );
       }
       return mismatches;
     }

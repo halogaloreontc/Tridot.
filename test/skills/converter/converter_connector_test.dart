@@ -19,13 +19,20 @@ bool _matches(String text) =>
     ConverterConnector().match(Utterance.analyze(text, now: _now)) != null;
 
 final class _Env implements ConverterEnvironment {
-  _Env(this.platform, {this.ffmpegReady = false});
+  _Env(
+    this.platform, {
+    this.ffmpegReady = false,
+    this.native = NativeMediaCaps.none,
+  });
 
   @override
   final JobPlatform platform;
 
   @override
   final bool ffmpegReady;
+
+  @override
+  final NativeMediaCaps native;
 }
 
 AssistantController _assistant({
@@ -145,25 +152,40 @@ void main() {
   });
 
   group('цели по типу файла', () {
-    test('картинки — png и jpeg без своего формата', () {
-      expect(ConvertTargets.targetsFor('a.png'), <String>['jpeg']);
-      expect(ConvertTargets.targetsFor('a.JPG'), <String>['png']);
+    test('картинки — png и jpeg; свой формат — «пережать»', () {
+      expect(ConvertTargets.targetsFor('a.png'), <String>['png', 'jpeg']);
+      expect(ConvertTargets.targetsFor('a.JPG'), <String>['png', 'jpeg']);
       expect(ConvertTargets.targetsFor('a.webp'), <String>['png', 'jpeg']);
       expect(ConvertTargets.targetsFor('a.bmp'), <String>['png', 'jpeg']);
       expect(ConvertTargets.targetsFor('a.gif'), <String>['png', 'jpeg']);
+      expect(ConvertTargets.sameFormat('a.JPG', 'jpeg'), isTrue);
+      expect(ConvertTargets.label('jpeg', same: true), 'JPEG (пережать)');
+      expect(ConvertTargets.label('png', same: true), 'PNG (уменьшить)');
     });
 
-    test('звук — mp3; видео — mp3, видео и кадр', () {
-      expect(ConvertTargets.targetsFor('a.wav'), <String>['mp3']);
-      expect(ConvertTargets.targetsFor('a.mp3'), isEmpty);
+    test('звук — mp3, m4a, wav; видео — ещё видео и кадр', () {
+      expect(ConvertTargets.targetsFor('a.wav'), <String>['mp3', 'm4a']);
+      expect(
+        ConvertTargets.targetsFor('a.mp3'),
+        <String>['mp3', 'm4a', 'wav'],
+      );
       expect(
         ConvertTargets.targetsFor('a.mkv'),
-        <String>['mp3', 'mp4', 'webm', 'frame-jpeg', 'frame-png'],
+        <String>[
+          'mp3',
+          'm4a',
+          'wav',
+          'mp4',
+          'mov',
+          'webm',
+          'frame-jpeg',
+          'frame-png',
+        ],
       );
-      expect(
-        ConvertTargets.targetsFor('a.mp4'),
-        <String>['mp3', 'webm', 'frame-jpeg', 'frame-png'],
-      );
+      // mp4 в mp4 — пережать; webm в webm и mov в mov — нет смысла.
+      expect(ConvertTargets.targetsFor('a.mp4'), contains('mp4'));
+      expect(ConvertTargets.targetsFor('a.webm'), isNot(contains('webm')));
+      expect(ConvertTargets.targetsFor('a.mov'), isNot(contains('mov')));
     });
 
     test('HEIC и неизвестное — «пока не поддерживается»', () {
@@ -175,7 +197,7 @@ void main() {
       );
       expect(
         ExtensionForms.blocker(_card('песня.mp3'), JobPlatform.linux),
-        'Для этого файла нет других форматов',
+        'Выберите: во что',
       );
     });
 
@@ -209,7 +231,7 @@ void main() {
             platform,
             tools: const <String>{'ffmpeg'},
           ),
-          contains('На этой платформе недоступно'),
+          anyOf(contains('только картинки'), contains('недоступно')),
         );
       }
     });
@@ -220,14 +242,14 @@ void main() {
         JobPlatform.linux,
       ]) {
         final card = _card('запись.wav', target: 'mp3');
-        expect(_options(card, platform), <String>['mp3×']);
+        expect(_options(card, platform), <String>['mp3×', 'm4a×']);
         expect(
           ExtensionForms.blocker(card, platform),
           contains('Нужен ffmpeg'),
         );
         expect(
           _options(card, platform, const <String>{'ffmpeg'}),
-          <String>['mp3'],
+          <String>['mp3', 'm4a'],
         );
         expect(
           ExtensionForms.blocker(
@@ -281,8 +303,7 @@ void main() {
       expect(ExtensionForms.blocker(card, JobPlatform.android), isNull);
     });
 
-    test('видео из недавних сообщений; цель не подходит файлу — не ставится',
-        () async {
+    test('видео из недавних сообщений; «в png» у видео — кадр', () async {
       final assistant = _assistant();
       final response = await assistant.handle(
         'сконвертируй видео в png',
@@ -290,15 +311,25 @@ void main() {
       );
       final card = response.job!;
       expect(card.files('file').single.name, 'клип.mp4');
+      expect(card.choice('target'), ConvertTargets.framePng);
+    });
+
+    test('цель не подходит файлу — не ставится', () async {
+      final response = await _assistant().handle(
+        'сконвертируй в mp3',
+        recentAttachments: <JobFile>[_att('кот.jpg')],
+      );
+      final card = response.job!;
+      expect(card.files('file').single.name, 'кот.jpg');
       expect(card.choice('target'), isNull);
     });
 
-    test('единственная цель ставится сама', () async {
+    test('цель не одна — не выбирается за пользователя', () async {
       final response = await _assistant().handle(
         'сконвертируй файл',
         attachments: <JobFile>[_att('голос.ogg')],
       );
-      expect(response.job!.choice('target'), 'mp3');
+      expect(response.job!.choice('target'), isNull);
     });
 
     test('неизвестный формат — честный ответ «пока не умею»', () async {
@@ -346,6 +377,355 @@ void main() {
       expect(response.intent, 'extension.off');
       expect(response.message, contains('Конвертер'));
       expect(response.job, isNull);
+    });
+  });
+
+  group('качество из фразы (ADR-026)', () {
+    Map<String, String> form(String text) {
+      final r = ConverterPhrases.requestOf(Utterance.analyze(text, now: _now));
+      return <String, String>{
+        if (r.target case final String t) 'target': t,
+        if (r.unoffered case final String f) 'unoffered': f,
+        ...r.options,
+      };
+    }
+
+    test('битрейт: число, с единицей, склеенный, «на 320», ближайший', () {
+      for (final text in <String>[
+        'сконвертируй видео в mp3 320',
+        'переведи видео в mp3 на 320 кбит/с',
+        'сконвертируй в mp3 320k',
+        'сконвертируй в mp3 320кбит',
+        'сконвертируй в mp3 320 kbps',
+        'сделай из видео mp3 в лучшем качестве',
+        'сконвертируй песню в mp3 максимальное качество',
+      ]) {
+        expect(
+          form(text),
+          <String, String>{
+            'target': 'mp3',
+            'audio_kbps': '320',
+          },
+          reason: text,
+        );
+      }
+      expect(form('сконвертируй в mp3 160'), containsPair('audio_kbps', '192'));
+      expect(form('перегони песню в m4a 256k'), <String, String>{
+        'target': 'm4a',
+        'audio_kbps': '256',
+      });
+      expect(
+        form('сконвертируй в mp3 экономно'),
+        containsPair('audio_kbps', '128'),
+      );
+      // Битрейт вне разумного — не выдумывается.
+      expect(form('сконвертируй в mp3 9000'), <String, String>{
+        'target': 'mp3',
+      });
+    });
+
+    test('видео: 720p, «р» по-русски, full hd, качество словами', () {
+      expect(form('сконвертируй в mp4 720p'), <String, String>{
+        'target': 'mp4',
+        'video_res': '720',
+      });
+      expect(
+        form('сконвертируй видео в mp4 480р'),
+        containsPair('video_res', '480'),
+      );
+      expect(
+        form('сконвертируй видео в mp4 1080'),
+        containsPair('video_res', '1080'),
+      );
+      expect(
+          form('сконвертируй видео в mp4 full hd экономно'), <String, String>{
+        'target': 'mp4',
+        'video_res': '1080',
+        'video_quality': 'eco',
+      });
+      expect(
+          form('сконвертируй видео в mov hd в высоком качестве'),
+          <String, String>{
+            'target': 'mov',
+            'video_res': '720',
+            'video_quality': 'high',
+          });
+      expect(form('уменьши видео до 720p'), <String, String>{
+        'video_res': '720',
+      });
+    });
+
+    test('картинки: качество JPEG, размер «до 1920», «1920px»', () {
+      expect(form('конвертируй фото в jpg качество 85'), <String, String>{
+        'target': 'jpeg',
+        'jpeg_quality': '85',
+      });
+      expect(
+        form('конвертируй фото в jpg качество 90'),
+        containsPair('jpeg_quality', '95'),
+      );
+      expect(form('сожми фото до 1920'), <String, String>{
+        'image_size': '1920',
+      });
+      expect(form('сконвертируй фото в png 1280px'), <String, String>{
+        'target': 'png',
+        'image_size': '1280',
+      });
+      expect(
+        form('уменьши картинку до 2000 пикселей'),
+        containsPair('image_size', '1920'),
+      );
+    });
+
+    test('числа рядом с деньгами и временем — не качество', () {
+      expect(_matches('переведи 320 рублей в доллары'), isFalse);
+      expect(_matches('сконвертируй 1080 рублей'), isFalse);
+      expect(_matches('сожми фото'), isFalse);
+      expect(_matches('сожми файлы до 10 мегабайт'), isFalse);
+      expect(form('сконвертируй видео в mp3 за 320 рублей'), <String, String>{
+        'target': 'mp3',
+      });
+      expect(form('сконвертируй видео в mp4 на 720 минут'), <String, String>{
+        'target': 'mp4',
+      });
+    });
+
+    test('формат, которого нет нигде, — понят, чтобы честно ответить', () {
+      expect(form('сконвертируй песню в flac'), <String, String>{
+        'unoffered': 'FLAC',
+      });
+      expect(form('переведи видео в ogg'), <String, String>{
+        'unoffered': 'OGG',
+      });
+      expect(_matches('переведи деньги в евро'), isFalse);
+    });
+  });
+
+  group('ответ с качеством и честные отказы', () {
+    test('«в mp3 320» — карточка уже с битрейтом, ответ его называет',
+        () async {
+      final response = await _assistant(
+        environment: _Env(JobPlatform.linux, ffmpegReady: true),
+      ).handle(
+        'сконвертируй видео в mp3 320',
+        attachments: <JobFile>[_att('клип.mp4')],
+      );
+      final card = response.job!;
+      expect(card.choice('target'), 'mp3');
+      expect(card.choice('audio_kbps'), '320');
+      expect(response.replyId, 'converter.form.quality');
+      expect(response.message, contains('MP3, 320 кбит/с'));
+      expect(
+        ExtensionForms.blocker(
+          card,
+          JobPlatform.linux,
+          tools: const <String>{'ffmpeg'},
+        ),
+        isNull,
+      );
+    });
+
+    test('качество не к цели в карточку не попадает', () async {
+      final response = await _assistant().handle(
+        'сконвертируй фото в png качество 60',
+        attachments: <JobFile>[_att('кот.jpg')],
+      );
+      expect(response.job!.choice('jpeg_quality'), isNull);
+    });
+
+    test('«сожми фото до 1920» — тот же формат, размер выбран', () async {
+      final response = await _assistant(
+        environment: _Env(JobPlatform.android),
+      ).handle('сожми фото до 1920', attachments: <JobFile>[_att('кот.jpg')]);
+      final card = response.job!;
+      expect(card.choice('target'), 'jpeg');
+      expect(card.choice('image_size'), '1920');
+      // Остальное — значения по умолчанию.
+      expect(card.choice('jpeg_quality'), '85');
+      expect(ExtensionForms.blocker(card, JobPlatform.android), isNull);
+    });
+
+    test('файла ещё нет: «уменьши видео до 720p» — mp4, фото — jpeg', () async {
+      final env = _Env(
+        JobPlatform.android,
+        native: const NativeMediaCaps(targets: <String>{'mp3', 'mp4'}),
+      );
+      final video =
+          (await _assistant(environment: env).handle('уменьши видео до 720p'))
+              .job!;
+      expect(video.choice('target'), 'mp4');
+      expect(video.choice('video_res'), '720');
+      final photo =
+          (await _assistant(environment: env).handle('сожми фото до 1920'))
+              .job!;
+      expect(photo.choice('target'), 'jpeg');
+      expect(photo.choice('image_size'), '1920');
+    });
+
+    test('WebM на телефоне и Mac — честно: не делается, а не ошибка', () async {
+      for (final platform in <JobPlatform>[
+        JobPlatform.android,
+        JobPlatform.macos,
+      ]) {
+        final response = await _assistant(
+          environment: _Env(
+            platform,
+            native: const NativeMediaCaps(targets: <String>{'mp3', 'mp4'}),
+          ),
+        ).handle(
+          'сконвертируй видео в webm',
+          attachments: <JobFile>[_att('клип.mp4')],
+        );
+        expect(response.replyId, 'converter.unavailable.target');
+        expect(response.message, contains('WebM'));
+        expect(response.message, contains('MP4'));
+        final card = response.job!;
+        // Выбор виден, причина — под ним, «Запустить» неактивна.
+        expect(card.choice('target'), 'webm');
+        expect(
+          ExtensionForms.blocker(
+            card,
+            platform,
+            tools: const NativeMediaCaps(
+              targets: <String>{'mp3', 'mp4'},
+            ).toTools(),
+          ),
+          contains('WebM не делается'),
+        );
+      }
+    });
+
+    test('FLAC — нигде: ответ называет, что есть здесь', () async {
+      final response = await _assistant(
+        environment: _Env(JobPlatform.windows, ffmpegReady: true),
+      ).handle('сконвертируй песню в flac');
+      expect(response.replyId, 'converter.unavailable.format');
+      expect(response.message, contains('FLAC'));
+      expect(response.message, contains('mp3'));
+      final phone = await _assistant(
+        environment: _Env(JobPlatform.android),
+      ).handle('сконвертируй песню в flac');
+      expect(phone.message, contains('звук и видео здесь недоступны'));
+    });
+
+    test('без ffmpeg на компьютере качество всё равно в карточке', () async {
+      final response = await _assistant(
+        environment: _Env(JobPlatform.linux),
+      ).handle(
+        'сконвертируй в mp4 720p',
+        attachments: <JobFile>[_att('клип.mkv')],
+      );
+      expect(response.replyId, 'converter.noTool');
+      expect(response.job!.choice('video_res'), '720');
+      expect(response.job!.choice('video_quality'), 'mid');
+    });
+  });
+  group('честные ответы по устройству (ревью ADR-026)', () {
+    const partial = NativeMediaCaps(
+      targets: <String>{'wav', 'm4a', 'frame-jpeg', 'frame-png'},
+    );
+
+    test('нет только MP3 (LAME не загрузился) — не «только картинки»',
+        () async {
+      final response = await _assistant(
+        environment: _Env(JobPlatform.android, native: partial),
+      ).handle(
+        'сконвертируй видео в mp3',
+        attachments: <JobFile>[_att('клип.mp4')],
+      );
+      expect(response.replyId, 'converter.unavailable.target');
+      expect(response.message, contains('MP3'));
+      expect(response.message, contains('кодировщик MP3 не загрузился'));
+      expect(response.message, isNot(contains('только картинки')));
+      final card = response.job!;
+      final reason = ExtensionForms.blocker(
+        card,
+        JobPlatform.android,
+        tools: partial.toTools(),
+      );
+      expect(reason, contains('На телефоне MP3 не делается'));
+    });
+
+    test('Mac не открывает MKV — честно, до «Запустить»', () async {
+      const mac = NativeMediaCaps(
+        targets: <String>{'mp3', 'm4a', 'wav', 'mp4', 'mov'},
+      );
+      final response = await _assistant(
+        environment: _Env(JobPlatform.macos, native: mac),
+      ).handle(
+        'сконвертируй видео в mp4 720p',
+        attachments: <JobFile>[_att('клип.mkv')],
+      );
+      expect(response.replyId, 'converter.unreadable');
+      expect(response.message, contains('MKV'));
+      expect(response.message, contains('mp4, mov'));
+      final reason = ExtensionForms.blocker(
+        response.job!,
+        JobPlatform.macos,
+        tools: mac.toTools(),
+      );
+      expect(reason, contains('На Mac файл MKV не открывается'));
+    });
+
+    test('поля качества не видны у цели, которая здесь не делается', () {
+      List<Choice> quality(
+        String code,
+        JobPlatform platform,
+        Set<String> t,
+        String target,
+      ) =>
+          ExtensionForms.of(ConverterConnector.id)!
+              .firstWhere((FieldSpec f) => f.code == code)
+              .options!(_card('клип.mp4', target: target), platform, t);
+      const phone = NativeMediaCaps(targets: <String>{'mp3', 'mp4'});
+      expect(
+        quality('video_res', JobPlatform.android, phone.toTools(), 'webm'),
+        isEmpty,
+      );
+      expect(
+        quality('video_res', JobPlatform.android, phone.toTools(), 'mp4'),
+        isNotEmpty,
+      );
+      expect(
+        quality('audio_kbps', JobPlatform.android, const <String>{}, 'mp3'),
+        isEmpty,
+      );
+      // ffmpeg ещё не скачан — качество видно: его можно скачать.
+      expect(
+        quality('audio_kbps', JobPlatform.linux, const <String>{}, 'mp3'),
+        isNotEmpty,
+      );
+    });
+
+    test('«в формат mp3 320» — цель и битрейт', () async {
+      final request = ConverterPhrases.requestOf(
+        Utterance.analyze('сконвертируй видео в формат mp3 320', now: _now),
+      );
+      expect(request.target, 'mp3');
+      expect(request.options, <String, String>{'audio_kbps': '320'});
+    });
+
+    test('«видео в jpg качество 75» — кадр в JPEG', () async {
+      final request = ConverterPhrases.requestOf(
+        Utterance.analyze('сконвертируй видео в jpg качество 75', now: _now),
+      );
+      expect(request.target, ConvertTargets.frameJpeg);
+      expect(request.options, <String, String>{'jpeg_quality': '75'});
+    });
+
+    test('файл и формат уже выбраны — не «выберите файл и формат»', () async {
+      final response = await _assistant(
+        environment: _Env(
+          JobPlatform.macos,
+          native: const NativeMediaCaps(targets: <String>{'mov', 'mp4'}),
+        ),
+      ).handle(
+        'сконвертируй видео в mov',
+        attachments: <JobFile>[_att('клип.mp4')],
+      );
+      expect(response.replyId, 'converter.form.quality');
+      expect(response.message, contains('MOV'));
+      expect(response.message, isNot(contains('файл и формат')));
     });
   });
 }

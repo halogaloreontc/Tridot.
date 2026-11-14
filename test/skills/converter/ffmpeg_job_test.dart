@@ -60,7 +60,10 @@ void main() {
     test('каждая цель: вход после -i, выход последним, формат явно', () {
       for (final target in <String>[
         ConvertTargets.mp3,
+        ConvertTargets.m4a,
+        ConvertTargets.wav,
         ConvertTargets.mp4,
+        ConvertTargets.mov,
         ConvertTargets.webm,
         ConvertTargets.frameJpeg,
         ConvertTargets.framePng,
@@ -104,6 +107,150 @@ void main() {
         isNot(contains('-ss')),
       );
       expect(() => of('pdf'), throwsArgumentError);
+    });
+
+    test('качество: битрейт, размер, качество видео, кадр JPEG', () {
+      List<String> of(String t, Map<String, String> o) => FfmpegArgs.build(
+            target: t,
+            input: 'i',
+            output: 'o',
+            options: ConvertOptions.fromMap(o, t),
+          );
+      // По умолчанию: mp3 192 кбит/с CBR, mp4 без масштаба, 4 Мбит/с.
+      expect(
+        of('mp3', const <String, String>{}),
+        containsAllInOrder(<String>['-c:a', 'libmp3lame', '-b:a', '192k']),
+      );
+      expect(of('mp3', const <String, String>{}), isNot(contains('-q:a')));
+      expect(
+        of('mp3', const <String, String>{'audio_kbps': '320'}),
+        containsAllInOrder(<String>['-b:a', '320k']),
+      );
+      // Чужое и недопустимое значение не доходит до ffmpeg.
+      expect(
+        of('mp3', const <String, String>{'audio_kbps': '999; rm'}),
+        containsAllInOrder(<String>['-b:a', '192k']),
+      );
+      expect(
+        of('m4a', const <String, String>{'audio_kbps': '256'}),
+        containsAllInOrder(<String>['-vn', '-c:a', 'aac', '-b:a', '256k']),
+      );
+      expect(FfmpegArgs.formatOf('m4a'), 'ipod');
+      expect(
+        of('wav', const <String, String>{}),
+        containsAllInOrder(<String>['-vn', '-c:a', 'pcm_s16le']),
+      );
+      final plain = of('mp4', const <String, String>{});
+      expect(plain, isNot(contains('-vf')));
+      expect(plain, containsAllInOrder(<String>['-b:v', '4000k']));
+      expect(plain, containsAllInOrder(<String>['-b:a', '160k']));
+      final small = of('mp4', const <String, String>{
+        'video_res': '720',
+        'video_quality': 'eco',
+      });
+      expect(
+        small,
+        containsAllInOrder(<String>[
+          '-vf',
+          "scale='min(1280,iw)':'min(1280,ih)':"
+              'force_original_aspect_ratio=decrease:force_divisible_by=2',
+          '-c:v',
+          'libopenh264',
+          '-b:v',
+          '1800k',
+          '-b:a',
+          '128k',
+        ]),
+      );
+      expect(
+        of('mov', const <String, String>{
+          'video_res': '1080',
+          'video_quality': 'high',
+        }),
+        containsAllInOrder(<String>['-vf', '-b:v', '8000k', '-f', 'mov']),
+      );
+      expect(
+        of('webm', const <String, String>{
+          'video_res': '480',
+          'video_quality': 'high',
+        }),
+        containsAllInOrder(<String>['-vf', '-c:v', 'libvpx-vp9', '-crf', '28']),
+      );
+      expect(
+        of('frame-jpeg', const <String, String>{'jpeg_quality': '60'}),
+        containsAllInOrder(<String>['-c:v', 'mjpeg', '-q:v', '8']),
+      );
+      expect(
+        of('frame-jpeg', const <String, String>{}),
+        containsAllInOrder(<String>['-q:v', '3']),
+      );
+    });
+
+    test('масштаб ffmpeg: длинная сторона, чётные размеры, без увеличения',
+        () async {
+      // Настоящий ffmpeg, если он есть на машине (необязательно).
+      final ffmpeg = Platform.isLinux && File('/usr/bin/ffmpeg').existsSync()
+          ? '/usr/bin/ffmpeg'
+          : null;
+      if (ffmpeg == null) {
+        markTestSkipped('ffmpeg не установлен');
+        return;
+      }
+      final dir = Directory.systemTemp.createTempSync('ff');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      Future<String> probe(int w, int h, String res) async {
+        final input = p.join(dir.path, 'in_${w}x$h.mp4');
+        if (!File(input).existsSync()) {
+          final made = await Process.run(ffmpeg, <String>[
+            '-hide_banner', '-loglevel', 'error', //
+            '-f', 'lavfi', '-i', 'testsrc=size=${w}x$h:rate=5:duration=0.4',
+            '-pix_fmt', 'yuv420p', input,
+          ]);
+          expect(made.exitCode, 0, reason: '${made.stderr}');
+        }
+        final out = p.join(dir.path, 'out_${w}x${h}_$res.png');
+        final args = FfmpegArgs.build(
+          target: ConvertTargets.framePng,
+          input: input,
+          output: out,
+          seek: false,
+          options: ConvertOptions.fromMap(
+            <String, String>{'video_res': res},
+            ConvertTargets.mp4,
+          ),
+        );
+        // Масштаб тот же, что у mp4; проверяем его на одном кадре.
+        final vf = FfmpegArgs.build(
+          target: ConvertTargets.mp4,
+          input: input,
+          output: out,
+          options: ConvertOptions.fromMap(
+            <String, String>{'video_res': res},
+            ConvertTargets.mp4,
+          ),
+        );
+        final filter = vf[vf.indexOf('-vf') + 1];
+        final i = args.indexOf('-c:v');
+        final run = await Process.run(ffmpeg, <String>[
+          ...args.sublist(0, i),
+          '-vf',
+          filter,
+          ...args
+              .sublist(i)
+              .where((String a) => a != 'pipe:1' && a != '-progress'),
+        ]);
+        expect(run.exitCode, 0, reason: '${run.stderr}');
+        final info =
+            await Process.run(ffmpeg, <String>['-hide_banner', '-i', out]);
+        return RegExp(r', (\d{2,5}x\d{2,5})')
+            .firstMatch('${info.stderr}')!
+            .group(1)!;
+      }
+
+      expect(await probe(1920, 1080, '720'), '1280x720');
+      expect(await probe(1080, 1920, '480'), '480x854');
+      // Меньшее видео не растягивается.
+      expect(await probe(640, 360, '1080'), '640x360');
     });
 
     test('длительность и ход работы', () {
@@ -271,7 +418,7 @@ void main() {
       final isolate = _Recorder();
       final ffmpeg = _Recorder();
       final router = JobRunnerRouter(
-        (JobRequest r) => ConvertOps.usesFfmpeg(r) ? ffmpeg : isolate,
+        (JobRequest r) => ConvertOps.usesDart(r) ? isolate : ffmpeg,
       );
       await router.start(request(ConvertTargets.mp3)).toList();
       final picture = ConvertOps.plan(

@@ -1,5 +1,5 @@
-Расширения с карточкой-формой (ADR-024)
-=======================================
+Расширения с карточкой-формой (ADR-024, ADR-026)
+=================================================
 
 1. FFmpeg — конвертер звука и видео (скачивается по кнопке, не встроен)
 -----------------------------------------------------------------------
@@ -59,3 +59,60 @@ https://github.com/yt-dlp/yt-dlp/blob/2026.10.26/THIRD_PARTY_LICENSES.txt
 Приложение не связано с проектом yt-dlp. Скачивайте только своё или то,
 на что есть права: правила YouTube и других площадок запрещают
 скачивание без разрешения.
+
+4. LAME 3.100 — кодировщик MP3 (встроен)
+----------------------------------------
+На телефоне Android и на Mac конвертер делает MP3 встроенным кодировщиком
+LAME 3.100 (ADR-026). Он входит в приложение отдельной разделяемой
+библиотекой: libtridot_mp3.so на Android (в APK: lib/arm64-v8a/),
+tridot_mp3.framework на macOS (Contents/Frameworks/). Внутри — только
+кодировщик MP3 из LAME (libmp3lame, без декодера mpglib и без программы
+lame) и тонкая обёртка Tridot для него.
+
+LAME Ain't an MP3 Encoder: Copyright (C) 1999 Mark Taylor и The LAME
+Project (начат Mike Cheng; авторы частей — в заголовках файлов),
+https://lame.sourceforge.io, www.mp3dev.org.
+Обёртка — Copyright (C) 2026 авторы Tridot.
+Лицензия LAME и обёртки — GNU Library General Public License версии 2 или
+(на выбор) любой более поздней версии (LGPL-2.0-or-later),
+https://www.gnu.org/licenses/old-licenses/lgpl-2.0.html
+Полный текст лицензии — в разделе пакета «tridot_lame» этого экрана.
+
+Исходный код LAME: https://lame.sourceforge.io,
+https://sourceforge.net/projects/lame/files/lame/3.100/
+Архив lame-3.100.tar.gz, SHA-256
+ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
+Исходники кодировщика и обёртки (src/: обёртка tridot_lame.c и JNI для
+Android tridot_lame_jni.c), из которых собрана библиотека, — в папке
+packages/tridot_lame открытого репозитория приложения:
+https://github.com/halogaloreontc/qenqritec/tree/main/packages/tridot_lame
+(у каждой выпущенной версии — тег с её номером, там те же исходники в том
+виде, в каком они вошли в эту версию; third_party/SOURCE.md — что взято
+из архива LAME и что нет; файлы LAME не изменены).
+
+Как заменить библиотеку: она подключается динамически, приложение зовёт
+только функции tl_* из packages/tridot_lame/src/tridot_lame.h. Её можно
+пересобрать из этих исходников (изменённых или нет) и положить вместо
+прежней — в APK (lib/arm64-v8a/libtridot_mp3.so, затем подписать APK
+своим ключом) или в бандл macOS (tridot_mp3.framework/tridot_mp3, затем
+подписать бандл). Если исходники по ссылкам выше недоступны, авторы
+приложения по запросу передадут исходный код библиотеки той версии,
+которая входит в приложение, — не менее трёх лет после выхода версии.
+Запрос — через обсуждения (Issues) репозитория приложения:
+https://github.com/halogaloreontc/qenqritec/issues
+
+На Windows и Linux MP3 делает скачиваемый ffmpeg (раздел 1), в который
+LAME входит в составе сборки. В сборку для Linux та же библиотека
+libtridot_mp3.so попадает (рядом с приложением, в lib/), но не
+используется; на Windows её нет.
+
+5. AndroidX Media3 — видео в MP4 на телефоне (встроен в сборку Android)
+------------------------------------------------------------------------
+На Android видео в MP4 (размер и качество) делает библиотека AndroidX
+Media3 1.11.1 (media3-transformer, media3-effect, media3-common) от
+The Android Open Source Project. Лицензия — Apache License 2.0,
+https://www.apache.org/licenses/LICENSE-2.0
+Исходный код: https://github.com/androidx/media (тег 1.11.1)
+Вместе с Media3 в сборку Android входит её зависимость Guava (Google,
+Apache License 2.0), https://github.com/google/guava
+В сборках для Windows, macOS и Linux её нет.

@@ -25,6 +25,7 @@ import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
 import 'package:local_assistant/core/skills/converter/converter_connector.dart';
+import 'package:local_assistant/core/skills/converter/platform_media_job.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 import 'package:path/path.dart' as p;
 
@@ -68,8 +69,10 @@ void main() {
   late InMemoryChatStore store;
   late _Runner runner;
   late _Picker picker;
+  late InMemorySettingsStore settings;
 
   setUp(() {
+    settings = InMemorySettingsStore();
     temp = Directory.systemTemp.createTempSync('home_converter');
     store = InMemoryChatStore(
       attachments: InMemoryAttachmentStore(persistent: true),
@@ -80,16 +83,21 @@ void main() {
 
   tearDown(() => temp.deleteSync(recursive: true));
 
-  Future<void> pump(WidgetTester tester, {bool fakeRunner = true}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    bool fakeRunner = true,
+    JobPlatform platform = JobPlatform.linux,
+    NativeMedia? nativeMedia,
+  }) async {
     tester.view.physicalSize = const Size(900, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final clock = FixedClock(DateTime(2026, 11, 14, 12));
     final tasks =
         TaskService(repository: InMemoryTaskRepository(), clock: clock);
-    final settings = InMemorySettingsStore();
+    final saved = await settings.load();
     await settings.save(
-      const AppSettings().withChoice(
+      saved.withChoice(
         const ExtensionChoice(enabled: <String>{ConverterConnector.id}),
       ),
     );
@@ -115,8 +123,9 @@ void main() {
           chatStore: store,
           jobRunner: fakeRunner ? runner : null,
           jobPicker: picker,
-          jobPlatform: JobPlatform.linux,
-          fileOpener: FileOpener(platform: JobPlatform.linux),
+          jobPlatform: platform,
+          nativeMedia: nativeMedia,
+          fileOpener: FileOpener(platform: platform),
           tempRoot: () async => temp.path,
         ),
       ),
@@ -215,20 +224,211 @@ void main() {
   testWidgets('новый файл заменяет прежний; неподходящая цель сбрасывается',
       (WidgetTester tester) async {
     await pump(tester);
-    await say(tester, 'сконвертируй в png');
-    final a = picture('a.jpg');
-    picker.next = <JobFile>[JobFile(path: a.path, name: 'a.jpg')];
+    await say(tester, 'сконвертируй в mp3');
+    picker.next = <JobFile>[
+      JobFile(path: p.join(temp.path, 'a.wav'), name: 'a.wav'),
+    ];
     await tester.tap(find.byKey(const Key('ext-card-pick-files')));
     await tester.pumpAndSettle();
+    var saved = await store.loadMessages(store.chatIds.single);
+    expect(saved.last.job!.choice('target'), 'mp3');
+    // Качество звука по умолчанию уже в карточке.
+    expect(saved.last.job!.choice('audio_kbps'), '192');
     final b = picture('b.png');
     picker.next = <JobFile>[JobFile(path: b.path, name: 'b.png')];
     await tester.tap(find.byKey(const Key('ext-card-pick-files')));
     await tester.pumpAndSettle();
-    expect(find.text('a.jpg'), findsNothing);
+    expect(find.text('a.wav'), findsNothing);
     expect(find.text('b.png'), findsOneWidget);
+    saved = await store.loadMessages(store.chatIds.single);
+    // mp3 картинке не подходит: цель сброшена, лишнее качество убрано.
+    expect(saved.last.job!.choice('target'), isNull);
+    expect(saved.last.job!.choice('audio_kbps'), isNull);
+  });
+
+  Future<void> choose(WidgetTester tester, String code, String value) async {
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byKey(ValueKey<String>('ext-card-select-$code')),
+            matching: find.byType(DropdownButton<String>),
+          )
+          .last,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find
+          .ancestor(
+            of: find.byKey(ValueKey<String>('ext-card-choice-$value')).last,
+            matching: find.byType(InkWell),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
+  }
+
+  Future<JobRequest> run(WidgetTester tester) async {
+    final before = runner.requests.length;
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('ext-card-run')).last);
+      for (var i = 0; i < 50 && runner.requests.length == before; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pump();
+    return runner.requests.last;
+  }
+
+  testWidgets('качество из списка — в задаче и запоминается для новой карточки',
+      (WidgetTester tester) async {
+    await pump(tester);
+    await say(tester, 'сконвертируй в jpg');
+    final source = picture('кот.png');
+    picker.next = <JobFile>[JobFile(path: source.path, name: 'кот.png')];
+    await tester.tap(find.byKey(const Key('ext-card-pick-files')));
+    await tester.pumpAndSettle();
+    expect(find.text('Качество JPEG'), findsOneWidget);
+    expect(find.text('85 — обычно'), findsOneWidget);
+    await choose(tester, 'jpeg_quality', '60');
+    await choose(tester, 'image_size', '1280');
+    expect((await settings.load()).formDefaults, <String, String>{
+      'converter.image_size': '1280',
+      'converter.jpeg_quality': '60',
+    });
+    final request = await run(tester);
+    expect(request.options, <String, String>{
+      'jpeg_quality': '60',
+      'image_size': '1280',
+    });
+    runner.jobs[request.cardId]!.add(const JobFailed(JobCodes.failed));
+    await tester.pumpAndSettle();
+
+    // Новая карточка — с последним выбором; фраза важнее запомненного.
+    await say(tester, 'сконвертируй в jpg качество 75');
+    picker.next = <JobFile>[JobFile(path: source.path, name: 'кот.png')];
+    await tester.tap(find.byKey(const Key('ext-card-pick-files')).last);
+    await tester.pumpAndSettle();
     final saved = await store.loadMessages(store.chatIds.single);
-    // У .png одна цель — jpeg: она и выбрана.
-    expect(saved.last.job!.choice('target'), 'jpeg');
+    final card = saved.last.job!;
+    expect(card.choice('jpeg_quality'), '75');
+    expect(card.choice('image_size'), '1280');
+  });
+
+  group('телефон: звук и видео делает система (ADR-026)', () {
+    const caps = NativeMediaCaps(
+      targets: <String>{'mp3', 'm4a', 'wav', 'mp4', 'frame-jpeg', 'frame-png'},
+      video1080: false,
+    );
+
+    testWidgets('видео → mp3 320 уходит системе, а не в изолят', (
+      WidgetTester tester,
+    ) async {
+      final native = _Runner();
+      await pump(
+        tester,
+        fakeRunner: false,
+        platform: JobPlatform.android,
+        nativeMedia: NativeMedia(caps: caps, runner: native),
+      );
+      await say(tester, 'сконвертируй видео в mp3 320');
+      final source = File(p.join(temp.path, 'клип.mp4'))
+        ..writeAsStringSync('v');
+      picker.next = <JobFile>[JobFile(path: source.path, name: 'клип.mp4')];
+      await tester.tap(find.byKey(const Key('ext-card-pick-files')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Нужен ffmpeg'), findsNothing);
+      expect(button(tester, 'ext-card-run').onPressed, isNotNull);
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const Key('ext-card-run')));
+        for (var i = 0; i < 50 && native.requests.isEmpty; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      await tester.pump();
+      final request = native.requests.single;
+      expect(request.action, 'mp3');
+      expect(request.options, <String, String>{'audio_kbps': '320'});
+      native.jobs[request.cardId]!.add(
+        JobDone(outputs: <String>[request.target!], outputDir: temp.path),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Готово: клип.mp3'), findsOneWidget);
+    });
+
+    testWidgets('картинка на телефоне — по-прежнему на Dart', (
+      WidgetTester tester,
+    ) async {
+      final native = _Runner();
+      await pump(
+        tester,
+        fakeRunner: false,
+        platform: JobPlatform.android,
+        nativeMedia: NativeMedia(caps: caps, runner: native),
+      );
+      await say(tester, 'конвертируй фото в jpg');
+      final source = picture('закат.png');
+      picker.next = <JobFile>[JobFile(path: source.path, name: 'закат.png')];
+      await tester.tap(find.byKey(const Key('ext-card-pick-files')));
+      await tester.pumpAndSettle();
+      // На телефоне результат — в папке карточки, не рядом с исходником.
+      File? found() => temp
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((File f) => p.basename(f.path) == 'закат.jpg')
+          .firstOrNull;
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const Key('ext-card-run')));
+        for (var i = 0; i < 300 && found() == null; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pumpAndSettle();
+      expect(found(), isNotNull);
+      expect(find.text('Готово: закат.jpg'), findsOneWidget);
+      expect(native.requests, isEmpty);
+    });
+
+    testWidgets('1080p, которого нет у телефона, — недоступен с причиной', (
+      WidgetTester tester,
+    ) async {
+      await pump(
+        tester,
+        platform: JobPlatform.android,
+        nativeMedia: NativeMedia(caps: caps, runner: _Runner()),
+      );
+      await say(tester, 'сконвертируй видео в mp4');
+      final source = File(p.join(temp.path, 'клип.mov'))
+        ..writeAsStringSync('v');
+      picker.next = <JobFile>[JobFile(path: source.path, name: 'клип.mov')];
+      await tester.tap(find.byKey(const Key('ext-card-pick-files')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find
+            .descendant(
+              of: find
+                  .byKey(const ValueKey<String>('ext-card-select-video_res')),
+              matching: find.byType(DropdownButton<String>),
+            )
+            .last,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Телефон не умеет кодировать 1080p'), findsWidgets);
+    });
+
+    testWidgets('без системного конвертера на телефоне — только картинки', (
+      WidgetTester tester,
+    ) async {
+      await pump(tester, platform: JobPlatform.android);
+      await say(tester, 'сконвертируй в mp3');
+      final source = File(p.join(temp.path, 'клип.mp4'))
+        ..writeAsStringSync('v');
+      picker.next = <JobFile>[JobFile(path: source.path, name: 'клип.mp4')];
+      await tester.tap(find.byKey(const Key('ext-card-pick-files')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('только картинки'), findsWidgets);
+      expect(button(tester, 'ext-card-run').onPressed, isNull);
+    });
   });
 
   testWidgets('«Найти команду» → «Сконвертировать файл» — пустая карточка', (

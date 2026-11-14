@@ -82,6 +82,7 @@ void main() {
     WidgetTester tester, {
     required bool enabled,
     ToolKit? ffmpeg,
+    NativeMediaCaps nativeMedia = NativeMediaCaps.none,
   }) async {
     final changes = <AppSettings>[];
     final registry = ExtensionRegistry(
@@ -102,6 +103,7 @@ void main() {
                 registry: registry,
                 settings: settings,
                 ffmpeg: ffmpeg,
+                nativeMedia: nativeMedia,
                 onChanged: (AppSettings value) {
                   changes.add(value);
                   registry.apply(value.extensionChoice);
@@ -130,6 +132,30 @@ void main() {
     expect(
       find.byKey(const ValueKey<String>('extension-configure-converter')),
       findsNothing,
+    );
+  });
+
+  testWidgets(
+      'телефон или Mac с системными кодировщиками — не «только '
+      'картинки», а что делает система', (WidgetTester tester) async {
+    await pump(
+      tester,
+      enabled: true,
+      nativeMedia: const NativeMediaCaps(
+        targets: <String>{
+          'mp3',
+          'm4a',
+          'wav',
+          'mp4',
+          'frame-jpeg',
+          'frame-png',
+        },
+      ),
+    );
+    expect(status(tester), isNot(contains('Только картинки')));
+    expect(
+      status(tester),
+      'Картинки; звук и видео — средствами системы: mp3, m4a, wav, mp4, кадр',
     );
   });
 

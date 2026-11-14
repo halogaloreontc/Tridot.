@@ -30,6 +30,11 @@ dependencies:
   # Конвертер картинок (ADR-024, шаг 2): png/jpeg/webp/bmp/gif → png/jpeg
   # на чистом Dart, в отдельном изоляте. MIT; версия закреплена.
   image: 4.12.0
+  # Встроенный кодировщик MP3 (ADR-026): LAME 3.100 (LGPL-2.0-or-later)
+  # отдельной разделяемой библиотекой libtridot_mp3 — её собирает
+  # build-хук пакета для Android, macOS и Linux (тесты).
+  tridot_lame:
+    path: packages/tridot_lame
 
 dev_dependencies:
   flutter_test:

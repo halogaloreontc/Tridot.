@@ -10,6 +10,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:local_assistant/core/jobs/job_runner.dart';
+import 'package:local_assistant/core/jobs/job_placement.dart';
 import 'package:local_assistant/core/skills/converter/convert_targets.dart';
 import 'package:local_assistant/core/skills/converter/image_convert.dart';
 import 'package:path/path.dart' as p;
@@ -88,9 +89,11 @@ void main() {
         final reporter = _Reporter();
         final done = ConvertOps.run(request, reporter);
         final out = File(done.outputs.single);
+        // Тот же формат («пережать») — рядом с «(2)»: исходник на месте.
+        final same = ConvertTargets.sameFormat('a.$ext', target);
         expect(
           p.basename(out.path),
-          'кадр.${ConvertTargets.outputExtension(target)}',
+          'кадр${same ? ' (2)' : ''}.${ConvertTargets.outputExtension(target)}',
         );
         final decoded = img.decodeImage(out.readAsBytesSync())!;
         expect(decoded.width, 4);
@@ -209,7 +212,7 @@ void main() {
       outputDir: temp.path,
     );
     expect(p.basename(request.target!), 'a (2).jpg');
-    expect(ConvertOps.usesFfmpeg(request), isFalse);
+    expect(ConvertOps.usesDart(request), isTrue);
     source.deleteSync();
     expect(
       () => ConvertOps.run(request, _Reporter()),
@@ -218,16 +221,20 @@ void main() {
     expect(JobCodes.of(const JobError(JobCodes.media)), JobCodes.media);
   });
 
-  test('видео и звук — задача ffmpeg, не изолята', () {
+  test('видео и звук — не задача изолята (ffmpeg или система)', () {
     final request = ConvertOps.plan(
       cardId: 'c',
       target: ConvertTargets.framePng,
       source: const JobSource('/tmp/v.mp4', 'v.mp4'),
       outputDir: '/tmp',
     );
-    expect(ConvertOps.usesFfmpeg(request), isTrue);
+    expect(ConvertOps.usesDart(request), isFalse);
     expect(p.basename(request.target!), 'v.png');
-    expect(p.basename(request.temp!), '.v.png.c.part');
+    expect(
+      p.basename(request.temp!),
+      matches(RegExp(r'^\.v\.png\.r[0-9a-z]+\.c\.part$')),
+    );
+    expect(JobPlacement.isTempFor(request.temp!, 'c'), isTrue);
   });
 
   test('в изоляте: готово; отмена убирает временный файл', () async {
@@ -259,5 +266,123 @@ void main() {
     expect((cancelled.last as JobFailed).code, JobCodes.cancelled);
     expect(File(again.temp!).existsSync(), isFalse);
     expect(File(again.target!).existsSync(), isFalse);
+  });
+
+  group('качество и размер (ADR-026)', () {
+    img.Image noisy(int width, int height) {
+      final image = img.Image(width: width, height: height);
+      for (var y = 0; y < height; y++) {
+        for (var x = 0; x < width; x++) {
+          image.setPixelRgb(
+            x,
+            y,
+            (x * 7 + y * 3) % 256,
+            (x * y) % 256,
+            y % 256,
+          );
+        }
+      }
+      return image;
+    }
+
+    test('JPEG: меньше качество — меньше файл', () {
+      final bytes = img.encodePng(noisy(300, 200));
+      final sizes = <int>[
+        for (final q in ConvertQuality.jpegPresets)
+          ConvertOps.convertBytes(bytes, ConvertTargets.jpeg, jpegQuality: q)
+              .length,
+      ];
+      for (var i = 1; i < sizes.length; i++) {
+        expect(sizes[i], lessThan(sizes[i - 1]), reason: '$sizes');
+      }
+    });
+
+    test('уменьшение: длинная сторона — ровно предел, пропорции те же', () {
+      final wide = img.decodeImage(
+        ConvertOps.convertBytes(
+          img.encodePng(noisy(400, 100)),
+          ConvertTargets.png,
+          maxSide: 200,
+        ),
+      )!;
+      expect((wide.width, wide.height), (200, 50));
+      final tall = img.decodeJpg(
+        ConvertOps.convertBytes(
+          img.encodePng(noisy(90, 300)),
+          ConvertTargets.jpeg,
+          maxSide: 150,
+        ),
+      )!;
+      expect((tall.width, tall.height), (45, 150));
+    });
+
+    test('меньшая картинка не растягивается', () {
+      final out = img.decodePng(
+        ConvertOps.convertBytes(
+          img.encodePng(noisy(120, 80)),
+          ConvertTargets.png,
+          maxSide: 1920,
+        ),
+      )!;
+      expect((out.width, out.height), (120, 80));
+    });
+
+    test('поворот по EXIF применяется до уменьшения', () {
+      final source = noisy(400, 100)..exif.imageIfd.orientation = 6;
+      final out = img.decodeJpg(
+        ConvertOps.convertBytes(
+          img.encodeJpg(source),
+          ConvertTargets.jpeg,
+          maxSide: 200,
+        ),
+      )!;
+      // Повёрнута на 90°: была 400×100, стала 100×400 → 50×200.
+      expect((out.width, out.height), (50, 200));
+      expect(out.exif.imageIfd.orientation, anyOf(isNull, 1));
+    });
+
+    test('задача берёт качество и размер из карточки', () {
+      final source = File(p.join(temp.path, 'фото.png'))
+        ..writeAsBytesSync(img.encodePng(noisy(640, 480)));
+      final request = ConvertOps.plan(
+        cardId: 'q1',
+        target: ConvertTargets.jpeg,
+        source: JobSource(source.path, 'фото.png'),
+        outputDir: temp.path,
+        options: const <String, String>{
+          'jpeg_quality': '60',
+          'image_size': '1280',
+          // Не к этой цели — в задачу не попадает.
+          'audio_kbps': '320',
+          'video_res': '<script>',
+        },
+      );
+      expect(request.options, <String, String>{
+        'jpeg_quality': '60',
+        'image_size': '1280',
+      });
+      final done = ConvertOps.run(request, _Reporter());
+      final out = img.decodeJpg(File(done.outputs.single).readAsBytesSync())!;
+      // 640 меньше 1280 — размер прежний.
+      expect((out.width, out.height), (640, 480));
+    });
+
+    test('тот же формат — «(2)» рядом, исходник не тронут', () {
+      final source = File(p.join(temp.path, 'кот.jpg'))
+        ..writeAsBytesSync(img.encodeJpg(noisy(300, 200)));
+      final before = _sha(source);
+      expect(ConvertTargets.targetsFor('кот.jpg'), contains('jpeg'));
+      final request = ConvertOps.plan(
+        cardId: 'q2',
+        target: ConvertTargets.jpeg,
+        source: JobSource(source.path, 'кот.jpg'),
+        outputDir: temp.path,
+        options: const <String, String>{'image_size': '1280'},
+      );
+      expect(p.basename(request.target!), 'кот (2).jpg');
+      ConvertOps.run(request, _Reporter());
+      expect(_sha(source), before);
+      expect(File(p.join(temp.path, 'кот (2).jpg')).existsSync(), isTrue);
+    });
   });
 }

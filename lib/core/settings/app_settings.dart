@@ -4,6 +4,7 @@ import 'dart:io';
 import '../commands/command_catalog.dart';
 import '../extensions/extension_info.dart';
 import '../extensions/role.dart';
+import '../jobs/extension_forms.dart';
 import '../personas/persona.dart';
 
 export '../personas/persona.dart';
@@ -31,6 +32,7 @@ final class AppSettings {
     this.voiceMicExplained = false,
     this.appLock = false,
     this.appLockAfter = 60,
+    this.formDefaults = const <String, String>{},
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -66,7 +68,29 @@ final class AppSettings {
       voiceMicExplained: json['voice.mic_explained'] == true,
       appLock: json['security.app_lock'] == true,
       appLockAfter: _lockAfter(json['security.app_lock_after']),
+      formDefaults: cleanFormDefaults(json['form_defaults']),
     );
+  }
+
+  /// Последние выборы в карточках: только известные поля
+  /// (`converter.audio_kbps`, `archiver.level`) и допустимые значения;
+  /// остальное отбрасывается.
+  static Map<String, String> cleanFormDefaults(Object? value) {
+    if (value is! Map) return const <String, String>{};
+    final out = <String, String>{};
+    for (final MapEntry(:key, :value) in value.entries) {
+      if (key is! String || value is! String) continue;
+      final dot = key.indexOf('.');
+      if (dot <= 0) continue;
+      if (ExtensionForms.validDefault(
+        key.substring(0, dot),
+        key.substring(dot + 1),
+        value,
+      )) {
+        out[key] = value;
+      }
+    }
+    return out;
   }
 
   /// Варианты «запрашивать после фона» (секунды): сразу, 1 мин, 5 мин.
@@ -234,6 +258,11 @@ final class AppSettings {
   /// Через сколько секунд в фоне снова спрашивать ([appLockAfterChoices]).
   final int appLockAfter;
 
+  /// Последний выбор в карточках расширений (ADR-026): поле → значение,
+  /// например `converter.audio_kbps` → `320`. Новая карточка берёт его,
+  /// если во фразе не сказано другое. Только коды, без файлов и путей.
+  final Map<String, String> formDefaults;
+
   AppSettings copyWith({
     bool? reduceMotion,
     bool? showTimestamps,
@@ -255,6 +284,7 @@ final class AppSettings {
     bool? voiceMicExplained,
     bool? appLock,
     int? appLockAfter,
+    Map<String, String>? formDefaults,
   }) =>
       AppSettings(
         reduceMotion: reduceMotion ?? this.reduceMotion,
@@ -278,6 +308,7 @@ final class AppSettings {
         voiceMicExplained: voiceMicExplained ?? this.voiceMicExplained,
         appLock: appLock ?? this.appLock,
         appLockAfter: appLockAfter ?? this.appLockAfter,
+        formDefaults: formDefaults ?? this.formDefaults,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -316,6 +347,11 @@ final class AppSettings {
         if (voiceMicExplained) 'voice.mic_explained': true,
         if (appLock) 'security.app_lock': true,
         if (appLockAfter != 60) 'security.app_lock_after': appLockAfter,
+        if (formDefaults.isNotEmpty)
+          'form_defaults': <String, String>{
+            for (final key in formDefaults.keys.toList()..sort())
+              key: formDefaults[key]!,
+          },
       };
 }
 

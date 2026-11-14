@@ -11,6 +11,7 @@ import 'app/extensions/tool_kit.dart';
 import 'app/extensions/ytdl_kit.dart';
 import 'app/files/file_opener.dart';
 import 'app/jobs/job_picker.dart';
+import 'app/jobs/media_channel_bridge.dart';
 import 'app/home_page.dart';
 import 'app/passwords/device_keys.dart';
 import 'app/passwords/passwords_kit.dart';
@@ -43,6 +44,7 @@ import 'core/settings/app_settings.dart';
 import 'core/skills/archiver/archiver_connector.dart';
 import 'core/skills/calculator/calculator_connector.dart';
 import 'core/skills/converter/converter_connector.dart';
+import 'core/skills/converter/platform_media_job.dart';
 import 'core/skills/data/data_connector.dart';
 import 'core/skills/passwords/passwords_connector.dart';
 import 'core/skills/talk/talk_connector.dart';
@@ -78,11 +80,21 @@ Future<void> main() async {
       <String>['Vosk', 'Kaldi', 'OpenFST', 'OpenBLAS'],
       voice,
     );
-    // Расширения (ADR-024): ffmpeg (LGPL, с libmp3lame) и yt-dlp
-    // скачиваются по кнопке, в приложение не встроены.
+    // Расширения (ADR-024, ADR-026): ffmpeg (LGPL, с libmp3lame) и yt-dlp
+    // скачиваются по кнопке, в приложение не встроены; LAME 3.100 встроен
+    // (libtridot_mp3, LGPL-2.0-or-later) — раздел 4 файла, полный текст
+    // LGPL — в разделе пакета «tridot_lame» (его LICENSE Flutter добавляет
+    // сам); AndroidX Media3 (Apache-2.0) — раздел 5: лицензии библиотек
+    // Android Flutter сам не показывает.
     final tools = await rootBundle.loadString('assets/extensions/NOTICE.txt');
     yield LicenseEntryWithLineBreaks(
-      <String>['FFmpeg', 'LAME', 'image', if (!kPlayBuild) 'yt-dlp'],
+      <String>[
+        'FFmpeg',
+        'LAME',
+        'image',
+        if (!kPlayBuild) 'yt-dlp',
+        'Media3',
+      ],
       tools,
     );
   });
@@ -157,7 +169,25 @@ Future<void> main() async {
         )
       : null;
   await ffmpeg?.refresh();
-  final converterEnvironment = _ConverterEnvironment(ffmpeg);
+  // Звук и видео на телефоне и Mac (ADR-026): средства системы и
+  // встроенный LAME. Что они умеют на этом устройстве — один вопрос при
+  // запуске; не ответили — там конвертируются только картинки.
+  NativeMedia? nativeMedia;
+  final platform = currentJobPlatform();
+  if (platform == JobPlatform.android || platform == JobPlatform.macos) {
+    final bridge = ChannelMediaBridge();
+    final caps = await loadNativeMediaCaps(bridge, platform: platform);
+    if (caps.targets.isNotEmpty) {
+      nativeMedia = NativeMedia(
+        caps: caps,
+        runner: PlatformMediaJobRunner(bridge),
+      );
+    }
+  }
+  final converterEnvironment = _ConverterEnvironment(
+    ffmpeg,
+    nativeMedia?.caps ?? NativeMediaCaps.none,
+  );
   // Загрузчик видео (ADR-024, шаг 3): только Windows и Linux и не в сборке
   // для Google Play (`--dart-define=TRIDOT_STORE=play`): там его код
   // выбрасывается как недостижимый. yt-dlp скачивается по кнопке в
@@ -201,8 +231,9 @@ Future<void> main() async {
       // Архиватор ZIP (ADR-024): расширение, выключено по умолчанию; ведёт
       // Лиорио. Работа — в отдельном изоляте по кнопке карточки.
       ArchiverConnector(),
-      // Конвертер (ADR-024, шаг 2): картинки — везде на Dart, звук и
-      // видео — скачиваемым ffmpeg только на Windows и Linux.
+      // Конвертер (ADR-024, ADR-026): картинки — везде на Dart, звук и
+      // видео — скачиваемым ffmpeg на Windows и Linux, средствами системы
+      // на телефоне и Mac.
       ConverterConnector(environment: converterEnvironment),
       // Загрузчик видео: ссылка уходит только в yt-dlp. Где его нет
       // (Android, macOS, сборка для Google Play), на те же фразы Лиорио
@@ -270,14 +301,16 @@ Future<void> main() async {
       voice: voice,
       fileOpener: opener,
       ffmpeg: ffmpeg,
+      nativeMedia: nativeMedia,
       ytdl: ytdl,
     ),
   );
 }
 
-/// Платформа и готовность ffmpeg — для текста ответа конвертера.
+/// Платформа, готовность ffmpeg и системный конвертер — для текста ответа
+/// конвертера.
 final class _ConverterEnvironment implements ConverterEnvironment {
-  _ConverterEnvironment(this.ffmpeg);
+  _ConverterEnvironment(this.ffmpeg, this.native);
 
   final ToolKit? ffmpeg;
 
@@ -286,6 +319,10 @@ final class _ConverterEnvironment implements ConverterEnvironment {
 
   @override
   bool get ffmpegReady => ffmpeg?.isInstalled ?? false;
+
+  /// Что умеет система телефона или Mac (ADR-026).
+  @override
+  final NativeMediaCaps native;
 }
 
 /// Удаляет `<временная папка>/tridot-jobs` целиком; ошибки — молча.
@@ -357,6 +394,7 @@ final class AssistantApp extends StatelessWidget {
     this.voice,
     this.fileOpener,
     this.ffmpeg,
+    this.nativeMedia,
     this.ytdl,
     this.appLock,
   });
@@ -382,6 +420,9 @@ final class AssistantApp extends StatelessWidget {
 
   /// ffmpeg конвертера; `null` — платформа без него.
   final ToolKit? ffmpeg;
+
+  /// Системный конвертер звука и видео; `null` — его нет.
+  final NativeMedia? nativeMedia;
 
   /// Загрузчик видео; `null` — нет в этой сборке или на платформе.
   final YtdlKit? ytdl;
@@ -416,6 +457,7 @@ final class AssistantApp extends StatelessWidget {
         voice: voice,
         fileOpener: fileOpener,
         ffmpeg: ffmpeg,
+        nativeMedia: nativeMedia,
         ytdl: ytdl,
         appLock: appLock,
       ),

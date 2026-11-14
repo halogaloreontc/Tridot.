@@ -7,6 +7,7 @@ import '../../core/build_flags.dart';
 import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
+import '../../core/skills/converter/convert_caps.dart';
 import '../../core/passwords/vault.dart';
 import '../assistant_theme.dart';
 import '../extensions/tool_kit.dart';
@@ -40,6 +41,7 @@ class ExtensionsSection extends StatefulWidget {
     this.connections = const <ConnectionService>[],
     this.passwords,
     this.ffmpeg,
+    this.nativeMedia = NativeMediaCaps.none,
     this.ytdl,
   });
 
@@ -54,6 +56,10 @@ class ExtensionsSection extends StatefulWidget {
   /// ffmpeg конвертера (ADR-024): статус и «Настроить» — скачать или
   /// удалить. `null` — платформа без ffmpeg: только картинки.
   final ToolKit? ffmpeg;
+
+  /// Что умеет система телефона или Mac (ADR-026): звук и видео без
+  /// ffmpeg. [NativeMediaCaps.none] — только картинки.
+  final NativeMediaCaps nativeMedia;
 
   /// Загрузчик видео (ADR-024, шаг 3): yt-dlp и папка загрузок. `null` —
   /// загрузчика в этой сборке нет (его плитки тоже нет: навык не
@@ -152,6 +158,11 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
   String _converterStatus(bool enabled) {
     final kit = widget.ffmpeg;
     if (kit == null) {
+      final native = widget.nativeMedia.targets;
+      if (native.isNotEmpty) {
+        return 'Картинки; звук и видео — средствами системы: '
+            '${ConvertCaps.mediaNames(native)}';
+      }
       return 'Только картинки на этой платформе: png, jpeg, webp, bmp, gif '
           '→ png, jpeg';
     }

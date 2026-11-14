@@ -158,4 +158,122 @@ void main() {
     empty.setValue('action', null);
     expect(ExtensionForms.blocker(empty, JobPlatform.linux), isNotNull);
   });
+
+  group('необязательные поля и последний выбор (ADR-026)', () {
+    ExtensionCard converter(String file, [Map<String, Object?>? extra]) =>
+        ExtensionCard(
+          id: 'j2_0',
+          extensionId: ExtensionForms.converter,
+          updatedAt: DateTime(2026),
+          values: <String, Object?>{
+            'file': <JobFile>[JobFile(path: '/tmp/$file', name: file)],
+            ...?extra,
+          },
+        );
+
+    test('прежнее значение не к этой цели запуск не держит', () {
+      final card = converter('кот.jpg', <String, Object?>{
+        'target': 'png',
+        'audio_kbps': '320',
+        'jpeg_quality': 'много',
+      });
+      expect(ExtensionForms.blocker(card, JobPlatform.android), isNull);
+    });
+
+    test('лишнее убирается, пустое — из фразы, запомненного, по умолчанию', () {
+      final card = converter('клип.mp4', <String, Object?>{
+        'target': 'mp4',
+        'audio_kbps': '320',
+        'video_quality': 'eco',
+      });
+      expect(
+        ExtensionForms.resolve(
+          card,
+          JobPlatform.linux,
+          tools: const <String>{'ffmpeg'},
+          remembered: const <String, String>{
+            'converter.video_res': '720',
+            'converter.video_quality': 'high',
+          },
+        ),
+        isTrue,
+      );
+      expect(card.choice('audio_kbps'), isNull);
+      // Из фразы — важнее запомненного.
+      expect(card.choice('video_quality'), 'eco');
+      expect(card.choice('video_res'), '720');
+      expect(
+        ExtensionForms.resolve(
+          card,
+          JobPlatform.linux,
+          tools: const <String>{'ffmpeg'},
+        ),
+        isFalse,
+      );
+      // Запомненное недопустимое значение не берётся.
+      final other = converter('клип.mp4', <String, Object?>{'target': 'mp4'});
+      ExtensionForms.resolve(
+        other,
+        JobPlatform.linux,
+        remembered: const <String, String>{'converter.video_res': '4320'},
+      );
+      expect(other.choice('video_res'), 'src');
+    });
+
+    test('без цели: значения из фразы ждут, чужие файлу — убираются', () {
+      final card = converter('кот.png', <String, Object?>{
+        'image_size': '1920',
+        'audio_kbps': '320',
+      });
+      ExtensionForms.resolve(card, JobPlatform.android);
+      expect(card.choice('image_size'), '1920');
+      expect(card.choice('audio_kbps'), isNull);
+      expect(card.choice('target'), isNull);
+    });
+
+    test('единственная цель ставится сама', () {
+      final card = converter('запись.wav');
+      ExtensionForms.resolve(card, JobPlatform.linux);
+      // У wav две цели (mp3, m4a) — не выбирается.
+      expect(card.choice('target'), isNull);
+    });
+
+    test('сжатие архива — только у «Создать архив»', () {
+      final card = _card();
+      ExtensionForms.resolve(card, JobPlatform.linux);
+      expect(card.choice('level'), ExtensionForms.levelNormal);
+      card.setValue('action', ExtensionForms.extract);
+      ExtensionForms.resolve(card, JobPlatform.linux);
+      expect(card.choice('level'), isNull);
+    });
+
+    test('что запоминается и что допустимо', () {
+      expect(ExtensionForms.rememberable('converter', 'audio_kbps'), isTrue);
+      expect(ExtensionForms.rememberable('converter', 'target'), isFalse);
+      expect(ExtensionForms.rememberable('converter', 'file'), isFalse);
+      expect(ExtensionForms.rememberable('archiver', 'level'), isTrue);
+      expect(ExtensionForms.rememberable('ytdl', 'format'), isFalse);
+      expect(
+        ExtensionForms.validDefault('converter', 'audio_kbps', '320'),
+        isTrue,
+      );
+      expect(
+        ExtensionForms.validDefault('converter', 'audio_kbps', '321'),
+        isFalse,
+      );
+      expect(
+        ExtensionForms.validDefault('archiver', 'level', 'strong'),
+        isTrue,
+      );
+    });
+
+    test('значения качества переживают историю чата', () {
+      final card = converter('клип.mp4', <String, Object?>{
+        'target': 'mp3',
+        'audio_kbps': '320',
+      });
+      final back = ExtensionCard.fromJson(_roundTrip(card.toJson()))!;
+      expect(back.choice('audio_kbps'), '320');
+    });
+  });
 }

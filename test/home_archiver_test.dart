@@ -144,6 +144,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('отчёт.txt'), findsOneWidget);
     expect(button(tester, 'ext-card-run').onPressed, isNotNull);
+    // Сжатие — выпадающим списком, «Сильное».
+    expect(find.text('Обычное'), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('ext-card-select-level')),
+        matching: find.byType(DropdownButton<String>),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find
+          .ancestor(
+            of: find
+                .byKey(const ValueKey<String>('ext-card-choice-strong'))
+                .last,
+            matching: find.byType(InkWell),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
     await tester.runAsync(() async {
       await tester.tap(find.byKey(const Key('ext-card-run')));
       for (var i = 0; i < 50 && runner.requests.isEmpty; i++) {
@@ -152,6 +172,7 @@ void main() {
     });
     await tester.pump();
     final request = runner.requests.single;
+    expect(request.options, <String, String>{'level': 'strong'});
     expect(request.target, p.join(temp.path, 'отчёт.zip'));
     expect(request.sources.single.path, source.path);
     expect(find.byKey(const Key('ext-card-cancel')), findsOneWidget);

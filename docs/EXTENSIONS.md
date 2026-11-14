@@ -78,13 +78,24 @@ final assistant = AssistantController(extensions: extensions, clock: clock);
 
 Расширение, которое работает с файлами или ссылками (архиватор, конвертер, загрузчик видео), отвечает карточкой-формой в чате, а не текстом: поля → «Запустить» → ход работы и «Отмена» → «Открыть» / «Открыть папку» или ошибка с «Повторить». Карточка общая; новое расширение добавляет:
 
-1. описание формы в `ExtensionForms.of` (`lib/core/jobs/extension_forms.dart`): список `FieldSpec` — код поля, вид (`files`, `file`, `folder`, `choice`, `url`), подпись, обязательность, варианты выбора с причиной недоступности (варианты получают карточку, платформу и установленные внешние программы — `tools`, например `ffmpeg`, `ytdlp`); поле `url` — строка в одну строку (Inter), проверка ссылки — `YtdlUrl.valid`;
+1. описание формы в `ExtensionForms.of` (`lib/core/jobs/extension_forms.dart`): список `FieldSpec` — код поля, вид (`files`, `file`, `folder`, `choice`, `url`), подпись, обязательность, варианты выбора с причиной недоступности (варианты получают карточку, платформу и установленные внешние программы — `tools`, например `ffmpeg`, `ytdlp`); поле `url` — строка в одну строку (Inter), проверка ссылки — `YtdlUrl.valid`. Поле-выбор показывается выпадающим списком (ADR-026): недоступный вариант — серым с причиной, не выбирается. Необязательное поле-выбор (`required: false`) без вариантов не показывается — так качество видно только у подходящей цели; лишние значения убирает и пустые заполняет `ExtensionForms.resolve` (фраза → последний выбор `AppSettings.formDefaults` → значение по умолчанию); запоминаемые поля — `ExtensionForms.rememberable`. Настройки задачи из карточки уходят в `JobRequest.options` — только допустимые значения;
 2. работу задачи — статическую функцию `JobWork` (`JobRequest`, `JobReporter`) → `JobDone`, которая выполняется в отдельном изоляте (`IsolateJobRunner`), или отдельный процесс (`FfmpegJobRunner`, `YtdlJobRunner` — образцы), и её регистрацию в `HomePage` (`_defaultJobRunner`, выбор исполнителя — `JobRunnerRouter`); ошибки — кодом `JobError(JobCodes.…)`, без путей и текста исключений;
 3. навык-коннектор, который реализует `FormConnector` (карточка из «+» без фразы) и в `run` отвечает `session.reply(…, job: ExtensionCard(…))`; файлы сообщения и недавних сообщений сессии — `AssistantSession.attachments` и `recentAttachments`, только для чтения;
 4. `offHint: true` в `ConnectorInfo`, если выключенное расширение должно подсказывать, где его включить;
 5. если в поле попадают чувствительные данные (ссылка загрузчика) — они идут только в поле карточки и в задачу (`JobRequest.url`): не в текст ответа, не в код ошибки и не в журналы.
 
 Код: `lib/core/jobs/` (карточка, формы, исполнитель, место результата), `lib/app/jobs/` (`JobHub`, `JobCards`, выбор файлов), `lib/app/widgets/extension_card_view.dart`, `lib/app/files/file_opener.dart`.
+
+### Задачи средствами системы (ADR-026)
+
+Если работу делает сама система (конвертер звука и видео на Android и macOS), задачу ведёт `PlatformMediaJobRunner` (`lib/core/skills/converter/platform_media_job.dart`). Связь с системой — `MediaBridge`: в приложении это каналы `ChannelMediaBridge` (`lib/app/jobs/media_channel_bridge.dart`), в тестах — подделка. Договор каналов одинаковый у Kotlin (`android/.../media/MediaChannel.kt`) и Swift (`macos/Runner/MediaChannel.swift`):
+
+- `tridot/media`, вызов `capabilities` → `{targets, video1080, api}`. Это один вопрос при запуске, ответ попадает в `NativeMediaCaps`. Нет ответа — звук и видео на этой платформе недоступны, и карточка так и пишет.
+- `start {id, input, output, target, audioKbps, videoRes, videoQuality, jpegQuality}` сразу возвращает `null`. Неверный путь или цель — ошибка с кодом. `output` — временный `….part` от `JobPlacement.tempFile` (свой у каждого запуска: `.<имя>.<запуск>.<id>.part`, чтобы поздняя уборка отменённого запуска не задела «Повторить»): готовый файл переименовывает Dart (`commitFile`, «(2)»).
+- `cancel {id}` можно звать сколько угодно.
+- `tridot/media/events` присылает `{id, progress}` не чаще 4 раз в секунду, затем ровно одно `{id, done: true}` или `{id, error: код}`. Коды — из `JobCodes`, без путей и текстов исключений.
+
+Таблица качества у Kotlin (`Presets.kt`) и Swift (`MediaPresets`) — копия `ConvertQuality`, тест `test/skills/converter/presets_parity_test.dart` их сверяет. Кто делает цель на какой платформе, решает `ConvertCaps.route` (`dart`, `ffmpeg` или `native`); если нельзя — причина: `noTool`, `imagesOnly` (система ничего не сообщила), `impossible` (WebM на телефоне и Mac, MOV на телефоне), `deviceLacks` (у системы нет кодировщика этой цели), `sourceUnreadable` (исходник система не откроет: на Mac — WebM, MKV, AVI, OGG, Opus). Встроенный кодировщик MP3 (LAME 3.100, LGPL) — пакет `packages/tridot_lame`: отдельная разделяемая библиотека, её собирает build-хук; Kotlin зовёт её через JNI, Swift — через `dlopen`.
 
 ### Скачиваемые программы (ADR-024)
 

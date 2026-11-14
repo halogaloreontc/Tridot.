@@ -88,6 +88,33 @@ void main() {
   ButtonStyleButton runButton(WidgetTester tester) =>
       tester.widget<ButtonStyleButton>(find.byKey(const Key('ext-card-run')));
 
+  Finder select(String code) => find.descendant(
+        of: find.byKey(ValueKey<String>('ext-card-select-$code')),
+        matching: find.byType(DropdownButton<String>),
+      );
+
+  /// Открывает выпадающий список поля [code].
+  Future<void> open(WidgetTester tester, String code) async {
+    await tester.tap(select(code));
+    await tester.pumpAndSettle();
+  }
+
+  /// Вариант [value] в открытом списке (последний — в меню, а не в кнопке).
+  Finder item(String value) =>
+      find.byKey(ValueKey<String>('ext-card-choice-$value')).last;
+
+  /// Нажатие по варианту меню: по его InkWell (подпись — WholeWordText,
+  /// своя раскладка без проверки касаний).
+  Finder tapTarget(String value) =>
+      find.ancestor(of: item(value), matching: find.byType(InkWell)).first;
+
+  /// Выбирает [value] в поле [code].
+  Future<void> choose(WidgetTester tester, String code, String value) async {
+    await open(tester, code);
+    await tester.tap(tapTarget(value));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('форма без файлов: «Запустить» неактивна, подсказка', (
     WidgetTester tester,
   ) async {
@@ -101,8 +128,31 @@ void main() {
     expect(runButton(tester).onPressed, isNull);
     await tester.tap(find.byKey(const Key('ext-card-pick-files')));
     await tester.tap(find.byKey(const Key('ext-card-pick-folder')));
-    await tester.tap(find.byKey(const Key('ext-card-choice-extract')));
-    expect(log, <String>['files', 'folder', 'action=extract']);
+    // Действие — выпадающим списком; «Распаковать» без .zip видно, но не
+    // выбирается, причина — второй строкой.
+    await open(tester, 'action');
+    expect(
+      tester.widget<DropdownMenuItem<String>>(item('extract')).enabled,
+      isFalse,
+    );
+    expect(find.text('Нужен ровно один файл .zip'), findsWidgets);
+    await tester.tap(tapTarget('zip'));
+    await tester.pumpAndSettle();
+    await choose(tester, 'level', 'store');
+    expect(log, <String>['files', 'folder', 'action=zip', 'level=store']);
+  });
+
+  testWidgets('сжатие — только у «Создать архив»', (
+    WidgetTester tester,
+  ) async {
+    await pump(tester, _card());
+    expect(find.text('Сжатие'), findsOneWidget);
+    await pump(tester, _card(action: ExtensionForms.extract));
+    expect(find.text('Сжатие'), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('ext-card-select-level')),
+      findsNothing,
+    );
   });
 
   testWidgets('форма с файлом: «Запустить», убрать файл, из сессии', (
@@ -303,9 +353,14 @@ void main() {
         converter('кот.jpg', target: 'png'),
         platform: JobPlatform.android,
       );
-      expect(find.byKey(const Key('ext-card-choice-png')), findsOneWidget);
-      expect(find.byKey(const Key('ext-card-choice-jpeg')), findsNothing);
+      expect(find.text('PNG'), findsOneWidget);
       expect(runButton(tester).onPressed, isNotNull);
+      await open(tester, 'target');
+      expect(item('png'), findsOneWidget);
+      expect(find.text('JPEG (пережать)'), findsWidgets);
+      await tester.tap(tapTarget('jpeg'));
+      await tester.pumpAndSettle();
+      expect(log, <String>['target=jpeg']);
     });
 
     testWidgets('видео на телефоне: варианты есть, причина видна честно', (
@@ -317,14 +372,41 @@ void main() {
         platform: JobPlatform.android,
       );
       expect(
-        find.byKey(const Key('ext-card-choice-frame-jpeg')),
-        findsOneWidget,
-      );
-      expect(
         find.byKey(const Key('ext-card-choice-reason')),
         findsOneWidget,
       );
-      expect(find.textContaining('На этой платформе недоступно'), findsWidgets);
+      expect(
+        find.textContaining('На телефоне — только картинки'),
+        findsWidgets,
+      );
+      expect(runButton(tester).onPressed, isNull);
+      await open(tester, 'target');
+      expect(item('frame-jpeg'), findsOneWidget);
+      expect(
+        tester.widget<DropdownMenuItem<String>>(item('frame-jpeg')).enabled,
+        isFalse,
+      );
+      // WebM и MOV на телефоне не делаются вовсе — их нет в списке.
+      expect(
+        find.byKey(const ValueKey<String>('ext-card-choice-webm')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('ext-card-choice-mov')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('WebM на телефоне, выбранный фразой, — виден с причиной', (
+      WidgetTester tester,
+    ) async {
+      await pump(
+        tester,
+        converter('клип.mp4', target: 'webm'),
+        platform: JobPlatform.android,
+      );
+      expect(find.text('WebM'), findsOneWidget);
+      expect(find.textContaining('WebM не делается'), findsOneWidget);
       expect(runButton(tester).onPressed, isNull);
     });
 
@@ -342,6 +424,81 @@ void main() {
       );
       expect(find.textContaining('Нужен ffmpeg'), findsNothing);
       expect(runButton(tester).onPressed, isNotNull);
+    });
+
+    testWidgets('качество — только у подходящей цели', (
+      WidgetTester tester,
+    ) async {
+      ExtensionCard card(String target, [Map<String, String>? extra]) =>
+          converter('клип.mkv', target: target)..values.addAll(extra ?? {});
+      await pump(
+        tester,
+        card('mp3', <String, String>{'audio_kbps': '320'}),
+        tools: const <String>{'ffmpeg'},
+      );
+      expect(find.text('Качество звука'), findsOneWidget);
+      expect(find.text('320 кбит/с — наилучшее'), findsOneWidget);
+      expect(find.text('Размер видео'), findsNothing);
+      await choose(tester, 'audio_kbps', '128');
+      expect(log, <String>['audio_kbps=128']);
+
+      await pump(tester, card('mp4'), tools: const <String>{'ffmpeg'});
+      expect(find.text('Размер видео'), findsOneWidget);
+      expect(find.text('Качество видео'), findsOneWidget);
+      expect(find.text('Качество звука'), findsNothing);
+      await choose(tester, 'video_res', '720');
+      expect(log, <String>['video_res=720']);
+
+      await pump(tester, card('wav'), tools: const <String>{'ffmpeg'});
+      expect(find.text('Качество звука'), findsNothing);
+      expect(find.text('Размер видео'), findsNothing);
+
+      await pump(tester, card('frame-jpeg'), tools: const <String>{'ffmpeg'});
+      expect(find.text('Качество JPEG'), findsOneWidget);
+      expect(find.text('Размер картинки'), findsNothing);
+
+      // У картинки: качество JPEG и размер.
+      await pump(tester, converter('кот.png', target: 'jpeg'));
+      expect(find.text('Качество JPEG'), findsOneWidget);
+      expect(find.text('Размер картинки'), findsOneWidget);
+    });
+
+    testWidgets('прежнее значение не из списка — пусто, а не падение', (
+      WidgetTester tester,
+    ) async {
+      await pump(
+        tester,
+        converter('клип.mkv', target: 'mp3')
+          ..values['audio_kbps'] = '999'
+          ..values['video_res'] = '720',
+        tools: const <String>{'ffmpeg'},
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('Качество звука'), findsOneWidget);
+      // Необязательное поле без значения запуск не держит.
+      expect(runButton(tester).onPressed, isNotNull);
+    });
+
+    testWidgets('занят — список не открывается', (WidgetTester tester) async {
+      log.clear();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AssistantTheme.dark(),
+          home: Scaffold(
+            body: ExtensionCardView(
+              card: converter('кот.jpg', target: 'png'),
+              platform: JobPlatform.linux,
+              progress: progress,
+              busy: true,
+              onChoice: (String c, String v) => log.add('$c=$v'),
+            ),
+          ),
+        ),
+      );
+      expect(
+        tester.widget<DropdownButton<String>>(select('target')).onChanged,
+        isNull,
+      );
     });
   });
 
@@ -383,10 +540,8 @@ void main() {
         tools: const <String>{'ytdlp'},
       );
       expect(runButton(tester).onPressed, isNotNull);
-      expect(
-        find.byKey(const Key('ext-card-choice-audio')),
-        findsOneWidget,
-      );
+      await open(tester, 'format');
+      expect(item('audio'), findsOneWidget);
     });
 
     testWidgets('готово без пути файла — «Открыть папку»', (
@@ -450,23 +605,21 @@ void main() {
       tools: const <String>{'ytdlp', 'ffmpeg'},
     );
     expect(tester.takeException(), isNull);
+    await open(tester, 'format');
+    expect(tester.takeException(), isNull);
     for (final format in <String>['video1080', 'video720', 'video480']) {
-      final label = tester.widget<Text>(
-        find.descendant(
-          of: find.byKey(ValueKey<String>('ext-card-choice-$format')),
-          matching: find.byType(Text),
-        ),
+      final label = find.descendant(
+        of: item(format),
+        matching: find.byType(Text),
       );
-      expect(label.softWrap, isTrue, reason: format);
-      expect(label.maxLines, greaterThan(1), reason: format);
-      final size = tester.getSize(
-        find.descendant(
-          of: find.byKey(ValueKey<String>('ext-card-choice-$format')),
-          matching: find.byType(Text),
-        ),
-      );
+      final text = tester.widget<Text>(label.first);
+      expect(text.maxLines, isNull, reason: format);
       // Подпись не обрезана в одну строку: её высота — больше строки.
-      expect(size.height, greaterThan(30), reason: format);
+      expect(
+        tester.getSize(label.first).height,
+        greaterThan(30),
+        reason: format,
+      );
     }
   });
 
@@ -484,6 +637,6 @@ void main() {
     expect(find.text('Во что'), findsOneWidget);
     expect(find.byKey(const Key('ext-card-empty-target')), findsOneWidget);
     expect(find.text('Сначала выберите файл'), findsOneWidget);
-    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.byType(DropdownButton<String>), findsNothing);
   });
 }

@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
+import com.example.local_assistant.media.MediaChannel
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -13,8 +14,13 @@ import java.io.File
 import java.util.UUID
 
 class MainActivity : FlutterActivity() {
+    private var disposeMedia: (() -> Unit)? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Конвертер звука и видео средствами телефона (ADR-026): MediaCodec,
+        // Media3 Transformer и встроенный LAME; работа — в своих потоках.
+        disposeMedia = MediaChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
         // Сейф (ADR-025): ключ устройства в Android Keystore, запрет снимков
         // экрана на экранах ПИН-кода и кода восстановления; вход в
         // приложение по отпечатку / Face ID.
@@ -50,6 +56,12 @@ class MainActivity : FlutterActivity() {
                     }
                 }.start()
             }
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        disposeMedia?.invoke()
+        disposeMedia = null
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     /** Копия [path] в cache/tridot-open и её адрес для других приложений. */

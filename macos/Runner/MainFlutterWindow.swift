@@ -9,6 +9,8 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    // Конвертер звука и видео средствами Mac и встроенный LAME (ADR-026).
+    MediaChannel.register(with: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }

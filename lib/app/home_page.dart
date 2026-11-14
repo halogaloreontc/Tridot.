@@ -41,6 +41,7 @@ import '../core/skills/archiver/zip_ops.dart';
 import '../core/skills/converter/convert_targets.dart';
 import '../core/skills/converter/ffmpeg_job.dart';
 import '../core/skills/converter/image_convert.dart';
+import '../core/skills/converter/platform_media_job.dart';
 import '../core/skills/ytdl/ytdl_formats.dart';
 import '../core/skills/ytdl/ytdl_job.dart';
 import '../core/skills/passwords/passwords_phrases.dart';
@@ -159,6 +160,7 @@ final class HomePage extends StatefulWidget {
     this.jobPlatform,
     this.tempRoot,
     this.ffmpeg,
+    this.nativeMedia,
     this.ytdl,
     this.appLock,
   });
@@ -205,8 +207,13 @@ final class HomePage extends StatefulWidget {
 
   /// ffmpeg для конвертера (ADR-024): скачивается по кнопке в «Настройки
   /// → Расширения → Конвертер»; `null` — платформа без ffmpeg (Android,
-  /// macOS), там конвертируются только картинки.
+  /// macOS): там звук и видео делает система ([nativeMedia]).
   final ToolKit? ffmpeg;
+
+  /// Конвертер звука и видео средствами системы (ADR-026): MediaCodec и
+  /// LAME на телефоне, AVFoundation на Mac; `null` — его нет, тогда там
+  /// конвертируются только картинки.
+  final NativeMedia? nativeMedia;
 
   /// Загрузчик видео (ADR-024, шаг 3): yt-dlp и папка загрузок; `null` —
   /// в этой сборке или на этой платформе загрузчика нет (Android, macOS,
@@ -323,13 +330,22 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ytdlpPath: () async => ytdl.tool.verifiedPath(),
             ffmpegPath: () async => ffmpeg?.verifiedPath(),
           );
-    return JobRunnerRouter(
-      (JobRequest request) => request.extensionId == ExtensionForms.ytdl
-          ? downloads ?? isolates
-          : ConvertOps.usesFfmpeg(request)
-              ? processes
-              : isolates,
-    );
+    final native = widget.nativeMedia?.runner;
+    final platform = widget.jobPlatform ?? currentJobPlatform();
+    // Звук и видео: на телефоне и Mac — система, на компьютере — ffmpeg.
+    final nativePlatform =
+        platform == JobPlatform.android || platform == JobPlatform.macos;
+    return JobRunnerRouter((JobRequest request) {
+      if (request.extensionId == ExtensionForms.ytdl) {
+        return downloads ?? isolates;
+      }
+      if (request.extensionId != ExtensionForms.converter ||
+          ConvertOps.usesDart(request)) {
+        return isolates;
+      }
+      if (nativePlatform) return native ?? isolates;
+      return processes;
+    });
   }
 
   late final JobPlatform _jobPlatform =
@@ -344,6 +360,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     attachments: () => _book.store.attachments,
     tools: () => <String>{
       if (widget.ffmpeg?.isInstalled ?? false) ConvertTargets.ffmpeg,
+      ...?widget.nativeMedia?.caps.toTools(),
       if (widget.ytdl?.tool.isInstalled ?? false) YtdlFormats.tool,
     },
     downloadsDir: widget.ytdl == null ? null : () => widget.ytdl!.folder(),
@@ -355,7 +372,24 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     onMessage: (String text) {
       if (mounted) _announce(text);
     },
+    formDefaults: () => _settings.formDefaults,
+    onFormDefault: _rememberFormDefault,
   );
+
+  /// Последний выбор в карточке (качество, сжатие) — в настройки: новая
+  /// карточка начнёт с него.
+  void _rememberFormDefault(String key, String value) {
+    if (_settings.formDefaults[key] == value) return;
+    final settings = _settings.copyWith(
+      formDefaults: AppSettings.cleanFormDefaults(<String, String>{
+        ..._settings.formDefaults,
+        key: value,
+      }),
+    );
+    _settings = settings;
+    unawaited(_settingsStore.save(settings));
+  }
+
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
 
   /// Команды открытого чата для ↑/↓ в поле ввода: у каждого чата своя
@@ -3398,6 +3432,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         passwords: widget.passwords,
         voice: widget.voice,
         ffmpeg: widget.ffmpeg,
+        nativeMedia: widget.nativeMedia?.caps ?? NativeMediaCaps.none,
         ytdl: widget.ytdl,
         appLock: widget.appLock,
         showTitle: false,

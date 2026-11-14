@@ -33,6 +33,8 @@ final class JobCards {
     this.isEnabled,
     this.onFinished,
     this.onMessage,
+    this.formDefaults,
+    this.onFormDefault,
   });
 
   final JobHub hub;
@@ -61,6 +63,23 @@ final class JobCards {
 
   bool _enabled(ExtensionCard card) =>
       isEnabled?.call(card.extensionId) ?? true;
+
+  /// Последний выбор в карточках (`AppSettings.formDefaults`):
+  /// `converter.audio_kbps` → `320`; `null` — не запоминается.
+  final Map<String, String> Function()? formDefaults;
+
+  /// Пользователь выбрал запоминаемое значение (качество, сжатие): ключ
+  /// `<расширение>.<поле>`.
+  final void Function(String key, String value)? onFormDefault;
+
+  /// Необязательные поля: лишние убрать, пустые заполнить из фразы,
+  /// последнего выбора или по умолчанию.
+  bool _resolve(ExtensionCard card) => ExtensionForms.resolve(
+        card,
+        platform,
+        tools: _tools,
+        remembered: formDefaults?.call() ?? const <String, String>{},
+      );
 
   /// Почему карточку сейчас нельзя запустить; `null` — можно.
   String? _blocker(ExtensionCard card) => ExtensionForms.blocker(
@@ -109,6 +128,9 @@ final class JobCards {
     if (card.state == CardState.interrupted && card.cleanup.isNotEmpty) {
       hub.sweepInterrupted(chatId, card);
     }
+    // Значения по умолчанию видны в форме сразу (в том числе у карточки
+    // из истории чата); сохраняются вместе со следующей правкой.
+    if (card.state == CardState.form) _resolve(card);
     final field = fileField(card);
     final code = field?.code ?? 'files';
     void add(List<JobFile> files) {
@@ -125,10 +147,8 @@ final class JobCards {
           if (target != null && !targets.contains(target)) {
             card.setValue('target', null);
           }
-          if (card.choice('target') == null && targets.length == 1) {
-            card.setValue('target', targets.single);
-          }
         }
+        _resolve(card);
         hub.edited(chatId, card);
         return;
       }
@@ -160,10 +180,16 @@ final class JobCards {
       onAddSessionFile: (JobFile file) => add(<JobFile>[file]),
       onRemoveFile: (JobFile file) {
         card.setValue(code, card.files(code)..remove(file));
+        _resolve(card);
         hub.edited(chatId, card);
       },
       onChoice: (String code, String value) {
+        if (card.state != CardState.form) return;
         card.setValue(code, value);
+        _resolve(card);
+        if (ExtensionForms.rememberable(card.extensionId, code)) {
+          onFormDefault?.call('${card.extensionId}.$code', value);
+        }
         hub.edited(chatId, card);
       },
       onText: (String code, String value) {
@@ -203,6 +229,9 @@ final class JobCards {
   /// «Запустить»: исходники, место результата и задача в изоляте.
   Future<void> run(String chatId, ExtensionCard card) async {
     if (hub.isRunning(card.id) || card.state != CardState.form) return;
+    // Выбранное качество записывается в карточку: «Повторить» и история
+    // запускают ровно то же.
+    _resolve(card);
     if (_blocker(card) != null) return;
     if (card.extensionId == ExtensionForms.ytdl) {
       await _runYtdl(chatId, card);
@@ -301,6 +330,7 @@ final class JobCards {
       outputDir: outputDir,
       limits: mobile ? ZipLimits.mobile : ZipLimits.desktop,
       explicitTarget: target,
+      level: card.choice('level'),
     );
     _start(chatId, card, request, files);
   }
@@ -378,6 +408,10 @@ final class JobCards {
       source: source,
       outputDir: outputDir,
       explicitTarget: explicit,
+      options: <String, String>{
+        for (final MapEntry(:key, :value) in card.values.entries)
+          if (value is String) key: value,
+      },
     );
   }
 

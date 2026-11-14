@@ -6,6 +6,7 @@ import '../../core/app_info.dart';
 import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
+import '../../core/skills/converter/convert_caps.dart';
 import '../assistant_theme.dart';
 import '../extensions/tool_kit.dart';
 import '../extensions/ytdl_kit.dart';
@@ -36,6 +37,7 @@ class SettingsScreen extends StatelessWidget {
     this.onOpenStorage,
     this.voice,
     this.ffmpeg,
+    this.nativeMedia = NativeMediaCaps.none,
     this.ytdl,
     this.appLock,
   });
@@ -72,6 +74,9 @@ class SettingsScreen extends StatelessWidget {
 
   /// ffmpeg конвертера: «Настроить» в плитке «Конвертер».
   final ToolKit? ffmpeg;
+
+  /// Звук и видео средствами системы (телефон, Mac; ADR-026).
+  final NativeMediaCaps nativeMedia;
 
   /// Загрузчик видео: «Настроить» в плитке «Загрузчик видео».
   final YtdlKit? ytdl;
@@ -195,6 +200,7 @@ class SettingsScreen extends StatelessWidget {
                   connections: connections,
                   passwords: passwords,
                   ffmpeg: ffmpeg,
+                  nativeMedia: nativeMedia,
                   ytdl: ytdl,
                 ),
               const SectionLabel('Сессии'),

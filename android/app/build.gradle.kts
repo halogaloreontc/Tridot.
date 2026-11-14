@@ -65,6 +65,9 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // Методы Mp3Native регистрирует JNI_OnLoad библиотеки
+            // libtridot_mp3 по имени класса: R8 не должен его переименовать.
+            proguardFiles("proguard-rules.pro")
         }
     }
 }
@@ -89,4 +92,13 @@ dependencies {
     // Dart через dart:ffi (lib/core/voice/vosk_ffi.dart). «@aar» — без
     // транзитивных зависимостей: JNA и Java-классы Vosk не нужны.
     implementation("com.alphacephei:vosk-android:0.3.75@aar")
+}
+
+dependencies {
+    // Видео → MP4 на телефоне (ADR-026): androidx.media3 Transformer
+    // (Apache-2.0) сам ведёт MediaCodec и MediaMuxer, поворот и масштаб.
+    // Версии закреплены точно.
+    implementation("androidx.media3:media3-transformer:1.11.1")
+    implementation("androidx.media3:media3-effect:1.11.1")
+    implementation("androidx.media3:media3-common:1.11.1")
 }

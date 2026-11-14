@@ -23,8 +23,8 @@ abstract final class ConvertOps {
   /// Самый большой файл картинки, который читается целиком.
   static const int maxImageBytes = 200 * 1024 * 1024;
 
-  /// Качество JPEG.
-  static const int jpegQuality = 90;
+  /// Качество JPEG по умолчанию ([ConvertQuality.jpeg]).
+  static const int jpegQuality = 85;
 
   /// Задача по карточке: имя результата и временный путь. Результат —
   /// `<имя>.<расширение цели>` в [outputDir] («(2)», «(3)» при
@@ -35,6 +35,7 @@ abstract final class ConvertOps {
     required JobSource source,
     required String outputDir,
     String? explicitTarget,
+    Map<String, String> options = const <String, String>{},
   }) {
     final ext = ConvertTargets.outputExtension(target);
     final base = JobPlacement.safeName(
@@ -53,16 +54,19 @@ abstract final class ConvertOps {
       // Id карточки в имени: две задачи с одним именем результата не
       // пишут в один временный файл.
       temp: JobPlacement.tempFile(out, cardId),
+      options: ConvertOptions.clean(
+        options,
+        target,
+        ConvertTargets.kindOf(source.name),
+      ),
     );
   }
 
-  /// Задача делается ffmpeg (а не на Dart).
-  static bool usesFfmpeg(JobRequest request) =>
+  /// Задача делается на Dart (картинка в картинку), а не ffmpeg или
+  /// системой.
+  static bool usesDart(JobRequest request) =>
       request.extensionId == ExtensionForms.converter &&
-      ConvertTargets.needsFfmpegFor(
-        request.sources.single.name,
-        request.action,
-      );
+      ConvertTargets.dartFor(request.sources.single.name, request.action);
 
   /// Картинка → png или jpeg; работа в изоляте.
   static JobDone run(JobRequest request, JobReporter reporter) {
@@ -71,13 +75,24 @@ abstract final class ConvertOps {
     final part = request.temp!;
     final file = File(source.path);
     if (!file.existsSync()) throw const JobMissing();
-    if (usesFfmpeg(request)) throw const JobError(JobCodes.noTool);
+    if (!usesDart(request)) throw const JobError(JobCodes.unsupported);
     reporter.progress(0.05, 'Чтение');
     if (file.lengthSync() > maxImageBytes) {
       throw const JobError(JobCodes.tooBig);
     }
     final bytes = file.readAsBytesSync();
-    final encoded = convertBytes(bytes, request.action, reporter: reporter);
+    final options = ConvertOptions.fromMap(
+      request.options,
+      request.action,
+      MediaKind.image,
+    );
+    final encoded = convertBytes(
+      bytes,
+      request.action,
+      reporter: reporter,
+      jpegQuality: options.jpegQuality,
+      maxSide: options.maxSide,
+    );
     reporter.progress(0.9, 'Запись');
     try {
       File(part).writeAsBytesSync(encoded, flush: true);
@@ -94,10 +109,14 @@ abstract final class ConvertOps {
   /// Байты картинки → байты png или jpeg ([target]). Поворот по EXIF
   /// применяется, метаданные (EXIF с GPS, текстовые поля) не переносятся;
   /// у GIF и других анимаций — первый кадр; прозрачное в JPEG — на белом.
+  /// [maxSide] — длинная сторона результата не больше (после поворота;
+  /// меньшая картинка не растягивается), [jpegQuality] — 1..100.
   static Uint8List convertBytes(
     Uint8List bytes,
     String target, {
     JobReporter? reporter,
+    int jpegQuality = ConvertOps.jpegQuality,
+    int? maxSide,
   }) {
     if (target != ConvertTargets.png && target != ConvertTargets.jpeg) {
       throw const JobError(JobCodes.unsupported);
@@ -134,6 +153,18 @@ abstract final class ConvertOps {
       ..exif = img.ExifData()
       ..textData = null
       ..frames = <img.Image>[image];
+    if (maxSide != null && maxSide > 0) {
+      final long = image.width > image.height ? image.width : image.height;
+      if (long > maxSide) {
+        final landscape = image.width >= image.height;
+        image = img.copyResize(
+          image,
+          width: landscape ? maxSide : null,
+          height: landscape ? null : maxSide,
+          interpolation: img.Interpolation.average,
+        );
+      }
+    }
     reporter?.progress(0.6, 'Преобразование');
     if (target == ConvertTargets.png) return img.encodePng(image);
     if (image.hasPalette) image = image.convert(numChannels: 4);
@@ -144,6 +175,6 @@ abstract final class ConvertOps {
       )..clear(img.ColorRgb8(255, 255, 255));
       image = img.compositeImage(background, image);
     }
-    return img.encodeJpg(image, quality: jpegQuality);
+    return img.encodeJpg(image, quality: jpegQuality.clamp(1, 100));
   }
 }

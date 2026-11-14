@@ -46,6 +46,7 @@ import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
+import 'package:local_assistant/core/skills/converter/convert_caps.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 import 'package:local_assistant/core/voice/voice_recognizer.dart';
@@ -768,6 +769,7 @@ void main() {
               state: state,
               values: <String, Object?>{
                 'action': ExtensionForms.zip,
+                'level': ExtensionForms.levelStrong,
                 'files': file,
               },
             ),
@@ -779,6 +781,56 @@ void main() {
             extensionId: ExtensionForms.converter,
             updatedAt: DateTime(2026),
             values: <String, Object?>{'file': file},
+          ),
+        ),
+        (
+          'конвертер видео в mp3 320',
+          ExtensionCard(
+            id: 'j4_0',
+            extensionId: ExtensionForms.converter,
+            updatedAt: DateTime(2026),
+            values: <String, Object?>{
+              'file': <JobFile>[
+                const JobFile(
+                  path: '/tmp/отпуск на море.mp4',
+                  name: 'отпуск на море.mp4',
+                ),
+              ],
+              'target': 'mp3',
+              'audio_kbps': '320',
+            },
+          ),
+        ),
+        (
+          'конвертер видео в mp4 720p',
+          ExtensionCard(
+            id: 'j5_0',
+            extensionId: ExtensionForms.converter,
+            updatedAt: DateTime(2026),
+            values: <String, Object?>{
+              'file': <JobFile>[
+                const JobFile(path: '/tmp/клип.mkv', name: 'клип.mkv'),
+              ],
+              'target': 'mp4',
+              'video_res': '720',
+              'video_quality': 'eco',
+            },
+          ),
+        ),
+        (
+          'конвертер фото в jpeg',
+          ExtensionCard(
+            id: 'j6_0',
+            extensionId: ExtensionForms.converter,
+            updatedAt: DateTime(2026),
+            values: <String, Object?>{
+              'file': <JobFile>[
+                const JobFile(path: '/tmp/кот.jpg', name: 'кот.jpg'),
+              ],
+              'target': 'jpeg',
+              'jpeg_quality': '60',
+              'image_size': '1920',
+            },
           ),
         ),
         (
@@ -821,6 +873,176 @@ void main() {
         await _checkScrolling(tester, '$label: $name');
       }
     });
+  });
+
+  group('выпадающие списки карточек', () {
+    // Открытый список «Во что» и «Качество звука»: длинные подписи и
+    // причины недоступности переносятся по словам.
+    for (final (code, target) in <(String, String)>[
+      ('target', 'mp3'),
+      ('audio_kbps', 'mp3'),
+      ('video_res', 'mp4'),
+    ]) {
+      _phones('открытый список $code', (tester, label) async {
+        final progress = ValueNotifier<JobTick?>(null);
+        addTearDown(progress.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AssistantTheme.dark(),
+            home: Scaffold(
+              body: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: ExtensionCardView(
+                  card: ExtensionCard(
+                    id: 'j7_0',
+                    extensionId: ExtensionForms.converter,
+                    updatedAt: DateTime(2026),
+                    values: <String, Object?>{
+                      'file': <JobFile>[
+                        const JobFile(path: '/tmp/клип.mp4', name: 'клип.mp4'),
+                      ],
+                      'target': target,
+                    },
+                  ),
+                  // «Во что» — телефон без системных кодировщиков: у
+                  // вариантов звука и видео причина второй строкой.
+                  // Качество — телефон с кодировщиками без 1080p: у 1080p
+                  // причина.
+                  platform: JobPlatform.android,
+                  progress: progress,
+                  tools: code == 'target'
+                      ? const <String>{}
+                      : const NativeMediaCaps(
+                          targets: <String>{'mp3', 'm4a', 'wav', 'mp4'},
+                          video1080: false,
+                        ).toTools(),
+                  onChoice: (String c, String v) {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.tap(
+          find.descendant(
+            of: find.byKey(ValueKey<String>('ext-card-select-$code')),
+            matching: find.byType(DropdownButton<String>),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        _expectWhole(tester, '$label: меню');
+      });
+    }
+  });
+
+  group('выпадающие списки: выбранное видно целиком и в Inter', () {
+    // Регрессия: у плотного DropdownButtonFormField кнопка высотой в одну
+    // строку — подпись в две строки («Экономное — меньше файл» на 320 px
+    // и шрифте 200 %) срезалась снизу, а проверка слов этого не видит.
+    // И style без fontFamily заменял шрифт темы: Inter терялся.
+    for (final (name, values, platform) in <(
+      String,
+      Map<String, Object?>,
+      JobPlatform,
+    )>[
+      (
+        'видео в mp4 720p эконом',
+        <String, Object?>{
+          'file': <JobFile>[
+            const JobFile(path: '/tmp/клип.mp4', name: 'клип.mp4'),
+          ],
+          'target': 'mp4',
+          'video_res': '720',
+          'video_quality': 'eco',
+        },
+        JobPlatform.linux,
+      ),
+      (
+        'архиватор сильное сжатие',
+        <String, Object?>{
+          'action': ExtensionForms.zip,
+          'level': ExtensionForms.levelStrong,
+          'files': <JobFile>[
+            const JobFile(path: '/tmp/отчёт.txt', name: 'отчёт.txt'),
+          ],
+        },
+        JobPlatform.linux,
+      ),
+    ]) {
+      _phones(name, (tester, label) async {
+        final progress = ValueNotifier<JobTick?>(null);
+        addTearDown(progress.dispose);
+        final extension = values.containsKey('action')
+            ? ExtensionForms.archiver
+            : ExtensionForms.converter;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AssistantTheme.dark(),
+            home: Scaffold(
+              body: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: ExtensionCardView(
+                  card: ExtensionCard(
+                    id: 'j8_0',
+                    extensionId: extension,
+                    updatedAt: DateTime(2026),
+                    values: values,
+                  ),
+                  platform: platform,
+                  progress: progress,
+                  tools: const <String>{'ffmpeg'},
+                  onChoice: (String c, String v) {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        final selects = find.byWidgetPredicate(
+          (Widget w) =>
+              w.key is ValueKey<String> &&
+              (w.key! as ValueKey<String>).value.startsWith('ext-card-select-'),
+        );
+        expect(selects, findsWidgets, reason: label);
+        for (final element in selects.evaluate()) {
+          final field = find.descendant(
+            of: find.byWidget(element.widget),
+            matching: find.byType(InputDecorator),
+          );
+          final box = tester.getRect(field.first);
+          final texts = find.descendant(
+            of: field.first,
+            matching: find.byType(RichText),
+          );
+          expect(texts, findsWidgets, reason: label);
+          for (final text in texts.evaluate()) {
+            final paragraph = text.renderObject! as RenderParagraph;
+            if (!paragraph.hasSize || paragraph.size.isEmpty) continue;
+            final rect = paragraph.localToGlobal(Offset.zero) & paragraph.size;
+            final shown = paragraph.text.toPlainText();
+            if (shown.isEmpty) continue;
+            expect(
+              rect.top >= box.top - 0.5 && rect.bottom <= box.bottom + 0.5,
+              isTrue,
+              reason: '$label: «$shown» ($rect) вне поля ($box)',
+            );
+            // Текст выше своего места: родитель сжал параграф, и строки
+            // ниже срезаны.
+            expect(
+              paragraph.textSize.height <= paragraph.size.height + 0.5,
+              isTrue,
+              reason: '$label: «$shown» выше места '
+                  '(${paragraph.textSize.height} > ${paragraph.size.height})',
+            );
+            final family = paragraph.text.style?.fontFamily;
+            // Стрелка списка — значок, у него свой шрифт.
+            if (family == 'MaterialIcons') continue;
+            expect(family, AppFonts.text, reason: '$label: «$shown»');
+          }
+        }
+      });
+    }
   });
 
   group('диалоги проектов', () {

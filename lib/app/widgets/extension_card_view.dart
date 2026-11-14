@@ -9,6 +9,7 @@ import '../../core/jobs/job_runner.dart';
 import '../../core/skills/ytdl/ytdl_formats.dart';
 import '../assistant_theme.dart';
 import '../jobs/job_hub.dart';
+import 'whole_word_text.dart';
 
 /// Карточка-форма расширения под ответом Лиорио (docs/PLANS.md,
 /// «Карточки-формы»): поля по схеме ядра ([ExtensionForms]) → «Запустить»
@@ -380,30 +381,14 @@ final class ExtensionCardView extends StatelessWidget {
       ];
     }
     return <Widget>[
-      Text(field.label, style: metaTextStyle),
-      const SizedBox(height: 4),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: <Widget>[
-          for (final option in options)
-            ChoiceChip(
-              key: ValueKey<String>('ext-card-choice-${option.value}'),
-              // Узкий экран и крупный шрифт: подпись переносится, а не
-              // обрезается («Видео: лучшее до 1080p» и «…до 720p» иначе
-              // не различить).
-              label: Text(
-                option.label,
-                softWrap: true,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-              selected: option.value == value,
-              onSelected: busy || onChoice == null
-                  ? null
-                  : (_) => onChoice!(field.code, option.value),
-            ),
-        ],
+      _ChoiceDropdown(
+        key: ValueKey<String>('ext-card-select-${field.code}'),
+        label: field.label,
+        options: options,
+        value: chosen?.value,
+        onChanged: busy || onChoice == null
+            ? null
+            : (String value) => onChoice!(field.code, value),
       ),
       if (chosen?.disabledReason case final String reason)
         Padding(
@@ -415,6 +400,7 @@ final class ExtensionCardView extends StatelessWidget {
                 const TextStyle(fontSize: 12, color: AssistantColors.warning),
           ),
         ),
+      const SizedBox(height: 10),
     ];
   }
 
@@ -634,6 +620,129 @@ final class ExtensionCardView extends StatelessWidget {
           ),
         ),
       ];
+}
+
+/// Поле-выбор карточки — выпадающий список (ADR-026): подпись сверху,
+/// список на всю ширину; длинная подпись варианта переносится по словам
+/// (узкий экран, шрифт 200 %), а не обрезается посреди слова. Недоступный
+/// вариант виден в списке серым с причиной второй строкой, но не
+/// выбирается.
+final class _ChoiceDropdown extends StatelessWidget {
+  const _ChoiceDropdown({
+    super.key,
+    required this.label,
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final List<Choice> options;
+
+  /// Выбранный вариант из [options] или `null`.
+  final String? value;
+
+  /// `null` — список не открывается (идёт ответ, форма занята).
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = options.any((Choice c) => c.value == value) ? value : null;
+    return Semantics(
+      container: true,
+      label: label,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(label, style: metaTextStyle),
+          const SizedBox(height: 4),
+          DropdownButtonFormField<String>(
+            // Поле помнит начальное значение: сменилось снаружи (новый
+            // файл, значение по умолчанию) — новое поле.
+            key: ValueKey<String?>(selected),
+            // Значение не из списка (старая карточка) — пусто, а не
+            // падение DropdownButton.
+            initialValue: selected,
+            isExpanded: true,
+            // Не плотное: у плотного кнопка высотой в одну строку, и
+            // выбранная подпись в две строки (узкий экран, шрифт 200 %)
+            // обрезается снизу.
+            isDense: false,
+            itemHeight: null,
+            dropdownColor: AssistantColors.raised,
+            borderRadius: BorderRadius.circular(8),
+            hint:
+                const WholeWordText('Выберите', style: TextStyle(fontSize: 13)),
+            // style заменяет стиль темы целиком (не дополняет): без
+            // fontFamily выбранное значение и пункты списка ушли бы в
+            // системный шрифт, а не Inter.
+            style: const TextStyle(
+              fontFamily: AppFonts.text,
+              fontSize: 13,
+              color: AssistantColors.textStrong,
+            ),
+            decoration: const InputDecoration(
+              isDense: true,
+              contentPadding: EdgeInsets.fromLTRB(10, 0, 10, 0),
+              border: OutlineInputBorder(),
+            ),
+            selectedItemBuilder: (BuildContext context) => <Widget>[
+              for (final option in options)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: WholeWordText(
+                    option.label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+            ],
+            items: <DropdownMenuItem<String>>[
+              for (final option in options)
+                DropdownMenuItem<String>(
+                  key: ValueKey<String>('ext-card-choice-${option.value}'),
+                  value: option.value,
+                  enabled: option.enabled,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        WholeWordText(
+                          option.label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: option.enabled
+                                ? AssistantColors.textStrong
+                                : AssistantColors.muted,
+                          ),
+                        ),
+                        if (option.disabledReason case final String reason)
+                          WholeWordText(
+                            reason,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AssistantColors.muted,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+            onChanged: onChanged == null
+                ? null
+                : (String? v) {
+                    if (v != null) onChanged!(v);
+                  },
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Поле ссылки загрузчика: Inter, одна строка, без автоисправлений.

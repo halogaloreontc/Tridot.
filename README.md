@@ -91,6 +91,8 @@ Platform runners для Android, Windows, Linux и macOS уже находятс
 
 Сейф паролей (ADR-014, ADR-025: защита ключом устройства и кодом восстановления, ПИН-код и вход по отпечатку / Face ID — по желанию; на Android ключ в Android Keystore, на Windows — под DPAPI, на macOS и Linux — честный запасной вариант файлом в папке приложения) использует libsodium через пакет `sodium` 4.x. Системная libsodium не нужна: build-хук пакета собирает её из исходников, вложенных в пакет, при первом `flutter test`, `flutter run`, `flutter build` или `dart run` (около полуминуты, дальше из кэша `.dart_tool`). Для этого нужен компилятор C и `make`: на Linux и macOS они уже есть вместе с инструментами выше (на чистом Ubuntu — `sudo apt-get install -y build-essential`, на раннере GitHub Actions `ubuntu-latest` есть из коробки), на Windows — Visual Studio с C++; сборка Android на Windows дополнительно требует bash (не из WSL), см. README пакета `sodium`.
 
+Конвертер звука и видео на Android и macOS (ADR-026) кодирует MP3 встроенным LAME 3.100 (LGPL-2.0-or-later): исходники лежат в `packages/tridot_lame`, его build-хук так же сам собирает из них разделяемую библиотеку `libtridot_mp3` для Android, macOS и Linux (на Linux она нужна только тестам). Нужен тот же компилятор C. Swift-часть для macOS (`macos/Runner/MediaChannel.swift`, `MediaPipelines.swift`) собирается только в Xcode на Mac.
+
 ## Первый запуск
 
 Клонирование и запуск из корня проекта:
