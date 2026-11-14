@@ -29,6 +29,11 @@ IconData commandIcon(String name) => switch (name) {
       'backup' => Icons.backup_outlined,
       'restore' => Icons.restore,
       'storage' => Icons.storage_outlined,
+      'zip' => Icons.folder_zip_outlined,
+      'unzip' => Icons.unarchive_outlined,
+      'convert' => Icons.transform,
+      'download' => Icons.download_outlined,
+      'list' => Icons.list_alt,
       _ => Icons.bolt,
     };
 

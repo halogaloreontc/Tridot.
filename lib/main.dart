@@ -7,11 +7,16 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'app/assistant_theme.dart';
+import 'app/extensions/tool_kit.dart';
+import 'app/extensions/ytdl_kit.dart';
+import 'app/files/file_opener.dart';
+import 'app/jobs/job_picker.dart';
 import 'app/home_page.dart';
 import 'app/passwords/passwords_kit.dart';
 import 'app/voice/voice_kit.dart';
 import 'app/voice/vosk_voice_recognizer.dart';
 import 'core/app_info.dart';
+import 'core/build_flags.dart';
 import 'core/chats/chat_store.dart';
 import 'core/connectors/connector.dart';
 import 'core/connectors/file_secret_store.dart';
@@ -22,6 +27,8 @@ import 'core/connectors/manifest/connection_slots.dart';
 import 'core/connectors/tasks_connector.dart';
 import 'core/downloads/verified_download.dart';
 import 'core/extensions/extension_registry.dart';
+import 'core/extensions/tools/tool_spec.dart';
+import 'core/jobs/extension_card.dart';
 import 'core/passwords/vault.dart';
 import 'core/passwords/vault_crypto.dart';
 import 'core/passwords/vault_store.dart';
@@ -30,10 +37,14 @@ import 'core/scenario/scenario_parser.dart';
 import 'core/services/clock.dart';
 import 'core/services/task_service.dart';
 import 'core/settings/app_settings.dart';
+import 'core/skills/archiver/archiver_connector.dart';
 import 'core/skills/calculator/calculator_connector.dart';
+import 'core/skills/converter/converter_connector.dart';
 import 'core/skills/data/data_connector.dart';
 import 'core/skills/passwords/passwords_connector.dart';
 import 'core/skills/talk/talk_connector.dart';
+import 'core/skills/ytdl/ytdl_connector.dart';
+import 'core/skills/ytdl/ytdl_unavailable.dart';
 import 'core/storage/json_task_repository.dart';
 import 'core/storage/storage_info.dart';
 import 'core/voice/voice_model.dart';
@@ -64,7 +75,17 @@ Future<void> main() async {
       <String>['Vosk', 'Kaldi', 'OpenFST', 'OpenBLAS'],
       voice,
     );
+    // Расширения (ADR-024): ffmpeg (LGPL, с libmp3lame) и yt-dlp
+    // скачиваются по кнопке, в приложение не встроены.
+    final tools = await rootBundle.loadString('assets/extensions/NOTICE.txt');
+    yield LicenseEntryWithLineBreaks(
+      <String>['FFmpeg', 'LAME', 'image', if (!kPlayBuild) 'yt-dlp'],
+      tools,
+    );
   });
+  // Временные папки задач расширений прошлого запуска (копии вложений из
+  // памяти, результаты в режиме «Только в памяти») больше не нужны.
+  await _dropJobTemp();
   final documents = await getApplicationDocumentsDirectory();
   final folder = p.join(documents.path, 'assistant');
   final tasksPath = p.join(folder, 'tasks.json');
@@ -112,6 +133,47 @@ Future<void> main() async {
   // Навыки и подключения регистрируются здесь; порядок важен только при
   // равной уверенности (тогда маршрутизатор всё равно переспросит). Что
   // включено — выбор пользователя в «Настройки → Расширения».
+  // ffmpeg для конвертера (ADR-024): только Windows и Linux, скачивается
+  // по кнопке в <поддержка>/assistant/tools/ffmpeg, проверяется по
+  // закреплённой SHA-256.
+  final ffmpegSpec = ToolSpecs.forCurrentPlatform('ffmpeg');
+  final ffmpeg = (Platform.isWindows || Platform.isLinux) &&
+          ffmpegSpec != null &&
+          ffmpegSpec.available
+      ? ToolKit(
+          spec: ffmpegSpec,
+          downloader: IoFileDownloader(
+            allowedRedirectHosts: ffmpegSpec.redirectHosts,
+          ),
+          dir: p.join(support.path, 'assistant', 'tools', 'ffmpeg'),
+        )
+      : null;
+  await ffmpeg?.refresh();
+  final converterEnvironment = _ConverterEnvironment(ffmpeg);
+  // Загрузчик видео (ADR-024, шаг 3): только Windows и Linux и не в сборке
+  // для Google Play (`--dart-define=TRIDOT_STORE=play`): там его код
+  // выбрасывается как недостижимый. yt-dlp скачивается по кнопке в
+  // <поддержка>/assistant/tools/ytdlp, проверяется по закреплённой
+  // SHA-256.
+  YtdlKit? ytdl;
+  if (!kPlayBuild && ytdlSupported(currentJobPlatform())) {
+    final ytdlpSpec = ToolSpecs.forCurrentPlatform('ytdlp');
+    if (ytdlpSpec != null) {
+      ytdl = YtdlKit(
+        tool: ToolKit(
+          spec: ytdlpSpec,
+          downloader: IoFileDownloader(
+            allowedRedirectHosts: ytdlpSpec.redirectHosts,
+          ),
+          dir: p.join(support.path, 'assistant', 'tools', 'ytdlp'),
+        ),
+        settingsPath: p.join(support.path, 'assistant', 'ytdl.json'),
+        defaultRoot: () async => (await getDownloadsDirectory())?.path,
+      );
+      await ytdl.tool.refresh();
+      await ytdl.load();
+    }
+  }
   final extensions = ExtensionRegistry(
     connectors: <Connector>[
       TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
@@ -128,6 +190,21 @@ Future<void> main() async {
       // «Копию чего: паролей или всех данных?» (решения владельца 3, 5).
       // Включён всегда.
       const DataConnector(),
+      // Архиватор ZIP (ADR-024): расширение, выключено по умолчанию; ведёт
+      // Лиорио. Работа — в отдельном изоляте по кнопке карточки.
+      ArchiverConnector(),
+      // Конвертер (ADR-024, шаг 2): картинки — везде на Dart, звук и
+      // видео — скачиваемым ffmpeg только на Windows и Linux.
+      ConverterConnector(environment: converterEnvironment),
+      // Загрузчик видео: ссылка уходит только в yt-dlp. Где его нет
+      // (Android, macOS, сборка для Google Play), на те же фразы Лиорио
+      // честно отвечает, почему, — без карточки и без ссылки в ответе.
+      if (!kPlayBuild && ytdl != null)
+        YtdlConnector()
+      else
+        YtdlUnavailableConnector(
+          YtdlUnavailableReason.of(currentJobPlatform(), play: kPlayBuild),
+        ),
     ],
     packs: packs,
   );
@@ -146,6 +223,17 @@ Future<void> main() async {
   await voice?.refresh();
   // SecretGuard: при открытом хранилище пароль в чате узнаётся и по
   // отпечатку, без слова «пароль».
+  // «Открыть» у результата архиватора на Android — только файлы из папок
+  // приложения (то же проверяет MainActivity).
+  final opener = Platform.isAndroid
+      ? FileOpener(
+          platform: JobPlatform.android,
+          allowedRoots: <String>[
+            folder,
+            (await getTemporaryDirectory()).path,
+          ],
+        )
+      : null;
   final assistant = AssistantController(
     extensions: extensions,
     clock: clock,
@@ -162,8 +250,36 @@ Future<void> main() async {
       connections: connections,
       passwords: passwords,
       voice: voice,
+      fileOpener: opener,
+      ffmpeg: ffmpeg,
+      ytdl: ytdl,
     ),
   );
+}
+
+/// Платформа и готовность ffmpeg — для текста ответа конвертера.
+final class _ConverterEnvironment implements ConverterEnvironment {
+  _ConverterEnvironment(this.ffmpeg);
+
+  final ToolKit? ffmpeg;
+
+  @override
+  JobPlatform get platform => currentJobPlatform();
+
+  @override
+  bool get ffmpegReady => ffmpeg?.isInstalled ?? false;
+}
+
+/// Удаляет `<временная папка>/tridot-jobs` целиком; ошибки — молча.
+Future<void> _dropJobTemp() async {
+  try {
+    final temp = await getTemporaryDirectory();
+    final jobs = Directory(p.join(temp.path, 'tridot-jobs'));
+    if (await jobs.exists()) await jobs.delete(recursive: true);
+    if (Platform.isAndroid) await dropPickerLeftovers(temp);
+  } on Object {
+    // Не вышло — уберём при следующем запуске.
+  }
 }
 
 /// Хранилище паролей или `null`, если libsodium недоступна.
@@ -219,6 +335,9 @@ final class AssistantApp extends StatelessWidget {
     this.connections = const <ConnectionService>[],
     this.passwords,
     this.voice,
+    this.fileOpener,
+    this.ffmpeg,
+    this.ytdl,
   });
 
   final AssistantController assistant;
@@ -236,6 +355,15 @@ final class AssistantApp extends StatelessWidget {
 
   /// Голосовой ввод; `null` — платформа без движка распознавания.
   final VoiceKit? voice;
+
+  /// «Открыть» у результата карточки расширения; `null` — по умолчанию.
+  final FileOpener? fileOpener;
+
+  /// ffmpeg конвертера; `null` — платформа без него.
+  final ToolKit? ffmpeg;
+
+  /// Загрузчик видео; `null` — нет в этой сборке или на платформе.
+  final YtdlKit? ytdl;
 
   @override
   Widget build(BuildContext context) {
@@ -255,6 +383,9 @@ final class AssistantApp extends StatelessWidget {
         connections: connections,
         passwords: passwords,
         voice: voice,
+        fileOpener: fileOpener,
+        ffmpeg: ffmpeg,
+        ytdl: ytdl,
       ),
     );
   }

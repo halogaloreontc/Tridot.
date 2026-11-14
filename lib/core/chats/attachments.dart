@@ -150,9 +150,25 @@ final class ChatAttachment {
     );
   }
 
-  /// `files/<папка>/<файл>`: три части, без «..», без обратной черты.
+  /// `files/<папка>/<файл>`: три части, без «..», без обратной черты. Или
+  /// результат карточки расширения: `files/<папка>/out/<id карточки>/…` —
+  /// имена внутри могут быть любыми, кроме `.`, `..`, управляющих знаков и
+  /// обратной черты.
   static bool isSafePath(String path) {
     final parts = path.split('/');
+    if (parts.length >= 5 &&
+        parts[2] == AttachmentStore.outFolder &&
+        _safeParts(parts.sublist(0, 4))) {
+      return parts.first == AttachmentStore.folder &&
+          parts.skip(4).every(
+                (String part) =>
+                    part.isNotEmpty &&
+                    part != '.' &&
+                    part != '..' &&
+                    !part.contains('\\') &&
+                    !RegExp(r'[\u0000-\u001f\u007f]').hasMatch(part),
+              );
+    }
     return parts.length == 3 &&
         parts.first == AttachmentStore.folder &&
         parts.every(
@@ -163,6 +179,14 @@ final class ChatAttachment {
               RegExp(r'^[A-Za-z0-9_.-]+$').hasMatch(part),
         );
   }
+
+  static bool _safeParts(List<String> parts) => parts.every(
+        (String part) =>
+            part.isNotEmpty &&
+            part != '.' &&
+            part != '..' &&
+            RegExp(r'^[A-Za-z0-9_.-]+$').hasMatch(part),
+      );
 
   /// Имя для показа: без управляющих знаков, пробелы схлопнуты, не длиннее
   /// [nameLimit] знаков. Пустое — «файл».
@@ -249,6 +273,11 @@ abstract interface class AttachmentStore {
   /// Сколько файлов можно прикрепить к одному сообщению.
   static const int maxPerMessage = 10;
 
+  /// Папка результатов карточек расширений внутри папки сессии:
+  /// `files/<сессия>/out/<id карточки>/`. Предела [maxBytes] у неё нет —
+  /// действуют пределы задачи.
+  static const String outFolder = 'out';
+
   /// Файлы переживают перезапуск (на диске), а не только в памяти.
   bool get persistent;
 
@@ -267,6 +296,18 @@ abstract interface class AttachmentStore {
   /// Полный путь копии на диске; `null` — хранилище в памяти.
   String? pathOf(ChatAttachment attachment);
 
+  /// Полный путь вложения по его относительному пути [relative]
+  /// (`files/<сессия>/<файл>`); `null` — хранилище в памяти или путь не
+  /// из папки вложений.
+  String? pathOfRelative(String relative);
+
+  /// Содержимое вложения по относительному пути (хранилище в памяти).
+  Uint8List? bytesOfRelative(String relative);
+
+  /// Папка результата карточки [cardId] в сессии [chatId] на диске
+  /// (`files/<сессия>/out/<id>`); `null` — хранилище в памяти.
+  String? outputDir(String chatId, String cardId);
+
   /// Содержимое копии в памяти; `null` — копия на диске или её нет.
   Uint8List? bytesOf(ChatAttachment attachment);
 
@@ -280,7 +321,9 @@ abstract interface class AttachmentStore {
   Future<void> clearAll();
 
   /// Стереть файлы чата [chatId], на которые не ссылается ни одно
-  /// сообщение: [live] — пути живых вложений.
+  /// сообщение: [live] — пути живых вложений и папок результатов карточек
+  /// (`files/<сессия>/out/<id>`); папка результата без ссылки удаляется
+  /// целиком.
   Future<void> sweep(String chatId, Set<String> live);
 }
 
@@ -301,6 +344,11 @@ abstract final class AttachmentPaths {
     final safe = RegExp(r'^[a-z0-9]{1,8}$').hasMatch(ext) ? '.$ext' : '';
     return '$base$safe';
   }
+
+  /// Папка результата карточки [cardId]: `files/<сессия>/out/<id>`.
+  static String outFolder(String chatId, String cardId) =>
+      '${AttachmentStore.folder}/${chatFolder(chatId)}/'
+      '${AttachmentStore.outFolder}/$cardId';
 
   /// Относительный путь копии.
   static String relative(
@@ -354,6 +402,15 @@ final class InMemoryAttachmentStore implements AttachmentStore {
 
   @override
   String? pathOf(ChatAttachment attachment) => null;
+
+  @override
+  String? pathOfRelative(String relative) => null;
+
+  @override
+  Uint8List? bytesOfRelative(String relative) => _files[relative];
+
+  @override
+  String? outputDir(String chatId, String cardId) => null;
 
   @override
   Uint8List? bytesOf(ChatAttachment attachment) => _files[attachment.path];
@@ -439,6 +496,17 @@ final class IoAttachmentStore implements AttachmentStore {
   String? pathOf(ChatAttachment attachment) => _absolute(attachment.path);
 
   @override
+  String? pathOfRelative(String relative) =>
+      ChatAttachment.isSafePath(relative) ? _absolute(relative) : null;
+
+  @override
+  Uint8List? bytesOfRelative(String relative) => null;
+
+  @override
+  String? outputDir(String chatId, String cardId) =>
+      _absolute(AttachmentPaths.outFolder(chatId, cardId));
+
+  @override
   Uint8List? bytesOf(ChatAttachment attachment) => null;
 
   @override
@@ -472,6 +540,23 @@ final class IoAttachmentStore implements AttachmentStore {
     }
   }
 
+  /// Папки результатов `out/<id>`, на которые не ссылается ни одна
+  /// карточка, удаляются целиком. Возвращает, сколько осталось.
+  Future<int> _sweepOut(Directory out, String prefix, Set<String> live) async {
+    var left = 0;
+    await for (final entity in out.list(followLinks: false)) {
+      final relative =
+          '$prefix${AttachmentStore.outFolder}/${p.basename(entity.path)}';
+      if (entity is Directory && live.contains(relative)) {
+        left++;
+      } else {
+        await entity.delete(recursive: true);
+      }
+    }
+    if (left == 0) await out.delete();
+    return left;
+  }
+
   @override
   Future<void> sweep(String chatId, Set<String> live) async {
     try {
@@ -481,6 +566,11 @@ final class IoAttachmentStore implements AttachmentStore {
           '${AttachmentStore.folder}/${AttachmentPaths.chatFolder(chatId)}/';
       var left = 0;
       await for (final entity in folder.list()) {
+        if (entity is Directory &&
+            p.basename(entity.path) == AttachmentStore.outFolder) {
+          left += await _sweepOut(entity, prefix, live);
+          continue;
+        }
         if (entity is! File) continue;
         final relative = '$prefix${p.basename(entity.path)}';
         // Копия ещё пишется (`<файл>.tmp` ждущего вложения) — не трогать.

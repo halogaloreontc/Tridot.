@@ -204,7 +204,8 @@ final class _VoiceInstallSheetState extends State<_VoiceInstallSheet> {
 }
 
 /// Полоса загрузки: светлая заливка на тёмной дорожке. Цвета по умолчанию
-/// здесь совпадают (дорожка — из `secondary`), и полоса не видна.
+/// здесь совпадают (дорожка — из `secondary`), и полоса не видна. Те же
+/// цвета задаёт всем полосам `progressIndicatorTheme` в [AssistantTheme].
 const Color voiceProgressColor = AssistantColors.primary;
 const Color voiceProgressTrack = AssistantColors.borderSoft;
 

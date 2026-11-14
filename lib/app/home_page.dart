@@ -6,8 +6,10 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show OrdinalSortKey;
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../core/app_info.dart';
+import '../core/build_flags.dart';
 import '../core/chats/attachments.dart';
 import '../core/chats/chat_book.dart';
 import '../core/chats/chat_models.dart';
@@ -22,6 +24,8 @@ import '../core/connectors/login_link.dart';
 import '../core/connectors/manifest/connection_service.dart';
 import '../core/connectors/manifest/connection.dart';
 import '../core/formatting/due_format.dart';
+import '../core/jobs/extension_card.dart';
+import '../core/jobs/job_runner.dart';
 import '../core/models/action_card.dart';
 import '../core/models/bulk.dart';
 import '../core/models/secure_card.dart';
@@ -33,6 +37,12 @@ import '../core/scenario/assistant_controller.dart';
 import '../core/services/clock.dart';
 import '../core/services/task_service.dart';
 import '../core/settings/app_settings.dart';
+import '../core/skills/archiver/zip_ops.dart';
+import '../core/skills/converter/convert_targets.dart';
+import '../core/skills/converter/ffmpeg_job.dart';
+import '../core/skills/converter/image_convert.dart';
+import '../core/skills/ytdl/ytdl_formats.dart';
+import '../core/skills/ytdl/ytdl_job.dart';
 import '../core/skills/passwords/passwords_phrases.dart';
 import '../core/stats/relay_stats.dart';
 import '../core/storage/storage_info.dart';
@@ -40,6 +50,12 @@ import '../core/voice/voice_recognizer.dart';
 import 'assistant_theme.dart';
 import 'attachments/attachment_picker.dart';
 import 'attachments/attachment_views.dart';
+import 'extensions/tool_kit.dart';
+import 'extensions/ytdl_kit.dart';
+import 'files/file_opener.dart';
+import 'jobs/job_cards.dart';
+import 'jobs/job_hub.dart';
+import 'jobs/job_picker.dart';
 import 'passwords/entry_screens.dart';
 import 'passwords/generator_view.dart';
 import 'passwords/passwords_kit.dart';
@@ -135,6 +151,13 @@ final class HomePage extends StatefulWidget {
     this.passwords,
     this.attachmentPicker = const FileSelectorAttachmentPicker(),
     this.voice,
+    this.jobRunner,
+    this.jobPicker = const FileSelectorJobPicker(),
+    this.fileOpener,
+    this.jobPlatform,
+    this.tempRoot,
+    this.ffmpeg,
+    this.ytdl,
   });
 
   final AssistantController assistant;
@@ -161,6 +184,31 @@ final class HomePage extends StatefulWidget {
   /// Голосовой ввод (ADR-023): модель и распознаватель; `null` — на этой
   /// платформе движка нет, микрофон скрыт.
   final VoiceKit? voice;
+
+  /// Исполнитель задач расширений (архиватор); по умолчанию — изоляты.
+  final JobRunner? jobRunner;
+
+  /// Выбор файлов и мест для карточек расширений; в тестах — подделка.
+  final JobFilePicker jobPicker;
+
+  /// «Открыть» и «Открыть папку» у результата; по умолчанию — системные.
+  final FileOpener? fileOpener;
+
+  /// Платформа для карточек расширений; по умолчанию — это устройство.
+  final JobPlatform? jobPlatform;
+
+  /// Временная папка приложения; по умолчанию — path_provider.
+  final Future<String> Function()? tempRoot;
+
+  /// ffmpeg для конвертера (ADR-024): скачивается по кнопке в «Настройки
+  /// → Расширения → Конвертер»; `null` — платформа без ffmpeg (Android,
+  /// macOS), там конвертируются только картинки.
+  final ToolKit? ffmpeg;
+
+  /// Загрузчик видео (ADR-024, шаг 3): yt-dlp и папка загрузок; `null` —
+  /// в этой сборке или на этой платформе загрузчика нет (Android, macOS,
+  /// сборка для Google Play).
+  final YtdlKit? ytdl;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -238,6 +286,70 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// Файлы, выбранные для следующего сообщения (ADR-019).
   final List<_PendingFile> _pendingFiles = <_PendingFile>[];
+
+  /// Задачи расширений (архиватор, конвертер): состояние карточек и их
+  /// сохранение. Картинки и ZIP — в изолятах, звук и видео — процессом
+  /// ffmpeg.
+  late final JobHub _jobHub = JobHub(
+    runner: widget.jobRunner ?? _defaultJobRunner(),
+    persist: (String chatId) {
+      _book.touch(chatId);
+      unawaited(_book.flush());
+    },
+    now: () => _now,
+  );
+
+  JobRunner _defaultJobRunner() {
+    final isolates = IsolateJobRunner(<String, JobWork>{
+      ExtensionForms.archiver: ZipOps.run,
+      ExtensionForms.converter: ConvertOps.run,
+    });
+    final ffmpeg = widget.ffmpeg;
+    final processes = FfmpegJobRunner(
+      ffmpegPath: () async => ffmpeg?.verifiedPath(),
+    );
+    // Загрузчик видео — только вне сборки для Google Play и только там,
+    // где он есть (ADR-024): в сборке для Play его код выбрасывается.
+    final ytdl = kPlayBuild ? null : widget.ytdl;
+    final downloads = ytdl == null
+        ? null
+        : YtdlJobRunner(
+            ytdlpPath: () async => ytdl.tool.verifiedPath(),
+            ffmpegPath: () async => ffmpeg?.verifiedPath(),
+          );
+    return JobRunnerRouter(
+      (JobRequest request) => request.extensionId == ExtensionForms.ytdl
+          ? downloads ?? isolates
+          : ConvertOps.usesFfmpeg(request)
+              ? processes
+              : isolates,
+    );
+  }
+
+  late final JobPlatform _jobPlatform =
+      widget.jobPlatform ?? currentJobPlatform();
+
+  /// Карточки расширений в ленте.
+  late final JobCards _jobCards = JobCards(
+    hub: _jobHub,
+    platform: _jobPlatform,
+    picker: widget.jobPicker,
+    opener: widget.fileOpener ?? FileOpener(platform: _jobPlatform),
+    attachments: () => _book.store.attachments,
+    tools: () => <String>{
+      if (widget.ffmpeg?.isInstalled ?? false) ConvertTargets.ffmpeg,
+      if (widget.ytdl?.tool.isInstalled ?? false) YtdlFormats.tool,
+    },
+    downloadsDir: widget.ytdl == null ? null : () => widget.ytdl!.folder(),
+    // Карточка выключенного расширения остаётся в чате, но не запускается.
+    isEnabled: (String id) => widget.assistant.extensions.isEnabled(id),
+    tempRoot:
+        widget.tempRoot ?? () async => (await getTemporaryDirectory()).path,
+    onFinished: _onJobFinished,
+    onMessage: (String text) {
+      if (mounted) _announce(text);
+    },
+  );
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
 
   /// Команды открытого чата для ↑/↓ в поле ввода: у каждого чата своя
@@ -373,6 +485,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     for (final connection in widget.connections) {
       connection.addSessionListener(_onSessionChanged);
     }
+    _jobHub.addListener(_onJobsChanged);
+    _book.onThreadLoaded = _sweepInterruptedJobs;
+    widget.ffmpeg?.addListener(_onJobsChanged);
+    widget.ytdl?.tool.addListener(_onJobsChanged);
     _settingsReady = _loadSettings();
     _chatsReady = _loadChats();
     _refresh();
@@ -481,6 +597,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    widget.ffmpeg?.removeListener(_onJobsChanged);
+    widget.ytdl?.tool.removeListener(_onJobsChanged);
+    _jobHub
+      ..removeListener(_onJobsChanged)
+      ..dispose();
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     widget.voice?.removeListener(_onVoiceChanged);
     // Уходя, микрофон не оставляем включённым.
@@ -562,6 +683,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// отвечает — выход не держим дольше [_exitFlushLimit].
   @override
   Future<AppExitResponse> didRequestAppExit() async {
+    // Идущие задачи останавливаются: ffmpeg и yt-dlp — отдельные
+    // процессы и без этого работали бы после выхода, а карточка
+    // показывала бы «Прервано». Временные файлы убирает отмена.
+    _jobHub.cancelAll();
     try {
       await widget.passwords?.lifecycle.onExit();
     } on Object {
@@ -598,7 +723,84 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         secureCard: response.secureCard,
         clarification: response.clarification,
         suggestions: response.suggestions,
+        job: response.job,
       );
+
+  // --------------------------------------------------- карточки расширений
+
+  void _onJobsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Задача карточки закончилась: короткое сообщение, если результат
+  /// готов, а чат не на экране.
+  void _onJobFinished(String chatId, ExtensionCard card) {
+    if (!mounted) return;
+    if (card.state == CardState.done &&
+        (chatId != _book.currentId || _section != AppSection.session) &&
+        card.outputs.isNotEmpty) {
+      _announce(
+        widget.assistant.jobDoneNote(
+          card.outputs.first.split(RegExp(r'[/\\]')).last,
+          null,
+          extensionId: card.extensionId,
+        ),
+      );
+    }
+  }
+
+  /// Файлы сессии [chatId] для карточек: из недавних сообщений, новые
+  /// первыми не идут — по порядку.
+  List<JobFile> _sessionFiles(String chatId, {String? skipMessageId}) {
+    final thread = _book.thread(chatId);
+    if (thread == null) return const <JobFile>[];
+    final files = <JobFile>[
+      for (final message in thread.messages)
+        if (message.id != skipMessageId)
+          for (final attachment in message.attachments)
+            JobFile(
+              path: attachment.path,
+              name: attachment.name,
+              attachment: true,
+            ),
+    ];
+    return files.length <= 20 ? files : files.sublist(files.length - 20);
+  }
+
+  /// Чат прочитан с диска: хвосты задач, прерванных перезапуском
+  /// (`.part`, временные папки рядом с исходником), убираются сразу.
+  void _sweepInterruptedJobs(ChatThread thread) {
+    for (final message in thread.messages) {
+      final card = message.job;
+      if (card != null && card.state == CardState.interrupted) {
+        _jobHub.sweepInterrupted(thread.id, card);
+      }
+    }
+  }
+
+  Widget? _jobCard(ChatMessage message) {
+    final card = message.job;
+    if (card == null) return null;
+    final chatId = _book.currentId;
+    return _jobCards.build(
+      chatId,
+      card,
+      busy: _sending,
+      sessionFiles: _sessionFiles(chatId),
+    );
+  }
+
+  /// Карточка расширения из «+» → «Шаблоны команд»: ответ Лиорио с пустой
+  /// формой, без фразы пользователя.
+  void _openForm(String extensionId, [String? action]) {
+    final response = widget.assistant.openForm(extensionId, action: action);
+    if (response == null) return;
+    final chatId = _book.currentId;
+    setState(() {
+      _book.append(chatId, _answer(response));
+    });
+    _scrollToLatest();
+  }
 
   // ------------------------------------------------------------- данные
 
@@ -928,6 +1130,15 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       secret ? shown : text,
       chatTaskId: chatTaskId,
       secretRedacted: secret,
+      attachments: <JobFile>[
+        for (final attachment in attachments)
+          JobFile(
+            path: attachment.path,
+            name: attachment.name,
+            attachment: true,
+          ),
+      ],
+      recentAttachments: _sessionFiles(chatId, skipMessageId: commandId),
     );
     if (!mounted) return;
     // Файлы с непонятным текстом («Смета и эскиз») — подпись к файлам, а
@@ -1236,6 +1447,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             unawaited(_openGenerator());
           case 'pw.add':
             unawaited(_openPasswords(add: true));
+          case 'ext.archiver.zip':
+            _openForm(ExtensionForms.archiver, ExtensionForms.zip);
+          case 'ext.archiver.extract':
+            _openForm(ExtensionForms.archiver, ExtensionForms.extract);
+          case 'ext.archiver.list':
+            _openForm(ExtensionForms.archiver, ExtensionForms.list);
+          case 'ext.converter':
+            _openForm(ExtensionForms.converter);
+          case 'ext.ytdl':
+            if (!kPlayBuild) _openForm(ExtensionForms.ytdl);
         }
     }
   }
@@ -1374,6 +1595,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // Вопрос со списком снимается, отменить прежние массовые изменения
     // из чата больше нельзя.
     widget.assistant.clearConversation();
+    // Задачи удаляемых чатов не работают дальше (ffmpeg, yt-dlp,
+    // распаковка в папку удалённой сессии).
+    _jobHub.cancelAll();
     unawaited(_book.clearAll());
     widget.assistant
       ..forgetChatSelections()
@@ -2511,6 +2735,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           task: thread.kind == ChatKind.task,
         );
         if (!confirmed || !mounted) return;
+        // Задачи удаляемого чата останавливаются: иначе ffmpeg и yt-dlp
+        // работали бы дальше, а распаковка писала бы в папку удалённой
+        // сессии.
+        _jobHub.cancelChat(_book.resolve(thread.id));
         final wasCurrent = await _book.remove(thread.id);
         if (!mounted) return;
         if (_workingChatId == thread.id) {
@@ -3149,6 +3377,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         connections: widget.connections,
         passwords: widget.passwords,
         voice: widget.voice,
+        ffmpeg: widget.ffmpeg,
+        ytdl: widget.ytdl,
         showTitle: false,
         includePersonas: false,
         onOpenStorage: () => unawaited(
@@ -3550,6 +3780,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ) ??
             _actionCard(message, i, lastWithCard) ??
             _secureCard(message) ??
+            _jobCard(message) ??
             _clarifyOptions(message) ??
             (i == latestAnswer ? _suggestionChips(message) : null),
       );

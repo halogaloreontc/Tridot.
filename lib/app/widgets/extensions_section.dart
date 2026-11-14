@@ -1,11 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/app_info.dart';
+import '../../core/build_flags.dart';
 import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/passwords/vault.dart';
 import '../assistant_theme.dart';
+import '../extensions/tool_kit.dart';
+import '../extensions/tool_screen.dart';
+import '../extensions/ytdl_kit.dart';
+import '../extensions/ytdl_settings.dart';
 import '../passwords/passwords_kit.dart';
 import '../passwords/passwords_screen.dart';
 import 'connection_screen.dart';
@@ -31,6 +38,8 @@ class ExtensionsSection extends StatefulWidget {
     required this.onChanged,
     this.connections = const <ConnectionService>[],
     this.passwords,
+    this.ffmpeg,
+    this.ytdl,
   });
 
   final ExtensionRegistry registry;
@@ -40,6 +49,15 @@ class ExtensionsSection extends StatefulWidget {
 
   /// Навык «Пароли»: статус хранилища и «Настроить» — экран «Пароли».
   final PasswordsKit? passwords;
+
+  /// ffmpeg конвертера (ADR-024): статус и «Настроить» — скачать или
+  /// удалить. `null` — платформа без ffmpeg: только картинки.
+  final ToolKit? ffmpeg;
+
+  /// Загрузчик видео (ADR-024, шаг 3): yt-dlp и папка загрузок. `null` —
+  /// загрузчика в этой сборке нет (его плитки тоже нет: навык не
+  /// зарегистрирован).
+  final YtdlKit? ytdl;
 
   @override
   State<ExtensionsSection> createState() => _ExtensionsSectionState();
@@ -54,11 +72,21 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
       connection.addListener(_changed);
     }
     widget.passwords?.addListener(_changed);
+    widget.ffmpeg?.addListener(_changed);
+    widget.ytdl?.tool.addListener(_changed);
   }
 
   @override
   void didUpdateWidget(ExtensionsSection oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.ytdl != widget.ytdl) {
+      oldWidget.ytdl?.tool.removeListener(_changed);
+      widget.ytdl?.tool.addListener(_changed);
+    }
+    if (oldWidget.ffmpeg != widget.ffmpeg) {
+      oldWidget.ffmpeg?.removeListener(_changed);
+      widget.ffmpeg?.addListener(_changed);
+    }
     if (oldWidget.passwords != widget.passwords) {
       oldWidget.passwords?.removeListener(_changed);
       widget.passwords?.addListener(_changed);
@@ -77,6 +105,8 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
 
   @override
   void dispose() {
+    widget.ffmpeg?.removeListener(_changed);
+    widget.ytdl?.tool.removeListener(_changed);
     widget.passwords?.removeListener(_changed);
     widget.registry.removeListener(_changed);
     for (final connection in widget.connections) {
@@ -111,6 +141,105 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
 
   void _changed() {
     if (mounted) setState(() {});
+  }
+
+  /// Id конвертера.
+  static const String _converterId = 'converter';
+
+  /// Статус плитки «Конвертер»: что работает на этой платформе и есть ли
+  /// ffmpeg.
+  String _converterStatus(bool enabled) {
+    final kit = widget.ffmpeg;
+    if (kit == null) {
+      return 'Только картинки на этой платформе: png, jpeg, webp, bmp, gif '
+          '→ png, jpeg';
+    }
+    if (!enabled) return 'Картинки; звук и видео — с ffmpeg';
+    return toolStatus(kit);
+  }
+
+  Future<void> _openTool(ToolKit kit, {bool autoStart = false}) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) =>
+              ToolScreen(kit: kit, autoStart: autoStart),
+        ),
+      );
+
+  /// Id загрузчика видео.
+  static const String _ytdlId = 'ytdl';
+
+  /// Статус плитки «Загрузчик видео».
+  String _ytdlStatus(bool enabled) {
+    final kit = widget.ytdl;
+    if (kit == null) return 'Недоступно на этой платформе';
+    if (!enabled) return 'Ссылка → видео или звук; нужна программа yt-dlp';
+    return toolStatus(kit.tool, copy: ToolCopy.ytdlp);
+  }
+
+  Future<void> _openYtdl(YtdlKit kit, {bool autoStart = false}) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => ToolScreen(
+            kit: kit.tool,
+            autoStart: autoStart,
+            copy: ToolCopy.ytdlp,
+            extra: <Widget>[YtdlFolderSetting(kit: kit)],
+          ),
+        ),
+      );
+
+  /// Переключатель загрузчика: включение — только после предупреждения о
+  /// правилах площадок, затем предложение скачать yt-dlp.
+  ValueChanged<bool>? _ytdlSwitch(ExtensionInfo info) {
+    final base = _switch(info);
+    if (base == null) return null;
+    return (bool value) {
+      if (!value) {
+        base(false);
+        return;
+      }
+      unawaited(() async {
+        final accepted = await showYtdlWarning(context);
+        if (!accepted || !mounted) return;
+        base(true);
+        final kit = widget.ytdl;
+        if (kit == null ||
+            kit.tool.isInstalled ||
+            kit.tool.isBusy ||
+            !kit.tool.spec.available) {
+          return;
+        }
+        final yes = await showToolOffer(
+          context,
+          kit.tool,
+          copy: ToolCopy.ytdlp,
+        );
+        if (yes && mounted) await _openYtdl(kit, autoStart: true);
+      }());
+    };
+  }
+
+  /// Переключатель конвертера: при включении на компьютере без ffmpeg —
+  /// предложение его скачать (с размером и источником).
+  ValueChanged<bool>? _converterSwitch(ExtensionInfo info) {
+    final base = _switch(info);
+    if (base == null) return null;
+    return (bool value) {
+      base(value);
+      final kit = widget.ffmpeg;
+      if (!value ||
+          kit == null ||
+          kit.isInstalled ||
+          kit.isBusy ||
+          !kit.spec.available) {
+        return;
+      }
+      unawaited(() async {
+        final yes = await showToolOffer(context, kit);
+        if (yes && mounted) await _openTool(kit, autoStart: true);
+      }());
+    };
   }
 
   /// Статус сейфа в плитке «Пароли» (раздел 8).
@@ -295,6 +424,32 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
                     ? () => _openPasswords(widget.passwords!)
                     : null,
               )
+            // В сборке для Google Play загрузчика нет (и коннектор не
+            // зарегистрирован): плитка и её код выбрасываются при сборке.
+            else if (!kPlayBuild && info.id == _ytdlId)
+              _ExtensionTile(
+                info: info,
+                enabled: registry.enabledUnder(choice, info),
+                onChanged: _ytdlSwitch(info),
+                status: _roleNote(info) ??
+                    _ytdlStatus(registry.enabledUnder(choice, info)),
+                onConfigure:
+                    registry.enabledUnder(choice, info) && widget.ytdl != null
+                        ? () => _openYtdl(widget.ytdl!)
+                        : null,
+              )
+            else if (info.id == _converterId)
+              _ExtensionTile(
+                info: info,
+                enabled: registry.enabledUnder(choice, info),
+                onChanged: _converterSwitch(info),
+                status: _roleNote(info) ??
+                    _converterStatus(registry.enabledUnder(choice, info)),
+                onConfigure:
+                    registry.enabledUnder(choice, info) && widget.ffmpeg != null
+                        ? () => _openTool(widget.ffmpeg!)
+                        : null,
+              )
             else
               _ExtensionTile(
                 info: info,
@@ -304,6 +459,18 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
                 onRemove: info.kind == ExtensionKind.pack && !info.builtIn
                     ? () => _removePack(info)
                     : null,
+              ),
+          // Чего нет в этой сборке (загрузчик видео на Android): вместо
+          // плитки — приглушённая строка, почему.
+          for (final missing in registry.unavailable)
+            if (missing.kind == kind && missing.description.isNotEmpty)
+              Padding(
+                key: ValueKey<String>('extension-unavailable-${missing.id}'),
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                child: Text(
+                  '${missing.title} — ${missing.description}',
+                  style: metaTextStyle,
+                ),
               ),
         ],
       );

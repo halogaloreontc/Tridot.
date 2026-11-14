@@ -1,6 +1,7 @@
 import 'package:characters/characters.dart';
 
 import 'attachments.dart';
+import '../jobs/extension_card.dart';
 import '../models/action_card.dart';
 import '../models/assistant_types.dart';
 import '../models/bulk.dart';
@@ -91,6 +92,7 @@ final class ChatMessage {
     this.clarification,
     this.suggestions,
     this.attachments = const <ChatAttachment>[],
+    this.job,
   });
 
   /// `m_<микросекунды>_<номер>`: уникален в пределах устройства.
@@ -145,6 +147,11 @@ final class ChatMessage {
   /// файлы не попадают.
   final List<ChatAttachment> attachments;
 
+  /// Карточка-форма расширения под ответом (архиватор): значения полей и
+  /// состояние задачи. После перезапуска задача, которая шла, —
+  /// «Прервано» ([ExtensionCard.fromJson]).
+  final ExtensionCard? job;
+
   bool get fromUser => author == ChatAuthor.user;
 
   /// То же сообщение с другим [id] и ссылкой [link] (копия в чат задачи).
@@ -159,6 +166,7 @@ final class ChatMessage {
         checklist: checklist,
         card: card,
         link: link,
+        job: job,
       );
 
   /// То же сообщение со ссылкой [link].
@@ -177,6 +185,7 @@ final class ChatMessage {
         clarification: clarification,
         suggestions: suggestions,
         attachments: attachments,
+        job: job,
       );
 
   /// То же сообщение с другим текстом [text] (строка о сохранённых файлах
@@ -196,6 +205,7 @@ final class ChatMessage {
         clarification: clarification,
         suggestions: suggestions,
         attachments: attachments,
+        job: job,
       );
 
   /// Пустые поля не пишутся.
@@ -210,6 +220,7 @@ final class ChatMessage {
         if (checklist != null) 'checklist': checklist!.toJson(),
         if (card != null) 'card': card!.toJson(),
         if (link != null) 'link': link!.toJson(),
+        if (job != null) 'job': job!.toJson(),
         if (attachments.isNotEmpty)
           'attachments': <Map<String, Object?>>[
             for (final attachment in attachments) attachment.toJson(),
@@ -252,6 +263,7 @@ final class ChatMessage {
           : null,
       card: json.containsKey('card') ? ActionCard.fromJson(json['card']) : null,
       link: ChatLink.fromJson(json['link']),
+      job: json.containsKey('job') ? ExtensionCard.fromJson(json['job']) : null,
       attachments: files is List
           ? <ChatAttachment>[
               for (final file in files)

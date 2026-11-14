@@ -4,6 +4,7 @@ import '../connectors/connector.dart';
 import '../connectors/login_link.dart';
 import '../connectors/tasks_connector.dart';
 import '../extensions/extension_registry.dart';
+import '../jobs/extension_card.dart';
 import '../models/action_card.dart';
 import '../models/bulk.dart';
 import '../models/secure_card.dart';
@@ -460,6 +461,8 @@ final class AssistantController {
     String? addressee,
     String? chatTaskId,
     bool secretRedacted = false,
+    List<JobFile> attachments = const <JobFile>[],
+    List<JobFile> recentAttachments = const <JobFile>[],
   }) async {
     // Кто ответит и обратились ли по имени — по настройкам на начало
     // сообщения.
@@ -485,6 +488,13 @@ final class AssistantController {
     _messageNo++;
     _inFlight++;
     session.chatTaskId = chatTaskId;
+    // Файлы сообщения и недавних сообщений сессии — только для чтения
+    // навыками-расширениями (карточка архиватора). Фраза с паролем их не
+    // получает: её не получает ни один навык.
+    session
+      ..attachments = secretRedacted ? const <JobFile>[] : attachments
+      ..recentAttachments =
+          secretRedacted ? const <JobFile>[] : recentAttachments;
     if (chatTaskId != null) selectTask(chatTaskId);
     final before = session.pendingConfirmation;
     _answered = null;
@@ -498,6 +508,9 @@ final class AssistantController {
         secretRedacted: secretRedacted,
       );
     } finally {
+      session
+        ..attachments = const <JobFile>[]
+        ..recentAttachments = const <JobFile>[];
       _inFlight--;
       if (_inFlight == 0 && !_chatChangePending) {
         session.projectTag = _viewProjectTag;
@@ -1106,6 +1119,22 @@ final class AssistantController {
       );
     }
     final bestConnector = _ownerOf(candidates, best);
+    // Фраза выключенного расширения («сожми в zip» при выключенном
+    // архиваторе): подсказать, где включить. Только если включённые навыки
+    // не взяли её явно.
+    if (best == null || best.implicit || best.fallback) {
+      final off = _switchedOffOwner(utterance, hideFromNetwork);
+      if (off != null) {
+        session.lastConnectorId = null;
+        _recent = null;
+        return session.reply(
+          'extension.off',
+          values: <String, String>{'name': off.info.title},
+          intent: 'extension.off',
+          status: AssistantStatus.noAction,
+        );
+      }
+    }
     if (best == null || bestConnector == null) {
       session.lastConnectorId = null;
       _recent = null;
@@ -1148,6 +1177,79 @@ final class AssistantController {
 
     _leadByDuty(bestConnector);
     return _run(bestConnector, best);
+  }
+
+  /// Выключенное расширение с подсказкой ([ConnectorInfo.offHint]), которое
+  /// явно узнаёт [utterance], или `null`.
+  Connector? _switchedOffOwner(Utterance utterance, bool hideFromNetwork) {
+    for (final connector in extensions.connectors) {
+      if (!connector.info.offHint || extensions.isEnabled(connector.info.id)) {
+        continue;
+      }
+      if (hideFromNetwork && connector.info.requiresNetwork) continue;
+      try {
+        final match = connector.match(utterance);
+        if (match != null &&
+            !match.implicit &&
+            !match.fallback &&
+            match.confidence >= RoutePolicy.ambiguityFloor) {
+          return connector;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  /// Карточка расширения [extensionId] без фразы — из «+» → «Шаблоны
+  /// команд». Отвечает ведущий расширения ([ExtensionRegistry.ownerFor]).
+  /// Расширение выключено — `extension.off`; нет в сборке — `null`.
+  AssistantResponse? openForm(String extensionId, {String? action}) {
+    final connector = extensions.connectors
+        .where((Connector c) => c.info.id == extensionId)
+        .firstOrNull;
+    if (connector == null) return null;
+    final owner = extensions.ownerFor(extensionId, personas);
+    session
+      ..voice = personas.voiceOf(owner)
+      ..speaker = owner
+      ..personas = personas;
+    if (!extensions.isEnabled(extensionId) || connector is! FormConnector) {
+      return session
+          .reply(
+            'extension.off',
+            values: <String, String>{'name': connector.info.title},
+            intent: 'extension.off',
+            status: AssistantStatus.noAction,
+          )
+          .withPersona(owner.id);
+    }
+    return (connector as FormConnector)
+        .openForm(action, session)
+        .withPersona(owner.id);
+  }
+
+  /// Строка о готовом результате карточки: голосом [personaId], вне счёта
+  /// реплик. [name] — имя результата.
+  /// [extensionId] — чья карточка: у каждого расширения своя запись
+  /// `<id>.done`.
+  String jobDoneNote(
+    String name,
+    String? personaId, {
+    String extensionId = ExtensionForms.archiver,
+  }) {
+    final key = switch (extensionId) {
+      ExtensionForms.converter => 'converter.done',
+      ExtensionForms.ytdl => 'ytdl.done',
+      _ => 'archiver.done',
+    };
+    return speak(
+      Reply(key, <String, String>{'name': name}),
+      personas.cast.byId(personaId),
+      intent: key,
+      countTurn: false,
+    ).message;
   }
 
   /// Переспросить уточняющий вопрос с теми же вариантами.
@@ -1234,6 +1336,7 @@ final class AssistantController {
     final catalog = CommandCatalog.build(
       connectors: connectors,
       passwordActions: false,
+      formActions: false,
     );
     final found = CommandSuggester.suggest(text, catalog, usage: commandUsage);
     // Похожих команд нет (опечатки не видно) — прежний ответ без кнопок:

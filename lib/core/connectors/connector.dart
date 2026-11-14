@@ -1,5 +1,6 @@
 import '../app_info.dart';
 import '../extensions/extension_registry.dart';
+import '../jobs/extension_card.dart';
 import '../models/action_card.dart';
 import '../models/assistant_types.dart';
 import '../models/bulk.dart';
@@ -44,6 +45,8 @@ final class ConnectorInfo {
     this.protectedReplies = const <String>{},
     this.sensitive = false,
     this.chips = const <RoleChip>[],
+    this.offHint = false,
+    this.unavailable = false,
   }) : assert(kind != ExtensionKind.pack, 'Пак — данные, а не коннектор');
 
   /// Автор встроенных расширений.
@@ -104,6 +107,21 @@ final class ConnectorInfo {
   /// включён ([ExtensionRegistry.activeChips]). У навыков ролей кнопки
   /// задаёт роль.
   final List<RoleChip> chips;
+
+  /// Выключенное расширение подсказывает, где его включить: если его
+  /// `match` явно узнаёт фразу, а включённые навыки берут её только без
+  /// маркера или не берут вовсе, ответ — `extension.off` («Архиватор
+  /// выключен — включите в «Настройки → Расширения»»). Фразы у
+  /// включённых навыков он не перехватывает.
+  final bool offHint;
+
+  /// Расширения нет в этой сборке или на этой платформе, а коннектор лишь
+  /// честно говорит об этом на его фразы (загрузчик видео на Android,
+  /// ADR-024). Слушает всегда, как обязательное, но нигде не
+  /// показывается: ни в «Настройки → Расширения» (там вместо плитки —
+  /// приглушённая строка «{title} — {description}», если [description]
+  /// не пуст), ни в «что умеешь», ни в «как дела», ни в каталоге команд.
+  final bool unavailable;
 }
 
 /// Ответ коннектора на вопрос «это твоя фраза?».
@@ -509,6 +527,7 @@ final class AssistantSession {
     ActionCard? card,
     SecureCardRequest? secureCard,
     Clarification? clarification,
+    ExtensionCard? job,
     String? prefix,
   }) =>
       AssistantResponse(
@@ -524,7 +543,16 @@ final class AssistantSession {
         card: card,
         secureCard: secureCard,
         clarification: clarification,
+        job: job,
       );
+
+  /// Файлы, прикреплённые к текущему сообщению (ADR-019), — только для
+  /// чтения: навык-расширение подставляет их в свою карточку. Маршрутизатор
+  /// ставит их в начале сообщения.
+  List<JobFile> attachments = const <JobFile>[];
+
+  /// Файлы недавних сообщений этой сессии (без файлов текущего).
+  List<JobFile> recentAttachments = const <JobFile>[];
 
   SelectedItem? _selection;
 
@@ -606,6 +634,13 @@ final class AssistantSession {
   /// чата, пока открыт чат задачи, и забывает в нём тот же объект
   /// (задачу завершили в её чате — в главном она больше не «её»).
   void Function(String connectorId, String itemId)? onForget;
+}
+
+/// Навык-расширение с карточкой-формой (docs/EXTENSIONS.md): карточку
+/// можно открыть без фразы — из «+» → «Шаблоны команд».
+abstract interface class FormConnector {
+  /// Ответ с пустой карточкой (действие [action], если задано).
+  AssistantResponse openForm(String? action, AssistantSession session);
 }
 
 /// Подключаемый набор команд: задачи, склад, внешнее приложение.

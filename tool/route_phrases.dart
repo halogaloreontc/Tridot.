@@ -40,10 +40,13 @@ import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
+import 'package:local_assistant/core/skills/archiver/archiver_connector.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
+import 'package:local_assistant/core/skills/converter/converter_connector.dart';
 import 'package:local_assistant/core/skills/data/data_connector.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
+import 'package:local_assistant/core/skills/ytdl/ytdl_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
 import '../test/connectors/manifest/fixtures.dart';
@@ -83,6 +86,13 @@ List<Connector> appConnectors(DateTime now) {
     TalkConnector(taskService: tasks),
     PasswordsConnector(),
     const DataConnector(),
+    // Архиватор (ADR-024): в приложении выключен по умолчанию, в корпусном
+    // тесте включён всегда — здесь тоже.
+    ArchiverConnector(),
+    // Конвертер (ADR-024, шаг 2) — так же.
+    ConverterConnector(),
+    // Загрузчик видео (ADR-024, шаг 3) — так же, на любой платформе.
+    YtdlConnector(),
   ];
 }
 

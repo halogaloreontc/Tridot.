@@ -271,6 +271,51 @@ void main() {
     expect(otherRequests, 0);
   });
 
+  test(
+      'переадресация на хост из списка (файлы релизов GitHub) — разрешена, '
+      'на любой другой — отказ', () async {
+    final other = await HttpServer.bind(InternetAddress.anyIPv4, 0);
+    var otherRequests = 0;
+    other.listen((HttpRequest request) async {
+      otherRequests++;
+      request.response.add(server.body);
+      await request.response.close();
+    });
+    addTearDown(() => other.close(force: true));
+    server.redirects['/model.zip'] = 'http://127.0.0.2:${other.port}/model.zip';
+    final listed = IoFileDownloader(
+      allowLoopbackHttp: true,
+      allowedRedirectHosts: const <String>{'127.0.0.2'},
+    );
+    final progress = await listed
+        .download(
+          server.uri,
+          part,
+          expectedBytes: server.body.length,
+          cancel: CancelToken(),
+        )
+        .toList();
+    expect(progress.last.received, server.body.length);
+    expect(otherRequests, 1);
+    await part.delete();
+    final notListed = IoFileDownloader(
+      allowLoopbackHttp: true,
+      allowedRedirectHosts: const <String>{'127.0.0.3'},
+    );
+    await expectLater(
+      notListed
+          .download(
+            server.uri,
+            part,
+            expectedBytes: server.body.length,
+            cancel: CancelToken(),
+          )
+          .toList(),
+      failsWith(DownloadError.network),
+    );
+    expect(otherRequests, 1);
+  });
+
   test('переадресация в пределах сайта — разрешена', () async {
     server.redirects['/model.zip'] = '/mirror/model.zip';
     final progress = await run();

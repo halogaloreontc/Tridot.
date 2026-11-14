@@ -237,4 +237,123 @@ void main() {
   test('не zip — отказ', () async {
     await expectRejected(List<int>.filled(200, 7), 'corrupt');
   });
+
+  group('архиватор (ADR-024): новые параметры', () {
+    test('имена, которые нельзя создать в Windows, — отказ', () async {
+      for (final name in <String>['ab:c.txt', 'CON', 'nul.txt', 'd/x.', 'q?']) {
+        await expectRejected(
+          _zip(<ArchiveFile>[_text(name, 'x')]),
+          'windows_name',
+        );
+      }
+    });
+
+    test('слишком сильное сжатие — отказ (zip-бомба)', () async {
+      final bytes = _zip(<ArchiveFile>[
+        ArchiveFile.bytes('zeros.bin', Uint8List(3 * 1024 * 1024)),
+      ]);
+      final zip = await write(bytes);
+      const limits = ZipLimits(
+        maxEntries: 10,
+        maxTotalBytes: 8 * 1024 * 1024,
+        maxEntryBytes: 8 * 1024 * 1024,
+        maxRatio: 200,
+      );
+      await expectLater(
+        extractZipSafely(zip, dest, limits: limits),
+        throwsA(
+          isA<UnsafeZipException>().having((e) => e.reason, 'reason', 'ratio'),
+        ),
+      );
+      expect(outside(), isEmpty);
+      // Без предела степени сжатия тот же архив распаковывается.
+      final plain = ZipLimits(
+        maxEntries: limits.maxEntries,
+        maxTotalBytes: limits.maxTotalBytes,
+        maxEntryBytes: limits.maxEntryBytes,
+      );
+      await extractZipSafely(zip, dest, limits: plain);
+      expect(File(p.join(dest.path, 'zeros.bin')).lengthSync(), 3 << 20);
+    });
+
+    test('архив с паролем — отказ «password», пароль не нужен', () async {
+      final archive = Archive()..add(_text('a.txt', 'секрет'));
+      final bytes = ZipEncoder(password: 'x').encode(archive);
+      await expectRejected(bytes, 'password');
+    });
+
+    test('ход записи и отмена между записями', () async {
+      final zip = await write(
+        _zip(<ArchiveFile>[_text('a.txt', 'aaa'), _text('b.txt', 'bbbb')]),
+      );
+      final seen = <(int, int)>[];
+      extractZipSafelySync(
+        zip.path,
+        dest.path,
+        limits: _limits,
+        onProgress: (int done, int total) => seen.add((done, total)),
+      );
+      expect(seen.last, (7, 7));
+      final other = Directory(p.join(temp.path, 'out2'));
+      var calls = 0;
+      expect(
+        () => extractZipSafelySync(
+          zip.path,
+          other.path,
+          limits: _limits,
+          cancel: () => ++calls > 1,
+        ),
+        throwsA(
+          isA<UnsafeZipException>()
+              .having((e) => e.reason, 'reason', 'cancelled'),
+        ),
+      );
+    });
+
+    test('только выбранные записи', () async {
+      final zip = await write(
+        _zip(<ArchiveFile>[
+          _text('pkg/bin/tool', 'x'),
+          _text('pkg/doc/readme', 'y'),
+        ]),
+      );
+      await extractZipSafely(
+        zip,
+        dest,
+        limits: _limits,
+        stripRoot: 'pkg',
+        onlyEntries: <String>{'bin/tool'},
+      );
+      expect(File(p.join(dest.path, 'bin', 'tool')).existsSync(), isTrue);
+      expect(File(p.join(dest.path, 'doc', 'readme')).existsSync(), isFalse);
+    });
+
+    test('содержимое без распаковки — с теми же проверками', () async {
+      final zip = await write(
+        _zip(<ArchiveFile>[_text('a/b.txt', 'xx'), _text('c.txt', 'y')]),
+      );
+      final entries = listZipSafely(zip.path, _limits);
+      expect(
+        entries.where((ZipEntryInfo e) => !e.isDirectory).map((e) => e.name),
+        containsAll(<String>['a/b.txt', 'c.txt']),
+      );
+      expect(dest.existsSync(), isFalse);
+      final bad = await write(_zip(<ArchiveFile>[_text('../x', 'x')]));
+      expect(
+        () => listZipSafely(bad.path, _limits),
+        throwsA(isA<UnsafeZipException>()),
+      );
+    });
+
+    test('прежние вызовы для голосовой модели работают как раньше', () async {
+      final zip = await write(
+        _zip(<ArchiveFile>[_text('model/am/final.mdl', 'm')]),
+      );
+      await extractZipSafely(zip, dest, limits: _limits, stripRoot: 'model');
+      expect(
+        File(p.join(dest.path, 'am', 'final.mdl')).readAsStringSync(),
+        'm',
+      );
+    });
+  });
 }

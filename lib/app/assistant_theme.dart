@@ -58,6 +58,14 @@ final class AssistantTheme {
               : AssistantColors.border,
         ),
       ),
+      // Полоса прогресса: светлая заливка на тёмной дорожке. Без этого
+      // Material 3 берёт для дорожки цвет, почти неотличимый от заливки в
+      // тёмной теме, и полоса не видна. Голосовая полоса — те же цвета.
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AssistantColors.primary,
+        linearTrackColor: AssistantColors.borderSoft,
+        linearMinHeight: 4,
+      ),
       snackBarTheme: const SnackBarThemeData(
         // Плавающее уведомление не прячет под собой поле ввода целиком.
         behavior: SnackBarBehavior.floating,

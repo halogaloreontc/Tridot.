@@ -15,10 +15,13 @@ import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/skills/calculator/calculator.dart';
+import 'package:local_assistant/core/skills/archiver/archiver_connector.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
+import 'package:local_assistant/core/skills/converter/converter_connector.dart';
 import 'package:local_assistant/core/skills/data/data_connector.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
+import 'package:local_assistant/core/skills/ytdl/ytdl_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
 import 'connectors/manifest/fixtures.dart';
@@ -169,6 +172,17 @@ final Map<String, Connector Function(DateTime now, bool connected)>
   // пароли — уточняющий вопрос. Совпадения без маркера и ниже порога
   // спора: уступают любой явной фразе.
   DataConnector.id: (DateTime now, bool connected) => const DataConnector(),
+  // Архиватор (ADR-024) выключен по умолчанию, но в корпусе включён
+  // всегда: его фразы («сожми в zip») не должны перехватывать задачи.
+  ArchiverConnector.id: (DateTime now, bool connected) => ArchiverConnector(),
+  // Конвертер (ADR-024, шаг 2) — так же: «переведи 100 долларов в рубли»
+  // и «переведи на английский» остаются не его.
+  ConverterConnector.id: (DateTime now, bool connected) => ConverterConnector(),
+  // Загрузчик видео (ADR-024, шаг 3): в приложении — только Windows и
+  // Linux и не в сборке для Google Play, в корпусе — всегда, на любой
+  // платформе: его фразы («скачай видео …») не должны перехватывать
+  // задачи и конвертер.
+  YtdlConnector.id: (DateTime now, bool connected) => YtdlConnector(),
 };
 
 /// Ответ калькулятора для сравнения с полем `answer`: пример — как его
@@ -361,7 +375,12 @@ final class _Case {
           factory(now, connected),
       ],
       choice: ExtensionChoice(
-        enabled: const <String>{PasswordsConnector.id},
+        enabled: const <String>{
+          PasswordsConnector.id,
+          ArchiverConnector.id,
+          ConverterConnector.id,
+          YtdlConnector.id,
+        },
         enabledRoles: roles,
         disabledRoles: <String>{
           for (final role in Roles.all)

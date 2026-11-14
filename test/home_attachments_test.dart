@@ -163,7 +163,7 @@ void main() {
     expect(answer.fromUser, isFalse);
     expect(answer.text, contains('в этой сессии'));
     expect(answer.text, contains('1 файл'));
-    expect(answer.text, contains('конвертер'));
+    expect(answer.text, contains('сожми в zip'));
     expect(
       find.byKey(
         ValueKey<String>('attachment-preview-${sent.attachments.single.id}'),

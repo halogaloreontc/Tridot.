@@ -14,7 +14,10 @@ import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
+import 'package:local_assistant/core/skills/archiver/archiver_connector.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
+import 'package:local_assistant/core/skills/converter/converter_connector.dart';
+import 'package:local_assistant/core/skills/ytdl/ytdl_connector.dart';
 import 'package:local_assistant/core/skills/data/data_connector.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
@@ -38,6 +41,9 @@ List<Connector> _connectors() => <Connector>[
       TalkConnector(),
       PasswordsConnector(),
       const DataConnector(),
+      ArchiverConnector(),
+      ConverterConnector(),
+      YtdlConnector(),
     ];
 
 ExtensionRegistry _registry({Set<String> disabled = const <String>{}}) =>
@@ -47,6 +53,9 @@ ExtensionRegistry _registry({Set<String> disabled = const <String>{}}) =>
         enabled: <String>{
           PasswordsConnector.id,
           'warehouse',
+          ArchiverConnector.id,
+          ConverterConnector.id,
+          YtdlConnector.id,
         }.difference(disabled),
         disabled: disabled,
         enabledRoles: <String>{for (final role in Roles.all) role.id},
@@ -86,6 +95,7 @@ void main() {
         CommandCategory.warehouse,
         CommandCategory.vault,
         CommandCategory.data,
+        CommandCategory.files,
       ]);
       final ids = catalog.entries.map((CommandEntry e) => e.id).toList();
       expect(ids.toSet(), hasLength(ids.length));
@@ -163,6 +173,84 @@ void main() {
         catalog.top(const <String, int>{}).map((CommandEntry e) => e.id),
         <String>['task.new', 'task.tomorrow10', 'task.list', 'task.project'],
       );
+    });
+
+    test('архиватор: карточки в «Файлах», только пока он включён', () {
+      final on = CommandCatalog.build(connectors: _infos(_registry()));
+      for (final id in <String>[
+        'ext.archiver.zip',
+        'ext.archiver.extract',
+        'ext.archiver.list',
+      ]) {
+        final entry = on.byId(id);
+        expect(entry?.kind, CommandKind.action, reason: id);
+        expect(entry?.category, CommandCategory.files, reason: id);
+        expect(CommandCatalog.knownIds, contains(id));
+      }
+      // Без сейфа (нет libsodium) карточки архиватора остаются.
+      final noVault = CommandCatalog.build(
+        connectors: _infos(_registry()),
+        passwordActions: false,
+      );
+      expect(noVault.byId('ext.archiver.zip'), isNotNull);
+      expect(noVault.byId('pw.open'), isNull);
+      // Подсказка «не понял» действий не предлагает.
+      final noForms = CommandCatalog.build(
+        connectors: _infos(_registry()),
+        formActions: false,
+      );
+      expect(noForms.byId('ext.archiver.zip'), isNull);
+      final off = CommandCatalog.build(
+        connectors: _infos(
+          _registry(
+            disabled: <String>{
+              ArchiverConnector.id,
+              ConverterConnector.id,
+              YtdlConnector.id,
+            },
+          ),
+        ),
+      );
+      expect(off.byId('ext.archiver.zip'), isNull);
+      expect(off.grouped.keys, isNot(contains(CommandCategory.files)));
+    });
+
+    test('конвертер: карточка в «Файлах», только пока он включён', () {
+      final on = CommandCatalog.build(connectors: _infos(_registry()));
+      final entry = on.byId('ext.converter');
+      expect(entry?.kind, CommandKind.action);
+      expect(entry?.category, CommandCategory.files);
+      expect(CommandCatalog.knownIds, contains('ext.converter'));
+      // Примеры известного навыка не дублируются в «Другом».
+      expect(
+        on.entries.where((CommandEntry e) => e.connectorId == 'converter'),
+        hasLength(1),
+      );
+      final off = CommandCatalog.build(
+        connectors: _infos(
+          _registry(disabled: <String>{ConverterConnector.id}),
+        ),
+      );
+      expect(off.byId('ext.converter'), isNull);
+      expect(off.byId('ext.archiver.zip'), isNotNull);
+    });
+
+    test('загрузчик видео: карточка в «Файлах», только пока он включён', () {
+      final on = CommandCatalog.build(connectors: _infos(_registry()));
+      final entry = on.byId('ext.ytdl');
+      expect(entry?.kind, CommandKind.action);
+      expect(entry?.category, CommandCategory.files);
+      expect(entry?.label, 'Скачать видео по ссылке');
+      expect(CommandCatalog.knownIds, contains('ext.ytdl'));
+      expect(
+        on.entries.where((CommandEntry e) => e.connectorId == 'ytdl'),
+        hasLength(1),
+      );
+      final off = CommandCatalog.build(
+        connectors: _infos(_registry(disabled: <String>{YtdlConnector.id})),
+      );
+      expect(off.byId('ext.ytdl'), isNull);
+      expect(off.byId('ext.converter'), isNotNull);
     });
 
     test('без выбранной задачи нет команд о ней', () {

@@ -92,7 +92,9 @@ abstract interface class FileDownloader {
 /// [FileDownloader] на `dart:io` `HttpClient`.
 ///
 /// Только https; не больше [maxRedirects] переадресаций, только на https
-/// и только на тот же сайт.
+/// и только на тот же сайт — или на хост из явного списка
+/// [allowedRedirectHosts] (точное совпадение имени: так GitHub отдаёт файлы
+/// релизов с `release-assets.githubusercontent.com`).
 /// `Range` для продолжения: 206 — дописываем, 200 — сервер не умеет
 /// продолжать, начинаем заново. Больше [download.expectedBytes] не пишется
 /// ни байта. Ни адрес, ни ответ в журнал не пишутся.
@@ -101,7 +103,12 @@ final class IoFileDownloader implements FileDownloader {
     HttpClient Function()? client,
     this.allowLoopbackHttp = false,
     this.idleTimeout = const Duration(seconds: 60),
+    this.allowedRedirectHosts = const <String>{},
   }) : _client = client ?? HttpClient.new;
+
+  /// Хосты, на которые разрешена переадресация кроме того же сайта:
+  /// только точные имена строчными, без масок.
+  final Set<String> allowedRedirectHosts;
 
   final HttpClient Function() _client;
 
@@ -273,7 +280,10 @@ final class IoFileDownloader implements FileDownloader {
   ) async {
     var current = uri;
     for (var hop = 0; hop <= maxRedirects; hop++) {
-      if (!_allowed(current) || !_sameSite(uri, current)) {
+      if (!_allowed(current) ||
+          !(_sameSite(uri, current) ||
+              (hop > 0 &&
+                  allowedRedirectHosts.contains(current.host.toLowerCase())))) {
         throw const DownloadException(DownloadError.network);
       }
       final request = await client.getUrl(current);

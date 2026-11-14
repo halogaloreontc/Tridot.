@@ -139,6 +139,11 @@ final class ChatBook {
 
   ChatStore get store => _store;
 
+  /// Сообщения чата прочитаны с диска: здесь интерфейс убирает хвосты
+  /// задач, прерванных перезапуском (карточки «Прервано»), — сразу, а не
+  /// когда карточку прокрутят до экрана.
+  void Function(ChatThread thread)? onThreadLoaded;
+
   /// Чаты прочитаны ([load] закончился).
   bool get loaded => _loaded;
 
@@ -431,6 +436,7 @@ final class ChatBook {
         thread.ownTalk = ChatThread.hasOwnTalk(thread.messages);
       }
       _loading.remove(thread.id);
+      if (stored.isNotEmpty) onThreadLoaded?.call(thread);
     });
   }
 
@@ -1337,9 +1343,10 @@ final class ChatBook {
   void _trim(ChatThread thread) {
     final extra = thread.messages.length - ChatStore.maxMessages;
     if (extra <= 0) return;
-    final dropped = thread.messages
-        .take(extra)
-        .any((ChatMessage m) => m.attachments.isNotEmpty);
+    // Файлы — вложения и папки результатов карточек расширений.
+    final dropped = thread.messages.take(extra).any(
+          (ChatMessage m) => m.attachments.isNotEmpty || m.job != null,
+        );
     thread.messages.removeRange(0, extra);
     // Файлы обрезанных сообщений больше не нужны.
     if (dropped) _sweep(thread);
@@ -1349,12 +1356,21 @@ final class ChatBook {
   /// сообщение (и которые не ждут своего сообщения, [attach]).
   void _sweep(ChatThread thread) {
     final live = <String>{
-      for (final message in thread.messages)
-        for (final attachment in message.attachments) attachment.path,
+      ..._liveFiles(thread),
       ...?_pendingFiles[thread.id],
     };
     unawaited(_store.attachments.sweep(thread.id, live));
   }
+
+  /// Пути, на которые ссылаются сообщения чата: вложения и папки
+  /// результатов карточек расширений (`files/<сессия>/out/<id>`).
+  static Set<String> _liveFiles(ChatThread thread) => <String>{
+        for (final message in thread.messages) ...<String>[
+          for (final attachment in message.attachments) attachment.path,
+          if (message.job case final job?)
+            AttachmentPaths.outFolder(thread.id, job.id),
+        ],
+      };
 
   /// Скопировать файлы [files] (источник и имя для показа, уже без
   /// секретов) в папку чата [chatId] для сообщения [messageId] (ADR-019).
@@ -1427,9 +1443,7 @@ final class ChatBook {
     }
     final thread = _chats[id];
     final live = <String>{
-      if (thread != null)
-        for (final message in thread.messages)
-          for (final attachment in message.attachments) attachment.path,
+      if (thread != null) ..._liveFiles(thread),
       ...?_pendingFiles[id],
     };
     return _store.attachments.sweep(id, live);

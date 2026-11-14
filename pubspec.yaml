@@ -27,6 +27,9 @@ dependencies:
   archive: 4.6.0
   ffi: 2.2.0
   record: 7.2.0
+  # Конвертер картинок (ADR-024, шаг 2): png/jpeg/webp/bmp/gif → png/jpeg
+  # на чистом Dart, в отдельном изоляте. MIT; версия закреплена.
+  image: 4.12.0
 
 dev_dependencies:
   flutter_test:
@@ -56,6 +59,8 @@ flutter:
     # Голосовой ввод (ADR-023): лицензии Vosk, Kaldi, OpenFST, OpenBLAS и
     # модели vosk-model-small-ru (модель скачивается, а не встроена).
     - assets/voice/NOTICE.txt
+    # Конвертер (ADR-024): лицензии скачиваемого ffmpeg (LGPL, libmp3lame).
+    - assets/extensions/NOTICE.txt
   fonts:
     - family: Inter
       fonts:

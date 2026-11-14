@@ -348,8 +348,13 @@ final class TalkConnector implements Connector, ConnectorHealth {
   Future<(List<String>, List<String>, List<String>)> _problems(
     AssistantSession session,
   ) async {
-    final connectors =
-        session.extensions?.enabledConnectors ?? const <Connector>[];
+    // Недоступное в сборке ([ConnectorInfo.unavailable]) не проверяется
+    // и не рекламируется.
+    final connectors = <Connector>[
+      for (final connector
+          in session.extensions?.enabledConnectors ?? const <Connector>[])
+        if (!connector.info.unavailable) connector,
+    ];
     final now = session.clock.now();
     final checked = <Connector>[
       for (final connector in connectors)
@@ -621,8 +626,13 @@ final class TalkConnector implements Connector, ConnectorHealth {
   /// Только включённые навыки и подключения, по одному примеру: выключенное
   /// не рекламируется.
   AssistantResponse _capabilities(AssistantSession session, String command) {
-    final connectors =
-        session.extensions?.enabledConnectors ?? const <Connector>[];
+    // Недоступное в сборке ([ConnectorInfo.unavailable]) не проверяется
+    // и не рекламируется.
+    final connectors = <Connector>[
+      for (final connector
+          in session.extensions?.enabledConnectors ?? const <Connector>[])
+        if (!connector.info.unavailable) connector,
+    ];
     String title(Connector c) => c.info.title;
     final items = <String>[
       for (final connector in connectors)

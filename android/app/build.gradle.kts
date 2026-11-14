@@ -80,6 +80,11 @@ flutter {
 }
 
 dependencies {
+    // FileProvider для «Открыть» у результата архиватора (ADR-024).
+    implementation("androidx.core:core:1.13.1")
+}
+
+dependencies {
     // Голосовой ввод (ADR-023): только libvosk.so (Apache-2.0), вызывается из
     // Dart через dart:ffi (lib/core/voice/vosk_ffi.dart). «@aar» — без
     // транзитивных зависимостей: JNA и Java-классы Vosk не нужны.

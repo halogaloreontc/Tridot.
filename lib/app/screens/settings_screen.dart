@@ -5,6 +5,8 @@ import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
+import '../extensions/tool_kit.dart';
+import '../extensions/ytdl_kit.dart';
 import '../passwords/passwords_kit.dart';
 import '../voice/voice_kit.dart';
 import '../voice/voice_views.dart';
@@ -30,6 +32,8 @@ class SettingsScreen extends StatelessWidget {
     this.includePersonas = true,
     this.onOpenStorage,
     this.voice,
+    this.ffmpeg,
+    this.ytdl,
   });
 
   /// Заголовок «Настройки» над экраном.
@@ -61,6 +65,12 @@ class SettingsScreen extends StatelessWidget {
   /// Голосовой ввод (ADR-023); `null` — на этой платформе его нет, раздел
   /// только сообщает об этом.
   final VoiceKit? voice;
+
+  /// ffmpeg конвертера: «Настроить» в плитке «Конвертер».
+  final ToolKit? ffmpeg;
+
+  /// Загрузчик видео: «Настроить» в плитке «Загрузчик видео».
+  final YtdlKit? ytdl;
 
   static const applicationName = AppInfo.name;
 
@@ -163,6 +173,8 @@ class SettingsScreen extends StatelessWidget {
                   onChanged: onChanged,
                   connections: connections,
                   passwords: passwords,
+                  ffmpeg: ffmpeg,
+                  ytdl: ytdl,
                 ),
               const SectionLabel('Сессии'),
               Padding(

@@ -94,12 +94,22 @@ final class ExtensionRegistry {
 
   ExtensionChoice get choice => _choice;
 
-  /// Навыки, подключения и паки — для экрана настроек.
+  /// Навыки, подключения и паки — для экрана настроек. Недоступные в
+  /// этой сборке ([ConnectorInfo.unavailable]) — не здесь, а в
+  /// [unavailable].
   List<ExtensionInfo> get all => <ExtensionInfo>[
         for (final connector in _connectors)
-          ExtensionInfo.fromConnector(connector.info),
+          if (!connector.info.unavailable)
+            ExtensionInfo.fromConnector(connector.info),
         for (final installed in packs.packs)
           ExtensionInfo.fromPack(installed.pack, builtIn: installed.builtIn),
+      ];
+
+  /// Расширения, которых нет в этой сборке: их коннекторы только
+  /// объясняют это ([ConnectorInfo.unavailable]).
+  List<ConnectorInfo> get unavailable => <ConnectorInfo>[
+        for (final connector in _connectors)
+          if (connector.info.unavailable) connector.info,
       ];
 
   List<ExtensionInfo> ofKind(ExtensionKind kind) =>
@@ -270,12 +280,15 @@ final class ExtensionRegistry {
   // ------------------------------------------------------------------
 
   /// Включённые навыки и подключения: только их спрашивает маршрутизатор.
+  /// Недоступное в сборке ([ConnectorInfo.unavailable]) слушает всегда:
+  /// на свои фразы оно честно отвечает, что его здесь нет.
   List<Connector> get enabledConnectors => <Connector>[
         for (final connector in _connectors)
-          if (enabledUnder(
-            _choice,
-            ExtensionInfo.fromConnector(connector.info),
-          ))
+          if (connector.info.unavailable ||
+              enabledUnder(
+                _choice,
+                ExtensionInfo.fromConnector(connector.info),
+              ))
             connector,
       ];
 

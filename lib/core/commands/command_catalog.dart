@@ -8,6 +8,7 @@
 /// пользователь потом допишет, не хранится и не считается.
 library;
 
+import '../build_flags.dart';
 import '../chats/chat_search.dart';
 import '../connectors/connector.dart';
 
@@ -20,6 +21,7 @@ enum CommandCategory {
   warehouse('Склад'),
   vault('Сейф'),
   data('Данные'),
+  files('Файлы'),
   other('Другое');
 
   const CommandCategory(this.label);
@@ -32,8 +34,8 @@ enum CommandKind {
   /// Вставить [CommandEntry.template] в поле ввода; `|` — место курсора.
   insert,
 
-  /// Действие интерфейса (открыть сейф, генератор): ничего не вставляет.
-  /// Какое — решает интерфейс по [CommandEntry.id].
+  /// Действие интерфейса (открыть сейф, генератор, карточку архиватора):
+  /// ничего не вставляет. Какое — решает интерфейс по [CommandEntry.id].
   action,
 }
 
@@ -97,21 +99,28 @@ final class CommandCatalog {
   /// активная задача: тогда есть и команды о ней («Перенести выбранную»).
   /// [projectTag] — метка папки проекта, в сессии которого открыт ввод
   /// (ADR-018): «Задача в проект» сразу подставит её. [passwordActions] —
-  /// интерфейс умеет открывать сейф и генератор.
+  /// интерфейс умеет открывать сейф и генератор. [formActions] —
+  /// интерфейс умеет открывать карточки расширений (архиватор).
   factory CommandCatalog.build({
     required Iterable<ConnectorInfo> connectors,
     bool hasSelection = false,
     String? projectTag,
     bool passwordActions = true,
+    bool formActions = true,
   }) {
+    // Недоступное в сборке ([ConnectorInfo.unavailable]) команд не даёт.
     final enabled = <String, ConnectorInfo>{
-      for (final info in connectors) info.id: info,
+      for (final info in connectors)
+        if (!info.unavailable) info.id: info,
     };
     final entries = <CommandEntry>[
       for (final entry in curated)
         if (enabled.containsKey(entry.connectorId))
           if (!entry.needsSelection || hasSelection)
-            if (entry.kind != CommandKind.action || passwordActions)
+            if (entry.kind != CommandKind.action ||
+                (entry.connectorId == 'passwords'
+                    ? passwordActions
+                    : formActions))
               _withProject(entry, projectTag),
       // Навыки и подключения, о которых каталог ничего не знает (новые
       // расширения): их примеры — готовые команды в «Другом».
@@ -475,6 +484,54 @@ final class CommandCatalog {
       connectorId: 'passwords',
       iconName: 'lock',
     ),
+    // ------------------------------------------------------------ Файлы
+    // Карточки архиватора (docs/PLANS.md, «Карточки-формы»): форма
+    // открывается сразу, без фразы.
+    CommandEntry(
+      id: 'ext.archiver.zip',
+      category: CommandCategory.files,
+      label: 'Сжать в ZIP',
+      kind: CommandKind.action,
+      connectorId: 'archiver',
+      iconName: 'zip',
+    ),
+    CommandEntry(
+      id: 'ext.archiver.extract',
+      category: CommandCategory.files,
+      label: 'Распаковать ZIP',
+      kind: CommandKind.action,
+      connectorId: 'archiver',
+      iconName: 'unzip',
+    ),
+    CommandEntry(
+      id: 'ext.archiver.list',
+      category: CommandCategory.files,
+      label: 'Что внутри ZIP',
+      kind: CommandKind.action,
+      connectorId: 'archiver',
+      iconName: 'list',
+    ),
+    // Карточка конвертера: файл → формат → «Запустить».
+    CommandEntry(
+      id: 'ext.converter',
+      category: CommandCategory.files,
+      label: 'Сконвертировать файл',
+      kind: CommandKind.action,
+      connectorId: 'converter',
+      iconName: 'convert',
+    ),
+    // Карточка загрузчика видео: ссылка → что скачать → «Скачать». Есть
+    // только там, где загрузчик зарегистрирован (Windows, Linux, не
+    // сборка для Google Play).
+    if (!kPlayBuild)
+      CommandEntry(
+        id: 'ext.ytdl',
+        category: CommandCategory.files,
+        label: 'Скачать видео по ссылке',
+        kind: CommandKind.action,
+        connectorId: 'ytdl',
+        iconName: 'download',
+      ),
     // ----------------------------------------------------------- Данные
     CommandEntry(
       id: 'data.backup',

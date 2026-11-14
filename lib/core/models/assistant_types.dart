@@ -1,4 +1,5 @@
 import '../commands/command_suggest.dart';
+import '../jobs/extension_card.dart';
 import '../personas/persona.dart';
 import 'action_card.dart';
 import 'bulk.dart';
@@ -24,6 +25,7 @@ final class AssistantResponse {
     this.secureCard,
     this.clarification,
     this.suggestions,
+    this.job,
   });
 
   /// Готовый текст для пользователя. В истории чата хранится именно он:
@@ -79,6 +81,11 @@ final class AssistantResponse {
   /// не попадает. `null` — без подсказки.
   final CommandSuggestions? suggestions;
 
+  /// Карточка-форма расширения (архиватор): поля, «Запустить», ход работы.
+  /// Тот же объект попадает в сообщение чата и в историю. `null` — без
+  /// карточки.
+  final ExtensionCard? job;
+
   /// Тот же ответ с подсказкой команд [suggestions].
   AssistantResponse withSuggestions(CommandSuggestions? suggestions) =>
       AssistantResponse(
@@ -96,6 +103,7 @@ final class AssistantResponse {
         secureCard: secureCard,
         clarification: clarification,
         suggestions: suggestions,
+        job: job,
       );
 
   /// Тот же ответ от помощника [personaId].
@@ -114,6 +122,7 @@ final class AssistantResponse {
         secureCard: secureCard,
         clarification: clarification,
         suggestions: suggestions,
+        job: job,
       );
 
   /// Тот же ответ, в котором пользователь обратился к [personaId] по имени.
@@ -132,6 +141,7 @@ final class AssistantResponse {
         secureCard: secureCard,
         clarification: clarification,
         suggestions: suggestions,
+        job: job,
       );
 
   /// Тот же ответ с другим текстом и фактами (выходной фильтр паролей).
@@ -151,5 +161,6 @@ final class AssistantResponse {
         secureCard: secureCard,
         clarification: clarification,
         suggestions: suggestions,
+        job: job,
       );
 }
