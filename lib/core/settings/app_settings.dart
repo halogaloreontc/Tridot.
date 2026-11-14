@@ -26,6 +26,9 @@ final class AppSettings {
     this.passwordsTrainingDue,
     this.firstSeenDay,
     this.commandUsage = const <String, int>{},
+    this.voiceInput = false,
+    this.voiceSendImmediately = false,
+    this.voiceMicExplained = false,
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -56,6 +59,9 @@ final class AppSettings {
       passwordsTrainingDue: _day(json['passwords.training_due']),
       firstSeenDay: _day(json['first_seen_day']),
       commandUsage: CommandUsage.fromJson(json['command_usage']),
+      voiceInput: json['voice.enabled'] == true,
+      voiceSendImmediately: json['voice.send_now'] == true,
+      voiceMicExplained: json['voice.mic_explained'] == true,
     );
   }
 
@@ -199,6 +205,18 @@ final class AppSettings {
   /// «Шаблоны команд» показывают самые нужные.
   final Map<String, int> commandUsage;
 
+  /// Голосовой ввод (ADR-023) включён. По умолчанию выключен: модель
+  /// распознавания (~44 МБ) скачивается, только когда его включают.
+  final bool voiceInput;
+
+  /// «Отправлять сразу»: распознанный текст уходит без правки. По
+  /// умолчанию выключено — текст попадает в поле ввода. Похожее на пароль
+  /// сразу не отправляется никогда.
+  final bool voiceSendImmediately;
+
+  /// Зачем нужен микрофон, уже объяснено (перед первым запросом доступа).
+  final bool voiceMicExplained;
+
   AppSettings copyWith({
     bool? reduceMotion,
     bool? showTimestamps,
@@ -215,6 +233,9 @@ final class AppSettings {
     String? passwordsTrainingDue,
     String? firstSeenDay,
     Map<String, int>? commandUsage,
+    bool? voiceInput,
+    bool? voiceSendImmediately,
+    bool? voiceMicExplained,
   }) =>
       AppSettings(
         reduceMotion: reduceMotion ?? this.reduceMotion,
@@ -233,6 +254,9 @@ final class AppSettings {
         passwordsTrainingDue: passwordsTrainingDue ?? this.passwordsTrainingDue,
         firstSeenDay: firstSeenDay ?? this.firstSeenDay,
         commandUsage: commandUsage ?? this.commandUsage,
+        voiceInput: voiceInput ?? this.voiceInput,
+        voiceSendImmediately: voiceSendImmediately ?? this.voiceSendImmediately,
+        voiceMicExplained: voiceMicExplained ?? this.voiceMicExplained,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -266,6 +290,9 @@ final class AppSettings {
             for (final id in commandUsage.keys.toList()..sort())
               id: commandUsage[id]!,
           },
+        if (voiceInput) 'voice.enabled': true,
+        if (voiceSendImmediately) 'voice.send_now': true,
+        if (voiceMicExplained) 'voice.mic_explained': true,
       };
 }
 

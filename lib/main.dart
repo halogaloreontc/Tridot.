@@ -9,6 +9,8 @@ import 'package:path_provider/path_provider.dart';
 import 'app/assistant_theme.dart';
 import 'app/home_page.dart';
 import 'app/passwords/passwords_kit.dart';
+import 'app/voice/voice_kit.dart';
+import 'app/voice/vosk_voice_recognizer.dart';
 import 'core/app_info.dart';
 import 'core/chats/chat_store.dart';
 import 'core/connectors/connector.dart';
@@ -18,6 +20,7 @@ import 'core/connectors/manifest/connection.dart';
 import 'core/connectors/manifest/connection_service.dart';
 import 'core/connectors/manifest/connection_slots.dart';
 import 'core/connectors/tasks_connector.dart';
+import 'core/downloads/verified_download.dart';
 import 'core/extensions/extension_registry.dart';
 import 'core/passwords/vault.dart';
 import 'core/passwords/vault_crypto.dart';
@@ -33,6 +36,7 @@ import 'core/skills/passwords/passwords_connector.dart';
 import 'core/skills/talk/talk_connector.dart';
 import 'core/storage/json_task_repository.dart';
 import 'core/storage/storage_info.dart';
+import 'core/voice/voice_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,6 +56,13 @@ Future<void> main() async {
     yield LicenseEntryWithLineBreaks(
       <String>['EFF Long Wordlist', 'SecLists'],
       words,
+    );
+    // Голосовой ввод (ADR-023): libvosk (Vosk, Kaldi, OpenFST — Apache-2.0,
+    // OpenBLAS/CLAPACK — BSD) и скачиваемая модель vosk-model-small-ru.
+    final voice = await rootBundle.loadString('assets/voice/NOTICE.txt');
+    yield LicenseEntryWithLineBreaks(
+      <String>['Vosk', 'Kaldi', 'OpenFST', 'OpenBLAS'],
+      voice,
     );
   });
   final documents = await getApplicationDocumentsDirectory();
@@ -121,6 +132,18 @@ Future<void> main() async {
     packs: packs,
   );
   await packs.load();
+  // Голосовой ввод (ADR-023): пока только Android — libvosk приходит из
+  // AAR только для arm64-v8a. Модель скачивается по требованию в
+  // <поддержка>/assistant/voice (исключена из резервной копии Android).
+  final voice = Platform.isAndroid
+      ? VoiceKit(
+          recognizer: VoskVoiceRecognizer(),
+          downloader: IoFileDownloader(),
+          spec: VoiceModelSpec.ruSmall,
+          dir: p.join(support.path, 'assistant', 'voice'),
+        )
+      : null;
+  await voice?.refresh();
   // SecretGuard: при открытом хранилище пароль в чате узнаётся и по
   // отпечатку, без слова «пароль».
   final assistant = AssistantController(
@@ -138,6 +161,7 @@ Future<void> main() async {
       chatStore: JsonChatStore(chatsPath),
       connections: connections,
       passwords: passwords,
+      voice: voice,
     ),
   );
 }
@@ -194,6 +218,7 @@ final class AssistantApp extends StatelessWidget {
     this.chatStore,
     this.connections = const <ConnectionService>[],
     this.passwords,
+    this.voice,
   });
 
   final AssistantController assistant;
@@ -208,6 +233,9 @@ final class AssistantApp extends StatelessWidget {
 
   /// Навык «Пароли»; `null` — libsodium не загрузилась.
   final PasswordsKit? passwords;
+
+  /// Голосовой ввод; `null` — платформа без движка распознавания.
+  final VoiceKit? voice;
 
   @override
   Widget build(BuildContext context) {
@@ -226,6 +254,7 @@ final class AssistantApp extends StatelessWidget {
         chatStore: chatStore,
         connections: connections,
         passwords: passwords,
+        voice: voice,
       ),
     );
   }

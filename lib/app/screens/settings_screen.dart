@@ -6,6 +6,8 @@ import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
 import '../passwords/passwords_kit.dart';
+import '../voice/voice_kit.dart';
+import '../voice/voice_views.dart';
 import '../widgets/extensions_section.dart';
 import '../widgets/personas_section.dart';
 import '../widgets/roles_section.dart';
@@ -27,6 +29,7 @@ class SettingsScreen extends StatelessWidget {
     this.showTitle = true,
     this.includePersonas = true,
     this.onOpenStorage,
+    this.voice,
   });
 
   /// Заголовок «Настройки» над экраном.
@@ -54,6 +57,10 @@ class SettingsScreen extends StatelessWidget {
 
   /// Навык «Пароли»: статус и «Настроить» в «Расширениях».
   final PasswordsKit? passwords;
+
+  /// Голосовой ввод (ADR-023); `null` — на этой платформе его нет, раздел
+  /// только сообщает об этом.
+  final VoiceKit? voice;
 
   static const applicationName = AppInfo.name;
 
@@ -129,6 +136,11 @@ class SettingsScreen extends StatelessWidget {
                 value: settings.showTimestamps,
                 onChanged: (value) =>
                     onChanged(settings.copyWith(showTimestamps: value)),
+              ),
+              VoiceSettingsSection(
+                settings: settings,
+                onChanged: onChanged,
+                voice: voice,
               ),
               if (includePersonas)
                 PersonasSection(

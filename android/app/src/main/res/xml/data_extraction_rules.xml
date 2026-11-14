@@ -9,11 +9,15 @@
     <cloud-backup>
         <exclude domain="file" path="assistant/vault/" />
         <exclude domain="file" path="assistant/secrets.json" />
+        <!-- Модель голосового ввода (ADR-023): скачивается заново. -->
+        <exclude domain="file" path="assistant/voice/" />
         <!-- Файлы, прикреплённые к сессиям (ADR-019), — только на устройстве. -->
         <exclude domain="root" path="app_flutter/assistant/chats/files/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="assistant/vault/" />
         <exclude domain="file" path="assistant/secrets.json" />
+        <!-- Модель голосового ввода (ADR-023): скачивается заново. -->
+        <exclude domain="file" path="assistant/voice/" />
     </device-transfer>
 </data-extraction-rules>

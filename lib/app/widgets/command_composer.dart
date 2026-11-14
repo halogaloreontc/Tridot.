@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,6 +11,35 @@ import '../attachments/attachment_views.dart';
 import 'command_finder_sheet.dart';
 
 enum AssistantViewMode { dialogue, document }
+
+/// Кнопка голосового ввода (ADR-023).
+enum VoiceButtonMode {
+  /// Движка на платформе нет: микрофона нет.
+  hidden,
+
+  /// Голосовой ввод выключен или модель не скачана: нажатие предлагает
+  /// включить.
+  off,
+
+  /// Готов: на телефоне — удерживать и говорить, на компьютере — нажать.
+  idle,
+
+  /// Загружается модель или запрашивается доступ к микрофону.
+  loading,
+
+  /// Слушает.
+  listening,
+}
+
+/// Голосовой ввод на компьютере — нажатием, а не удержанием: держать
+/// кнопку мыши, пока говоришь, неудобно.
+bool get voiceToggleByDefault => switch (defaultTargetPlatform) {
+      TargetPlatform.windows ||
+      TargetPlatform.macOS ||
+      TargetPlatform.linux =>
+        true,
+      _ => false,
+    };
 
 /// Файл, выбранный для следующего сообщения: чип над полем ввода.
 final class PendingAttachmentChip {
@@ -41,7 +71,6 @@ final class CommandComposer extends StatefulWidget {
     required this.onModeChanged,
     required this.onSend,
     required this.onCommand,
-    required this.onVoice,
     required this.previousCommand,
     required this.nextCommand,
     this.onAttach,
@@ -53,6 +82,13 @@ final class CommandComposer extends StatefulWidget {
     this.pending = const <PendingAttachmentChip>[],
     this.onRemovePending,
     this.header,
+    this.voiceMode = VoiceButtonMode.hidden,
+    this.onVoiceStart,
+    this.onVoiceStop,
+    this.onVoiceTap,
+    this.voicePartial,
+    this.voiceNotice,
+    this.desktopToggle,
   });
 
   final TextEditingController controller;
@@ -89,8 +125,33 @@ final class CommandComposer extends StatefulWidget {
   /// Крестик на чипе файла [pending]`[i]`.
   final ValueChanged<int>? onRemovePending;
 
-  /// Микрофон при пустом поле: голосовое общение с помощником.
-  final VoidCallback onVoice;
+  /// Микрофон при пустом поле (ADR-023): голосовой ввод в поле, без
+  /// озвучивания ответов.
+  final VoiceButtonMode voiceMode;
+
+  /// Палец лёг на микрофон: начать слушать (телефон, удержание).
+  final VoidCallback? onVoiceStart;
+
+  /// Палец отпущен или жест прерван: закончить.
+  final VoidCallback? onVoiceStop;
+
+  /// Нажатие на микрофон: при [VoiceButtonMode.off] — предложение
+  /// включить, на компьютере — начать или закончить, для экранного
+  /// диктора — то же.
+  final VoidCallback? onVoiceTap;
+
+  /// Промежуточный распознанный текст: серой строкой над полем, пока
+  /// слушает.
+  final String? voicePartial;
+
+  /// Подсказка голосового ввода («Удерживайте микрофон…», «Нет доступа к
+  /// микрофону…»): строкой над полем, а не всплывающим уведомлением —
+  /// уведомление закрыло бы сам микрофон.
+  final String? voiceNotice;
+
+  /// Нажатием, а не удержанием; `null` — по платформе
+  /// ([voiceToggleByDefault]).
+  final bool? desktopToggle;
 
   /// Прошлая и следующая команда из истории для ↑/↓; null — нет.
   final String? Function() previousCommand;
@@ -205,8 +266,23 @@ final class _CommandComposerState extends State<CommandComposer> {
         // Файлы можно отправить и без текста.
         final hasText = widget.controller.text.trim().isNotEmpty ||
             widget.pending.isNotEmpty;
-        // Пустое поле — микрофон для голоса, с текстом — кнопка отправки.
-        final voice = !hasText && !widget.sending;
+        final voiceMode = widget.voiceMode;
+        final voiceActive = voiceMode == VoiceButtonMode.listening ||
+            voiceMode == VoiceButtonMode.loading;
+        // Пустое поле — микрофон для голосового ввода, с текстом — кнопка
+        // отправки. Пока слушает, микрофон остаётся на месте: под пальцем
+        // ждут, когда его отпустят.
+        final voice = voiceMode != VoiceButtonMode.hidden &&
+            (voiceActive || (!hasText && !widget.sending));
+        final partial = widget.voicePartial?.trim() ?? '';
+        final notice = widget.voiceNotice?.trim() ?? '';
+        final showPartial =
+            voiceMode == VoiceButtonMode.listening && partial.isNotEmpty;
+        final hint = switch (voiceMode) {
+          VoiceButtonMode.listening => 'Говорите…',
+          VoiceButtonMode.loading => 'Готовлю распознавание…',
+          _ => 'Спросить, найти или поручить…',
+        };
         return Container(
           key: const Key('assistant-composer'),
           padding: const EdgeInsets.all(8),
@@ -243,6 +319,46 @@ final class _CommandComposerState extends State<CommandComposer> {
                     ),
                   ),
                 ),
+              // Что слышно сейчас: серым, пока говорят. В поле текст
+              // попадает только после того, как микрофон отпущен.
+              if (showPartial)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      partial,
+                      key: const Key('voice-partial'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AssistantColors.muted,
+                        fontStyle: FontStyle.italic,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+              if (!showPartial && notice.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        notice,
+                        key: const Key('voice-notice'),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AssistantColors.text,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               TextField(
                 key: const Key('assistant-input'),
                 controller: widget.controller,
@@ -260,12 +376,12 @@ final class _CommandComposerState extends State<CommandComposer> {
                   fontSize: 16,
                   color: AssistantColors.textStrong,
                 ),
-                decoration: const InputDecoration(
-                  hintText: 'Спросить, найти или поручить…',
+                decoration: InputDecoration(
+                  hintText: hint,
                   hintMaxLines: 1,
-                  hintStyle: TextStyle(color: AssistantColors.muted),
+                  hintStyle: const TextStyle(color: AssistantColors.muted),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.fromLTRB(6, 4, 6, 8),
+                  contentPadding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
                   isDense: true,
                 ),
               ),
@@ -280,32 +396,35 @@ final class _CommandComposerState extends State<CommandComposer> {
                       child: const _RoundIcon(icon: Icons.add),
                     ),
                   );
-                  final send = IconButton(
-                    key: const Key('assistant-send'),
-                    onPressed: widget.sending
-                        ? null
-                        : voice
-                            ? widget.onVoice
-                            : widget.onSend,
-                    tooltip: voice ? 'Голосовой режим' : 'Отправить',
-                    style: IconButton.styleFrom(
-                      fixedSize: const Size(44, 44),
-                      backgroundColor: AssistantColors.primary,
-                      foregroundColor: AssistantColors.onPrimary,
-                      disabledBackgroundColor: AssistantColors.raised,
-                      disabledForegroundColor: AssistantColors.muted,
-                    ),
-                    icon: widget.sending
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Icon(
-                            voice ? Icons.mic_none : Icons.arrow_upward,
-                            size: 20,
+                  final send = voice
+                      ? _VoiceButton(
+                          mode: voiceMode,
+                          toggle: widget.desktopToggle ?? voiceToggleByDefault,
+                          onStart: widget.onVoiceStart,
+                          onStop: widget.onVoiceStop,
+                          onTap: widget.onVoiceTap,
+                        )
+                      : IconButton(
+                          key: const Key('assistant-send'),
+                          onPressed: widget.sending ? null : widget.onSend,
+                          tooltip: 'Отправить',
+                          style: IconButton.styleFrom(
+                            fixedSize: const Size(44, 44),
+                            backgroundColor: AssistantColors.primary,
+                            foregroundColor: AssistantColors.onPrimary,
+                            disabledBackgroundColor: AssistantColors.raised,
+                            disabledForegroundColor: AssistantColors.muted,
                           ),
-                  );
+                          icon: widget.sending
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.arrow_upward, size: 20),
+                        );
                   // Две строки: сверху ввод, снизу «+», переключатель режимов
                   // ровно посередине и микрофон или отправка. На широком поле
                   // у иконок режимов есть подписи, на узком — только иконки.
@@ -346,6 +465,105 @@ final class _CommandComposerState extends State<CommandComposer> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Микрофон (ADR-023), 44×44 — как кнопка отправки на его месте. На
+/// телефоне — удержание: палец лёг — слушает, отпущен — текст в поле. На
+/// компьютере — нажатие: начать и закончить. Экранный диктор нажимает
+/// двойным касанием — это тоже начать и закончить.
+final class _VoiceButton extends StatelessWidget {
+  const _VoiceButton({
+    required this.mode,
+    required this.toggle,
+    required this.onStart,
+    required this.onStop,
+    required this.onTap,
+  });
+
+  final VoiceButtonMode mode;
+  final bool toggle;
+  final VoidCallback? onStart;
+  final VoidCallback? onStop;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final listening = mode == VoiceButtonMode.listening;
+    final hold = !toggle && mode != VoiceButtonMode.off;
+    final tooltip = switch (mode) {
+      VoiceButtonMode.off => 'Голосовой ввод',
+      VoiceButtonMode.listening => toggle
+          ? 'Говорите… нажмите, чтобы закончить'
+          : 'Говорите… отпустите, чтобы закончить',
+      VoiceButtonMode.loading => 'Готовлю распознавание…',
+      _ => toggle
+          ? 'Голосовой ввод: нажмите и говорите'
+          : 'Голосовой ввод: удерживайте и говорите',
+    };
+    final Widget icon = mode == VoiceButtonMode.loading
+        ? const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AssistantColors.onPrimary,
+            ),
+          )
+        : Icon(
+            listening ? Icons.mic : Icons.mic_none,
+            size: 20,
+            color: listening
+                ? AssistantColors.onPrimary
+                : mode == VoiceButtonMode.off
+                    ? AssistantColors.textStrong
+                    : AssistantColors.onPrimary,
+          );
+    final circle = AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      width: 44,
+      height: 44,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: listening
+            ? AssistantColors.danger
+            : mode == VoiceButtonMode.off
+                ? Colors.transparent
+                : AssistantColors.primary,
+        border: mode == VoiceButtonMode.off
+            ? Border.all(color: AssistantColors.border)
+            : null,
+      ),
+      child: icon,
+    );
+    final Widget body = hold
+        // Listener, а не onLongPress: слушать начинает сразу, без
+        // полусекундной задержки.
+        ? Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (_) => onStart?.call(),
+            onPointerUp: (_) => onStop?.call(),
+            onPointerCancel: (_) => onStop?.call(),
+            child: circle,
+          )
+        : InkResponse(
+            onTap: onTap,
+            radius: 24,
+            child: circle,
+          );
+    return Semantics(
+      button: true,
+      label: 'Голосовой ввод',
+      value: listening ? 'слушаю' : null,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: tooltip,
+        excludeFromSemantics: true,
+        child: KeyedSubtree(key: const Key('assistant-voice'), child: body),
+      ),
     );
   }
 }

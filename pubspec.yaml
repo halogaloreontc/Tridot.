@@ -19,6 +19,14 @@ dependencies:
   # последние стабильные не моложе двух недель на момент внедрения.
   sodium: 4.1.2
   file_selector: ^1.1.0
+  # Голосовой ввод (ADR-023). crypto, archive и ffi уже были транзитивно —
+  # теперь прямые, версии закреплены: SHA-256 модели, безопасная распаковка
+  # zip, привязка dart:ffi к libvosk.so. record — поток PCM с микрофона
+  # (BSD-3); runtime-запрос RECORD_AUDIO делает он сам.
+  crypto: 3.0.8
+  archive: 4.6.0
+  ffi: 2.2.0
+  record: 7.2.0
 
 dev_dependencies:
   flutter_test:
@@ -45,6 +53,9 @@ flutter:
     # генератора и 10 000 частых паролей SecLists (MIT) для оценки
     # надёжности. Лицензии — assets/passwords/NOTICE.txt.
     - assets/passwords/
+    # Голосовой ввод (ADR-023): лицензии Vosk, Kaldi, OpenFST, OpenBLAS и
+    # модели vosk-model-small-ru (модель скачивается, а не встроена).
+    - assets/voice/NOTICE.txt
   fonts:
     - family: Inter
       fonts:

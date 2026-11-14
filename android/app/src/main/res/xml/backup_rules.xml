@@ -4,6 +4,8 @@
 <full-backup-content>
     <exclude domain="file" path="assistant/vault/" />
     <exclude domain="file" path="assistant/secrets.json" />
+    <!-- Модель голосового ввода (ADR-023): скачивается заново. -->
+    <exclude domain="file" path="assistant/voice/" />
     <!-- Файлы, прикреплённые к сессиям (ADR-019). -->
     <exclude domain="root" path="app_flutter/assistant/chats/files/" />
 </full-backup-content>

@@ -414,15 +414,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('микрофон при пустом поле превращается в отправку при вводе',
+  testWidgets('без голосового ввода микрофона нет, отправка — стрелкой',
       (tester) async {
     await _pump(tester);
-    expect(find.byIcon(Icons.mic_none), findsOneWidget);
-    expect(find.byIcon(Icons.arrow_upward), findsNothing);
-
-    await tester.tap(find.byKey(const Key('assistant-send')));
-    await tester.pump();
-    expect(find.textContaining('Голосовой режим в разработке'), findsOneWidget);
+    // Платформа без движка распознавания (voice: null): микрофон скрыт.
+    expect(find.byKey(const Key('assistant-voice')), findsNothing);
+    expect(find.byIcon(Icons.mic_none), findsNothing);
+    expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const Key('assistant-input')),
@@ -430,7 +428,6 @@ void main() {
     );
     await tester.pump();
     expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
-    expect(find.byIcon(Icons.mic_none), findsNothing);
 
     await tester.tap(find.byKey(const Key('assistant-send')));
     await tester.pump();

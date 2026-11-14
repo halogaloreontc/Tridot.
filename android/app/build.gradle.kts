@@ -29,6 +29,37 @@ android {
         versionName = flutter.versionName
     }
 
+    // Голосовой ввод (ADR-023): из AAR Vosk нужен только libvosk.so для
+    // arm64-v8a — остальные ABI не попадают в APK (~10 МБ вместо ~40).
+    packaging {
+        jniLibs {
+            excludes += listOf(
+                "lib/armeabi-v7a/libvosk.so",
+                "lib/x86/libvosk.so",
+                "lib/x86_64/libvosk.so",
+            )
+            // Сборка под выбранные ABI (--target-platform): библиотеки
+            // других ABI (например, libdartjni.so пакета record) в APK не
+            // кладём. Иначе Android выберет ABI без libflutter.so, и на x86_64
+            // или 32-битном ARM приложение упадёт при запуске.
+            val abiByPlatform = mapOf(
+                "android-arm" to "armeabi-v7a",
+                "android-arm64" to "arm64-v8a",
+                "android-x86" to "x86",
+                "android-x64" to "x86_64",
+            )
+            val targetAbis = (project.findProperty("target-platform") as String?)
+                ?.split(",")
+                ?.mapNotNull { abiByPlatform[it.trim()] }
+                ?.toSet()
+            if (!targetAbis.isNullOrEmpty()) {
+                abiByPlatform.values
+                    .filter { it !in targetAbis }
+                    .forEach { excludes += "lib/$it/**" }
+            }
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -46,4 +77,11 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Голосовой ввод (ADR-023): только libvosk.so (Apache-2.0), вызывается из
+    // Dart через dart:ffi (lib/core/voice/vosk_ffi.dart). «@aar» — без
+    // транзитивных зависимостей: JNA и Java-классы Vosk не нужны.
+    implementation("com.alphacephei:vosk-android:0.3.75@aar")
 }

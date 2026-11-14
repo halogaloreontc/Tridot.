@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/screens/settings_screen.dart';
+import 'package:local_assistant/app/voice/voice_kit.dart';
 import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
@@ -15,6 +17,10 @@ import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
+import 'package:local_assistant/core/voice/voice_recognizer.dart';
+import 'package:path/path.dart' as p;
+
+import '../support/fake_voice.dart';
 
 Widget host({
   AppSettings settings = const AppSettings(),
@@ -626,5 +632,279 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(row);
     expect(storage, 1);
+  });
+
+  group('Голосовой ввод', () {
+    late Directory temp;
+    late String dir;
+    late List<int> bytes;
+
+    setUp(() {
+      temp = Directory.systemTemp.createTempSync('settings_voice_test');
+      dir = p.join(temp.path, 'assistant', 'voice');
+      bytes = List<int>.generate(3000, (int i) => i % 199);
+    });
+
+    tearDown(() => temp.deleteSync(recursive: true));
+
+    /// Экран с голосовым вводом, который сам хранит изменённые настройки.
+    Future<(VoiceKit, FakeFileDownloader, List<AppSettings>)> pumpVoice(
+      WidgetTester tester, {
+      AppSettings settings = const AppSettings(),
+      bool installed = false,
+      String? sha,
+      VoiceSupport support = VoiceSupport.supported,
+    }) async {
+      final spec = fakeVoiceSpec(bytes, sha: sha);
+      if (installed) installFakeModelSync(dir, spec);
+      final downloader = FakeFileDownloader(bytes);
+      final voice = fakeVoiceKit(
+        recognizer: FakeVoiceRecognizer(support: support),
+        downloader: downloader,
+        spec: spec,
+        dir: dir,
+      );
+      addTearDown(voice.dispose);
+      await tester.runAsync(voice.refresh);
+      final changes = <AppSettings>[];
+      var current = settings;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AssistantTheme.dark(),
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) => SettingsScreen(
+                settings: current,
+                onChanged: (value) {
+                  changes.add(value);
+                  setState(() => current = value);
+                },
+                onClearChat: () {},
+                messageCount: 1,
+                voice: voice,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      return (voice, downloader, changes);
+    }
+
+    Future<void> tapVisible(WidgetTester tester, Key key) async {
+      await tester.ensureVisible(find.byKey(key));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(key));
+      await tester.pump();
+    }
+
+    /// Переключатель «Голосовой ввод» без модели: предложение с размером и
+    /// источником, затем «Скачать».
+    Future<void> enableVoice(WidgetTester tester) async {
+      await tapVisible(tester, const Key('setting-voice'));
+      await tester.pumpAndSettle();
+      expect(find.text('Включить голосовой ввод?'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.textContaining('с сайта example.invalid'),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('voice-offer-download')));
+      await tester.pump();
+    }
+
+    SwitchListTile switchTile(WidgetTester tester, String key) =>
+        tester.widget<SwitchListTile>(find.byKey(Key(key)));
+
+    testWidgets('без движка — только пояснение', (tester) async {
+      await tester.pumpWidget(host());
+      expect(find.byKey(const Key('voice-unsupported')), findsOneWidget);
+      expect(find.byKey(const Key('setting-voice')), findsNothing);
+
+      await pumpVoice(tester, support: VoiceSupport.unsupported);
+      expect(
+        find.text('На этой платформе пока недоступен — сейчас только Android'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('setting-voice')), findsNothing);
+    });
+
+    testWidgets('выключен: «Отправлять сразу» недоступно, удалять нечего',
+        (tester) async {
+      await pumpVoice(tester);
+      expect(switchTile(tester, 'setting-voice').value, isFalse);
+      expect(switchTile(tester, 'setting-voice-send-now').onChanged, isNull);
+      expect(find.byKey(const Key('voice-delete')), findsNothing);
+    });
+
+    testWidgets(
+        'переключатель без модели сначала спрашивает: «Не сейчас» — '
+        'ничего не скачивается', (tester) async {
+      final (voice, downloader, changes) = await pumpVoice(tester);
+      expect(find.textContaining('с сайта example.invalid'), findsOneWidget);
+      await tapVisible(tester, const Key('setting-voice'));
+      await tester.pumpAndSettle();
+      expect(find.text('Включить голосовой ввод?'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('voice-offer-later')));
+      await tester.pumpAndSettle();
+      expect(downloader.calls, 0);
+      expect(changes, isEmpty);
+      expect(switchTile(tester, 'setting-voice').value, isFalse);
+      expect(voice.phase, VoiceKitPhase.notInstalled);
+    });
+
+    testWidgets('полоса загрузки видна: заливка и дорожка разного цвета',
+        (tester) async {
+      final (voice, downloader, _) = await pumpVoice(tester);
+      downloader
+        ..gate = Completer<void>()
+        ..gateFrom = 1;
+      await enableVoice(tester);
+      await pumpUntilVoice(tester, () => voice.received > 0);
+      final bar = tester.widget<LinearProgressIndicator>(
+        find.byKey(const Key('voice-progress-bar')),
+      );
+      expect(bar.color, isNotNull);
+      expect(bar.backgroundColor, isNotNull);
+      expect(bar.color, isNot(bar.backgroundColor));
+      expect(bar.minHeight, greaterThanOrEqualTo(4));
+      await tapVisible(tester, const Key('voice-cancel'));
+      await pumpUntilVoice(
+        tester,
+        () => voice.phase == VoiceKitPhase.notInstalled,
+      );
+    });
+
+    testWidgets('включение скачивает модель: ход, проверка, готово',
+        (tester) async {
+      final (voice, downloader, changes) = await pumpVoice(tester);
+      final gate = Completer<void>();
+      downloader
+        ..gate = gate
+        ..gateFrom = 1;
+      await enableVoice(tester);
+      expect(changes.last.voiceInput, isTrue);
+      await pumpUntilVoice(tester, () => voice.received > 0);
+      expect(find.byKey(const Key('voice-progress-bar')), findsOneWidget);
+      expect(find.textContaining('из 0 МБ'), findsOneWidget);
+      expect(find.byKey(const Key('voice-cancel')), findsOneWidget);
+      // Пока модели нет, «Отправлять сразу» недоступно.
+      expect(switchTile(tester, 'setting-voice-send-now').onChanged, isNull);
+
+      gate.complete();
+      await pumpUntilVoice(tester, () => voice.isInstalled);
+      expect(find.byKey(const Key('voice-progress-bar')), findsNothing);
+      expect(
+        switchTile(tester, 'setting-voice-send-now').onChanged,
+        isNotNull,
+      );
+      await tapVisible(tester, const Key('setting-voice-send-now'));
+      expect(changes.last.voiceSendImmediately, isTrue);
+      expect(find.byKey(const Key('voice-delete')), findsOneWidget);
+    });
+
+    testWidgets('«Отмена» в настройках: выключено, скачанное осталось',
+        (tester) async {
+      final (voice, downloader, changes) = await pumpVoice(tester);
+      downloader
+        ..gate = Completer<void>()
+        ..gateFrom = 1;
+      await enableVoice(tester);
+      await pumpUntilVoice(tester, () => voice.received > 0);
+      await tapVisible(tester, const Key('voice-cancel'));
+      await pumpUntilVoice(
+        tester,
+        () => voice.phase == VoiceKitPhase.notInstalled,
+      );
+      expect(changes.last.voiceInput, isFalse);
+      expect(voice.hasPartial, isTrue);
+      expect(find.byKey(const Key('voice-delete')), findsOneWidget);
+      expect(find.text('Удалить недокачанную модель'), findsOneWidget);
+    });
+
+    testWidgets('сумма не совпала — ошибка и «Повторить»', (tester) async {
+      final (voice, downloader, _) = await pumpVoice(
+        tester,
+        settings: const AppSettings(voiceInput: true),
+        sha: 'f' * 64,
+      );
+      expect(find.byKey(const Key('voice-download')), findsOneWidget);
+      await tapVisible(tester, const Key('voice-download'));
+      await pumpUntilVoice(tester, () => voice.phase == VoiceKitPhase.error);
+      expect(
+        find.text(
+          'Файл повреждён: контрольная сумма не совпала',
+        ),
+        findsOneWidget,
+      );
+      await tapVisible(tester, const Key('voice-retry'));
+      await pumpUntilVoice(tester, () => downloader.calls == 2);
+      await pumpUntilVoice(tester, () => voice.phase == VoiceKitPhase.error);
+    });
+
+    testWidgets('«Удалить модель» спрашивает и освобождает место',
+        (tester) async {
+      final (voice, _, changes) = await pumpVoice(
+        tester,
+        settings: const AppSettings(
+          voiceInput: true,
+          voiceSendImmediately: true,
+        ),
+        installed: true,
+      );
+      expect(voice.isInstalled, isTrue);
+      expect(find.textContaining('Удалить модель ('), findsOneWidget);
+      // Модель уже скачана: подпись не обещает скачать её снова.
+      expect(find.textContaining('Модель скачана'), findsOneWidget);
+      expect(find.textContaining('скачается один раз'), findsNothing);
+
+      await tapVisible(tester, const Key('voice-delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('voice-delete-cancel')));
+      await tester.pumpAndSettle();
+      expect(voice.isInstalled, isTrue);
+      expect(changes, isEmpty);
+
+      await tapVisible(tester, const Key('voice-delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Удалить модель распознавания?'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('voice-delete-confirm')));
+      await tester.pump();
+      await pumpUntilVoice(
+        tester,
+        () => voice.phase == VoiceKitPhase.notInstalled,
+      );
+      expect(changes.last.voiceInput, isFalse);
+      expect(changes.last.voiceSendImmediately, isFalse);
+      expect(Directory(p.join(dir, 'test-model')).existsSync(), isFalse);
+      expect(find.byKey(const Key('voice-delete')), findsNothing);
+    });
+
+    testWidgets('без переполнения на 320x640 при масштабе 2', (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final (voice, downloader, _) = await pumpVoice(tester);
+      downloader
+        ..gate = Completer<void>()
+        ..gateFrom = 1;
+      await enableVoice(tester);
+      await pumpUntilVoice(tester, () => voice.received > 0);
+      await tester.ensureVisible(find.byKey(const Key('voice-cancel')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.takeException(), isNull);
+      await tapVisible(tester, const Key('voice-cancel'));
+      await pumpUntilVoice(
+        tester,
+        () => voice.phase == VoiceKitPhase.notInstalled,
+      );
+      await tester.ensureVisible(find.byKey(const Key('voice-delete')));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.takeException(), isNull);
+    });
   });
 }
