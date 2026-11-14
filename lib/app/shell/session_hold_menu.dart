@@ -14,14 +14,17 @@ enum SessionAction {
   /// «Закрепить» / «Открепить».
   pin,
 
+  /// «В проект…»: перенести в проект-папку или вынести из неё (ADR-018).
+  move,
+
   /// «Удалить».
   delete,
 }
 
 /// Меню действий с сессией (макет «Ж2»): нажатая строка чуть
 /// приподнимается и подсвечивается, под ней справа — короткое меню
-/// «Переименовать», «Закрепить», черта, «Удалить»; остальное слегка
-/// затемнено. Нажатие мимо, «Назад» и Esc закрывают меню без действия.
+/// «Переименовать», «Закрепить», «В проект…» ([canMove]), черта,
+/// «Удалить»; остальное слегка затемнено. Нажатие мимо, «Назад» и Esc закрывают меню без действия.
 ///
 /// [rowRect] — строка в глобальных координатах, [liftedRow] — её
 /// содержимое без жестов. Возвращает выбранное действие или `null`.
@@ -32,6 +35,7 @@ Future<SessionAction?> showSessionHoldMenu(
   required Widget liftedRow,
   bool pinned = false,
   bool canRename = true,
+  bool canMove = false,
   bool reduceMotion = false,
 }) {
   return Navigator.of(context).push<SessionAction>(
@@ -41,6 +45,7 @@ Future<SessionAction?> showSessionHoldMenu(
       liftedRow: liftedRow,
       pinned: pinned,
       canRename: canRename,
+      canMove: canMove,
       still:
           reduceMotion || MediaQuery.maybeDisableAnimationsOf(context) == true,
       capturedThemes: InheritedTheme.capture(
@@ -58,6 +63,7 @@ final class _HoldMenuRoute extends PopupRoute<SessionAction> {
     required this.liftedRow,
     required this.pinned,
     required this.canRename,
+    required this.canMove,
     required this.still,
     required this.capturedThemes,
   });
@@ -67,6 +73,7 @@ final class _HoldMenuRoute extends PopupRoute<SessionAction> {
   final Widget liftedRow;
   final bool pinned;
   final bool canRename;
+  final bool canMove;
   final bool still;
   final CapturedThemes capturedThemes;
 
@@ -127,6 +134,7 @@ final class _HoldMenuLayer extends StatelessWidget {
     double needed({required bool icons}) => _HoldMenu.neededWidth(
           scaler,
           pinned: route.pinned,
+          canMove: route.canMove,
           icons: icons,
           // Как у текста внутри Material меню: шрифт темы.
           base: Theme.of(context).textTheme.bodyMedium,
@@ -134,7 +142,7 @@ final class _HoldMenuLayer extends StatelessWidget {
     // Совсем крупный шрифт на узком экране: значки уступают место словам.
     final icons = needed(icons: true) <= room;
     final width = math.min(room, math.max(base, needed(icons: icons)));
-    final items = route.canRename ? 3 : 2;
+    final items = 2 + (route.canRename ? 1 : 0) + (route.canMove ? 1 : 0);
     // Высота меню: пункты по 52 (крупный шрифт — выше), черта, поля.
     final menuHeight = 12 + items * math.max(52.0, 30 + 16 * scale) + 9;
     final bottomLimit = screen.height - insets.bottom - padding.bottom - 8;
@@ -226,6 +234,7 @@ final class _HoldMenuLayer extends StatelessWidget {
                 title: route.title,
                 pinned: route.pinned,
                 canRename: route.canRename,
+                canMove: route.canMove,
                 onChoose: choose,
               ),
             ),
@@ -242,6 +251,7 @@ final class _HoldMenu extends StatelessWidget {
     required this.title,
     required this.pinned,
     required this.canRename,
+    required this.canMove,
     required this.onChoose,
   });
 
@@ -250,7 +260,11 @@ final class _HoldMenu extends StatelessWidget {
   final String title;
   final bool pinned;
   final bool canRename;
+  final bool canMove;
   final ValueChanged<SessionAction> onChoose;
+
+  /// Пункт переноса в проект-папку.
+  static const String moveLabel = 'В проект…';
 
   /// Подпись пункта: 16 px, как в макете «Ж2».
   static const TextStyle labelStyle = TextStyle(fontSize: 16, height: 1.3);
@@ -261,6 +275,7 @@ final class _HoldMenu extends StatelessWidget {
   static double neededWidth(
     TextScaler scaler, {
     required bool pinned,
+    bool canMove = false,
     bool icons = true,
     TextStyle? base,
   }) {
@@ -269,6 +284,7 @@ final class _HoldMenu extends StatelessWidget {
     for (final label in <String>[
       'Переименовать',
       if (pinned) 'Открепить' else 'Закрепить',
+      if (canMove) moveLabel,
       'Удалить',
     ]) {
       final painter = TextPainter(
@@ -328,6 +344,14 @@ final class _HoldMenu extends StatelessWidget {
                   autofocus: !canRename,
                   onTap: () => onChoose(SessionAction.pin),
                 ),
+                if (canMove)
+                  _MenuItem(
+                    key: const Key('session-menu-move'),
+                    showIcon: icons,
+                    icon: Icons.drive_file_move_outline,
+                    label: moveLabel,
+                    onTap: () => onChoose(SessionAction.move),
+                  ),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: Divider(
@@ -423,17 +447,20 @@ final class _MenuItem extends StatelessWidget {
 Future<String?> showRenameSessionDialog(
   BuildContext context, {
   required String current,
+  String title = 'Переименовать сессию',
 }) {
   return showDialog<String>(
     context: context,
-    builder: (BuildContext context) => _RenameDialog(current: current),
+    builder: (BuildContext context) =>
+        _RenameDialog(current: current, title: title),
   );
 }
 
 final class _RenameDialog extends StatefulWidget {
-  const _RenameDialog({required this.current});
+  const _RenameDialog({required this.current, required this.title});
 
   final String current;
+  final String title;
 
   @override
   State<_RenameDialog> createState() => _RenameDialogState();
@@ -470,7 +497,7 @@ final class _RenameDialogState extends State<_RenameDialog> {
       // Крупный шрифт и открытая клавиатура (поле с autofocus) на узком
       // телефоне: окно прокручивается, а не вылезает за край.
       scrollable: true,
-      title: const Text('Переименовать сессию'),
+      title: Text(widget.title),
       content: TextField(
         key: const Key('rename-field'),
         controller: _text,

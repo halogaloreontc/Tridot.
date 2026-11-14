@@ -1,7 +1,10 @@
 import 'package:characters/characters.dart';
+
+import 'attachments.dart';
 import '../models/action_card.dart';
 import '../models/assistant_types.dart';
 import '../models/bulk.dart';
+import '../commands/command_suggest.dart';
 import '../models/clarification.dart';
 import '../models/secure_card.dart';
 
@@ -86,6 +89,8 @@ final class ChatMessage {
     this.link,
     this.secureCard,
     this.clarification,
+    this.suggestions,
+    this.attachments = const <ChatAttachment>[],
   });
 
   /// `m_<микросекунды>_<номер>`: уникален в пределах устройства.
@@ -130,6 +135,16 @@ final class ChatMessage {
   /// в [toJson] и [fromJson], и [copyAs] его не копирует.
   final Clarification? clarification;
 
+  /// Подсказка команд под ответом «не до конца понял» (ADR-022). Только в
+  /// памяти, как [clarification]: её нет в [toJson] и [fromJson], и
+  /// [copyAs] её не копирует.
+  final CommandSuggestions? suggestions;
+
+  /// Прикреплённые файлы (ADR-019): описания копий в папке сессии. Пишутся
+  /// в JSON, только если есть; [copyAs] их не копирует — в чат задачи
+  /// файлы не попадают.
+  final List<ChatAttachment> attachments;
+
   bool get fromUser => author == ChatAuthor.user;
 
   /// То же сообщение с другим [id] и ссылкой [link] (копия в чат задачи).
@@ -160,6 +175,27 @@ final class ChatMessage {
         link: link,
         secureCard: secureCard,
         clarification: clarification,
+        suggestions: suggestions,
+        attachments: attachments,
+      );
+
+  /// То же сообщение с другим текстом [text] (строка о сохранённых файлах
+  /// под ответом).
+  ChatMessage withText(String text) => ChatMessage(
+        id: id,
+        author: author,
+        text: text,
+        timestamp: timestamp,
+        personaId: personaId,
+        status: status,
+        taskId: taskId,
+        checklist: checklist,
+        card: card,
+        link: link,
+        secureCard: secureCard,
+        clarification: clarification,
+        suggestions: suggestions,
+        attachments: attachments,
       );
 
   /// Пустые поля не пишутся.
@@ -174,6 +210,10 @@ final class ChatMessage {
         if (checklist != null) 'checklist': checklist!.toJson(),
         if (card != null) 'card': card!.toJson(),
         if (link != null) 'link': link!.toJson(),
+        if (attachments.isNotEmpty)
+          'attachments': <Map<String, Object?>>[
+            for (final attachment in attachments) attachment.toJson(),
+          ],
       };
 
   /// Сообщение из файла чата. Повреждённая запись — `null`: её
@@ -196,6 +236,7 @@ final class ChatMessage {
     }
     final personaId = json['persona_id'];
     final taskId = json['task_id'];
+    final files = json['attachments'];
     return ChatMessage(
       id: id,
       author: author,
@@ -211,6 +252,14 @@ final class ChatMessage {
           : null,
       card: json.containsKey('card') ? ActionCard.fromJson(json['card']) : null,
       link: ChatLink.fromJson(json['link']),
+      attachments: files is List
+          ? <ChatAttachment>[
+              for (final file in files)
+                if (ChatAttachment.fromJson(file)
+                    case final ChatAttachment attachment)
+                  attachment,
+            ]
+          : const <ChatAttachment>[],
     );
   }
 }
@@ -238,6 +287,8 @@ final class ChatThread {
     this.preview,
     this.lastPersonaId,
     this.unread = false,
+    this.ownTalk = false,
+    this.projectId,
     List<ChatMessage>? messages,
     this.loaded = true,
     int storedCount = 0,
@@ -277,7 +328,8 @@ final class ChatThread {
   /// задаче: tasks.json не меняется.
   final String? parentTaskId;
 
-  final DateTime createdAt;
+  /// Когда создан. Меняется только у пустой сессии ([touchEmpty]).
+  DateTime createdAt;
   DateTime lastActivityAt;
 
   /// Адресат «Кому:» из прежних версий: читается из старых файлов без
@@ -310,6 +362,19 @@ final class ChatThread {
   /// ответ на команду, отправленную перед уходом из чата).
   bool unread;
 
+  /// В чате задачи есть своя реплика пользователя — не копия команды,
+  /// которой задачу создали ([ChatBook.onTaskCreated]). Только такие чаты
+  /// задач стоят в меню среди сессий: иначе каждая созданная задача
+  /// добавляла бы строку рядом с сессией, где её создали. У сессий не
+  /// используется.
+  bool ownTalk;
+
+  /// Проект-папка, в которой лежит чат ([ChatBook.moveToProject],
+  /// ADR-018); `null` — вне проектов. Только у сессий и чатов задач.
+  /// Ссылка на проект, которого уже нет, при чтении становится `null`
+  /// (ChatBook.load).
+  String? projectId;
+
   /// Сообщения по порядку. Пока чат не открыт ([loaded] = false), здесь
   /// только написанное в этом запуске, а сохранённых — [messageCount] из
   /// index.json.
@@ -324,6 +389,16 @@ final class ChatThread {
 
   /// Закреплена ([pinnedAt]).
   bool get pinned => pinnedAt != null;
+
+  /// Пустую сессию открыли снова («+», удаление открытого чата): она
+  /// «создана» сейчас и в меню стоит в «Сегодня», а не в дне, когда её
+  /// впервые оставили пустой. На диск пустая сессия не пишется. У чата с
+  /// сообщениями ничего не меняется.
+  void touchEmpty(DateTime now) {
+    if (!isSession || messageCount > 0) return;
+    createdAt = now;
+    lastActivityAt = now;
+  }
 
   /// Сколько сообщений в чате, даже если они ещё не прочитаны.
   int get messageCount =>
@@ -344,13 +419,16 @@ final class ChatThread {
         if (preview != null) 'preview': preview,
         if (lastPersonaId != null) 'last_persona': lastPersonaId,
         if (unread) 'unread': true,
+        if (kind == ChatKind.task) 'own_talk': ownTalk,
+        if (projectId != null) 'project_id': projectId,
         'count': messageCount,
       };
 
   /// Чат по метаданным без сообщений ([loaded] = false). Повреждённые
   /// метаданные — `null`. Поля, которых нет в старых файлах
   /// (`custom_title`, `pinned_at`, `preview`, `last_persona`), читаются
-  /// осторожно: нет или не того типа — `null`.
+  /// осторожно: нет или не того типа — `null`. `project_id` старые
+  /// версии не пишут и при чтении пропускают.
   static ChatThread? fromMetaJson(Object? json) {
     if (json is! Map) return null;
     final id = json['id'];
@@ -377,7 +455,10 @@ final class ChatThread {
     final pinned = json['pinned_at'];
     final preview = json['preview'];
     final persona = json['last_persona'];
+    final own = json['own_talk'];
+    final project = json['project_id'];
     final session = kind == ChatKind.session;
+    final stored = count is int && count >= 0 ? count : 0;
     return ChatThread(
       id: id,
       kind: kind,
@@ -395,9 +476,36 @@ final class ChatThread {
           : null,
       lastPersonaId: persona is String && persona.isNotEmpty ? persona : null,
       unread: json['unread'] == true,
+      // Старые файлы без признака: свои реплики, вероятно, есть, если
+      // сообщений больше двух копий из onTaskCreated. При открытии чата
+      // признак уточняется по сообщениям.
+      ownTalk: kind == ChatKind.task && (own is bool ? own : stored > 2),
+      projectId:
+          kind != ChatKind.main && project is String && project.isNotEmpty
+              ? project
+              : null,
       loaded: false,
-      storedCount: count is int && count >= 0 ? count : 0,
+      storedCount: stored,
     );
+  }
+
+  /// Команда [messages]`[i]` — копия из ChatBook.onTaskCreated: за ней
+  /// идёт копия ответа со ссылкой на исходное сообщение
+  /// ([ChatLink.messageId]). Исходный ответ ссылается на чат задачи без
+  /// сообщения.
+  static bool isCopiedCommand(List<ChatMessage> messages, int i) {
+    if (!messages[i].fromUser || i + 1 >= messages.length) return false;
+    final next = messages[i + 1];
+    return !next.fromUser && next.link?.messageId != null;
+  }
+
+  /// Есть ли в [messages] своя реплика пользователя, а не копия команды
+  /// ([isCopiedCommand]) — признак [ownTalk] по сообщениям.
+  static bool hasOwnTalk(List<ChatMessage> messages) {
+    for (var i = 0; i < messages.length; i++) {
+      if (messages[i].fromUser && !isCopiedCommand(messages, i)) return true;
+    }
+    return false;
   }
 
   /// Название от пользователя: пробелы схлопнуты, края обрезаны, не

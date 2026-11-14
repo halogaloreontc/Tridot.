@@ -1,13 +1,41 @@
 import 'package:flutter/material.dart';
 
 import '../../core/formatting/due_format.dart';
+import '../../core/formatting/plural.dart';
 import '../../core/models/task.dart';
 import '../assistant_theme.dart';
 import '../widgets/task_tile.dart';
 
-/// Экран «Проекты»: активные задачи, сгруппированные по проекту
-/// (первая метка задачи). Карточка проекта раскрывается на месте и
-/// показывает его задачи по срокам; одновременно открыта одна карточка.
+/// Проект-папка на экране «Проекты» (ADR-018).
+final class ProjectFolderCard {
+  const ProjectFolderCard({
+    required this.id,
+    required this.name,
+    required this.sessions,
+    this.description,
+    this.taskTag,
+  });
+
+  final String id;
+  final String name;
+  final String? description;
+
+  /// Сколько в папке сессий.
+  final int sessions;
+
+  /// Связанная метка задач без «#»; `null` — нет.
+  final String? taskTag;
+}
+
+/// Экран «Проекты» (ADR-018), два блока:
+///
+/// - «Папки» — проекты-папки с сессиями ([folders]): нажатие открывает
+///   проект ([onOpenFolder]), «Новый проект» — [onNewFolder];
+/// - «Метки задач» — активные задачи, сгруппированные по первой метке, как
+///   раньше. Метки, уже связанные с папкой, здесь не повторяются (их задачи
+///   — на экране папки). Карточка метки раскрывается на месте и показывает
+///   задачи по срокам и «Сделать папкой» ([onMakeFolder]); одновременно
+///   открыта одна карточка.
 class ProjectsScreen extends StatefulWidget {
   const ProjectsScreen({
     super.key,
@@ -16,7 +44,19 @@ class ProjectsScreen extends StatefulWidget {
     required this.selectedId,
     required this.onOpenTask,
     required this.onToggleDone,
+    this.folders = const <ProjectFolderCard>[],
+    this.onOpenFolder,
+    this.onNewFolder,
+    this.onMakeFolder,
   });
+
+  /// Проекты-папки по порядку.
+  final List<ProjectFolderCard> folders;
+  final ValueChanged<String>? onOpenFolder;
+  final VoidCallback? onNewFolder;
+
+  /// «Сделать папкой» у метки: папка с её именем, связанная с ней.
+  final ValueChanged<String>? onMakeFolder;
 
   /// Только активные задачи.
   final List<Task> tasks;
@@ -38,7 +78,7 @@ final class _Project {
   final String? name;
   final List<Task> tasks = <Task>[];
 
-  String get key => name == null ? 'project-none' : 'project-$name';
+  String get key => name == null ? 'tag-none' : 'tag-$name';
   String get label => name == null ? 'Без проекта' : '#$name';
 }
 
@@ -49,8 +89,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   List<_Project> _projects() {
     final named = <String, _Project>{};
     final none = _Project(null);
+    final linked = <String>{
+      for (final folder in widget.folders)
+        if (folder.taskTag case final String tag) tag,
+    };
     for (final task in widget.tasks) {
       final project = task.project;
+      if (project != null && linked.contains(project)) continue;
       if (project == null) {
         none.tasks.add(task);
       } else {
@@ -62,6 +107,43 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     return <_Project>[
       for (final name in names) named[name]!,
       if (none.tasks.isNotEmpty) none,
+    ];
+  }
+
+  List<Widget> _buildFolders() {
+    final open = widget.onOpenFolder;
+    return <Widget>[
+      Row(
+        children: <Widget>[
+          const Expanded(child: SectionLabel('Папки')),
+          if (widget.onNewFolder != null)
+            TextButton.icon(
+              key: const Key('projects-new'),
+              onPressed: widget.onNewFolder,
+              icon: const Icon(Icons.create_new_folder_outlined, size: 18),
+              label: const Text('Новый проект'),
+            ),
+        ],
+      ),
+      if (widget.folders.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text(
+            'Папок пока нет. В папке живут сессии одного дела, а новую '
+            'сессию можно начать прямо в ней.',
+            key: Key('projects-no-folders'),
+            style: metaTextStyle,
+          ),
+        )
+      else
+        for (final folder in widget.folders)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _FolderCard(
+              folder: folder,
+              onTap: open == null ? null : () => open(folder.id),
+            ),
+          ),
     ];
   }
 
@@ -90,16 +172,20 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Проект задаётся меткой в команде: Добавь задачу «Отчёт» '
-                '#работа — или в документе задачи.',
-                style: technicalTextStyle,
+                'Проект — папка для сессий: из неё сразу начинают новую '
+                'сессию. Метку задачи задают в команде: Добавь задачу '
+                '«Отчёт» #работа — или в документе задачи.',
+                style: metaTextStyle,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              ..._buildFolders(),
+              const SizedBox(height: 12),
+              const SectionLabel('Метки задач'),
               if (projects.isEmpty)
                 const EmptyState(
-                  icon: Icons.folder_outlined,
+                  icon: Icons.sell_outlined,
                   title: 'Нет активных задач',
-                  hint: 'Проекты появятся, когда у задач будут метки.',
+                  hint: 'Метки появятся, когда у задач будут метки.',
                 )
               else
                 for (final project in projects)
@@ -113,6 +199,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                       onToggleExpanded: () => _toggle(project.key),
                       onOpenTask: widget.onOpenTask,
                       onToggleDone: widget.onToggleDone,
+                      onMakeFolder:
+                          project.name == null || widget.onMakeFolder == null
+                              ? null
+                              : () => widget.onMakeFolder!(project.name!),
                     ),
                   ),
             ],
@@ -132,8 +222,10 @@ final class _ProjectCard extends StatelessWidget {
     required this.onToggleExpanded,
     required this.onOpenTask,
     required this.onToggleDone,
+    this.onMakeFolder,
   });
 
+  final VoidCallback? onMakeFolder;
   final _Project project;
   final DateTime now;
   final bool expanded;
@@ -186,12 +278,12 @@ final class _ProjectCard extends StatelessWidget {
                             ),
                             Text(
                               'активных: ${project.tasks.length}',
-                              style: technicalTextStyle,
+                              style: metaTextStyle,
                             ),
                             if (overdue > 0)
                               Text(
                                 'просрочено: $overdue',
-                                style: technicalTextStyle.copyWith(
+                                style: metaTextStyle.copyWith(
                                   color: AssistantColors.danger,
                                 ),
                               ),
@@ -216,6 +308,19 @@ final class _ProjectCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
+                  if (onMakeFolder != null)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        key: Key('make-folder-${project.name}'),
+                        onPressed: onMakeFolder,
+                        icon: const Icon(
+                          Icons.create_new_folder_outlined,
+                          size: 18,
+                        ),
+                        label: const Text('Сделать папкой'),
+                      ),
+                    ),
                   for (final (group, tasks)
                       in groupTasks(project.tasks, now)) ...<Widget>[
                     SectionLabel(
@@ -237,6 +342,93 @@ final class _ProjectCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Карточка проекта-папки: значок, название, число сессий, метка и
+/// описание.
+final class _FolderCard extends StatelessWidget {
+  const _FolderCard({required this.folder, required this.onTap});
+
+  final ProjectFolderCard folder;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final sessions = '${folder.sessions} '
+        '${ruPlural(folder.sessions, 'сессия', 'сессии', 'сессий')}';
+    return Material(
+      color: AssistantColors.panel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: const BorderSide(color: AssistantColors.borderSoft),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Semantics(
+        button: true,
+        label: 'Проект «${folder.name}», $sessions',
+        excludeSemantics: true,
+        onTap: onTap,
+        child: InkWell(
+          key: Key('folder-${folder.id}'),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.folder_outlined,
+                    color: AssistantColors.icon,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Text(
+                          folder.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: projectNameStyle(fontSize: 18),
+                        ),
+                        Wrap(
+                          spacing: 12,
+                          children: <Widget>[
+                            Text(sessions, style: metaTextStyle),
+                            if (folder.taskTag != null)
+                              Text(
+                                '#${folder.taskTag}',
+                                style: metaTextStyle,
+                              ),
+                          ],
+                        ),
+                        if (folder.description != null)
+                          Text(
+                            folder.description!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AssistantColors.muted,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right,
+                    color: AssistantColors.muted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

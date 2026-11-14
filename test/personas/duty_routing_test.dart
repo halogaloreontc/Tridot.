@@ -1,6 +1,6 @@
-// Кто отвечает без обращения по имени (ADR-016): зона главного — Садо,
+// Кто отвечает без обращения по имени (ADR-016): зона главного — Связной,
 // расширения — их ведущий, оповещения — ведущий оповещений; ведущий,
-// выключенный режимом, отдаёт зону Садо. Матрица: режим × помощник Дуэта ×
+// выключенный режимом, отдаёт зону Связной. Матрица: режим × помощник Дуэта ×
 // переназначение обязанностей. Пароли — только канарейки.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
@@ -24,7 +24,7 @@ import '../connectors/manifest/fixtures.dart';
 import '../passwords/vault_test_support.dart';
 
 /// Ожидаемый ведущий обязанности, назначенной [assigned]: он сам, если
-/// режим его включает, иначе Садо. Считается здесь независимо от
+/// режим его включает, иначе Связной. Считается здесь независимо от
 /// [PersonaCast].
 String _expected(TeamMode mode, String duoHelper, String assigned) =>
     switch (mode) {
@@ -133,7 +133,7 @@ void main() {
 
             final task = await assistant.handle('добавь задачу хлеб');
             expect(task.intent, 'task.create');
-            expect(task.personaId, 'sado', reason: 'задачи — зона Садо');
+            expect(task.personaId, 'sado', reason: 'задачи — зона Связной');
 
             final store = await assistant.handle('где лежит 64115');
             expect(store.replyId, 'role.notConnected');
@@ -208,10 +208,10 @@ void main() {
         duoHelper: 'rio',
       );
       final answer = await assistant.handle('да');
-      expect(answer.personaId, 'sado', reason: 'задачи — зона Садо');
+      expect(answer.personaId, 'sado', reason: 'задачи — зона Связной');
     });
 
-    test('имя выключенного помощника снимается, отвечает Садо', () async {
+    test('имя выключенного помощника снимается, отвечает Связной', () async {
       final (assistant, _) = await setUpWith(
         const PersonaSettings(teamMode: TeamMode.duo, duoHelper: 'rio'),
       );

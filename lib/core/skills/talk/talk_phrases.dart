@@ -91,15 +91,15 @@ enum TalkSettingKind {
   /// «Не шути».
   jokesOff,
 
-  /// «Noda, будь основной», «пусть отвечает Лиорио». Главный всегда Садо
+  /// «Noda, будь основной», «пусть отвечает Лиорио». Главный всегда Связной
   /// (ADR-016): просьба настроек не меняет, ответ — где включить
   /// помощников.
   main,
 
-  /// «Включи соло»: всё делает Садо.
+  /// «Включи соло»: всё делает Связной.
   modeSolo,
 
-  /// «Включи дуэт», «включи дуэт с Нодой»: Садо и один помощник.
+  /// «Включи дуэт», «включи дуэт с Нодой»: Связной и один помощник.
   modeDuo,
 
   /// «Включи трио»: все трое.
@@ -1079,12 +1079,20 @@ abstract final class TalkPhrases {
     if (!inflected && _isRude(words)) {
       return TalkRequest(TalkTopic.rude, persona: persona);
     }
+    bool isName(String word) =>
+        _names.containsKey(word) || _inflectedNames.containsKey(word);
     final kept = <String>[
-      for (final word in words)
-        if (_names.containsKey(word) || _inflectedNames.containsKey(word))
+      for (var i = 0; i < words.length; i++)
+        if (isName(words[i]))
           _nameSlot
-        else if (!_fillers.contains(word))
-          word,
+        // «Дуэт со Связным», «дуэт со Светой» — тот же образец, что «дуэт
+        // с <имя>» (ADR-017).
+        else if (words[i] == 'со' &&
+            i + 1 < words.length &&
+            isName(words[i + 1]))
+          'с'
+        else if (!_fillers.contains(words[i]))
+          words[i],
     ];
     if (kept.isEmpty) return null;
     final withName = _phrases[kept.join(' ')] ?? _settingWithPlace(kept);

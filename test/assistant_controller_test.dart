@@ -59,6 +59,40 @@ void main() {
     expect(await service.listActive(), isEmpty);
   });
 
+  group('метка проекта-папки (ADR-018)', () {
+    test('задача в сессии проекта без своей метки получает метку проекта',
+        () async {
+      assistant.enterChat(sessionId: 'session:1', projectTag: 'дом');
+      final created = await assistant.handle('Добавь задачу «Плитка»');
+      expect(created.status, AssistantStatus.completed);
+      expect(created.task?.tags, <String>['дом']);
+    });
+
+    test('своя метка в команде важнее метки проекта', () async {
+      assistant.enterChat(sessionId: 'session:1', projectTag: 'дом');
+      final created = await assistant.handle('Добавь задачу «Отчёт» #работа');
+      expect(created.task?.tags, <String>['работа']);
+    });
+
+    test('вне проекта и после смены чата метки нет', () async {
+      assistant.enterChat(sessionId: 'session:1', projectTag: 'дом');
+      assistant.enterChat(sessionId: 'session:2');
+      final created = await assistant.handle('Добавь задачу «Хлеб»');
+      expect(created.task?.tags, isEmpty);
+    });
+
+    test('setProjectTag: сессию перенесли в проект', () async {
+      assistant
+        ..enterChat(sessionId: 'session:1')
+        ..setProjectTag('дача');
+      final created = await assistant.handle('Добавь задачу «Забор»');
+      expect(created.task?.tags, <String>['дача']);
+      assistant.setProjectTag(null);
+      final plain = await assistant.handle('Добавь задачу «Ворота»');
+      expect(plain.task?.tags, isEmpty);
+    });
+  });
+
   test('запрашивает контекст вместо угадывания задачи', () async {
     final response = await assistant.handle('Заверши её');
 

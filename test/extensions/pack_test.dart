@@ -191,7 +191,7 @@ void main() {
       );
       expectError(
         withEntry(<String, Object?>{'id': 'j1', 'text': 'а', 'persona': 'bob'}),
-        'any, sado (Садо), rio (Лиорио), noda (Нода)',
+        'any, sado (Связной), rio (Лиорио), noda (Нода)',
       );
       expectError(
         withEntry(<String, Object?>{
@@ -243,7 +243,7 @@ void main() {
     expect(pack.encode(), contains('"persona":"rio"'));
   });
 
-  test('persona: «sado» — запись только для Садо', () {
+  test('persona: «sado» — запись только для Связной', () {
     final pack = PackFormat.parse(
       jsonEncode(
         withEntry(<String, Object?>{

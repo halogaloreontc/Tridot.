@@ -243,7 +243,7 @@ void main() {
       return store;
     }
 
-    testWidgets('без имени: склад — ведущей расширений, остальное — Садо',
+    testWidgets('без имени: склад — ведущей расширений, остальное — Связной',
         (tester) async {
       await _pump(tester, await nodaLeads(), connected: true);
       expect(find.byKey(const Key('addressee-switch')), findsNothing);
@@ -251,7 +251,7 @@ void main() {
       await _tapQuick(tester, 'Без фото');
       expect(_lastAuthor(tester), 'noda');
       await _say(tester, '2+2');
-      expect(_lastAuthor(tester), 'sado', reason: 'калькулятор — зона Садо');
+      expect(_lastAuthor(tester), 'sado', reason: 'калькулятор — зона Связной');
       await _say(tester, '64115');
       expect(_lastAuthor(tester), 'noda');
     });
@@ -283,7 +283,7 @@ void main() {
       expect(_lastAuthor(tester), 'sado');
     });
 
-    testWidgets('сменили режим на Дуэт с Лиорио — склад отвечает Садо',
+    testWidgets('сменили режим на Дуэт с Лиорио — склад отвечает Связной',
         (tester) async {
       final store = await nodaLeads();
       final assistant = await _pump(tester, store, connected: true);
@@ -300,14 +300,14 @@ void main() {
       await backToSession(tester);
       expect(assistant.personas.teamMode, TeamMode.duo);
       expect(assistant.personas.duoHelper, 'rio');
-      // Ведущая расширений Нода выключена режимом — склад у Садо.
+      // Ведущая расширений Нода выключена режимом — склад у Связной.
       await _say(tester, '64115');
       expect(_lastAuthor(tester), 'sado');
       await _say(tester, 'покажи задачи');
       expect(_lastAuthor(tester), 'sado');
     });
 
-    testWidgets('по умолчанию склад — Лиорио, остальное — Садо',
+    testWidgets('по умолчанию склад — Лиорио, остальное — Связной',
         (tester) async {
       final store = InMemorySettingsStore();
       await store.save(

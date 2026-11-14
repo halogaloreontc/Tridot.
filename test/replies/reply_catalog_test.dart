@@ -31,9 +31,9 @@ const Map<String, String> facts = <String, String>{
   'overdue': '2',
   'problems': '«Склад» не работает: нет связи с сервером (с 14:05)',
   'other': 'Нода',
-  'main': 'Садо',
+  'main': 'Связной',
   'duties': 'оповещения (напоминания, просрочки, сигналы склада)',
-  'team': 'Садо, Лиорио и Нода',
+  'team': 'Связной, Лиорио и Нода',
   'appPrepositional': 'Tridot',
   'appGenitive': 'Tridot',
   'skills': '«Задачи» — например, «Покажи задачи»',
@@ -357,7 +357,7 @@ void main() {
     expect(checked, greaterThan(1000));
   });
 
-  group('Садо, Лиорио и Нода (ADR-016)', () {
+  group('Связной, Лиорио и Нода (ADR-016)', () {
     test('ReplyVoice.copyWith меняет только род', () {
       const voice = ReplyVoice(
         style: ReplyStyles.brief,
@@ -407,7 +407,7 @@ void main() {
       }
     });
 
-    test('Садо о себе — во всех стилях и в обоих родах', () {
+    test('Связной о себе — во всех стилях и в обоих родах', () {
       for (final id in <String>[
         'common.welcome',
         'talk.greet',

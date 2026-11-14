@@ -78,6 +78,7 @@ class _PersonasSectionState extends State<PersonasSection> {
     final mode = personas.teamMode;
     final cast = personas.cast;
     final sado = cast.responder.russianName;
+    final alone = cast.responder.gender == ReplyGender.female ? 'сама' : 'сам';
     final helpers = <Persona>[
       for (final id in Personas.helperIds) cast.byId(id),
     ];
@@ -91,9 +92,11 @@ class _PersonasSectionState extends State<PersonasSection> {
         _Group(
           title: 'Режим',
           hint: '${switch (mode) {
-            TeamMode.solo => '$sado делает всё сам.',
-            TeamMode.duo => '$sado и один помощник на выбор; зона второго '
-                'возвращается к $sado.',
+            TeamMode.solo => '$sado делает всё $alone.',
+            // Имя — только в именительном: своё имя пользователя
+            // склонять не надо (ADR-017).
+            TeamMode.duo => '$sado и один помощник на выбор; зона '
+                'выключенного — снова у главного.',
             TeamMode.trio => 'Все трое: $sado, ${helpers[0].russianName} и '
                 '${helpers[1].russianName}.',
           }} Написать помощнику напрямую: «${addressee.russianName}, …».',
@@ -178,7 +181,7 @@ class _PersonasSectionState extends State<PersonasSection> {
           ),
           subtitle: const Text(
             'Если стиль ими пользуется',
-            style: technicalTextStyle,
+            style: metaTextStyle,
           ),
           value: personas.emoji,
           onChanged: (bool value) => _set(personas.copyWith(emoji: value)),
@@ -207,7 +210,7 @@ class _PersonasSectionState extends State<PersonasSection> {
 }
 
 /// Кто ведёт обязанность: Лиорио или Нода. Если назначенного выключил
-/// режим — подпись «сейчас делает Садо».
+/// режим — подпись «сейчас делает Связной».
 class _DutyGroup extends StatelessWidget {
   const _DutyGroup({
     required this.duty,
@@ -332,7 +335,15 @@ class _PersonaStyleState extends State<_PersonaStyle> {
     final error = _check(name);
     setState(() => _error = error);
     // Неверное имя не сохраняется: в настройках остаётся прежнее.
-    if (error == null) widget.onName(name);
+    if (error == null) {
+      widget.onName(name);
+      // Встроенное имя другого рода («Связной» при «она») род не меняет:
+      // в поле — то, что покажут настройки (ADR-017).
+      final shown = widget.personas
+          .withName(widget.persona.id, name)
+          .nameOf(widget.persona.id);
+      if (shown != name) _name.text = shown;
+    }
   }
 
   @override
@@ -346,7 +357,7 @@ class _PersonaStyleState extends State<_PersonaStyle> {
     final preview = library.render(PersonasSection.preview, voice);
     final accent = Color(persona.accentColor);
     final isSado = persona.id == Personas.sado.id;
-    // Род Садо до выбора не отмечен: ни «он», ни «она».
+    // Род главного до выбора не отмечен: ни «он», ни «она».
     final ReplyGender? gender = isSado && !personas.sadoGenderChosen
         ? null
         : personas.genderOf(persona.id);
@@ -439,7 +450,7 @@ class _PersonaStyleState extends State<_PersonaStyle> {
                 'Стиль «$style» сейчас выключен или удалён — '
                 '${persona.russianName} говорит нейтрально.',
                 key: ValueKey<String>('style-missing-${persona.id}'),
-                style: technicalTextStyle.copyWith(
+                style: metaTextStyle.copyWith(
                   color: AssistantColors.warning,
                 ),
               ),
@@ -461,7 +472,7 @@ class _PersonaStyleState extends State<_PersonaStyle> {
               style: const TextStyle(color: AssistantColors.text),
             ),
           ),
-          // Пример склоняется в мужском роде, пока род Садо не выбран
+          // Пример склоняется в мужском роде, пока род главного не выбран
           // (ADR-016): об этом сказано прямо, чтобы пример не спорил с
           // неотмеченными «Он» и «Она».
           if (gender == null)
@@ -470,7 +481,7 @@ class _PersonaStyleState extends State<_PersonaStyle> {
               child: Text(
                 'Пример — в мужском роде, пока род не выбран.',
                 key: ValueKey<String>('style-preview-note-${persona.id}'),
-                style: technicalTextStyle,
+                style: metaTextStyle,
               ),
             ),
         ],
@@ -506,7 +517,7 @@ class _Group extends StatelessWidget {
           Wrap(spacing: 8, runSpacing: 8, children: children),
           if (hint != null) ...<Widget>[
             const SizedBox(height: 6),
-            Text(hint!, key: hintKey, style: technicalTextStyle),
+            Text(hint!, key: hintKey, style: metaTextStyle),
           ],
         ],
       ),

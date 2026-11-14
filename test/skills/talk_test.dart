@@ -765,21 +765,21 @@ void main() {
   });
 
   group('«кто ты» и «что умеешь»', () {
-    test('трио: Садо о себе и о помощниках, помощник — о себе и о главном',
+    test('трио: Связной о себе и о помощниках, помощник — о себе и о главном',
         () async {
       final f = await _fixture();
 
       final sado = await f.say('кто ты');
       expect(sado.replyId, 'talk.who.main');
       expect(sado.personaId, 'sado');
-      expect(sado.message, startsWith('Я Садо, главный помощник'));
+      expect(sado.message, startsWith('Я Связной, главный помощник'));
       expect(sado.message, contains('Лиорио'));
       expect(sado.message, contains('Нода'));
 
       final noda = await f.say('кто ты', addressee: 'noda');
       expect(noda.replyId, 'talk.who.self.helper');
       expect(noda.personaId, 'noda');
-      expect(noda.message, contains('Садо'));
+      expect(noda.message, contains('Связной'));
     });
 
     test('соло: единственный помощник', () async {
@@ -795,7 +795,7 @@ void main() {
       expect(response.personaId, 'sado');
       expect(
         response.message,
-        'Я Садо, помощница в Tridot: отвечаю на ваши сообщения, веду задачи '
+        'Я Связная, помощница в Tridot: отвечаю на ваши сообщения, веду задачи '
         'и считаю.',
       );
     });
@@ -818,7 +818,7 @@ void main() {
       final sado = await f.say('кто ты');
       expect(
         sado.message,
-        'Я Садо, главный помощник в Tridot: беседа, задачи, планы, расчёты. '
+        'Я Связной, главный помощник в Tridot: беседа, задачи, планы, расчёты. '
         'Лиорио — помощник: расширения (пока ни одно не включено). Нода — '
         'помощница: оповещения (напоминания, просрочки). К любому из нас '
         'можно обратиться по имени.',
@@ -828,19 +828,19 @@ void main() {
       expect(
         noda.message,
         'Я Нода, помощница в Tridot: оповещения (напоминания, просрочки). '
-        'Главный помощник — Садо: беседа, задачи, планы, расчёты.',
+        'Главный помощник — Связной: беседа, задачи, планы, расчёты.',
       );
 
       final rio = await f.say('кто ты', addressee: 'rio');
       expect(
         rio.message,
         'Я Лиорио, помощник в Tridot: расширения (пока ни одно не '
-        'включено). Главный помощник — Садо: беседа, задачи, планы, '
+        'включено). Главный помощник — Связной: беседа, задачи, планы, '
         'расчёты.',
       );
     });
 
-    test('дуэт с Нодой: расширения у Садо, о Лиорио ни слова', () async {
+    test('дуэт с Нодой: расширения у Связной, о Лиорио ни слова', () async {
       final f = await _fixture(
         personas: const PersonaSettings(
           teamMode: TeamMode.duo,
@@ -851,7 +851,7 @@ void main() {
       final sado = await f.say('кто ты');
       expect(sado.message, contains('Нода — помощница: оповещения'));
       expect(sado.message, isNot(contains('Лиорио')));
-      // Имя выключенного помощника — просто текст: отвечает Садо.
+      // Имя выключенного помощника — просто текст: отвечает Связной.
       expect((await f.say('кто ты, Лиорио?')).personaId, 'sado');
     });
 
@@ -880,10 +880,11 @@ void main() {
     });
 
     // Фраза о помощнике следует его собственному роду, а не роду
-    // говорящего: все четыре сочетания рода Садо и Ноды.
+    // говорящего: все четыре сочетания рода Связной и Ноды.
     for (final sadoGender in ReplyGender.values) {
       for (final nodaGender in ReplyGender.values) {
-        test('род: Садо ${sadoGender.name}, Нода ${nodaGender.name}', () async {
+        test('род: главный ${sadoGender.name}, Нода ${nodaGender.name}',
+            () async {
           final f = await _fixture(
             personas: PersonaSettings(
               genders: <String, ReplyGender>{
@@ -901,7 +902,9 @@ void main() {
           expect(
             sado,
             startsWith(
-              'Я Садо, ${female ? 'главная помощница' : 'главный помощник'}',
+              female
+                  ? 'Я Связная, главная помощница'
+                  : 'Я Связной, главный помощник',
             ),
           );
           final nodaFemale = nodaGender == ReplyGender.female;
@@ -917,7 +920,9 @@ void main() {
           expect(
             noda,
             contains(
-              '${female ? 'Главная помощница' : 'Главный помощник'} — Садо',
+              female
+                  ? 'Главная помощница — Связная'
+                  : 'Главный помощник — Связной',
             ),
           );
         });
@@ -957,8 +962,8 @@ void main() {
         );
         for (final persona in settings.cast.active) {
           test(
-              '$style, ${persona.russianName}, ${mode.name}: не «связной», '
-              'а помощник в Tridot', () async {
+              '$style, ${persona.russianName}, ${mode.name}: помощник в '
+              'Tridot, а не «связной» Tridot', () async {
             final f = await _fixture(personas: settings);
 
             final response = await f.say('кто ты', addressee: persona.id);
@@ -967,10 +972,14 @@ void main() {
             expect(response.personaId, persona.id);
             expect(text, contains('в Tridot'), reason: text);
             expect('в Tridot'.allMatches(text).length, 1, reason: text);
+            // «Связной» — имя главного (ADR-017), а не приложения:
+            // приложение помощником не называется.
             expect(
-              text,
+              text.replaceAll(settings.cast.responder.russianName, ''),
               isNot(contains(RegExp('связн', caseSensitive: false))),
+              reason: text,
             );
+            expect(text, isNot(contains('Tridot — помощник')));
             final self =
                 text.substring(0, text.indexOf('в Tridot')).toLowerCase();
             if (persona.gender == ReplyGender.female) {
@@ -1060,7 +1069,7 @@ void main() {
           _pack('jokes.mixed', <Map<String, Object?>>[
             <String, Object?>{
               'id': 's',
-              'text': 'Шутка для Садо.',
+              'text': 'Шутка для Связной.',
               'persona': 'sado',
             },
             <String, Object?>{
@@ -1084,7 +1093,7 @@ void main() {
         ],
       );
 
-      expect((await f.say('анекдот')).message, 'Шутка для Садо.');
+      expect((await f.say('анекдот')).message, 'Шутка для Связной.');
       expect((await f.say('Лиорио, анекдот')).message, 'Шутка для Liorio.');
       final noda = await f.say('Нода, анекдот');
       expect(noda.message, contains('Шутка для Noda.'));
@@ -1243,9 +1252,9 @@ void main() {
       expect(f.assistant.personas, const PersonaSettings());
     });
 
-    test('главный всегда Садо: просьбы сменить основного настроек не меняют',
+    test('главный всегда Связной: просьбы сменить основного настроек не меняют',
         () async {
-      // Отвечает тот, кто отвечал бы и так: к кому обратились или Садо.
+      // Отвечает тот, кто отвечал бы и так: к кому обратились или Связной.
       for (final (text, persona) in <(String, String)>[
         ('Noda будь основной', 'noda'),
         ('пусть отвечает Лиорио', 'sado'),
@@ -1258,14 +1267,14 @@ void main() {
         final response = await f.say(text);
         expect(response.replyId, 'talk.set.mainFixed', reason: text);
         expect(response.status, AssistantStatus.noAction, reason: text);
-        expect(response.message, contains('— Садо'), reason: text);
+        expect(response.message, contains('— Связной'), reason: text);
         expect(response.settingsChange, isNull, reason: text);
         expect(response.personaId, persona, reason: text);
         expect(f.assistant.personas, const PersonaSettings(), reason: text);
       }
     });
 
-    test('в соло — отвечает Садо, настройки те же', () async {
+    test('в соло — отвечает Связной, настройки те же', () async {
       const solo = PersonaSettings(teamMode: TeamMode.solo);
       final f = await _fixture(personas: solo);
 
@@ -1278,7 +1287,7 @@ void main() {
     });
 
     group('режим команды из беседы', () {
-      test('«включи соло» → Соло, подтверждает Садо', () async {
+      test('«включи соло» → Соло, подтверждает Связной', () async {
         final f = await _fixture(
           personas: const PersonaSettings(
             styles: <String, String>{'sado': 'neutral'},
@@ -1290,7 +1299,7 @@ void main() {
         expect(response.settingsChange?.teamMode, TeamMode.solo);
         expect(response.message, 'Хорошо, теперь всё делаю сам.');
         expect(f.assistant.personas.teamMode, TeamMode.solo);
-        // Теперь склад и обращение к Ноде — у Садо.
+        // Теперь склад и обращение к Ноде — у Связной.
         expect((await f.say('Нода, привет')).personaId, 'sado');
       });
 
@@ -1305,7 +1314,7 @@ void main() {
         expect(response.replyId, 'talk.set.modeDuo');
         expect(
           response.message,
-          'Хорошо, теперь работаем вдвоём: Садо и Нода.',
+          'Хорошо, теперь работаем вдвоём: Связной и Нода.',
         );
         expect(f.assistant.personas.teamMode, TeamMode.duo);
         expect(f.assistant.personas.duoHelper, 'noda');
@@ -1352,7 +1361,7 @@ void main() {
         expect(response.replyId, 'talk.set.modeTrio');
         expect(
           response.message,
-          'Хорошо, теперь работаем втроём: Садо, Лиорио и Нода.',
+          'Хорошо, теперь работаем втроём: Связной, Лиорио и Нода.',
         );
         expect(f.assistant.personas.teamMode, TeamMode.trio);
         final again = await f.say('режим трио');
@@ -1460,10 +1469,10 @@ void main() {
       final response = await f.say('кто ты, Нода?');
       expect(response.replyId, 'talk.who.self.helper');
       expect(response.message, startsWith('Я Нода!'));
-      expect(response.message, contains('Садо'));
+      expect(response.message, contains('Связной'));
     });
 
-    test('соло: имя помощника — просто текст, отвечает Садо', () async {
+    test('соло: имя помощника — просто текст, отвечает Связной', () async {
       final f = await _fixture(
         personas: const PersonaSettings(teamMode: TeamMode.solo),
       );
@@ -1554,13 +1563,13 @@ void main() {
 
     test(
         '«говори короче, Нода» — кратко говорит Noda; задача без имени — '
-        'Садо', () async {
+        'Связной', () async {
       final f = await _fixture();
       final responses = await chat(f, <String>[
         'говори короче, Нода',
         'Добавь задачу купить хлеб',
       ]);
-      // Задачи — другой навык: отвечает Садо, а не та, к кому
+      // Задачи — другой навык: отвечает Связной, а не та, к кому
       // обращались в беседе.
       expect(responses.last.personaId, 'sado');
       expect(f.assistant.personas.styleOf(Personas.noda), ReplyStyles.brief);
@@ -1580,7 +1589,7 @@ void main() {
         '2+2',
       ]);
       // Главный не меняется: просьба — не обращение, отвечает Нода, с
-      // которой разговаривали; калькулятор — снова Садо.
+      // которой разговаривали; калькулятор — снова Связной.
       expect(responses[1].replyId, 'talk.set.mainFixed');
       expect(responses[2].replyId, 'talk.set.mainFixed');
       expect(responses[2].personaId, 'noda');
@@ -1604,7 +1613,7 @@ void main() {
       expect(f.assistant.personas, const PersonaSettings());
     });
 
-    test('соло: «пусть отвечает Лиорио» — отвечает Садо', () async {
+    test('соло: «пусть отвечает Лиорио» — отвечает Связной', () async {
       final f = await _fixture(
         personas: const PersonaSettings(teamMode: TeamMode.solo),
       );
@@ -1651,7 +1660,7 @@ void main() {
 
     test(
         '«да» без имени на вопрос Noda — отвечает Noda; другой навык — '
-        'снова Садо', () async {
+        'снова Связной', () async {
       final f = await _fixture();
       await f.tasks.create(title: 'Купить хлеб');
       final responses = await chat(f, <String>[
@@ -1661,7 +1670,7 @@ void main() {
       ]);
       expect(responses[1].personaId, 'noda');
       expect(responses[1].addressedPersonaId, isNull);
-      // Калькулятор — другой навык: продолжения нет, отвечает Садо.
+      // Калькулятор — другой навык: продолжения нет, отвечает Связной.
       expect(responses.last.personaId, 'sado');
     });
 

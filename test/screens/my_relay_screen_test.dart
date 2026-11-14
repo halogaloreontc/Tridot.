@@ -358,7 +358,7 @@ void main() {
       return changes;
     }
 
-    testWidgets('карточки Садо, Лиорио и Ноды с их настройками',
+    testWidgets('карточки Связной, Лиорио и Ноды с их настройками',
         (tester) async {
       await pumpAssistants(tester, const AppSettings());
       for (final id in <String>['sado', 'rio', 'noda']) {
@@ -366,12 +366,12 @@ void main() {
       }
       String role(String id) =>
           tester.widget<Text>(find.byKey(Key('persona-role-$id'))).data!;
-      // Род Садо ещё не выбран — подпись без рода.
+      // Род Связной ещё не выбран — подпись без рода.
       expect(role('sado'), 'главное: беседа, задачи, планы');
       expect(role('rio'), 'ведёт расширения');
       expect(role('noda'), 'ведёт оповещения');
       expect(find.text('на вы'), findsNWidgets(3));
-      // У Садо переключателя нет: он всегда включён.
+      // У Связной переключателя нет: он всегда включён.
       expect(find.byKey(const Key('persona-active-sado')), findsNothing);
       expect(find.byKey(const Key('persona-active-rio')), findsOneWidget);
       expect(find.byKey(const Key('persona-active-noda')), findsOneWidget);
@@ -386,7 +386,7 @@ void main() {
       );
     });
 
-    testWidgets('род Садо выбран — «главный помощник» / «главная помощница»',
+    testWidgets('род Связной выбран — «главный помощник» / «главная помощница»',
         (tester) async {
       for (final (gender, text) in <(ReplyGender, String)>[
         (ReplyGender.male, 'главный помощник'),

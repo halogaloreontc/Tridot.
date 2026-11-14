@@ -7,8 +7,8 @@ import 'persona_palette.dart';
 
 export 'persona_cast.dart';
 
-/// Помощник: Садо, Лиорио или Нода (docs/PLANS.md, «Tridot: Садо, Лиорио
-/// и Нода»; ADR-016).
+/// Помощник: Связной (Связная), Лиорио или Нода (docs/PLANS.md;
+/// ADR-016, ADR-017).
 ///
 /// Данные и коннекторы у них общие; различаются имя, род, цвет, стиль
 /// общения и обязанности. Имя и род можно поменять в настройках: тогда
@@ -18,6 +18,7 @@ final class Persona {
     required this.id,
     required this.name,
     required this.russianName,
+    this.feminineName,
     this.nicknames = const <String>[],
     this.inflectedForms = const <String>[],
     required this.gender,
@@ -38,13 +39,32 @@ final class Persona {
   /// Имя в интерфейсе и в ответах: «Лиорио» или имя из настроек.
   final String russianName;
 
+  /// Встроенное имя в женском роде: «Связная» у главного (ADR-017). Пока
+  /// имя не меняли, показывается то, что подходит к роду
+  /// ([defaultNameFor]). У остальных и у переименованного — `null`.
+  final String? feminineName;
+
+  /// Встроенное имя для рода [gender]: у главного «Связной» или
+  /// «Связная», у остальных — [russianName].
+  String defaultNameFor(ReplyGender gender) =>
+      gender == ReplyGender.female ? feminineName ?? russianName : russianName;
+
+  /// [value] — встроенное имя помощника (любого рода), без учёта
+  /// регистра и «ё»: «связная» у главного, «нода» у Ноды.
+  bool isDefaultName(String value) {
+    final word = fold(value.trim());
+    return word == fold(russianName) ||
+        (feminineName != null && word == fold(feminineName!));
+  }
+
   /// Другие имена для обращения, в нижнем регистре: краткое «лио»,
   /// ласковое «нодочка», разговорное «нодь». Только у встроенного имени.
   final List<String> nicknames;
 
-  /// Косвенные падежи имени, в нижнем регистре: «ноду», «ноде». Только
-  /// для беседы («сделай Ноду основной»), обращением не считаются.
-  /// «Лиорио» и «Садо» не склоняются; у нового имени форм нет.
+  /// Косвенные падежи имени, в нижнем регистре: «ноду», «ноде»,
+  /// «связного». Только для беседы («сделай Ноду основной»), обращением не
+  /// считаются. «Лиорио» не склоняется; у нового имени — падежи по
+  /// [nameCaseForms].
   final List<String> inflectedForms;
 
   /// Имена, по которым обращаются в начале и в конце сообщения, в нижнем
@@ -97,18 +117,21 @@ final class Persona {
   int get hashCode => Object.hash(id, name, russianName, gender);
 
   /// Тот же помощник с именем [newName] и родом [newGender]. Встроенные
-  /// краткие имена и падежи остаются, только пока имя прежнее (без учёта
-  /// регистра и «ё»): у нового имени одно обращение — именительный падеж,
-  /// а в просьбах беседы понимается ещё творительный («дуэт с Мирой»,
-  /// [instrumentalForms]).
+  /// краткие имена и падежи остаются, только пока имя встроенное (без
+  /// учёта регистра и «ё», любого рода — [isDefaultName]); показывается
+  /// тогда встроенное имя рода [newGender]: «Связная» у главного в женском
+  /// роде (ADR-017). У нового имени одно обращение — именительный падеж,
+  /// а в просьбах беседы понимаются ещё косвенные падежи («дуэт с Мирой»,
+  /// «сделай Свету основной», [nameCaseForms]).
   Persona renamed(String newName, ReplyGender newGender) {
-    final same = fold(newName) == fold(russianName);
+    final same = isDefaultName(newName);
     return Persona(
       id: id,
       name: same ? name : newName,
-      russianName: same ? russianName : newName,
+      russianName: same ? defaultNameFor(newGender) : newName,
+      feminineName: same ? feminineName : null,
       nicknames: same ? nicknames : const <String>[],
-      inflectedForms: same ? inflectedForms : instrumentalForms(newName),
+      inflectedForms: same ? inflectedForms : nameCaseForms(newName, newGender),
       gender: newGender,
       accentColor: accentColor,
       accentBackground: accentBackground,
@@ -117,11 +140,90 @@ final class Persona {
   }
 }
 
-/// Творительный падеж нового имени для просьб беседы («включи дуэт с
-/// Мирой»), в нижнем регистре и с «е» вместо «ё»: «Мира» — «мирой»,
-/// «мирей»; «Тим» — «тимом», «тимем»; «Гоша» — «гошей», «гошой»; «Ая» —
-/// «аей». Несклоняемые («Садо», «Лиорио») и не кириллица — без форм.
-/// Только для образцов просьб: обращением эти формы не считаются.
+/// Косвенные падежи нового имени для просьб беседы, в нижнем регистре и с
+/// «е» вместо «ё» (ADR-017): родительный, дательный, винительный,
+/// творительный и предложный — «дуэт с Мирой», «сделай Свету основной»,
+/// «пусть Тиму отвечает». Именительный — не здесь: он обращение.
+///
+/// Существительные — по окончанию: «Мира» — «миру», «мире», «миры»,
+/// «мирой»; «Аглая» — «аглаю», «аглае», «аглаи», «аглаей»; «Дмитрий» —
+/// «дмитрия», «дмитрию», «дмитрием», «дмитрии»; «Тим» — «тима», «тиму»,
+/// «тимом», «тиме»; на «-ь» — по роду [gender]. Мужское имя на «-ой» или
+/// «-ый» склоняется как прилагательное: «Шустрый» — «шустрого»,
+/// «шустрому», «шустрым», «шустром»; женское длиннее пяти букв на «-ая» —
+/// тоже: «Связная» — «связной», «связную». Женское на согласный,
+/// несклоняемые («Лиорио», «Садо») и не кириллица — без форм. Обращением
+/// эти формы не считаются.
+List<String> nameCaseForms(String name, ReplyGender gender) {
+  final word = Persona.fold(name.trim());
+  if (word.length < 2 || !RegExp(r'^[а-я-]+$').hasMatch(word)) {
+    return const <String>[];
+  }
+  final male = gender == ReplyGender.male;
+  final stem = word.substring(0, word.length - 1);
+  final last = word[word.length - 1];
+  final forms = <String>[
+    if (male &&
+        word.length > 3 &&
+        (word.endsWith('ой') || word.endsWith('ый'))) ...<String>[
+      for (final ending in const <String>['ого', 'ому', 'ым', 'ом'])
+        '${word.substring(0, word.length - 2)}$ending',
+    ] else if (!male &&
+        word.length > 5 &&
+        (word.endsWith('ая') || word.endsWith('яя'))) ...<String>[
+      // «Связная» — «связной», «связную», «связною». Короткие на «-ая» —
+      // существительные: «Аглая» — «аглаи», «аглаю».
+      for (final ending in word.endsWith('яя')
+          ? const <String>['ей', 'юю', 'ею']
+          : const <String>['ой', 'ую', 'ою'])
+        '${word.substring(0, word.length - 2)}$ending',
+    ] else if (word.endsWith('ий') && word.length > 3) ...<String>[
+      for (final ending in const <String>['я', 'ю', 'ем', 'и'])
+        '${word.substring(0, word.length - 1)}$ending',
+    ] else
+      ...switch (last) {
+        'а' => <String>[
+            '$stemу',
+            '$stemе',
+            if (_hushing.contains(stem[stem.length - 1]))
+              '$stemи'
+            else
+              '$stemы',
+            '$stemой',
+            '$stemей',
+          ],
+        'я' => <String>['$stemю', '$stemе', '$stemи', '$stemей'],
+        'й' => <String>['$stemя', '$stemю', '$stemем', '$stemе'],
+        'ь' => male
+            ? <String>['$stemя', '$stemю', '$stemем', '$stemе']
+            : <String>['$stemи', '$stemью'],
+        'о' ||
+        'е' ||
+        'и' ||
+        'у' ||
+        'ю' ||
+        'э' ||
+        'ы' ||
+        '-' =>
+          const <String>[],
+        _ => male
+            ? <String>['$wordа', '$wordу', '$wordом', '$wordем', '$wordе']
+            : const <String>[],
+      },
+  ];
+  return <String>{
+    for (final form in forms)
+      if (form != word) form,
+  }.toList();
+}
+
+/// Буквы, после которых пишется «и», а не «ы»: «Гоша» — «Гоши».
+const Set<String> _hushing = <String>{'г', 'к', 'х', 'ж', 'ш', 'ч', 'щ'};
+
+/// Творительный падеж нового имени ([nameCaseForms]) — прежнее имя
+/// функции из ADR-016: «Мира» — «мирой», «мирей»; «Тим» — «тимом»,
+/// «тимем»; «Гоша» — «гошей», «гошой»; «Ая» — «аей». Несклоняемые
+/// («Лиорио») и не кириллица — без форм.
 List<String> instrumentalForms(String name) {
   final word = Persona.fold(name.trim());
   if (word.length < 2 || !RegExp(r'^[а-я-]+$').hasMatch(word)) {
@@ -142,13 +244,30 @@ List<String> instrumentalForms(String name) {
 /// Встроенные помощники — значения по умолчанию. Текущие имена и род —
 /// в [PersonaCast] ([PersonaSettings.cast]).
 abstract final class Personas {
-  /// Садо — главный: беседа, задачи, планы, расчёты. Встречает в новой
-  /// сессии. Род выбирает пользователь; пока не выбран, каталог склоняет в
-  /// мужском роде (ADR-016).
+  /// Связной (Связная) — главный: беседа, задачи, планы, расчёты.
+  /// Встречает в новой сессии. Род выбирает пользователь; пока не выбран,
+  /// каталог склоняет в мужском роде, а имя — «Связной» (ADR-016,
+  /// ADR-017). Id `sado` — от прежнего имени «Садо», менять его нельзя: он
+  /// в настройках, истории и паках.
+  ///
+  /// Имя — прилагательное: обращение «Связной, …» и «Связная, …» при
+  /// любом роде ([nicknames]), косвенные падежи — «сделай Связного
+  /// основным», «дуэт со Связной» ([inflectedForms]; форма «связной»
+  /// женского рода уже в обращениях).
   static const Persona sado = Persona(
     id: 'sado',
-    name: 'Sado',
-    russianName: 'Садо',
+    name: 'Svyaznoy',
+    russianName: 'Связной',
+    feminineName: 'Связная',
+    nicknames: <String>['связной', 'связная'],
+    inflectedForms: <String>[
+      'связного',
+      'связному',
+      'связным',
+      'связном',
+      'связную',
+      'связною',
+    ],
     gender: ReplyGender.male,
     accentColor: PersonaPalette.sado,
     accentBackground: PersonaPalette.sadoBg,
@@ -242,7 +361,7 @@ final class PersonaSettings {
     this.legacySoloPersona,
   });
 
-  /// По умолчанию Садо и Лиорио говорят нейтрально, Нода — дружески.
+  /// По умолчанию Связной и Лиорио говорят нейтрально, Нода — дружески.
   static const Map<String, String> defaultStyles = <String, String>{
     'sado': ReplyStyles.neutral,
     'rio': ReplyStyles.neutral,
@@ -252,13 +371,13 @@ final class PersonaSettings {
   /// Соло, Дуэт или Трио.
   final TeamMode teamMode;
 
-  /// Помощник Садо в Дуэте: `rio` или `noda`.
+  /// Помощник главного в Дуэте: `rio` или `noda`.
   final String duoHelper;
 
   /// Имена из настроек: id → имя. Нет ключа — встроенное имя.
   final Map<String, String> names;
 
-  /// Род из настроек: id → род. Нет ключа — встроенный род; у Садо это
+  /// Род из настроек: id → род. Нет ключа — встроенный род; у главного это
   /// значит «род не выбран» ([sadoGenderChosen]).
   final Map<String, ReplyGender> genders;
 
@@ -290,15 +409,17 @@ final class PersonaSettings {
   /// Состав по этим настройкам: имена, род, кто активен и кто что ведёт.
   PersonaCast get cast => PersonaCast.of(this);
 
-  /// Текущее имя помощника [id] (встроенное, если не меняли).
-  String nameOf(String id) => names[id] ?? Personas.byId(id)?.russianName ?? id;
+  /// Текущее имя помощника [id]. Не меняли — встроенное в текущем роде:
+  /// «Связной» или «Связная» у главного (ADR-017).
+  String nameOf(String id) =>
+      names[id] ?? Personas.byId(id)?.defaultNameFor(genderOf(id)) ?? id;
 
-  /// Текущий род помощника [id]. У Садо до выбора — мужской: так
+  /// Текущий род помощника [id]. У главного до выбора — мужской: так
   /// склоняет каталог (ADR-016); интерфейс до выбора говорит без рода.
   ReplyGender genderOf(String id) =>
       genders[id] ?? Personas.byId(id)?.gender ?? ReplyGender.male;
 
-  /// Пользователь уже выбрал род Садо (карточка первого запуска).
+  /// Пользователь уже выбрал род главного (карточка первого запуска).
   bool get sadoGenderChosen => genders.containsKey(Personas.sado.id);
 
   /// Кто ведёт обязанность [duty] по настройкам, без учёта режима.
@@ -308,13 +429,13 @@ final class PersonaSettings {
         PersonaDuty.notifications => dutyNotifications,
       };
 
-  /// Главный — всегда Садо. Отвечает, если к помощнику не обратились.
+  /// Главный — всегда Связной. Отвечает, если к помощнику не обратились.
   Persona get responder => cast.responder;
 
-  /// Кто пишет первым: ведущий оповещений, если он активен, иначе Садо.
+  /// Кто пишет первым: ведущий оповещений, если он активен, иначе Связной.
   Persona get notifier => cast.notifier;
 
-  /// Кто ведёт расширения: назначенный, если он активен, иначе Садо.
+  /// Кто ведёт расширения: назначенный, если он активен, иначе Связной.
   Persona get extensionsLead => cast.extensionsLead;
 
   String styleOf(Persona persona) =>
@@ -359,12 +480,15 @@ final class PersonaSettings {
   PersonaSettings withStyle(String personaId, String style) =>
       copyWith(styles: <String, String>{...styles, personaId: style});
 
-  /// Имя одного помощника. Встроенное имя снимает переименование.
+  /// Имя одного помощника. Встроенное имя снимает переименование: тогда
+  /// имя снова следует за родом. «Связная» при мужском роде род не меняет
+  /// — показывается «Связной»: род меняется только переключателем
+  /// (ADR-017).
   PersonaSettings withName(String personaId, String name) {
     final next = <String, String>{...names}..remove(personaId);
-    final builtin = Personas.byId(personaId)?.russianName;
+    final builtin = Personas.byId(personaId);
     // «нода» вместо «Нода» — то же имя ([Persona.renamed]).
-    if (builtin == null || Persona.fold(name) != Persona.fold(builtin)) {
+    if (builtin == null || !builtin.isDefaultName(name)) {
       next[personaId] = name;
     }
     return copyWith(names: next);
@@ -375,7 +499,7 @@ final class PersonaSettings {
       copyWith(genders: <String, ReplyGender>{...genders, personaId: gender});
 
   /// Обязанность [duty] ведёт [personaId] (`rio` или `noda`). Главного
-  /// не переназначить: он всегда Садо.
+  /// не переназначить: он всегда Связной.
   PersonaSettings withDuty(PersonaDuty duty, String personaId) =>
       switch (duty) {
         PersonaDuty.main => this,
@@ -426,7 +550,7 @@ final class PersonaSettings {
   /// настроек: испорченный файл не мешает запуску.
   ///
   /// Файл прежней версии (нет `team_mode`): дуэт Лиорио + Нода или ключа
-  /// нет — Трио; соло — Соло, всё делает Садо. Садо получает стиль
+  /// нет — Трио; соло — Соло, всё делает Связной. Связной получает стиль
   /// прежнего отвечающего. `role_owners` в обязанности не переносится
   /// (ADR-016).
   factory PersonaSettings.fromJson(Map<String, Object?> json) {
@@ -457,7 +581,7 @@ final class PersonaSettings {
               .firstOrNull ??
           TeamMode.trio;
     } else {
-      // Переход с прежних настроек: Садо говорит, как прежний отвечающий.
+      // Переход с прежних настроек: Связной говорит, как прежний отвечающий.
       final solo = json['assistant_mode'] == 'solo';
       teamMode = solo ? TeamMode.solo : TeamMode.trio;
       // Прежний отвечающий: неизвестный id читался как Лиорио.
@@ -480,7 +604,7 @@ final class PersonaSettings {
     // Имена. Каждое проверяется против состава из всех остальных
     // имён файла (а не встроенных): так файл читается в том же виде, в
     // каком его принял экран, даже после обмена именами через третье
-    // («Садо» → «Мира», «Нода» → «Садо», «Садо» → «Нода»). Неверное
+    // («Связной» → «Мира», «Нода» → «Связной», «Связной» → «Нода»). Неверное
     // (пустое, «склад», имя другого помощника) отбрасывается — помощник
     // со встроенным именем; проверка повторяется, пока что-то
     // отбрасывается: встроенное имя могло совпасть с чужим.
@@ -491,7 +615,9 @@ final class PersonaSettings {
         final raw = rawNames[persona.id];
         if (raw is! String) continue;
         final name = raw.trim();
-        if (Persona.fold(name) == Persona.fold(persona.russianName)) continue;
+        // Встроенное имя любого рода — не переименование: «Связной»,
+        // сохранённое раньше как своё, снова следует за родом (ADR-017).
+        if (persona.isDefaultName(name)) continue;
         // Само по себе неверное («склад», пусто, пробелы) — сразу мимо:
         // остальные помощники здесь с именами, которые ни с чем не
         // совпадут.
@@ -507,7 +633,7 @@ final class PersonaSettings {
       // Остались совпадения с чужими именами.
       while (true) {
         final cast = PersonaSettings(names: names).cast;
-        // Отбрасывается по одному, с конца (Нода, Лиорио, Садо): из двух
+        // Отбрасывается по одному, с конца (Нода, Лиорио, Связной): из двух
         // одинаковых имён остаётся первое.
         final invalid = <String>[
           for (final persona in Personas.all)
@@ -625,7 +751,7 @@ final class PersonaSettingsChange {
   /// Новый режим: Соло, Дуэт, Трио.
   final TeamMode? teamMode;
 
-  /// Новый помощник Садо в Дуэте.
+  /// Новый помощник главного в Дуэте.
   final String? duoHelper;
 
   /// Новые имена: id → имя. Остальные как были.

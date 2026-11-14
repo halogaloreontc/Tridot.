@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../commands/command_catalog.dart';
 import '../extensions/extension_info.dart';
 import '../extensions/role.dart';
 import '../personas/persona.dart';
@@ -24,6 +25,7 @@ final class AppSettings {
     this.passwordsVaultExisted = false,
     this.passwordsTrainingDue,
     this.firstSeenDay,
+    this.commandUsage = const <String, int>{},
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -53,6 +55,7 @@ final class AppSettings {
       passwordsVaultExisted: json['passwords.vault_existed'] == true,
       passwordsTrainingDue: _day(json['passwords.training_due']),
       firstSeenDay: _day(json['first_seen_day']),
+      commandUsage: CommandUsage.fromJson(json['command_usage']),
     );
   }
 
@@ -191,6 +194,11 @@ final class AppSettings {
   /// трогает.
   final String? firstSeenDay;
 
+  /// Сколько раз выбирали команду из «+» и «Найти команду» (ADR-020):
+  /// id команды → число. Только id: ни текста, ни времени. По нему
+  /// «Шаблоны команд» показывают самые нужные.
+  final Map<String, int> commandUsage;
+
   AppSettings copyWith({
     bool? reduceMotion,
     bool? showTimestamps,
@@ -206,6 +214,7 @@ final class AppSettings {
     bool? passwordsVaultExisted,
     String? passwordsTrainingDue,
     String? firstSeenDay,
+    Map<String, int>? commandUsage,
   }) =>
       AppSettings(
         reduceMotion: reduceMotion ?? this.reduceMotion,
@@ -223,6 +232,7 @@ final class AppSettings {
             passwordsVaultExisted ?? this.passwordsVaultExisted,
         passwordsTrainingDue: passwordsTrainingDue ?? this.passwordsTrainingDue,
         firstSeenDay: firstSeenDay ?? this.firstSeenDay,
+        commandUsage: commandUsage ?? this.commandUsage,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -251,6 +261,11 @@ final class AppSettings {
         if (passwordsTrainingDue != null)
           'passwords.training_due': passwordsTrainingDue,
         if (firstSeenDay != null) 'first_seen_day': firstSeenDay,
+        if (commandUsage.isNotEmpty)
+          'command_usage': <String, int>{
+            for (final id in commandUsage.keys.toList()..sort())
+              id: commandUsage[id]!,
+          },
       };
 }
 

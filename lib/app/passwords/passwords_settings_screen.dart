@@ -237,7 +237,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                 child: Text(
                   'Эти настройки хранятся внутри зашифрованного сейфа. '
                   'Ослабить защиту можно только мастер-паролем.',
-                  style: technicalTextStyle,
+                  style: metaTextStyle,
                 ),
               ),
               _choice(
@@ -294,7 +294,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                   'остаются только названия, логин в маске и факты вроде '
                   '«пароль был показан». «Очистить историю» сейф не '
                   'трогает.',
-                  style: technicalTextStyle,
+                  style: metaTextStyle,
                 ),
               ),
               const SectionLabel('МАСТЕР-ПАРОЛЬ'),
@@ -326,7 +326,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(kit.platform.unlockNote, style: technicalTextStyle),
+                child: Text(kit.platform.unlockNote, style: metaTextStyle),
               ),
             ],
           ),

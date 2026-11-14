@@ -264,7 +264,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
           if (items.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
-              child: Text(empty, style: technicalTextStyle),
+              child: Text(empty, style: metaTextStyle),
             ),
           for (final info in items)
             if (_connection(info.id) case final ConnectionService service)
@@ -318,7 +318,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
           child: Text(
             'Настройте ${AppInfo.name} под себя: включайте только нужное. '
             'Изменения применяются сразу, задачи и сессии не сбрасываются.',
-            style: technicalTextStyle,
+            style: metaTextStyle,
           ),
         ),
         group(ExtensionKind.skill, 'Навыков нет'),
@@ -439,7 +439,7 @@ class _ExtensionTile extends StatelessWidget {
             children: <Widget>[
               Text(
                 'v${info.version} · ${info.author}',
-                style: technicalTextStyle,
+                style: metaTextStyle,
               ),
               if (info.builtIn) const _Badge('встроено'),
               if (info.required) const _Badge('всегда включено'),
@@ -485,7 +485,7 @@ class _Badge extends StatelessWidget {
         border: Border.all(color: AssistantColors.border),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(text, style: technicalTextStyle),
+      child: Text(text, style: metaTextStyle),
     );
   }
 }
@@ -594,7 +594,7 @@ class _PackImportDialogState extends State<_PackImportDialog> {
                 minLines: 5,
                 maxLines: 10,
                 keyboardType: TextInputType.multiline,
-                style: technicalTextStyle.copyWith(
+                style: metaTextStyle.copyWith(
                   color: AssistantColors.text,
                 ),
                 decoration: const InputDecoration(

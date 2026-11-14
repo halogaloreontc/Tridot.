@@ -4,6 +4,7 @@ import '../../core/app_info.dart';
 import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
 import '../shell/relay_drawer.dart';
+import '../widgets/app_name_text.dart';
 
 /// Вкладки «Мой Tridot».
 enum MyRelayTab { summary, activity, assistants, settings }
@@ -150,16 +151,18 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
                     children: <Widget>[
                       Semantics(
                         header: true,
-                        child: Text(
-                          AppInfo.hubName,
+                        child: Text.rich(
+                          appNameSpan(
+                            AppInfo.hubName,
+                            TextStyle(
+                              fontSize: phone ? 18 : 24,
+                              height: 1.25,
+                              fontWeight: FontWeight.w600,
+                              color: AssistantColors.textStrong,
+                            ),
+                          ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: phone ? 18 : 24,
-                            height: 1.25,
-                            fontWeight: FontWeight.w600,
-                            color: AssistantColors.textStrong,
-                          ),
                         ),
                       ),
                       if (stats != null && !phone) ...<Widget>[

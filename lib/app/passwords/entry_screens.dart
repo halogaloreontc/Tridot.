@@ -295,7 +295,7 @@ class _EntryScreenState extends State<EntryScreen>
         childrenPadding: EdgeInsets.zero,
         title: Text(
           'Прежние пароли (${items.length})',
-          style: technicalTextStyle,
+          style: metaTextStyle,
         ),
         children: <Widget>[
           if (items.isEmpty)
@@ -312,7 +312,7 @@ class _EntryScreenState extends State<EntryScreen>
               child: Text(
                 'Хронология выключена: при смене пароля старый больше не '
                 'сохраняется.',
-                style: technicalTextStyle,
+                style: metaTextStyle,
               ),
             ),
           for (final meta in items)
@@ -328,7 +328,7 @@ class _EntryScreenState extends State<EntryScreen>
                       children: <Widget>[
                         Text(
                           historyPeriodText(meta),
-                          style: technicalTextStyle,
+                          style: metaTextStyle,
                         ),
                         if (meta.looksLikeTypo)
                           const Text(
@@ -462,7 +462,7 @@ class _EntryScreenState extends State<EntryScreen>
                       Text(
                         kit.platform.copyNote ?? '',
                         key: const ValueKey<String>('entry-copy-note'),
-                        style: technicalTextStyle,
+                        style: metaTextStyle,
                       ),
                     if (kit.historyEnabled || entry.history.isNotEmpty)
                       _history(entry),
@@ -501,7 +501,7 @@ class _EntryScreenState extends State<EntryScreen>
                           ),
                         Text(
                           'Изменён ${agoText(entry.changed, widget.now())}',
-                          style: technicalTextStyle,
+                          style: metaTextStyle,
                         ),
                       ],
                     ),
@@ -577,7 +577,7 @@ class _Field extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Text(label, style: technicalTextStyle),
+          Text(label, style: metaTextStyle),
           const SizedBox(height: 4),
           child,
         ],

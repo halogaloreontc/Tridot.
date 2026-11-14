@@ -16,7 +16,12 @@ final class ChatSearchHit {
     required this.matchEnd,
     this.personaId,
     this.messageId,
+    this.projectName,
   });
+
+  /// Проект-папка чата (подпись «Проект · …» у результата); `null` — вне
+  /// проектов.
+  final String? projectName;
 
   final String chatId;
 

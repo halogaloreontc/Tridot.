@@ -136,7 +136,9 @@ List<String> _history(WidgetTester tester) {
       author = key.value.substring('message-author-'.length);
     }
     if (widget is SelectableText) {
-      rows.add('${author ?? 'user'}: ${widget.data}');
+      rows.add(
+        '${author ?? 'user'}: ${widget.data ?? widget.textSpan?.toPlainText()}',
+      );
       author = null;
     }
   }
@@ -229,7 +231,7 @@ String _heroPersona(WidgetTester tester) => tester
     .id;
 
 void main() {
-  group('Tridot: метки, имена и выбор рода Садо', () {
+  group('Tridot: метки, имена и выбор рода Связной', () {
     String letter(WidgetTester tester, String id) => tester
         .widget<Text>(
           find
@@ -260,7 +262,7 @@ void main() {
       final name = tester.widget<Text>(
         find.descendant(
           of: find.byKey(const ValueKey<String>('message-author-sado')),
-          matching: find.text('Садо'),
+          matching: find.text('Связной'),
         ),
       );
       expect(name.style?.color, AssistantColors.sado);
@@ -285,7 +287,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      // Прежнее имя — просто текст: отвечает Садо.
+      // Прежнее имя — просто текст: отвечает Связной.
       await _say(tester, 'Нода, 3+3');
       expect(_history(tester).last, startsWith('sado: '));
     });
@@ -313,7 +315,7 @@ void main() {
       expect(letter(tester, 'rio'), 'Т');
     });
 
-    testWidgets('карточка выбора рода Садо: видна до выбора, потом исчезает',
+    testWidgets('карточка выбора рода Связной: видна до выбора, потом исчезает',
         (tester) async {
       final store = InMemorySettingsStore();
       await _pump(tester, settings: store);
@@ -343,7 +345,7 @@ void main() {
       expect(_history(tester), isEmpty);
       expect(find.textContaining('Я готов к работе'), findsNothing);
       expect(_heroPersona(tester), 'sado');
-      expect(find.text('Садо'), findsWidgets);
+      expect(find.text('Связной'), findsWidgets);
       expect(find.text('Sado'), findsNothing, reason: 'имена кириллицей');
 
       await _say(tester, 'Добавь задачу купить хлеб');
@@ -357,14 +359,14 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('подпись «Садо» с меткой «С», название Tridot в меню',
+    testWidgets('подпись «Связной» с меткой «С», название Tridot в меню',
         (tester) async {
       await _pump(tester, settings: InMemorySettingsStore());
       await _say(tester, 'покажи задачи');
       final author = find.byKey(const ValueKey<String>('message-author-sado'));
       expect(author, findsOneWidget);
       expect(
-        find.descendant(of: author, matching: find.text('Садо')),
+        find.descendant(of: author, matching: find.text('Связной')),
         findsOneWidget,
       );
       // Знак и подпись помощника — кириллицей, как в макете «Д».
@@ -381,7 +383,7 @@ void main() {
       expect(find.text('Помощник'), findsNothing);
     });
 
-    testWidgets('Дуэт с Нодой из сохранённых настроек: встречает Садо',
+    testWidgets('Дуэт с Нодой из сохранённых настроек: встречает Связной',
         (tester) async {
       final store = InMemorySettingsStore();
       await store.save(
@@ -411,7 +413,7 @@ void main() {
         startsWith('noda: '),
         reason: 'калькулятор',
       );
-      // Другая тема — отвечает Садо: невидимого адресата нет.
+      // Другая тема — отвечает Связной: невидимого адресата нет.
       await _say(tester, 'покажи задачи');
       expect(_history(tester).last, startsWith('sado: '));
       expect(h.assistant.followUpPersonaId, isNull);
@@ -456,7 +458,7 @@ void main() {
   });
 
   group('к кому обратились, тот и продолжает — тем же навыком', () {
-    testWidgets('«Нода, расскажи шутку» → «ещё шутку» — Noda; другое — Садо',
+    testWidgets('«Нода, расскажи шутку» → «ещё шутку» — Noda; другое — Связной',
         (tester) async {
       final h = await _pump(tester, settings: InMemorySettingsStore());
       await _say(tester, 'Нода, расскажи шутку');
@@ -489,14 +491,14 @@ void main() {
     });
 
     testWidgets(
-        '«пусть отвечает Лиорио» — главный не меняется, калькулятор у Садо',
+        '«пусть отвечает Лиорио» — главный не меняется, калькулятор у Связной',
         (tester) async {
       final h = await _pump(tester, settings: InMemorySettingsStore());
       await _say(tester, 'Нода, привет');
       expect(h.assistant.followUpPersonaId, 'noda');
       await _say(tester, 'пусть отвечает Лиорио');
       expect(_history(tester).last, startsWith('noda: '));
-      expect(_history(tester).last, contains('Садо'));
+      expect(_history(tester).last, contains('Связной'));
       await _say(tester, '2+2');
       expect(_history(tester).last, 'sado: 2 + 2 = 4');
     });
@@ -562,7 +564,7 @@ void main() {
       expect(await h.tasks.listActive(), isEmpty);
     });
 
-    testWidgets('соло: имя не закрепляется; в дуэте снова Садо',
+    testWidgets('соло: имя не закрепляется; в дуэте снова Связной',
         (tester) async {
       await _pump(tester, settings: InMemorySettingsStore());
       await _say(tester, 'Нода, 2+2');
@@ -575,7 +577,7 @@ void main() {
       await _openSettings(tester);
       await _tapSetting(tester, 'assistant-mode-duo');
       await _openTasks(tester);
-      // В соло «Лиорио, …» — просто текст; в дуэте калькулятор у Садо.
+      // В соло «Лиорио, …» — просто текст; в дуэте калькулятор у Связной.
       await _say(tester, '5+5');
       expect(_history(tester).last, startsWith('sado: '));
     });
@@ -794,7 +796,7 @@ void main() {
           );
         }
       }
-      // Продолжение Ноды короткое: «шути больше» — уже снова Садо.
+      // Продолжение Ноды короткое: «шути больше» — уже снова Связной.
       expect(_history(tester).last, startsWith('sado: '));
       expect(h.assistant.followUpPersonaId, isNull);
       await _say(tester, 'покажи задачи');
@@ -933,7 +935,7 @@ void main() {
         (await h.tasks.listActive()).map((Task t) => t.title),
         <String>['Купить хлеб'],
       );
-      // Новая пустая сессия — со знаком Садо (Соло); ответ — его голосом
+      // Новая пустая сессия — со знаком Связной (Соло); ответ — его голосом
       // и выбранным стилем.
       expect(_history(tester), isEmpty);
       expect(_heroPersona(tester), 'sado');
@@ -941,7 +943,8 @@ void main() {
       expect(_history(tester).last, startsWith('sado: '));
     });
 
-    testWidgets('испорченный файл настроек: трио, встречает Садо, задачи целы',
+    testWidgets(
+        'испорченный файл настроек: трио, встречает Связной, задачи целы',
         (tester) async {
       final repository = InMemoryTaskRepository();
       final service = TaskService(
@@ -1059,7 +1062,7 @@ void main() {
       expect(
         lineMark(tester),
         'sado',
-        reason: 'в дуэте с Лиорио оповещения — у Садо',
+        reason: 'в дуэте с Лиорио оповещения — у Связной',
       );
 
       // Перезапуск — та же строка, сообщений нет.

@@ -36,13 +36,17 @@ import 'core/storage/storage_info.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Лицензии шрифтов Inter и JetBrains Mono (SIL OFL) — в «Настройки → Лицензии».
+  // Лицензии шрифтов Inter, JetBrains Mono и Cormorant Unicase (SIL OFL) —
+  // в «Настройки → Лицензии».
   LicenseRegistry.addLicense(() async* {
     final text = await rootBundle.loadString('assets/fonts/Inter-OFL.txt');
     yield LicenseEntryWithLineBreaks(<String>['Inter'], text);
     final mono =
         await rootBundle.loadString('assets/fonts/JetBrainsMono-OFL.txt');
     yield LicenseEntryWithLineBreaks(<String>['JetBrains Mono'], mono);
+    final display =
+        await rootBundle.loadString('assets/fonts/CormorantUnicase-OFL.txt');
+    yield LicenseEntryWithLineBreaks(<String>['Cormorant Unicase'], display);
     // Словари навыка «Пароли»: EFF large (CC BY 3.0 US), SecLists (MIT).
     final words = await rootBundle.loadString('assets/passwords/NOTICE.txt');
     yield LicenseEntryWithLineBreaks(

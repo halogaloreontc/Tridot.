@@ -442,24 +442,34 @@ void main() {
     );
   });
 
-  testWidgets('«+» показывает диски и шаблоны команд', (tester) async {
+  testWidgets('«+»: облачный диск, файл и шаблоны команд', (tester) async {
     await _pump(tester);
     await tester.tap(find.byKey(const Key('templates-button')));
     await tester.pumpAndSettle();
-    expect(find.text('Google Диск'), findsOneWidget);
-    expect(find.text('Яндекс Диск'), findsOneWidget);
-    expect(find.text('Задача на завтра в 10:00'), findsOneWidget);
+    expect(find.byKey(const Key('composer-cloud')), findsOneWidget);
+    expect(find.byKey(const Key('composer-attach')), findsOneWidget);
+    expect(find.byKey(const Key('composer-templates')), findsOneWidget);
+    expect(find.text('Прикрепить файл'), findsOneWidget);
+    // Списки закрыты, пока пункт не раскрыт.
+    expect(find.text('Задача на завтра в 10:00'), findsNothing);
 
-    await tester.tap(find.text('Яндекс Диск'));
+    // Дисков нет: честное «Подключить диск» и пояснение.
+    await tester.tap(find.byKey(const Key('composer-cloud')));
     await tester.pumpAndSettle();
+    expect(find.text('Подключить диск'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('cloud-connect')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('cloud-disk-info')), findsOneWidget);
     expect(
-      find.textContaining('«Яндекс Диск» — следующий этап'),
+      find.textContaining('Яндекс Диск и Google Диск появятся позже'),
       findsOneWidget,
     );
-    await tester.pump(const Duration(seconds: 4));
+    await tester.tap(find.text('Понятно'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('templates-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('composer-templates')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Задача на завтра в 10:00'));
     await tester.pumpAndSettle();
@@ -807,7 +817,7 @@ void main() {
       await _say(tester, 'Покажи задачи');
 
       final rail = tester.getRect(find.byKey(const Key('history-rail')));
-      final persona = tester.getRect(find.byKey(const Key('persona-switch')));
+      final persona = tester.getRect(find.byKey(const Key('session-title')));
       final composer =
           tester.getRect(find.byKey(const Key('assistant-composer')));
       // Под строкой шапки, над лентой.

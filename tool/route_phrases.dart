@@ -93,7 +93,7 @@ Map<String, Object?> routePhrase(
   DateTime now, {
   String? after,
 }) {
-  // Обращение по имени в начале («Садо, …») маршрутизатор снимает до
+  // Обращение по имени в начале («Связной, …») маршрутизатор снимает до
   // разбора (AssistantController.resolve), корпусный тест — тоже.
   final text = PersonaAddressing.commandText(message);
   final utterance = Utterance.analyze(text, now: now)

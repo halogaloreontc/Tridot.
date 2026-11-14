@@ -3,13 +3,26 @@ import 'persona.dart';
 /// Обращение по имени в начале сообщения: «Noda, покажи задачи»,
 /// «Лиорио: добавь задачу …», «лио — сколько будет 2+2».
 final class PersonaAddressing {
-  const PersonaAddressing(this.persona, this.rest);
+  const PersonaAddressing(
+    this.persona,
+    this.rest, {
+    this.nameStart = 0,
+    this.nameEnd = 0,
+    this.restStart = 0,
+  });
 
   /// К кому обратились.
   final Persona persona;
 
   /// Сообщение без имени и знака после него: его и разбирает помощник.
   final String rest;
+
+  /// Где в исходном сообщении имя (`[nameStart, nameEnd)`) и где
+  /// начинается [rest] — для подсветки обращения (ADR-021). У обращения в
+  /// конце ([parseTrailing]) не заполняются.
+  final int nameStart;
+  final int nameEnd;
+  final int restStart;
 
   /// Имя ([Persona.addressNames]: «Liorio», «Лиорио», «Лио», «Noda»,
   /// «Нодочка», «Нодь») — первое слово без учёта регистра, дальше запятая,
@@ -21,13 +34,20 @@ final class PersonaAddressing {
     _ensure();
     final match = _pattern.firstMatch(message);
     if (match == null) return null;
+    final name = match.group(1)!;
+    final nameStart = message.indexOf(name, match.start);
+    final tail = message.substring(match.end);
+    final rest = tail.trim();
     return PersonaAddressing(
-      Personas.byAddressName(match.group(1)!)!,
-      message.substring(match.end).trim(),
+      Personas.byAddressName(name)!,
+      rest,
+      nameStart: nameStart,
+      nameEnd: nameStart + name.length,
+      restStart: rest.isEmpty ? message.length : match.end + tail.indexOf(rest),
     );
   }
 
-  /// [message] без обращения по имени в начале («Садо, добавь задачу
+  /// [message] без обращения по имени в начале («Связной, добавь задачу
   /// хлеб» → «добавь задачу хлеб»): так фразу получают навыки — и в
   /// маршрутизаторе, и в корпусном тесте, и в `tool/route_phrases.dart`.
   /// Одно имя без остального не трогается.

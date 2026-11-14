@@ -325,7 +325,9 @@ final class TaskService {
     return done;
   }
 
-  /// Правка из документа задачи. Пустой [project] убирает проект.
+  /// Правка из документа задачи. [project] — первая метка задачи: новое
+  /// значение заменяет её, пустое убирает только её (остальные метки
+  /// остаются, ADR-018).
   Future<Task> updateDetails(
     String id, {
     String? title,
@@ -335,9 +337,10 @@ final class TaskService {
     final task = await _requireTask(id);
     var tags = task.tags;
     if (project != null) {
-      final normalized = _normalizeTags(<String>[project]);
-      tags = <String>[...normalized, ...task.tags.skip(1)];
-      if (normalized.isEmpty) tags = task.tags.skip(1).toList();
+      // Проект — первая метка: новое значение встаёт на её место, пустое
+      // убирает только её. Если новая метка уже была среди остальных, она
+      // не повторяется ([_normalizeTags]).
+      tags = _normalizeTags(<String>[project, ...task.tags.skip(1)]);
     }
     final updated = task.copyWith(
       title: title == null ? null : _validTitle(title),

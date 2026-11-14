@@ -14,3 +14,9 @@
 {"id":"move-014","text":"перенеси на завтрашний день созвон","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-03","precision":"date"}
 {"id":"move-015","text":"с 5 на 7 декабря перенеси созвон","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-12-07","precision":"date","note":"исходное число без месяца — месяц нового срока"}
 {"id":"move-016","text":"отложи напоминание про полис на завтра","intent":"rescheduleTask","targetQuery":"Про полис","due":"2026-11-03","precision":"date","note":"«напоминание» сразу после команды — как «задачу»; «про» у цели переноса остаётся"}
+{"id":"move-017","text":"Перенеси её на завтра в","intent":"rescheduleTask","targetQuery":null,"issue":"missingTime","note":"шаблон «+» без времени: висящий «в» — не цель, а вопрос «Во сколько?»"}
+{"id":"move-018","text":"перенеси её на завтра на","intent":"rescheduleTask","targetQuery":null,"issue":"missingTime","note":"висящий «на» после дня"}
+{"id":"move-019","text":"Перенеси её на","intent":"rescheduleTask","targetQuery":null,"due":null,"note":"шаблон «Перенеси её на |» без срока — спросить, на когда"}
+{"id":"move-020","text":"перенеси отчёт на пятницу к","intent":"rescheduleTask","targetQuery":"Отчёт","issue":"missingTime"}
+{"id":"move-021","text":"Добавь задачу «Смета» на завтра в","intent":"createTask","title":"Смета","issue":"missingTime","note":"создание с днём и висящим «в» — тоже «Во сколько?»"}
+{"id":"move-022","text":"Добавь задачу «Смета» #","intent":"createTask","title":"Смета","projects":[],"note":"шаблон «Задача в проект» без метки: голая решётка не метка"}

@@ -2,6 +2,7 @@ import '../formatting/due_format.dart';
 import '../models/bulk.dart';
 import '../models/task.dart';
 import '../replies/reply_library.dart';
+import '../scenario/command_spans.dart';
 import '../scenario/scenario_parser.dart';
 import '../services/task_service.dart';
 import '../skills/data/data_phrases.dart';
@@ -21,7 +22,11 @@ import 'task_chat_phrases.dart';
 /// поэтому сначала вопрос со списком задач и галочками ([BulkChecklist]),
 /// а после применения — «Отменить» (ADR-004, docs/CONNECTORS.md).
 final class TasksConnector
-    implements Connector, ConnectorHealth, ConfirmationFollowUp {
+    implements
+        Connector,
+        ConnectorHealth,
+        ConfirmationFollowUp,
+        CommandSpanSource {
   TasksConnector({
     required TaskService taskService,
     required ScenarioParser parser,
@@ -182,6 +187,22 @@ final class TasksConnector
     );
   }
 
+  /// Подсветка команды (ADR-021): части фразы, которые понял разбор задач.
+  /// Фраза о задаче чата («закрой», «на завтра») — только срок.
+  @override
+  List<CommandSpan> spansOf(Utterance utterance, ConnectorMatch match) {
+    final payload = match.payload;
+    if (payload is ParsedCommand) return _parser.spansOf(utterance);
+    return CommandSpans.normalize(
+      <CommandSpan>[
+        for (final span in utterance.due.spans)
+          if (span.length > 0)
+            CommandSpan(span.start, span.end, CommandSpanKind.due),
+      ],
+      utterance.original.length,
+    );
+  }
+
   /// Реплика беседы целиком — не задача, даже если разбор задач нашёл
   /// в ней поручение. Без маркера разбор угадывает по форме слов: «хочу
   /// посмеяться» — будто дело «Посмеяться», «расскажи прикол» — будто
@@ -266,7 +287,10 @@ final class TasksConnector
       dueAt: command.dueAt,
       // Без срока точность не важна: задача хранит значение по умолчанию.
       duePrecision: command.duePrecision ?? DuePrecision.dateTime,
-      tags: command.projects,
+      // Своя метка в команде («#другое») важнее метки проекта-папки.
+      tags: command.projects.isEmpty && session.projectTag != null
+          ? <String>[session.projectTag!]
+          : command.projects,
     );
     session.select(id, task.id);
     final due = _due(task, session);
@@ -1220,6 +1244,7 @@ final class TasksConnector
         DueIssue.conflictingDays => 'task.due.conflictingDays',
         DueIssue.conflictingTimes => 'task.due.conflictingTimes',
         DueIssue.ambiguousHour => 'task.due.ambiguousHour',
+        DueIssue.missingTime => 'task.due.missingTime',
       };
 
   String? _titleClarification(TitleIssue issue) => switch (issue) {

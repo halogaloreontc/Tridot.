@@ -226,7 +226,7 @@ class _RolesSectionState extends State<RolesSection> {
             'Роль — набор навыков и кнопок для сферы работы. Включайте '
             'одну или несколько; подключения и пароли при выключении '
             'остаются.',
-            style: technicalTextStyle,
+            style: metaTextStyle,
           ),
         ),
         for (final role in roles) _card(role),
@@ -280,12 +280,12 @@ class _RolesSectionState extends State<RolesSection> {
                 Text(
                   'Входит: ${_includes(role)}',
                   key: ValueKey<String>('role-includes-${role.id}'),
-                  style: technicalTextStyle,
+                  style: metaTextStyle,
                 ),
                 if (role.chips.isNotEmpty)
                   Text(
                     'Кнопки: ${role.chips.map((RoleChip c) => '«${c.label}»').join(', ')}',
-                    style: technicalTextStyle,
+                    style: metaTextStyle,
                   ),
                 if (on)
                   if (_switchedOff(role) case final String note)

@@ -6,14 +6,15 @@ import '../../core/replies/reply_library.dart';
 import '../assistant_theme.dart';
 import '../widgets/personas_section.dart';
 
-/// Пустая новая сессия (макет «Д») — она же приветствие: знак Садо,
+/// Пустая новая сессия (макет «Д») — она же приветствие: знак главного,
 /// «Что сделать?» и, если какую-то роль ведёт помощник, строка об этом.
 /// Ниже — короткие строки от ведущего оповещений ([notifier]): «Просрочена
 /// 1 задача ›» ([overdue]) и «Пора потренировать пароль ›» ([onTraining]).
 /// Сами по себе в сессию они ничего не пишут.
 ///
-/// Пока род Садо не выбран, под «Что сделать?» — карточка «Садо — он или
-/// она?» ([onSadoGender]): не модальное окно, её можно не замечать.
+/// Пока род главного не выбран, под «Что сделать?» — карточка «Связной
+/// или Связная?» ([onSadoGender]): не модальное окно, её можно не
+/// замечать.
 final class SessionHero extends StatelessWidget {
   const SessionHero({
     super.key,
@@ -24,19 +25,24 @@ final class SessionHero extends StatelessWidget {
     this.onOverdue,
     this.onTraining,
     this.onSadoGender,
+    this.projectName,
   });
 
-  /// Главный — Садо: его знак крупно.
+  /// Пустая сессия начата в проекте-папке: подпись «Проект «…»» под
+  /// «Что сделать?»; `null` — вне проектов.
+  final String? projectName;
+
+  /// Главный — Связной: его знак крупно.
   final Persona persona;
 
   /// «Кладовщик» ведёт Лиорио — такие фразы передам»; `null` — без строки.
   final String? note;
 
-  /// Ведущий оповещений (в Соло — Садо): его знак у строк о просроченных
+  /// Ведущий оповещений (в Соло — Связной): его знак у строк о просроченных
   /// и тренировке. `null` — без знака.
   final Persona? notifier;
 
-  /// Род Садо ещё не выбран: карточка выбора, нажатие — выбранный род;
+  /// Род главного ещё не выбран: карточка выбора, нажатие — выбранный род;
   /// `null` — карточки нет.
   final ValueChanged<ReplyGender>? onSadoGender;
 
@@ -57,7 +63,7 @@ final class SessionHero extends StatelessWidget {
 
   /// Строка о ролях, которые ведёт не главный: `null`, если все роли у
   /// [main]. Текст одной строки — [line] (запись каталога
-  /// `session.handoff.note` голосом Садо): роли через запятую и кто их
+  /// `session.handoff.note` голосом главного): роли через запятую и кто их
   /// ведёт.
   static String? noteFor(
     Iterable<(String roleTitle, Persona owner)> roles,
@@ -102,13 +108,50 @@ final class SessionHero extends StatelessWidget {
                 ),
               ),
             ),
+            if (projectName != null) ...<Widget>[
+              const SizedBox(height: 6),
+              Row(
+                key: const Key('hero-project'),
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Icon(
+                    Icons.folder_outlined,
+                    size: 16,
+                    color: AssistantColors.muted,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text.rich(
+                      TextSpan(
+                        style: metaTextStyle,
+                        children: <InlineSpan>[
+                          const TextSpan(text: 'Проект «'),
+                          // Название проекта — шрифтом названия (ADR-021).
+                          TextSpan(
+                            text: projectName,
+                            style: projectNameStyle(
+                              fontSize: 15,
+                              color: AssistantColors.muted,
+                            ),
+                          ),
+                          const TextSpan(text: '»'),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (note != null) ...<Widget>[
               const SizedBox(height: 8),
               Text(
                 note!,
                 key: const Key('session-hero-note'),
                 textAlign: TextAlign.center,
-                style: technicalTextStyle,
+                style: metaTextStyle,
               ),
             ],
             if (onSadoGender != null) ...<Widget>[
@@ -141,7 +184,8 @@ final class SessionHero extends StatelessWidget {
   }
 }
 
-/// «Садо — он или она?» и два чипа. Выбор пишется в настройки, и
+/// «Связной или Связная?» (имя не меняли) или «Мира — он или она?»
+/// (своё имя) и два чипа. Выбор пишется в настройки, и
 /// карточка исчезает.
 final class _GenderChoice extends StatelessWidget {
   const _GenderChoice({required this.name, required this.onChosen});
@@ -151,6 +195,25 @@ final class _GenderChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Имя не меняли — вопрос о самом имени: «Связной или Связная?»
+    // (ADR-017). Своё имя от рода не зависит.
+    final builtin = Personas.sado.isDefaultName(name);
+    final question = builtin
+        ? '${Personas.sado.defaultNameFor(ReplyGender.male)} или '
+            '${Personas.sado.defaultNameFor(ReplyGender.female)}?'
+        : '$name — он или она?';
+    final hint = builtin
+        ? 'Так зовут главного помощника, и так он говорит о себе. '
+            'Поменять можно в «Помощниках».'
+        : 'От этого зависит, как помощник говорит о себе. '
+            'Поменять можно в «Помощниках».';
+    String label(ReplyGender gender) {
+      final pronoun = gender == ReplyGender.female ? 'она' : 'он';
+      return builtin
+          ? '${Personas.sado.defaultNameFor(gender)} ($pronoun)'
+          : '${pronoun[0].toUpperCase()}${pronoun.substring(1)}';
+    }
+
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 360),
       child: DecoratedBox(
@@ -166,16 +229,15 @@ final class _GenderChoice extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Text(
-                '$name — он или она?',
+                question,
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: AssistantColors.textStrong),
               ),
               const SizedBox(height: 2),
-              const Text(
-                'От этого зависит, как помощник говорит о себе. '
-                'Поменять можно в «Помощниках».',
+              Text(
+                hint,
                 textAlign: TextAlign.center,
-                style: technicalTextStyle,
+                style: metaTextStyle,
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -183,13 +245,13 @@ final class _GenderChoice extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: <Widget>[
-                  for (final (gender, label) in const <(ReplyGender, String)>[
-                    (ReplyGender.male, 'Он'),
-                    (ReplyGender.female, 'Она'),
+                  for (final gender in const <ReplyGender>[
+                    ReplyGender.male,
+                    ReplyGender.female,
                   ])
                     ActionChip(
                       key: ValueKey<String>('sado-gender-${gender.name}'),
-                      label: Text(label),
+                      label: Text(label(gender)),
                       onPressed: () => onChosen(gender),
                       labelStyle: const TextStyle(color: AssistantColors.text),
                       backgroundColor: AssistantColors.workspace,
@@ -248,7 +310,7 @@ final class _HeroLine extends StatelessWidget {
                   child: Text(
                     text,
                     textAlign: TextAlign.center,
-                    style: technicalTextStyle.copyWith(color: color),
+                    style: metaTextStyle.copyWith(color: color),
                   ),
                 ),
                 const SizedBox(width: 4),

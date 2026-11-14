@@ -162,7 +162,7 @@ final class RelaySummary extends StatelessWidget {
                       Text(
                         'сегодня: ${todaySummary(today.length, overdue)}',
                         key: const Key('summary-today'),
-                        style: technicalTextStyle.copyWith(
+                        style: metaTextStyle.copyWith(
                           color: overdue > 0 ? AssistantColors.danger : null,
                         ),
                       ),
@@ -298,7 +298,7 @@ final class _NextRow extends StatelessWidget {
                   ),
                   Text(
                     subtitle,
-                    style: technicalTextStyle.copyWith(
+                    style: metaTextStyle.copyWith(
                       color: overdue ? AssistantColors.danger : null,
                     ),
                   ),
@@ -399,7 +399,7 @@ final class _RelayActivityState extends State<RelayActivity> {
 
 /// Подзаголовок карточки помощника: «главный помощник», «ведёт
 /// расширения», «ведёт оповещения», «выключен · режим «Соло»». Пока род
-/// Садо не выбран, о нём — без рода.
+/// главного не выбран, о нём — без рода.
 String personaRole(Persona persona, PersonaSettings personas) {
   final cast = personas.cast;
   final female = personas.genderOf(persona.id) == ReplyGender.female;
@@ -421,7 +421,7 @@ String personaRole(Persona persona, PersonaSettings personas) {
   };
 }
 
-/// «Помощники» (D-Desk-Assistants): карточки Садо, Лиорио и Ноды
+/// «Помощники» (D-Desk-Assistants): карточки Связного, Лиорио и Ноды
 /// (стиль, обращение, роли, включён ли помощник), полные настройки ниже и
 /// приглушённая строка о журнале. Журнал не строим.
 final class RelayAssistants extends StatefulWidget {
@@ -455,7 +455,7 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
   void _set(PersonaSettings personas) =>
       widget.onChanged(widget.settings.copyWith(personas: personas));
 
-  /// Включить или выключить помощника [persona]: оба помощника Садо
+  /// Включить или выключить помощника [persona]: оба помощника главного
   /// включены — Трио, один — Дуэт с ним, ни одного — Соло.
   void _setActive(Persona persona, bool active) {
     final p = _personas;
@@ -505,7 +505,7 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
                         role.title,
                   ],
                   active: cast.isActive(persona.id),
-                  // Садо всегда включён; помощников включает режим.
+                  // Связной всегда включён; помощников включает режим.
                   canToggle: persona.id != cast.responder.id,
                   onActive: (bool v) => _setActive(persona, v),
                   onEdit: _edit,
@@ -540,7 +540,7 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
         const Text(
           'Журнал помощников — в планах',
           key: Key('assistants-journal-planned'),
-          style: technicalTextStyle,
+          style: metaTextStyle,
         ),
         KeyedSubtree(
           key: _details,
@@ -618,7 +618,7 @@ final class _PersonaCard extends StatelessWidget {
                     Text(
                       personaRole(persona, personas),
                       key: Key('persona-role-${persona.id}'),
-                      style: technicalTextStyle,
+                      style: metaTextStyle,
                     ),
                   ],
                 ),
@@ -697,7 +697,7 @@ final class _Fact extends StatelessWidget {
         children: <Widget>[
           Expanded(
             flex: 2,
-            child: Text(label, style: technicalTextStyle),
+            child: Text(label, style: metaTextStyle),
           ),
           Expanded(
             flex: 3,

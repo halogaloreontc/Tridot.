@@ -1,4 +1,4 @@
-// Настоящие шрифты приложения (Inter, JetBrains Mono) для тестов, где
+// Настоящие шрифты приложения (Inter, JetBrains Mono, Cormorant Unicase) для тестов, где
 // важна ширина текста: тестовый шрифт рисует каждую букву квадратом, и
 // подписи в нём заметно шире, чем на устройстве.
 import 'dart:io';
@@ -17,6 +17,9 @@ Future<void> loadAppFonts() async {
       .load();
   await (FontLoader('JetBrains Mono')
         ..addFont(read('assets/fonts/JetBrainsMonoVariable.ttf')))
+      .load();
+  await (FontLoader('Cormorant Unicase')
+        ..addFont(read('assets/fonts/CormorantUnicase-SemiBold.ttf')))
       .load();
   _loaded = true;
 }

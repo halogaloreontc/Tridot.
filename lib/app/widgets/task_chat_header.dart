@@ -115,7 +115,7 @@ final class TaskChatHeader extends StatelessWidget {
                 child: Text(
                   status,
                   key: const Key('task-chat-status'),
-                  style: technicalTextStyle.copyWith(color: statusColor),
+                  style: metaTextStyle.copyWith(color: statusColor),
                 ),
               ),
               if (done)
@@ -161,14 +161,14 @@ final class TaskChatHeader extends StatelessWidget {
           const SizedBox(width: 10),
           Text(
             formatDue(due, task.duePrecision, now),
-            style: technicalTextStyle,
+            style: metaTextStyle,
           ),
         ],
         const SizedBox(width: 10),
         Text(
           status,
           key: const Key('task-chat-status'),
-          style: technicalTextStyle.copyWith(color: statusColor),
+          style: metaTextStyle.copyWith(color: statusColor),
         ),
         const SizedBox(width: 12),
         if (done)
@@ -241,10 +241,10 @@ final class TaskChatHeader extends StatelessWidget {
             : 10 +
                 measure(
                   formatDue(due, task.duePrecision, now),
-                  technicalTextStyle,
+                  metaTextStyle,
                 )) +
         10 +
-        measure(status, technicalTextStyle) +
+        measure(status, metaTextStyle) +
         12 +
         // Кнопка: отступы 12 + значок 16 + промежуток 8 + подпись.
         12 +
@@ -292,7 +292,7 @@ final class TaskChatHeader extends StatelessWidget {
                         formatDue(due, task.duePrecision, now),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: technicalTextStyle.copyWith(height: 1.2),
+                        style: metaTextStyle.copyWith(height: 1.2),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -301,7 +301,7 @@ final class TaskChatHeader extends StatelessWidget {
                     status,
                     key: const Key('task-chat-status'),
                     maxLines: 1,
-                    style: technicalTextStyle.copyWith(
+                    style: metaTextStyle.copyWith(
                       color: color,
                       height: 1.2,
                     ),

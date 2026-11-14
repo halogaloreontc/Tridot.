@@ -81,7 +81,7 @@ void main() {
   testWidgets('поле имени у каждого из трёх', (tester) async {
     await pump(tester);
     for (final (id, name) in <(String, String)>[
-      ('sado', 'Садо'),
+      ('sado', 'Связной'),
       ('rio', 'Лиорио'),
       ('noda', 'Нода'),
     ]) {
@@ -140,7 +140,7 @@ void main() {
     expect(changes, isEmpty);
   });
 
-  testWidgets('род: Садо до выбора без отметки, выбор сохраняется',
+  testWidgets('род: Связной до выбора без отметки, выбор сохраняется',
       (tester) async {
     final changes = await pump(tester);
     expect(selected(tester, 'persona-gender-sado-male'), isFalse);
@@ -162,7 +162,7 @@ void main() {
     expect(changes.last.personas.genderOf('rio'), ReplyGender.female);
   });
 
-  testWidgets('обязанности переназначаются, выключенного заменяет Садо',
+  testWidgets('обязанности переназначаются, выключенного заменяет Связной',
       (tester) async {
     final changes = await pump(tester);
     expect(selected(tester, 'duty-extensions-rio'), isTrue);
@@ -173,12 +173,12 @@ void main() {
     expect(changes.last.personas.dutyNotifications, 'rio');
     expect(changes.last.personas.notifier.id, 'rio');
 
-    // Дуэт с Нодой: Лиорио выключен — обе обязанности сейчас у Садо.
+    // Дуэт с Нодой: Лиорио выключен — обе обязанности сейчас у Связной.
     await tap(tester, 'assistant-mode-duo');
     await tap(tester, 'duo-helper-noda');
     expect(
       tester.widget<Text>(key('duty-extensions-fallback')).data,
-      'Сейчас делает Садо: Лиорио выключен режимом.',
+      'Сейчас делает Связной: Лиорио выключен режимом.',
     );
     expect(key('duty-notifications-fallback'), findsOneWidget);
     expect(changes.last.personas.extensionsLead.id, 'sado');

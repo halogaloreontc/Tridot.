@@ -139,14 +139,14 @@ void main() {
       });
     }
 
-    test('Садо: худший тёмный фон — пузырь, около 5,96:1', () {
+    test('Связной: худший тёмный фон — пузырь, около 5,96:1', () {
       expect(
         contrast(AssistantColors.sado, AssistantColors.bubble),
         closeTo(5.96, 0.05),
       );
     });
 
-    test('Садо на светлом фоне — отдельный токен', () {
+    test('Связной на светлом фоне — отдельный токен', () {
       const light = <Color>[Color(0xFFFFFFFF), AssistantColors.textStrong];
       for (final color in light) {
         expect(
@@ -155,6 +155,25 @@ void main() {
         );
         // Тёмный акцент на светлом не годится — потому и токен.
         expect(contrast(AssistantColors.sado, color), lessThan(4.5));
+      }
+    });
+
+    test('подсветка команды (ADR-021): не ниже 7:1 на всех тёмных фонах', () {
+      const colors = <String, Color>{
+        'commandVerb': AssistantColors.commandVerb,
+        'commandValue': AssistantColors.commandValue,
+        'commandTag': AssistantColors.commandTag,
+        'commandAddress': AssistantColors.commandAddress,
+      };
+      for (final MapEntry(key: name, value: color) in colors.entries) {
+        for (final MapEntry(key: surface, value: background)
+            in darkSurfaces.entries) {
+          expect(
+            contrast(color, background),
+            greaterThanOrEqualTo(7),
+            reason: '$name на $surface',
+          );
+        }
       }
     });
   });

@@ -160,6 +160,18 @@ void main() {
 
   Finder canary(String value) => find.textContaining(value, findRichText: true);
 
+  /// «+» → «Шаблоны команд» → «Найти команду» и поиск [query].
+  Future<void> openCommandFinder(WidgetTester tester, String query) async {
+    await tester.tap(find.byKey(const Key('templates-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('composer-templates')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('command-find')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('command-search')), query);
+    await tester.pumpAndSettle();
+  }
+
   Future<void> finish(WidgetTester tester) async {
     vault.lock();
     await tester.pumpWidget(const SizedBox.shrink());
@@ -376,9 +388,11 @@ void main() {
     await setUpHome(enabled: false);
     await pumpHome(tester);
     expect(find.byKey(const Key('quick-Открыть пароли')), findsNothing);
-    await tester.tap(find.byKey(const Key('templates-button')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('composer-action-Пароли')), findsNothing);
+    // Действия сейфа — в «+» → «Шаблоны команд» → «Найти команду»,
+    // раздел «Сейф» (ADR-020): с выключенным навыком раздела нет.
+    await openCommandFinder(tester, 'сейф');
+    expect(find.byKey(const Key('command-category-vault')), findsNothing);
+    expect(find.byKey(const Key('command-entry-pw.open')), findsNothing);
     await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
     await send(tester, 'забыл пароль от почты');
@@ -392,9 +406,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('quick-Открыть пароли')), findsOne);
     expect(find.byKey(const Key('quick-Подсказка к паролю…')), findsOne);
-    await tester.tap(find.byKey(const Key('templates-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('composer-action-Пароли')));
+    await openCommandFinder(tester, 'сейф');
+    await tester.tap(find.byKey(const Key('command-entry-pw.open')));
     await tester.pumpAndSettle();
     expect(find.byType(PasswordsScreen), findsOneWidget);
     // Выключение заперло хранилище; включение его не открывает.

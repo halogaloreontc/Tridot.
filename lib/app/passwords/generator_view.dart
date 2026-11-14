@@ -201,7 +201,7 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
             padding: EdgeInsets.only(top: 4),
             child: Text(
               'Словарь слов не загрузился — доступен пароль из символов.',
-              style: technicalTextStyle,
+              style: metaTextStyle,
             ),
           ),
         const SizedBox(height: 10),
@@ -236,7 +236,7 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
           'стойкость: биты посчитаны так, будто устройство пароля известно. '
           'Допишите к ней своё — то, что напомнит именно вам.',
           key: const ValueKey<String>('generator-structure'),
-          style: technicalTextStyle,
+          style: metaTextStyle,
         ),
         const SizedBox(height: 6),
         if (words) ..._wordControls(o) else ..._charControls(o),
@@ -285,7 +285,7 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
         ),
         // Подпись над списком, список — на всю ширину с многоточием: при
         // крупном шрифте на узком экране ничего не уходит за край.
-        const Text('Разделитель', style: technicalTextStyle),
+        const Text('Разделитель', style: metaTextStyle),
         DropdownButton<String>(
           key: const ValueKey<String>('generator-separator'),
           isExpanded: true,
@@ -331,7 +331,7 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
       ];
 
   List<Widget> _charControls(GeneratorOptions o) => <Widget>[
-        Text('Длина: ${o.length}', style: technicalTextStyle),
+        Text('Длина: ${o.length}', style: metaTextStyle),
         // Ползунок тянут вбок: этот жест — его, а не свайп меню.
         DrawerSwipeBlocker(
           child: Slider(

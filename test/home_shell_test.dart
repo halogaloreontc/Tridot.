@@ -1,4 +1,4 @@
-// Оболочка «Д» на главном экране: «Садо ▾» → «Мой Tridot · Помощники»,
+// Оболочка «Д» на главном экране: «Связной ▾» → «Мой Tridot · Помощники»,
 // «+» (новая сессия), «Сегодня» — колонкой на компьютере и «Сводкой» на
 // телефоне, свайп вправо по сессии открывает меню, хроника команд под
 // шапкой, чистый «Документ», поиск по сессиям из меню, телефон и крупный
@@ -67,26 +67,40 @@ Future<void> _say(WidgetTester tester, String text) async {
 }
 
 void main() {
-  testWidgets('«Садо ▾» открывает «Мой Tridot» на вкладке «Помощники»',
+  testWidgets(
+      'название сессии в шапке — меню сессии, а не настройки помощников',
       (tester) async {
     await _pump(tester);
+    // Под названием — кто отвечает; пустую сессию меню не открывает.
     expect(
       find.descendant(
-        of: find.byKey(const Key('persona-switch')),
-        matching: find.text('Садо'),
+        of: find.byKey(const Key('session-title')),
+        matching: find.text('Связной'),
       ),
       findsOneWidget,
     );
-    await tester.tap(find.byKey(const Key('persona-switch')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('my-relay')), findsOneWidget);
     expect(
-      find.byKey(const ValueKey<String>('assistant-mode-trio')),
+      find.descendant(
+        of: find.byKey(const Key('session-title')),
+        matching: find.text('Новая сессия'),
+      ),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('assistants-journal-planned')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('my-relay-back')));
+    await tester.tap(find.byKey(const Key('session-title')));
     await tester.pumpAndSettle();
+    expect(find.text('Переименовать'), findsNothing);
+    expect(find.byKey(const Key('my-relay')), findsNothing);
+
+    await _say(tester, 'привет');
+    await tester.tap(find.byKey(const Key('session-title')));
+    await tester.pumpAndSettle();
+    expect(find.text('Переименовать'), findsOneWidget);
+    expect(find.text('Закрепить'), findsOneWidget);
+    expect(find.text('Удалить'), findsOneWidget);
+    expect(find.byKey(const Key('my-relay')), findsNothing);
+    await tester.tapAt(const Offset(195, 600));
+    await tester.pumpAndSettle();
+    expect(find.text('Переименовать'), findsNothing);
     expect(find.byKey(const Key('assistant-composer')), findsOneWidget);
   });
 
@@ -297,7 +311,7 @@ void main() {
       await _say(tester, text);
     }
     final rail = tester.getRect(find.byKey(const Key('history-rail')));
-    final header = tester.getRect(find.byKey(const Key('persona-switch')));
+    final header = tester.getRect(find.byKey(const Key('session-title')));
     expect(rail.top, greaterThanOrEqualTo(header.bottom));
     expect(rail.top, lessThan(56 + 8));
     expect(rail.height, greaterThanOrEqualTo(44));
@@ -538,9 +552,12 @@ void main() {
     expect(find.byKey(const Key('today-panel')), findsOneWidget);
     expect(find.byKey(const Key('menu-button')), findsNothing);
     expect(
-      find.byKey(const Key('session-subtitle')),
+      find.descendant(
+        of: find.byKey(const Key('session-title')),
+        matching: find.byIcon(Icons.keyboard_arrow_down),
+      ),
       findsNothing,
-      reason: 'пустая сессия — без подписи',
+      reason: 'пустая сессия — без меню',
     );
     expect(find.byKey(const Key('today-show')), findsNothing);
     expect(find.byKey(const Key('today-button')), findsNothing);

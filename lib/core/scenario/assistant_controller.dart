@@ -1,3 +1,5 @@
+import '../commands/command_catalog.dart';
+import '../commands/command_suggest.dart';
 import '../connectors/connector.dart';
 import '../connectors/login_link.dart';
 import '../connectors/tasks_connector.dart';
@@ -12,8 +14,10 @@ import '../personas/persona_address.dart';
 import '../replies/reply_library.dart';
 import '../services/clock.dart';
 import '../skills/passwords/passwords_phrases.dart';
+import 'command_spans.dart';
 import 'route_policy.dart';
 
+export 'command_spans.dart';
 export 'route_policy.dart';
 
 /// Маршрутизатор сообщений между коннекторами.
@@ -41,7 +45,7 @@ export 'route_policy.dart';
 /// коннектора.
 ///
 /// Отвечает один из помощников ([personas], ADR-016): без обращения —
-/// Садо или ведущий обязанности, чей навык забрал фразу (склад, пароли —
+/// Связной или ведущий обязанности, чей навык забрал фразу (склад, пароли —
 /// ведущий расширений, если режим его включает), а тот, к кому обратились
 /// по имени («Нода, …»), — на это сообщение. Имя помощника, выключенного
 /// режимом, — просто текст. Обращение по имени отмечается в ответе
@@ -49,7 +53,7 @@ export 'route_policy.dart';
 ///
 /// К кому обратились — тот и продолжает, пока разговор идёт тем же
 /// навыком ([_followUp]): «Нода, расскажи шутку» → «ещё шутку» — снова
-/// Нода, а «покажи задачи» после этого — уже Садо.
+/// Нода, а «покажи задачи» после этого — уже Связной.
 /// Продолжение — не дольше [followUpLimit] фраз без имени. Это короткое
 /// продолжение живёт только здесь, в памяти: интерфейс его не
 /// показывает и не сохраняет, смена чата его снимает. Выбора «Кому» в
@@ -109,7 +113,7 @@ final class AssistantController {
   /// вопрос «копию чего?».
   static const Duration contextWindow = Duration(minutes: 10);
 
-  /// Адресат «главный помощник» (Садо), выбранный явно. Это не то же, что
+  /// Адресат «главный помощник» (Связной), выбранный явно. Это не то же, что
   /// «никого не выбрали» (`null`): явный выбор важнее ведущего обязанности
   /// (ADR-016), а без выбора фразу расширения забирает его ведущий.
   static const String mainAddressee = 'main';
@@ -188,6 +192,11 @@ final class AssistantController {
   /// Включённые сейчас коннекторы.
   List<Connector> get _connectors => extensions.enabledConnectors;
 
+  /// Счётчики выбора команд (`AppSettings.commandUsage`, ADR-020): только
+  /// порядок подсказки при равной похожести ([_unknownFor]). Ставит
+  /// интерфейс; только id и числа.
+  Map<String, int> commandUsage = const <String, int>{};
+
   /// Паспорта включённых коннекторов.
   List<ConnectorInfo> get connectors => <ConnectorInfo>[
         for (final connector in _connectors) connector.info,
@@ -228,6 +237,9 @@ final class AssistantController {
   /// сообщали).
   String? _viewSessionId;
 
+  /// Метка задач проекта-папки открытой сессии ([enterChat]).
+  String? _viewProjectTag;
+
   /// Чат без задачи, чей выбор сейчас в [session]; не важен, пока открыт
   /// чат задачи.
   String? _appliedSessionId;
@@ -252,9 +264,12 @@ final class AssistantController {
   /// вопрос. Отмена массовых изменений («Отменить») остаётся. В чате задачи
   /// «её» — эта задача; в сессии — прежний выбор этой сессии.
   ///
+  /// [projectTag] — метка задач проекта-папки, в котором лежит чат
+  /// (ADR-018): новая задача без своей метки получает её.
+  ///
   /// Если ответ ещё готовится, смена применится после него: контекст
   /// сообщения не меняется посреди ответа.
-  void enterChat({String? taskId, String? sessionId}) {
+  void enterChat({String? taskId, String? sessionId, String? projectTag}) {
     // Продолжение разговора — только в том чате, где обратились.
     _followUp = null;
     _chatEpoch++;
@@ -264,6 +279,7 @@ final class AssistantController {
     session.lastConnectorId = null;
     _viewChatTaskId = taskId;
     _viewSessionId = taskId == null ? sessionId : null;
+    _viewProjectTag = projectTag;
     _awaitingAnswer = false;
     session.takePendingConfirmation()?.onDropped?.call();
     if (_inFlight > 0) {
@@ -275,7 +291,11 @@ final class AssistantController {
 
   void _applyChat() {
     final target = _viewChatTaskId;
-    if (session.chatTaskId == null) {
+    // Сессию удалили ([forgetChat]): её выбор не сохраняем.
+    final forgotten =
+        _appliedSessionId != null && _appliedSessionId == _forgottenSessionId;
+    if (forgotten) _forgottenSessionId = null;
+    if (session.chatTaskId == null && !forgotten) {
       final selected = selectedTaskId;
       if (selected == null) {
         _selections.remove(_appliedSessionId);
@@ -284,6 +304,7 @@ final class AssistantController {
       }
     }
     session.chatTaskId = target;
+    session.projectTag = _viewProjectTag;
     if (target != null) {
       selectTask(target);
       return;
@@ -297,11 +318,32 @@ final class AssistantController {
     }
   }
 
+  /// Открытую сессию перенесли в проект или из него, проекту дали или
+  /// сняли метку задач: метка для новых задач — [projectTag]. Посреди
+  /// ответа — после него, как [enterChat].
+  void setProjectTag(String? projectTag) {
+    _viewProjectTag = projectTag;
+    if (_inFlight == 0) session.projectTag = projectTag;
+  }
+
+  /// Сессию [sessionId] удалили: её выбор («её») больше не нужен и не
+  /// вернётся, если id когда-нибудь совпадёт.
+  void forgetChat(String sessionId) {
+    _selections.remove(sessionId);
+    // Её выбор ещё в [session]: при переходе в другой чат он не
+    // сохраняется под id удалённой сессии.
+    if (sessionId == _appliedSessionId) _forgottenSessionId = sessionId;
+  }
+
+  /// Удалённая сессия, чей выбор ещё применён ([forgetChat]).
+  String? _forgottenSessionId;
+
   /// Забывает выбор («её») всех чатов: история сессий очищена.
   void forgetChatSelections() {
     _followUp = null;
     _recent = null;
     _selections.clear();
+    _forgottenSessionId = null;
     clearSelection();
   }
 
@@ -313,7 +355,7 @@ final class AssistantController {
   /// была. Только в памяти и только в текущем чате ([enterChat]).
   ///
   /// Продолжение короткое: не больше [followUpLimit] фраз без имени
-  /// подряд, потом снова отвечает ведущий обязанности или Садо. Интерфейс
+  /// подряд, потом снова отвечает ведущий обязанности или Связной. Интерфейс
   /// продолжение не показывает — долгое «залипание» было бы невидимым
   /// адресатом.
   ({String personaId, String? connectorId, int left})? _followUp;
@@ -344,7 +386,7 @@ final class AssistantController {
     if (named != null) {
       if (named.id == personas.responder.id &&
           extensions.mainLeadsAll(personas)) {
-        // Садо и так отвечает на всё.
+        // Связной и так отвечает на всё.
         _followUp = null;
       } else if (response.replyId == 'common.addressed') {
         // «Нода» без команды: следующая фраза — ей, любым навыком.
@@ -376,10 +418,10 @@ final class AssistantController {
   }
 
   /// Кто ответит на [message]: обращение по имени активного помощника
-  /// («Нода, …», «Садо, …») важнее адресата [addressee] из поля ввода
-  /// ([mainAddressee] — Садо), а без них отвечает Садо — или ведущий
+  /// («Нода, …», «Связной, …») важнее адресата [addressee] из поля ввода
+  /// ([mainAddressee] — Связной), а без них отвечает Связной — или ведущий
   /// обязанности, чей навык заберёт фразу ([_leadByDuty]). Имя помощника,
-  /// выключенного режимом, — не обращение: отвечает Садо, а имя из начала
+  /// выключенного режимом, — не обращение: отвечает Связной, а имя из начала
   /// фразы убирается (ADR-016).
   /// Возвращает помощника и текст без обращения.
   (Persona, String, bool) resolve(String message, {String? addressee}) {
@@ -390,7 +432,7 @@ final class AssistantController {
     }
     // Имя помощника, выключенного режимом, обращением не считается, но и в
     // команду не попадает: «Нода, добавь задачу хлеб» в Дуэте с Лиорио —
-    // задача «Хлеб» от Садо (ADR-016).
+    // задача «Хлеб» от главного (ADR-016).
     final text = PersonaAddressing.commandText(message);
     final chosen = cast.find(addressee);
     return (
@@ -457,6 +499,9 @@ final class AssistantController {
       );
     } finally {
       _inFlight--;
+      if (_inFlight == 0 && !_chatChangePending) {
+        session.projectTag = _viewProjectTag;
+      }
       if (_inFlight == 0 && _chatChangePending) {
         _chatChangePending = false;
         // Ответ пришёл в покинутый чат: его вопрос там и остаётся.
@@ -524,7 +569,7 @@ final class AssistantController {
     return response.withPersona(response.personaId ?? session.speaker.id);
   }
 
-  /// Приветствие Садо: он встречает в новой сессии (ADR-016). В
+  /// Приветствие главного: он встречает в новой сессии (ADR-016). В
   /// интерфейсе сообщением не показывается (приветствие — пустая сессия,
   /// SessionHero); ключ `common.welcome` оставлен для паков реплик.
   AssistantResponse welcome() => speak(
@@ -534,6 +579,24 @@ final class AssistantController {
         personas.responder,
         intent: 'welcome',
       );
+
+  /// Ответ на сообщение только из файлов (ADR-019): файлы сохранены в
+  /// сессии, обрабатывать их пока нечем. Отвечает главный — как на
+  /// реплику без обращения.
+  AssistantResponse attachmentsSaved(int count) => speak(
+        Reply('attachments.saved', <String, String>{'count': '$count'}),
+        personas.responder,
+        intent: 'attachments.saved',
+      );
+
+  /// Строка под ответом на команду с файлами: файлы сохранены в сессии.
+  /// Голосом того, кто ответил ([personaId]); вне счёта реплик.
+  String attachmentsNote(int count, String? personaId) => speak(
+        Reply('attachments.savedNote', <String, String>{'count': '$count'}),
+        personas.cast.byId(personaId),
+        intent: 'attachments.saved',
+        countTurn: false,
+      ).message;
 
   /// «Команда обрабатывается…» голосом того, кто ответит на [message]: без
   /// явного обращения — ведущий обязанности, чей навык, скорее всего,
@@ -651,6 +714,75 @@ final class AssistantController {
     return _ownerOf(found, likely);
   }
 
+  /// Подсветка команды (ADR-021): какие части [text] распознали навыки —
+  /// обращение по имени, слово команды, название, срок, метки, пример.
+  /// Тот же выбор навыка, что у [_route] (без контекста сессии, чата и
+  /// вопросов), и разбор самого навыка ([CommandSpanSource]); ничего не
+  /// запускается и не запоминается.
+  ///
+  /// Фраза о паролях, вставленный пароль или код входа не подсвечиваются
+  /// совсем: подсветка не должна выделять секрет ни цветом, ни шрифтом.
+  /// Длинный текст ([CommandSpans.maxLength]) — тоже.
+  List<CommandSpan> highlight(String text) {
+    if (text.trim().isEmpty || text.length > CommandSpans.maxLength) {
+      return const <CommandSpan>[];
+    }
+    if (text.contains('•') ||
+        LoginLinks.contains(text) ||
+        SecretGuard.redact(text).guarded) {
+      return const <CommandSpan>[];
+    }
+    final spans = <CommandSpan>[];
+    var offset = 0;
+    var body = text;
+    final addressing = PersonaAddressing.parse(text);
+    if (addressing != null && addressing.rest.isNotEmpty) {
+      if (personas.cast.isActive(addressing.persona.id) &&
+          addressing.nameEnd > addressing.nameStart) {
+        spans.add(
+          CommandSpan(
+            addressing.nameStart,
+            addressing.nameEnd,
+            CommandSpanKind.address,
+          ),
+        );
+      }
+      offset = addressing.restStart;
+      body = text.substring(offset);
+    }
+    final utterance = Utterance.analyze(body, now: session.clock.now());
+    if (PasswordPhrases.looksLike(utterance)) return const <CommandSpan>[];
+    final found = <(Connector, ConnectorMatch)>[];
+    for (final connector in _connectors) {
+      try {
+        final match = connector.match(utterance);
+        if (match == null || match.confidence <= 0) continue;
+        if (connector.info.sensitive) return const <CommandSpan>[];
+        found.add((connector, match));
+      } catch (_) {
+        continue;
+      }
+    }
+    final likely = RoutePolicy.pick(
+      <ConnectorMatch>[for (final (_, m) in found) m],
+    ).likely;
+    final owner = _ownerOf(found, likely);
+    if (owner != null && likely != null && !likely.fallback) {
+      List<CommandSpan> own;
+      try {
+        own = owner is CommandSpanSource
+            ? (owner as CommandSpanSource).spansOf(utterance, likely)
+            : CommandSpans.generic(utterance);
+      } catch (_) {
+        own = const <CommandSpan>[];
+      }
+      for (final span in own) {
+        spans.add(span.shift(offset));
+      }
+    }
+    return CommandSpans.normalize(spans, text.length);
+  }
+
   /// Коннектор совпадения [match] среди [found].
   static Connector? _ownerOf(
     List<(Connector, ConnectorMatch)> found,
@@ -664,8 +796,8 @@ final class AssistantController {
   }
 
   /// Фразу забрал навык из зоны помощника: без явного обращения отвечает
-  /// ведущий этой обязанности — так Садо передаёт фразу помощнику
-  /// (ADR-016). Зона неактивного помощника — у Садо. Обращение по имени и
+  /// ведущий этой обязанности — так Связной передаёт фразу помощнику
+  /// (ADR-016). Зона неактивного помощника — у главного. Обращение по имени и
   /// явный адресат важнее; продолжение разговора тем же навыком
   /// ([_followUp]) — тоже.
   void _leadByDuty(Connector connector) {
@@ -688,7 +820,7 @@ final class AssistantController {
   }
 
   /// Первым пишет ведущий оповещений ([PersonaCast.notifier]; выключен
-  /// режимом — Садо): просроченные задачи. `null`, если просроченных нет. Интерфейс в сессию это больше
+  /// режимом — Связной): просроченные задачи. `null`, если просроченных нет. Интерфейс в сессию это больше
   /// не пишет (строка «Просрочена N задач» в пустой сессии); ключ
   /// `task.overdue` оставлен для паков реплик.
   AssistantResponse? overdueNotice(List<Task> overdue) {
@@ -730,7 +862,7 @@ final class AssistantController {
   /// даже если адресат в поле ввода с тех пор сменился. Если в ответе
   /// назвали помощника по имени в начале ([addressed]: «Лио, да»), отвечает
   /// названный. Имя в конце ([trailing]: «да, Лиорио», «спасибо, Лио») —
-  /// тоже обращение: отвечает названный. В соло все ответы — от Садо.
+  /// тоже обращение: отвечает названный. В соло все ответы — от главного.
   void _speakAsAsker(
     Persona? asker, {
     required bool addressed,
@@ -977,7 +1109,7 @@ final class AssistantController {
     if (best == null || bestConnector == null) {
       session.lastConnectorId = null;
       _recent = null;
-      return _unknown();
+      return _unknownFor(message, private: hideFromNetwork);
     }
     // Фраза понята по контексту сессии как фраза другого навыка: её
     // разбирают заново как каноническую команду (один раз).
@@ -1085,6 +1217,47 @@ final class AssistantController {
   }
 
   AssistantResponse _unknown() => TasksConnector.unknown(session);
+
+  /// «Не понял» с подсказкой (ADR-022): фразу не забрал ни один навык.
+  /// Похожие команды каталога включённых навыков — «Не до конца понял.
+  /// Возможно, подойдёт: …» и кнопки команд — только при опечатке в слове
+  /// команды; иначе прежний ответ без кнопок. Фраза о паролях, пароль или код —
+  /// прежний ответ без кнопок: слова пользователя не повторяются нигде.
+  /// Ничего не запоминается.
+  AssistantResponse _unknownFor(String text, {required bool private}) {
+    if (private ||
+        text.contains('•') ||
+        LoginLinks.contains(text) ||
+        CommandSuggester.isPrivate(text)) {
+      return _unknown();
+    }
+    final catalog = CommandCatalog.build(
+      connectors: connectors,
+      passwordActions: false,
+    );
+    final found = CommandSuggester.suggest(text, catalog, usage: commandUsage);
+    // Похожих команд нет (опечатки не видно) — прежний ответ без кнопок:
+    // подсказка не должна становиться обычным ответом на любую фразу.
+    if (found.isEmpty) return _unknown();
+    final quoted = <String>[
+      for (final suggestion in found) '«${suggestion.label}»',
+    ];
+    final options = quoted.length == 1
+        ? quoted.single
+        : '${quoted.sublist(0, quoted.length - 1).join(', ')} или '
+            '${quoted.last}';
+    return session
+        .reply(
+          unknownSuggestReply,
+          values: <String, String>{'options': options},
+          intent: 'unknown',
+          status: AssistantStatus.noAction,
+        )
+        .withSuggestions(CommandSuggestions(found));
+  }
+
+  /// Ответ «не до конца понял» с подсказкой команд (ADR-022).
+  static const String unknownSuggestReply = 'common.unknown.suggest';
 
   /// Выходной фильтр (раздел 5.9): при открытом хранилище текст ответа и
   /// подставленные факты проверяются по отпечаткам паролей. Совпадение

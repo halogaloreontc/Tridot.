@@ -72,7 +72,7 @@ void main() {
   });
 
   group('трио', () {
-    test('по умолчанию отвечает Садо нейтрально', () async {
+    test('по умолчанию отвечает Связной нейтрально', () async {
       final (assistant, _) = _assistant();
       final response = await assistant.handle('Добавь задачу купить хлеб');
       expect(response.personaId, 'sado');
@@ -131,7 +131,7 @@ void main() {
       );
     });
 
-    test('Дуэт с Нодой: отвечает Садо, просрочки — от Ноды', () async {
+    test('Дуэт с Нодой: отвечает Связной, просрочки — от Ноды', () async {
       final (assistant, _) = _assistant(
         personas: const PersonaSettings(
           teamMode: TeamMode.duo,
@@ -187,7 +187,7 @@ void main() {
 
     test(
         '«Нода, …» — дальше тем же навыком отвечает Noda, другим — снова '
-        'Садо', () async {
+        'Связной', () async {
       final (assistant, tasks) = _assistant();
       final followUps = <String?>[];
       final responses = await chat(
@@ -222,9 +222,9 @@ void main() {
         personas:
             const PersonaSettings(teamMode: TeamMode.duo, duoHelper: 'noda'),
       );
-      final response = await assistant.handle('Садо, 2+2');
+      final response = await assistant.handle('Связной, 2+2');
       expect(response.personaId, 'sado');
-      expect(assistant.followUpPersonaId, isNull, reason: 'Садо ведёт всё');
+      expect(assistant.followUpPersonaId, isNull, reason: 'Связной ведёт всё');
       await assistant.handle('Нода, 2+2');
       expect(assistant.followUpPersonaId, 'noda');
       expect((await assistant.handle('5+5')).personaId, 'noda');
@@ -345,7 +345,7 @@ void main() {
         (const PersonaSettings(teamMode: TeamMode.solo), 'sado'),
       ]) {
         final (assistant, _) = _assistant(personas: settings);
-        for (final name in <String>['Садо', 'Лиорио', 'Нода']) {
+        for (final name in <String>['Связной', 'Лиорио', 'Нода']) {
           await assistant.handle('$name, 2+2');
           expect(
             assistant.overdueNotice(overdue)!.personaId,
@@ -358,7 +358,7 @@ void main() {
   });
 
   group('соло', () {
-    test('отвечает Садо, имя помощника снимается', () async {
+    test('отвечает Связной, имя помощника снимается', () async {
       final (assistant, tasks) = _assistant(
         personas: const PersonaSettings(
           teamMode: TeamMode.solo,

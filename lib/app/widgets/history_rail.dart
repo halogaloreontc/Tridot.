@@ -214,7 +214,7 @@ final class HistoryRail extends StatelessWidget {
           overflow: TextOverflow.clip,
           textAlign: TextAlign.right,
           textScaler: TextScaler.noScaling,
-          style: technicalTextStyle.copyWith(
+          style: metaTextStyle.copyWith(
             fontSize: 11,
             color: AssistantColors.faint,
           ),
@@ -262,7 +262,7 @@ final class HistoryRail extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                leading: Text(entries[i].timestamp, style: technicalTextStyle),
+                leading: Text(entries[i].timestamp, style: metaTextStyle),
                 onTap: () => Navigator.of(context).pop(i),
               ),
           ],
@@ -489,7 +489,7 @@ final class _MarkState extends State<_Mark> {
         children: <InlineSpan>[
           TextSpan(
             text: '${widget.entry.timestamp} · команда\n',
-            style: technicalTextStyle,
+            style: metaTextStyle,
           ),
           TextSpan(
             text: _clip(widget.entry.command, 120),
@@ -505,7 +505,7 @@ final class _MarkState extends State<_Mark> {
             ),
           const TextSpan(
             text: '\nНажмите, чтобы перейти к сообщению',
-            style: technicalTextStyle,
+            style: metaTextStyle,
           ),
         ],
       ),

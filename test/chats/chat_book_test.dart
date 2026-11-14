@@ -129,23 +129,6 @@ void main() {
     expect(store.chatIds, <String>['task:done']);
   });
 
-  test('recent: по последней активности, только чаты с сообщениями', () async {
-    final b = await book();
-    for (final (id, minute) in <(String, int)>[('a', 5), ('b', 1), ('c', 9)]) {
-      b.ensureTaskThread(id);
-      b.append(
-        'task:$id',
-        _say(b, id, clock.value.add(Duration(minutes: minute))),
-      );
-    }
-    b.ensureTaskThread('empty');
-    expect(
-      b.recent().map((ChatThread t) => t.taskId),
-      <String>['c', 'a', 'b'],
-    );
-    expect(b.recent(limit: 2).length, 2);
-  });
-
   test('сообщение помощника в закрытый чат — «не прочитано»', () async {
     final b = await book();
     final s = b.currentId;
@@ -867,9 +850,11 @@ void main() {
       final b = await open();
       expect(b.thread(ChatThread.legacyMainSessionId), isNull);
       expect(b.resolve('main'), 'main');
+      // Чат задачи — только копия команды и ответа: в меню его нет.
+      expect(b.thread('task:t1'), isNotNull);
       expect(
         b.sessions().map((ChatThread t) => t.id),
-        unorderedEquals(<String>['task:t1', b.currentId]),
+        <String>[b.currentId],
       );
       expect(File(p.join(chats(), 'main.json')).existsSync(), isFalse);
       expect(File(p.join(chats(), 'session-main.json')).existsSync(), isFalse);

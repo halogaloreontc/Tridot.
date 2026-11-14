@@ -1,5 +1,5 @@
-// Экран новой сессии: знак Садо, строки ведущего оповещений, строка о
-// ролях помощников голосом Садо и карточка выбора рода Садо (ADR-016).
+// Экран новой сессии: знак Связной, строки ведущего оповещений, строка о
+// ролях помощников голосом Связной и карточка выбора рода Связной (ADR-016).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
@@ -27,7 +27,7 @@ void main() {
       )
       .persona;
 
-  /// Строка роли голосом Садо из встроенного каталога.
+  /// Строка роли голосом Связной из встроенного каталога.
   String Function(String, Persona) line(PersonaSettings personas) =>
       (String roles, Persona owner) => ReplyLibrary.builtIn.render(
             Reply('session.handoff.note', <String, String>{
@@ -47,7 +47,7 @@ void main() {
     ('Трио', const PersonaSettings()),
   ]) {
     testWidgets(
-        '$title: крупный знак — Садо, просрочки — от ведущего '
+        '$title: крупный знак — Связной, просрочки — от ведущего '
         'оповещений', (tester) async {
       final cast = settings.cast;
       await pump(
@@ -80,13 +80,13 @@ void main() {
     });
   }
 
-  test('строка о ролях — из каталога, голосом Садо, без ролей Садо', () {
+  test('строка о ролях — из каталога, голосом Связной, без ролей Связной', () {
     final cast = const PersonaSettings().cast;
     final roles = <(String, Persona)>[
       ('Личное', cast.responder),
       ('Кладовщик', cast.byId('rio')),
     ];
-    // Строка без рода: она видна рядом с карточкой «Садо — он или она?»,
+    // Строка без рода: она видна рядом с карточкой «Связной — он или она?»,
     // пока род не выбран, и не меняется после выбора.
     for (final personas in <PersonaSettings>[
       const PersonaSettings(),
@@ -102,7 +102,7 @@ void main() {
         '«Кладовщик» ведёт Лиорио — такие фразы передам',
       );
     }
-    // Все роли у Садо — строки нет.
+    // Все роли у Связной — строки нет.
     expect(
       SessionHero.noteFor(
         <(String, Persona)>[('Личное', cast.responder)],
@@ -125,7 +125,7 @@ void main() {
     );
   });
 
-  testWidgets('карточка «Садо — он или она?» видна, пока род не выбран',
+  testWidgets('карточка «Связной или Связная?» видна, пока род не выбран',
       (tester) async {
     final chosen = <ReplyGender>[];
     final cast = const PersonaSettings().cast;
@@ -134,12 +134,29 @@ void main() {
       SessionHero(persona: cast.responder, onSadoGender: chosen.add),
     );
     expect(find.byKey(const Key('sado-gender-choice')), findsOneWidget);
-    expect(find.text('Садо — он или она?'), findsOneWidget);
+    expect(find.text('Связной или Связная?'), findsOneWidget);
+    expect(find.text('Связной (он)'), findsOneWidget);
+    expect(find.text('Связная (она)'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey<String>('sado-gender-female')));
     expect(chosen, <ReplyGender>[ReplyGender.female]);
 
     await pump(tester, SessionHero(persona: cast.responder));
     expect(find.byKey(const Key('sado-gender-choice')), findsNothing);
+  });
+
+  testWidgets('своё имя главного: «Мира — он или она?», чипы «Он» и «Она»',
+      (tester) async {
+    final cast = const PersonaSettings(
+      names: <String, String>{'sado': 'Мира'},
+    ).cast;
+    await pump(
+      tester,
+      SessionHero(persona: cast.responder, onSadoGender: (_) {}),
+    );
+    expect(find.text('Мира — он или она?'), findsOneWidget);
+    expect(find.text('Он'), findsOneWidget);
+    expect(find.text('Она'), findsOneWidget);
+    expect(find.textContaining('Связн'), findsNothing);
   });
 
   testWidgets('карточка выбора рода на 320 px и шрифте ×2 без переполнений',

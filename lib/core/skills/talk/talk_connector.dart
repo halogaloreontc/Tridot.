@@ -17,9 +17,9 @@ export 'talk_phrases.dart';
 ///
 /// Беседа заготовленная, а не свободная (ADR-001): понимает только
 /// короткие реплики целиком ([TalkPhrases]) и отвечает записями каталога
-/// ответов голосом Садо, Лиорио или Ноды. Совпадения беседы — на крайний случай
-/// ([ConnectorMatch.fallback]): любая команда задач, калькулятора или
-/// подключения важнее.
+/// ответов голосом главного, Лиорио или Ноды. Совпадения беседы — на
+/// крайний случай ([ConnectorMatch.fallback]): любая команда задач,
+/// калькулятора или подключения важнее.
 final class TalkConnector implements Connector, ConnectorHealth {
   TalkConnector({TaskService? taskService}) : _tasks = taskService;
 
@@ -512,11 +512,11 @@ final class TalkConnector implements Connector, ConnectorHealth {
         : parts.join(' и ');
   }
 
-  /// «Кто ты» (ADR-016). Соло — Садо о себе (`talk.who.solo`). В Дуэте и
-  /// Трио Садо говорит о себе (`talk.who.main`) и о каждом активном
+  /// «Кто ты» (ADR-016). Соло — Связной о себе (`talk.who.solo`). В Дуэте и
+  /// Трио Связной говорит о себе (`talk.who.main`) и о каждом активном
   /// помощнике (`talk.who.helper` — в роде помощника), помощник — о себе
   /// (`talk.who.self.helper`) и о главном (`talk.who.mainRef` — в роде
-  /// Садо). Имена — текущие русские из настроек, только в именительном
+  /// главного). Имена — текущие русские из настроек, только в именительном
   /// падеже; название приложения звучит один раз.
   AssistantResponse _who(AssistantSession session, String command) {
     final speaker = session.speaker;
@@ -746,7 +746,7 @@ final class TalkConnector implements Connector, ConnectorHealth {
   ) {
     final settings = session.personas;
     final kind = request.setting!;
-    // Главный всегда Садо (ADR-016): «пусть отвечает Лио», «сделай Ноду
+    // Главный всегда Связной (ADR-016): «пусть отвечает Лио», «сделай Ноду
     // основной» настроек не меняют — ответ объясняет, где включить
     // помощников.
     if (kind == TalkSettingKind.main) return _mainFixed(session, command);
@@ -806,8 +806,8 @@ final class TalkConnector implements Connector, ConnectorHealth {
     return response.withPersona(speaker.id);
   }
 
-  /// «Пусть отвечает Лиорио»: главный — Садо, это не меняется
-  /// (`talk.set.mainFixed`, в роде Садо, стилем говорящего).
+  /// «Пусть отвечает Лиорио»: главный — Связной, это не меняется
+  /// (`talk.set.mainFixed`, в роде Связной, стилем говорящего).
   AssistantResponse _mainFixed(AssistantSession session, String command) {
     final main = session.personas.cast.responder;
     return AssistantResponse(
@@ -823,7 +823,7 @@ final class TalkConnector implements Connector, ConnectorHealth {
   }
 
   /// «Включи трио», «включи дуэт с Нодой», «включи соло»: режим меняет и
-  /// подтверждает Садо — он есть в любом режиме.
+  /// подтверждает Связной — он есть в любом режиме.
   AssistantResponse _mode(
     TalkRequest request,
     AssistantSession session,

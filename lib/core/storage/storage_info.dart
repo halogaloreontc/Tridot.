@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
+import '../chats/attachments.dart';
 import '../services/clock.dart';
 
 /// Сведения о месте данных для экрана «Данные».
@@ -49,7 +52,8 @@ final class JsonStorageInfo implements StorageInfo {
   @override
   bool get canBackup => true;
 
-  /// tasks.json и все файлы чатов; null, если нет ни того, ни другого.
+  /// tasks.json, все файлы чатов и прикреплённые файлы сессий
+  /// (`chats/files/`, ADR-019); null, если нет ничего.
   @override
   Future<int?> sizeBytes() async {
     final file = File(filePath);
@@ -59,6 +63,12 @@ final class JsonStorageInfo implements StorageInfo {
       await for (final entity in Directory(chats).list()) {
         if (entity is File && entity.path.endsWith('.json')) {
           total = (total ?? 0) + await entity.length();
+        }
+      }
+      final files = Directory(p.join(chats, AttachmentStore.folder));
+      if (await files.exists()) {
+        await for (final entity in files.list(recursive: true)) {
+          if (entity is File) total = (total ?? 0) + await entity.length();
         }
       }
     }

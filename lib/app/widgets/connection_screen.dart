@@ -304,14 +304,14 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
         if (record.baseUri case final Uri base)
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-            child: Text('Адрес: $base', style: technicalTextStyle),
+            child: Text('Адрес: $base', style: metaTextStyle),
           ),
         if (record.connected)
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
             child: Text(
               'Последний ответ: ${_moment(record.lastOk)}',
-              style: technicalTextStyle,
+              style: metaTextStyle,
             ),
           ),
         if (record.connected && failure != null)
@@ -527,19 +527,19 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               Text(
                 'Версия описания: $version',
                 key: const ValueKey<String>('connection-manifest-version'),
-                style: technicalTextStyle,
+                style: metaTextStyle,
               ),
               Text(
                 record.connected
                     ? 'Проверено: ${_moment(meta.fetchedAt)}'
                     : 'Встроенная копия — до подключения',
-                style: technicalTextStyle,
+                style: metaTextStyle,
               ),
               // «Наше описание главное» (ADR-012): какое в работе и почему.
               Text(
                 'В работе: ${_service.descriptionReason}',
                 key: const ValueKey<String>('connection-manifest-origin'),
-                style: technicalTextStyle,
+                style: metaTextStyle,
               ),
               if (_service.manifestError case final String error)
                 Padding(

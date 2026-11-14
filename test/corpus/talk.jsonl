@@ -65,8 +65,8 @@
 {"id": "talk-065", "text": "шути меньше", "connector": "talk", "intent": "talk.setting", "source": "manual"}
 {"id": "talk-066", "text": "шути больше", "connector": "talk", "intent": "talk.setting", "source": "manual"}
 {"id": "talk-067", "text": "не шути", "connector": "talk", "intent": "talk.setting", "source": "manual"}
-{"id": "talk-068", "text": "Noda будь основной", "connector": "talk", "intent": "talk.setting", "note": "главный всегда Садо (ADR-016): ответ talk.set.mainFixed, настройки не меняются", "source": "manual"}
-{"id": "talk-069", "text": "пусть отвечает Лиорио", "connector": "talk", "intent": "talk.setting", "note": "главный всегда Садо (ADR-016): ответ talk.set.mainFixed, настройки не меняются", "source": "manual"}
+{"id": "talk-068", "text": "Noda будь основной", "connector": "talk", "intent": "talk.setting", "note": "главный всегда Связной (ADR-016, ADR-017): ответ talk.set.mainFixed, настройки не меняются", "source": "manual"}
+{"id": "talk-069", "text": "пусть отвечает Лиорио", "connector": "talk", "intent": "talk.setting", "note": "главный всегда Связной (ADR-016, ADR-017): ответ talk.set.mainFixed, настройки не меняются", "source": "manual"}
 {"id": "talk-070", "text": "пока не забыл, купить хлеб", "connector": "talk", "intent": "unknown", "note": "прощание только целиком", "source": "manual"}
 {"id": "talk-071", "text": "привет, добавь задачу купить хлеб", "connector": "talk", "intent": "unknown", "note": "явная задача важнее приветствия", "source": "manual"}
 {"id": "talk-072", "text": "спасибо, перенеси отчёт на завтра", "connector": "talk", "intent": "unknown", "note": "команда после благодарности", "source": "manual"}
@@ -102,7 +102,7 @@
 {"id": "talk-102", "text": "Лио, привет", "connector": "talk", "intent": "talk.greet", "source": "manual"}
 {"id": "talk-103", "text": "спасибо, Нодочка", "connector": "talk", "intent": "talk.thanks", "source": "manual"}
 {"id": "talk-104", "text": "пусть отвечает Лио", "connector": "talk", "intent": "talk.setting", "source": "manual"}
-{"id": "talk-105", "text": "сделай Ноду основной", "connector": "talk", "intent": "talk.setting", "note": "главный всегда Садо (ADR-016): ответ talk.set.mainFixed, настройки не меняются", "source": "manual"}
+{"id": "talk-105", "text": "сделай Ноду основной", "connector": "talk", "intent": "talk.setting", "note": "главный всегда Связной (ADR-016, ADR-017): ответ talk.set.mainFixed, настройки не меняются", "source": "manual"}
 {"id": "talk-106", "text": "Нодь, расскажи шутку", "connector": "talk", "intent": "talk.joke", "source": "manual"}
 {"id": "talk-107", "text": "привет, Лио, добавь задачу хлеб", "connector": "tasks", "intent": "createTask", "title": "Хлеб", "note": "краткое имя помощника после приветствия", "source": "manual"}
 {"id": "talk-108", "text": "ну давай анекдот про кошку", "connector": "talk", "intent": "talk.joke", "note": "анекдот с темой", "source": "manual"}
@@ -128,7 +128,7 @@
 {"id": "talk-128", "text": "слишком официально, сбавь тон", "connector": "talk", "intent": "talk.setting", "note": "«слишком официально» — жалоба, «сбавь тон» — просьба", "source": "manual"}
 {"id": "talk-129", "text": "распиши всё подробно", "connector": "talk", "intent": "talk.setting", "source": "manual"}
 {"id": "talk-130", "text": "пусть теперь всё говорит Нода", "connector": "talk", "intent": "talk.setting", "source": "manual"}
-{"id": "talk-131", "text": "Лио, ты основной?", "connector": "talk", "intent": "talk.whoAreYou", "note": "вопрос, а не просьба: ответ «кто ты» называет главного — Садо", "source": "manual"}
+{"id": "talk-131", "text": "Лио, ты основной?", "connector": "talk", "intent": "talk.whoAreYou", "note": "вопрос, а не просьба: ответ «кто ты» называет главного — Связного", "source": "manual"}
 {"id": "talk-132", "text": "расскажи шутку на корпоративе", "connector": "talk", "intent": "unknown", "note": "чужое слово — не беседа", "source": "manual"}
 {"id": "talk-133", "text": "добавь смайлики в презентацию", "connector": "talk", "intent": "unknown", "note": "смайлики не в ответах — не настройка", "source": "manual"}
 {"id": "talk-134", "text": "говори по-русски", "connector": "talk", "intent": "unknown", "note": "язык ответов — не настройка стиля", "source": "manual"}
@@ -154,8 +154,13 @@
 {"id": "talk-154", "text": "что ты умеешь по части задач", "connector": "talk", "intent": "talk.capabilities", "source": "manual"}
 {"id": "talk-155", "text": "спасибо за анекдот, давай ещё", "connector": "talk", "intent": "talk.joke", "source": "manual"}
 {"id": "talk-156", "text": "Нод, привет", "connector": "talk", "intent": "talk.greet", "note": "имя с опечаткой в обращении", "source": "manual"}
-{"id": "talk-157", "text": "Садо, привет", "connector": "talk", "intent": "talk.greet", "note": "обращение к главному по имени (ADR-016)", "source": "manual"}
-{"id": "talk-158", "text": "Садо, добавь задачу хлеб", "connector": "tasks", "intent": "createTask", "title": "Хлеб", "note": "обращение к главному по имени не попадает в название", "source": "manual"}
+{"id": "talk-157", "text": "Связной, привет", "connector": "talk", "intent": "talk.greet", "note": "обращение к главному по имени (ADR-016, ADR-017)", "source": "manual"}
+{"id": "talk-158", "text": "Связной, добавь задачу хлеб", "connector": "tasks", "intent": "createTask", "title": "Хлеб", "note": "обращение к главному по имени не попадает в название", "source": "manual"}
 {"id": "talk-159", "text": "включи трио", "connector": "talk", "intent": "talk.setting", "note": "режим команды: Трио (ADR-016)", "source": "manual"}
 {"id": "talk-160", "text": "включи дуэт с Нодой", "connector": "talk", "intent": "talk.setting", "note": "режим команды: Дуэт с Нодой", "source": "manual"}
 {"id": "talk-161", "text": "включи соло", "connector": "talk", "intent": "talk.setting", "note": "режим команды: Соло", "source": "manual"}
+{"id": "talk-162", "text": "сделай Связного основным", "connector": "talk", "intent": "talk.setting", "note": "имя главного в винительном падеже (ADR-017): ответ talk.set.mainFixed, настройки не меняются", "source": "manual"}
+{"id": "talk-163", "text": "пусть отвечает Связной", "connector": "talk", "intent": "talk.setting", "note": "главный и так отвечает (ADR-017): ответ talk.set.mainFixed", "source": "manual"}
+{"id": "talk-164", "text": "включи дуэт со Связным", "connector": "talk", "intent": "talk.setting", "note": "«со» перед именем — как «с» (ADR-017); главный в дуэте всегда, помощник не выбран", "source": "manual"}
+{"id": "talk-165", "text": "Связная, привет", "connector": "talk", "intent": "talk.greet", "note": "обращение к главному в женском роде работает при любом выбранном роде (ADR-017)", "source": "manual"}
+{"id": "talk-166", "text": "Связная, добавь задачу молоко", "connector": "tasks", "intent": "createTask", "title": "Молоко", "note": "обращение к главной по имени не попадает в название (ADR-017)", "source": "manual"}

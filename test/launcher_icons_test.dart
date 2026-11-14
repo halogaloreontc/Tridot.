@@ -63,7 +63,7 @@ void main() {
     expect(_icoSizes(bytes), <int>[16, 32, 48, 256]);
   });
 
-  testWidgets('в центрах точек — цвета Садо, Лиорио и Ноды', (tester) async {
+  testWidgets('в центрах точек — цвета Связной, Лиорио и Ноды', (tester) async {
     Future<void> check(String path, double inset) async {
       final bytes = File(path).readAsBytesSync();
       final pixels = await tester.runAsync(() async {

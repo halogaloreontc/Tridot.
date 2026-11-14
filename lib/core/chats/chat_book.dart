@@ -5,13 +5,24 @@ import 'package:characters/characters.dart';
 
 import '../models/action_card.dart';
 import '../services/clock.dart';
+import 'attachments.dart';
 import 'chat_models.dart';
 import 'chat_preview.dart';
+import 'chat_projects.dart';
 import 'chat_search.dart';
 import 'chat_store.dart';
 
 /// Карточка действия, которая ждёт «Подтвердить»: где она и какая.
 typedef PendingCard = ({String chatId, String messageId, ChatMessage message});
+
+/// Итог [ChatBook.attach]: сохранённые вложения, файлы больше лимита
+/// ([AttachmentStore.maxBytes]) и сколько не удалось скопировать по другой
+/// причине.
+typedef AttachmentImport = ({
+  List<ChatAttachment> saved,
+  List<String> tooLarge,
+  int failed,
+});
 
 /// Группа сессии в меню по дню последней активности.
 enum SessionGroup {
@@ -44,13 +55,15 @@ SessionGroup groupOf(DateTime at, DateTime now) {
   return SessionGroup.earlier;
 }
 
-/// Сессии меню по группам: закреплённые отдельно, остальные — по дню.
+/// Сессии меню по группам: закреплённые отдельно, остальные — по дню;
+/// [hidden] — сколько не вошло в лимит (строка «Показать ещё»).
 typedef SessionGroups = ({
   List<ChatThread> pinned,
   List<ChatThread> today,
   List<ChatThread> yesterday,
   List<ChatThread> week,
   List<ChatThread> earlier,
+  int hidden,
 });
 
 /// Все чаты приложения: сессии и чаты задач, какой открыт и куда ведёт
@@ -95,11 +108,8 @@ final class ChatBook {
   /// Глубина стека «назад».
   static const int maxBack = 20;
 
-  /// Сколько чатов задач показывает боковое меню.
-  static const int recentLimit = 5;
-
   /// Сколько сессий показывает меню (все группы вместе, без
-  /// закреплённых).
+  /// закреплённых), пока не нажали «Показать ещё».
   static const int sessionsLimit = 50;
 
   /// Длина названия сессии из первой команды.
@@ -109,8 +119,15 @@ final class ChatBook {
   final Clock _clock;
   final String Function(String text) _redactTitle;
   final Map<String, ChatThread> _chats = <String, ChatThread>{};
+
+  /// Проекты-папки по id (ADR-018).
+  final Map<String, ChatProject> _projects = <String, ChatProject>{};
   final List<String> _back = <String>[];
   final Map<String, Future<void>> _loading = <String, Future<void>>{};
+
+  /// Вложения, уже скопированные в папку чата, но ещё не в сообщении
+  /// ([attach] → [append]): [_sweep] их не трогает.
+  final Map<String, Set<String>> _pendingFiles = <String, Set<String>>{};
 
   /// Записи, которые ждут чтения своего чата ([_save]).
   final Set<Future<void>> _deferred = <Future<void>>{};
@@ -172,6 +189,16 @@ final class ChatBook {
   Future<bool> _load() async {
     var migrated = false;
     try {
+      for (final project in await _store.loadProjects()) {
+        _projects.putIfAbsent(project.id, () => project);
+      }
+    } on Object {
+      // Файл проектов есть, но не прочитался (заблокирован, нет доступа):
+      // чаты читаются и без папок, но ни ссылки сессий на папки, ни сам
+      // файл не трогаются — иначе следующая запись затёрла бы все папки.
+      _projectsUnreadable = true;
+    }
+    try {
       ChatThread? legacy;
       for (final meta in await _store.loadIndex()) {
         if (meta.kind == ChatKind.main) {
@@ -182,6 +209,16 @@ final class ChatBook {
       }
       // Порядок записей в index.json не важен: перенос — после всех.
       if (legacy != null) migrated = await _migrateLegacyMain(legacy);
+      // Ссылка на проект, которого нет (удалён в другой версии, битый
+      // projects.json), — чат вне проектов. На диск — со следующей
+      // записью чата.
+      for (final thread in _chats.values) {
+        if (!_projectsUnreadable &&
+            thread.projectId != null &&
+            !_projects.containsKey(thread.projectId)) {
+          thread.projectId = null;
+        }
+      }
     } on Object {
       // Хранилище не прочиталось: работаем с пустыми чатами.
     }
@@ -276,14 +313,24 @@ final class ChatBook {
   }
 
   /// Пустая сессия: открытая, если она пуста, иначе уже созданная раньше,
-  /// иначе новая. Пустых сессий в памяти не больше одной.
+  /// иначе новая. Пустых сессий в памяти не больше одной. Её время —
+  /// «сейчас» ([ChatThread.touchEmpty]): оставленная вчера пустая сессия,
+  /// открытая снова, стоит в меню в «Сегодня», а не во «Вчера».
   String _emptySessionId() {
+    final now = _clock.now();
     final open = _chats[_currentId];
     if (open != null && open.isSession && open.messageCount == 0) {
+      open.touchEmpty(now);
       return open.id;
     }
     for (final thread in _chats.values) {
-      if (thread.isSession && thread.messageCount == 0) return thread.id;
+      if (thread.isSession && thread.messageCount == 0) {
+        thread.touchEmpty(now);
+        // Оставленная пустая сессия начинается заново: вне проектов
+        // (новую сессию в проекте открывает [newSession]).
+        thread.projectId = null;
+        return thread.id;
+      }
     }
     return _createSession().id;
   }
@@ -374,6 +421,15 @@ final class ChatBook {
       thread.messages.insertAll(0, stored);
       thread.loaded = true;
       _trim(thread);
+      // Файлы без сообщения (сбой между копированием и записью чата) —
+      // лишние. Только если сообщения прочитались: пустой ответ может быть
+      // ошибкой чтения, и тогда файлы трогать нельзя.
+      if (stored.isNotEmpty) _sweep(thread);
+      // Признак своих реплик из старого index.json — догадка по числу
+      // сообщений; теперь он точный.
+      if (thread.kind == ChatKind.task) {
+        thread.ownTalk = ChatThread.hasOwnTalk(thread.messages);
+      }
       _loading.remove(thread.id);
     });
   }
@@ -390,10 +446,33 @@ final class ChatBook {
     ChatMessage message, {
     bool notify = true,
     bool sensitive = false,
+  }) =>
+      _append(chatId, message, notify: notify, sensitive: sensitive);
+
+  /// [copied] — копия команды из [onTaskCreated]: своей репликой в чате
+  /// задачи она не считается ([ChatThread.ownTalk]).
+  bool _append(
+    String chatId,
+    ChatMessage message, {
+    bool notify = true,
+    bool sensitive = false,
+    bool copied = false,
   }) {
     final thread = _chats[chatId];
     if (thread == null) return false;
     thread.messages.add(message);
+    if (message.attachments.isNotEmpty) {
+      final pending = _pendingFiles[chatId];
+      if (pending != null) {
+        for (final attachment in message.attachments) {
+          pending.remove(attachment.path);
+        }
+        if (pending.isEmpty) _pendingFiles.remove(chatId);
+      }
+    }
+    if (thread.kind == ChatKind.task && message.fromUser && !copied) {
+      thread.ownTalk = true;
+    }
     _trim(thread);
     final preview = ChatPreview.of(message, sensitive: sensitive);
     if (preview != null) {
@@ -402,7 +481,11 @@ final class ChatBook {
         ..lastPersonaId = message.personaId ?? thread.lastPersonaId;
     }
     if (thread.isSession && thread.title == null && message.fromUser) {
-      final title = sessionTitle(message.text);
+      var title = sessionTitle(message.text);
+      // Только файлы, без текста: «Фото», «Файл: отчёт.pdf».
+      if (title.isEmpty && message.attachments.isNotEmpty) {
+        title = sessionTitle(message.attachments.first.sessionTitle);
+      }
       if (title.isNotEmpty) thread.title = title;
     }
     if (message.timestamp.isAfter(thread.lastActivityAt)) {
@@ -549,6 +632,7 @@ final class ChatBook {
     final id = resolve(chatId);
     final thread = _chats.remove(id);
     if (thread == null) return false;
+    _pendingFiles.remove(id);
     _back.removeWhere((String b) => b == id);
     final wasCurrent = id == _currentId;
     if (wasCurrent) _currentId = _emptySessionId();
@@ -580,8 +664,10 @@ final class ChatBook {
     final origin = _chats[fromChatId];
     final parent = origin?.taskId;
     final thread = ensureTaskThread(taskId, parentTaskId: parent);
+    // Задача из сессии проекта — её чат в том же проекте.
+    thread.projectId ??= origin?.projectId;
     final id = thread.id;
-    append(id, command.copyAs(newMessageId()), notify: false);
+    _append(id, command.copyAs(newMessageId()), notify: false, copied: true);
     append(
       id,
       reply.copyAs(
@@ -636,14 +722,285 @@ final class ChatBook {
   /// «назад»). Без приветствия; на диск — с первым сообщением. Если
   /// открытая сессия ещё пуста, остаётся она же; пустая сессия,
   /// оставленная раньше, используется снова.
-  Future<ChatThread> newSession() {
-    if (!_loaded) return ready.then((_) => newSession());
+  ///
+  /// [projectId] — «Новая сессия» на экране проекта: пустая сессия сразу
+  /// лежит в этом проекте и попадёт в него с первым сообщением. Без него
+  /// — сессия вне проектов, даже если пустая открытая была проектной.
+  Future<ChatThread> newSession({String? projectId}) {
+    if (!_loaded) {
+      return ready.then((_) => newSession(projectId: projectId));
+    }
+    final target = _projects.containsKey(projectId) ? projectId : null;
     final current = this.current;
     if (current.isSession && current.messageCount == 0) {
+      // Открыта с вечера: «+» после полуночи — сессия уже сегодняшняя.
+      current
+        ..touchEmpty(_clock.now())
+        ..projectId = target;
       return Future<ChatThread>.value(current);
     }
-    return open(_emptySessionId());
+    final id = _emptySessionId();
+    _chats[id]!.projectId = target;
+    return open(id);
   }
+
+  // ------------------------------------------------------ проекты-папки
+
+  /// Проект [projectId]; `null` — нет такого.
+  ChatProject? project(String? projectId) =>
+      projectId == null ? null : _projects[projectId];
+
+  /// Проект, в котором лежит чат [chatId]; `null` — вне проектов.
+  ChatProject? projectOf(String chatId) =>
+      project(_chats[resolve(chatId)]?.projectId);
+
+  /// Проекты: закреплённые сверху, потом — по последней активности (сам
+  /// проект или его сессии), свежие выше.
+  List<ChatProject> projects() {
+    final list = _projects.values.toList();
+    final activity = <String, DateTime>{
+      for (final project in list) project.id: project.updatedAt,
+    };
+    for (final thread in _chats.values) {
+      final id = thread.projectId;
+      final at = activity[id];
+      if (at != null &&
+          thread.messageCount > 0 &&
+          thread.lastActivityAt.isAfter(at)) {
+        activity[id!] = thread.lastActivityAt;
+      }
+    }
+    return list
+      ..sort((ChatProject a, ChatProject b) {
+        if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+        if (a.pinned) return b.pinnedAt!.compareTo(a.pinnedAt!);
+        final byActivity = activity[b.id]!.compareTo(activity[a.id]!);
+        return byActivity != 0 ? byActivity : a.name.compareTo(b.name);
+      });
+  }
+
+  /// Новый проект. Название очищается ([ChatProject.cleanName]); пустое —
+  /// `null`, проект не создаётся.
+  ChatProject? createProject(
+    String name, {
+    String? description,
+    String? taskTag,
+  }) {
+    final clean = ChatProject.cleanName(name);
+    if (clean == null) return null;
+    final now = _clock.now();
+    var id = '${ChatProject.prefix}${now.microsecondsSinceEpoch}_'
+        '${_random.nextInt(1 << 20).toRadixString(16)}';
+    while (_projects.containsKey(id)) {
+      id = '$id${_random.nextInt(16).toRadixString(16)}';
+    }
+    final project = ChatProject(
+      id: id,
+      name: clean,
+      description: description == null
+          ? null
+          : ChatProject.cleanDescription(description),
+      taskTag: taskTag == null ? null : ChatProject.normalizeTag(taskTag),
+      createdAt: now,
+      updatedAt: now,
+    );
+    _projects[id] = project;
+    _saveProjects();
+    return project;
+  }
+
+  /// Переименовать проект. Пустое название — `false`.
+  bool renameProject(String projectId, String name) {
+    final project = _projects[projectId];
+    final clean = ChatProject.cleanName(name);
+    if (project == null || clean == null) return false;
+    if (clean != project.name) {
+      _projects[projectId] =
+          project.copyWith(name: clean, updatedAt: _clock.now());
+      _saveProjects();
+    }
+    return true;
+  }
+
+  /// Описание проекта; пустое или `null` — убрать.
+  bool setProjectDescription(String projectId, String? description) {
+    final project = _projects[projectId];
+    if (project == null) return false;
+    final clean =
+        description == null ? null : ChatProject.cleanDescription(description);
+    if (clean != project.description) {
+      _projects[projectId] = project.copyWith(
+        description: clean,
+        clearDescription: clean == null,
+        updatedAt: _clock.now(),
+      );
+      _saveProjects();
+    }
+    return true;
+  }
+
+  /// Связать проект с меткой задач [tag] («#работа»); `null` или пустая —
+  /// снять связь. Метка из нескольких слов — `false`.
+  bool linkProjectTag(String projectId, String? tag) {
+    final project = _projects[projectId];
+    if (project == null) return false;
+    final clean = tag == null || tag.trim().isEmpty
+        ? null
+        : ChatProject.normalizeTag(tag);
+    if (tag != null && tag.trim().isNotEmpty && clean == null) return false;
+    if (clean != project.taskTag) {
+      _projects[projectId] = project.copyWith(
+        taskTag: clean,
+        clearTaskTag: clean == null,
+        updatedAt: _clock.now(),
+      );
+      _saveProjects();
+    }
+    return true;
+  }
+
+  /// Проект, связанный с меткой задач [tag]; `null` — такого нет.
+  ChatProject? projectForTag(String tag) {
+    final clean = ChatProject.normalizeTag(tag);
+    if (clean == null) return null;
+    for (final project in _projects.values) {
+      if (project.taskTag == clean) return project;
+    }
+    return null;
+  }
+
+  /// «Закрепить» / «Открепить» проект: закреплённые стоят первыми.
+  bool setProjectPinned(String projectId, bool pinned) {
+    final project = _projects[projectId];
+    if (project == null) return false;
+    if (project.pinned == pinned) return true;
+    _projects[projectId] = pinned
+        ? project.copyWith(pinnedAt: _clock.now())
+        : project.copyWith(clearPinned: true);
+    _saveProjects();
+    return true;
+  }
+
+  /// Перенести чат [chatId] в проект [projectId] («В проект…» в меню
+  /// сессии) или вынести из проекта (`null`). Пишется сразу. Нет чата или
+  /// проекта — `false`.
+  bool moveToProject(String chatId, String? projectId) {
+    final thread = _chats[resolve(chatId)];
+    if (thread == null || thread.kind == ChatKind.main) return false;
+    if (projectId != null && !_projects.containsKey(projectId)) return false;
+    if (thread.projectId == projectId) return true;
+    thread.projectId = projectId;
+    _save(thread);
+    return true;
+  }
+
+  /// Сессии проекта [projectId] (и чаты его задач, где пользователь сам
+  /// писал): закреплённые сверху, потом свежие. Открытая пустая сессия
+  /// этого проекта — тоже в списке.
+  List<ChatThread> sessionsOf(String projectId) {
+    final list = <ChatThread>[
+      for (final thread in _chats.values)
+        if (thread.projectId == projectId && _listed(thread)) thread,
+    ];
+    return list
+      ..sort((ChatThread a, ChatThread b) {
+        if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+        return b.lastActivityAt.compareTo(a.lastActivityAt);
+      });
+  }
+
+  /// Сколько сессий с сообщениями в проекте [projectId] (счётчик в
+  /// панели).
+  int projectSessionCount(String projectId) => _chats.values
+      .where(
+        (ChatThread t) =>
+            t.projectId == projectId &&
+            t.messageCount > 0 &&
+            (t.kind != ChatKind.task || t.ownTalk),
+      )
+      .length;
+
+  /// Все чаты проекта [projectId] с сообщениями, в том числе чаты задач
+  /// только с копией команды (их удаляет или выносит [deleteProject]).
+  List<ChatThread> _chatsOf(String projectId) => <ChatThread>[
+        for (final thread in _chats.values)
+          if (thread.projectId == projectId) thread,
+      ];
+
+  /// Удалить проект [projectId]. [deleteSessions] — стереть его чаты
+  /// насовсем ([remove]), иначе — вынести их из проекта. Возвращает
+  /// `true`, если стёрт открытый чат (тогда открыта пустая сессия).
+  Future<bool> deleteProject(
+    String projectId, {
+    required bool deleteSessions,
+    Set<String>? removed,
+  }) async {
+    if (!_projects.containsKey(projectId)) return false;
+    var wasCurrent = false;
+    for (final thread in _chatsOf(projectId)) {
+      if (deleteSessions && thread.messageCount > 0) {
+        removed?.add(thread.id);
+        if (await remove(thread.id)) wasCurrent = true;
+      } else {
+        thread.projectId = null;
+        _save(thread);
+      }
+    }
+    // Открытая пустая сессия могла появиться в проекте, пока стирали.
+    for (final thread in _chatsOf(projectId)) {
+      thread.projectId = null;
+    }
+    _projects.remove(projectId);
+    _deletedProjects.add(projectId);
+    _saveProjects();
+    return wasCurrent;
+  }
+
+  void _saveProjects() {
+    if (_projectsUnreadable) {
+      _savingProjects = _savingProjects.then((_) => _retrySaveProjects());
+      unawaited(_savingProjects);
+      return;
+    }
+    unawaited(_store.saveProjects(_projects.values.toList()));
+  }
+
+  /// Файл проектов при загрузке не прочитался: перед записью — ещё одна
+  /// попытка прочитать. Прочитался — папки с диска добавляются к
+  /// созданным за это время, и всё записывается. Снова нет — запись
+  /// пропускается: папки на диске целы, изменения папок живут до
+  /// перезапуска.
+  Future<void> _retrySaveProjects() async {
+    if (!_projectsUnreadable) {
+      await _store.saveProjects(_projects.values.toList());
+      return;
+    }
+    final List<ChatProject> stored;
+    try {
+      stored = await _store.loadProjects();
+    } on Object {
+      return;
+    }
+    _projectsUnreadable = false;
+    for (final project in stored) {
+      if (_deletedProjects.contains(project.id)) continue;
+      _projects.putIfAbsent(project.id, () => project);
+    }
+    await _store.saveProjects(_projects.values.toList());
+  }
+
+  /// Файл проектов не прочитался при загрузке ([_retrySaveProjects]).
+  bool _projectsUnreadable = false;
+
+  /// Папки, удалённые, пока файл проектов не читался: при слиянии с
+  /// диском не возвращаются.
+  final Set<String> _deletedProjects = <String>{};
+
+  Future<void> _savingProjects = Future<void>.value();
+
+  /// Файл проектов-папок не прочитался при запуске: папки не показаны, но
+  /// на диске целы.
+  bool get projectsUnreadable => _projectsUnreadable;
 
   /// Название чата для меню и поиска: у сессии — первая команда или
   /// «Новая сессия». Чату задачи название даёт задача ([taskTitle]).
@@ -663,12 +1020,22 @@ final class ChatBook {
     return '${chars.take(titleLimit - 1).toString().trimRight()}…';
   }
 
-  /// Сессии меню: сессии и чаты задач с сообщениями, свежие
-  /// сверху. Открытый чат — всегда в списке.
+  /// Строка меню среди сессий: открытый чат, сессия с сообщениями или
+  /// чат задачи, где пользователь сам что-то написал
+  /// ([ChatThread.ownTalk]). Чат задачи только с копией команды, которой
+  /// её создали (и ответами помощника), в меню не стоит: команда уже видна
+  /// в сессии, где её написали, а задача — в «Задачах».
+  bool _listed(ChatThread thread) =>
+      thread.id == _currentId ||
+      (thread.messageCount > 0 &&
+          (thread.kind != ChatKind.task || thread.ownTalk));
+
+  /// Сессии меню ([_listed]), свежие сверху. Открытый чат — всегда в
+  /// списке.
   List<ChatThread> sessions({int limit = sessionsLimit}) {
     final list = <ChatThread>[
       for (final thread in _chats.values)
-        if (thread.messageCount > 0 || thread.id == _currentId) thread,
+        if (_listed(thread)) thread,
     ]..sort(
         (ChatThread a, ChatThread b) =>
             b.lastActivityAt.compareTo(a.lastActivityAt),
@@ -679,8 +1046,9 @@ final class ChatBook {
   }
 
   /// Меню по группам ([SessionGroup]): закреплённые — отдельно
-  /// ([pinned]), остальные [sessions] — по дню последней активности.
-  /// Открытый чат — всегда в своей группе.
+  /// ([pinned]), остальные [sessions] — по дню последней активности, не
+  /// больше [limit]; сколько не вошло — `hidden`. Открытый чат — всегда в
+  /// своей группе, пустая сессия — в «Сегодня» (она начинается сейчас).
   SessionGroups groups(DateTime now, {int limit = sessionsLimit}) {
     final pinned = this.pinned();
     final rest = <SessionGroup, List<ChatThread>>{
@@ -688,9 +1056,7 @@ final class ChatBook {
     };
     final list = <ChatThread>[
       for (final thread in _chats.values)
-        if ((thread.messageCount > 0 || thread.id == _currentId) &&
-            !pinned.contains(thread))
-          thread,
+        if (_listed(thread) && !pinned.contains(thread)) thread,
     ]..sort(
         (ChatThread a, ChatThread b) =>
             b.lastActivityAt.compareTo(a.lastActivityAt),
@@ -700,7 +1066,10 @@ final class ChatBook {
       shown.add(current);
     }
     for (final thread in shown) {
-      rest[groupOf(thread.lastActivityAt, now)]!.add(thread);
+      final group = thread.isSession && thread.messageCount == 0
+          ? SessionGroup.today
+          : groupOf(thread.lastActivityAt, now);
+      rest[group]!.add(thread);
     }
     return (
       pinned: pinned,
@@ -708,6 +1077,7 @@ final class ChatBook {
       yesterday: rest[SessionGroup.yesterday]!,
       week: rest[SessionGroup.week]!,
       earlier: rest[SessionGroup.earlier]!,
+      hidden: list.length - list.where(shown.contains).length,
     );
   }
 
@@ -716,15 +1086,13 @@ final class ChatBook {
   /// чате новой задачи ([onTaskCreated]) — не своя: она уже посчитана в
   /// чате, где её написали. Непрочитанный чат задачи без своих сообщений
   /// поверх этих двух копий не считается.
-  int get sessionCount => _chats.values.where((ChatThread t) {
-        final messages = t.messages;
-        for (var i = 0; i < messages.length; i++) {
-          if (messages[i].fromUser && !isCopiedCommand(messages, i)) {
-            return true;
-          }
-        }
-        return !t.loaded && _storedHasOwn(t);
-      }).length;
+  int get sessionCount => _chats.values
+      .where(
+        (ChatThread t) =>
+            ChatThread.hasOwnTalk(t.messages) ||
+            (!t.loaded && _storedHasOwn(t)),
+      )
+      .length;
 
   /// Сколько сообщений непрочитанного чата [thread] лежит только на диске.
   static int _storedCount(ChatThread thread) =>
@@ -743,11 +1111,8 @@ final class ChatBook {
   /// Команда [messages]`[i]` — копия из [onTaskCreated]: за ней идёт копия
   /// ответа со ссылкой на исходное сообщение ([ChatLink.messageId]).
   /// Исходный ответ ссылается на чат задачи без сообщения.
-  static bool isCopiedCommand(List<ChatMessage> messages, int i) {
-    if (!messages[i].fromUser || i + 1 >= messages.length) return false;
-    final next = messages[i + 1];
-    return !next.fromUser && next.link?.messageId != null;
-  }
+  static bool isCopiedCommand(List<ChatMessage> messages, int i) =>
+      ChatThread.isCopiedCommand(messages, i);
 
   /// Карточки действий, которые ждут «Подтвердить» и ещё могут уйти на
   /// запись, — из прочитанных чатов, последняя версия каждой карточки.
@@ -777,10 +1142,14 @@ final class ChatBook {
   /// сессия»). Состояние книги не меняется: непрочитанные чаты читаются из
   /// хранилища только для поиска. [titles] — названия чатов задач по id
   /// задачи.
+  ///
+  /// [projectId] — искать только в чатах этого проекта. У результата из
+  /// проекта — его название ([ChatSearchHit.projectName]).
   Future<List<ChatSearchHit>> search(
     String query, {
     Map<String, String> titles = const <String, String>{},
     int limit = 50,
+    String? projectId,
   }) async {
     final needle = ChatSearch.fold(query.trim());
     if (needle.isEmpty) return const <ChatSearchHit>[];
@@ -795,6 +1164,8 @@ final class ChatBook {
       // Пустая сессия — не результат («Новая сессия» без истории). Пустой
       // чат задачи находится по названию задачи.
       if (thread.isSession && thread.messageCount == 0) continue;
+      if (projectId != null && thread.projectId != projectId) continue;
+      final projectName = _projects[thread.projectId]?.name;
       final title = titleOf(thread, taskTitle: titles[thread.taskId]);
       final titleAt = ChatSearch.fold(title).indexOf(needle);
       List<ChatMessage> messages;
@@ -811,8 +1182,16 @@ final class ChatBook {
         }
       }
       ChatSearchHit? hit;
-      for (final message in messages.reversed) {
+      final task = thread.kind == ChatKind.task;
+      for (var i = messages.length - 1; i >= 0; i--) {
+        final message = messages[i];
         if (message.secureCard != null || message.card != null) continue;
+        // Копии команды и ответа из сессии, где создали задачу: их уже
+        // нашли в самой сессии — второй результат был бы дублем.
+        if (task &&
+            (isCopiedCommand(messages, i) || message.link?.messageId != null)) {
+          continue;
+        }
         final at = ChatSearch.fold(message.text).indexOf(needle);
         if (at < 0) continue;
         final (snippet, start, end) =
@@ -826,6 +1205,7 @@ final class ChatBook {
           snippet: snippet,
           matchStart: start,
           matchEnd: end,
+          projectName: projectName,
         );
         break;
       }
@@ -837,6 +1217,7 @@ final class ChatBook {
           snippet: title,
           matchStart: titleAt,
           matchEnd: titleAt + needle.length,
+          projectName: projectName,
         );
       }
       if (hit != null) hits.add(hit);
@@ -934,23 +1315,13 @@ final class ChatBook {
     return best;
   }
 
-  /// Чаты задач с сообщениями, свежие сверху.
-  List<ChatThread> recent({int limit = recentLimit}) {
-    final list = <ChatThread>[
-      for (final thread in _chats.values)
-        if (thread.kind == ChatKind.task && thread.messageCount > 0) thread,
-    ]..sort(
-        (ChatThread a, ChatThread b) =>
-            b.lastActivityAt.compareTo(a.lastActivityAt),
-      );
-    return list.take(limit).toList(growable: false);
-  }
-
   /// «Очистить историю сессий»: все сессии и чаты задач удаляются,
-  /// открыта новая пустая сессия.
+  /// открыта новая пустая сессия. Проекты-папки остаются — пустыми
+  /// (ADR-018).
   Future<void> clearAll() {
     _chats.clear();
     _back.clear();
+    _pendingFiles.clear();
     _currentId = _createSession().id;
     return _store.clearAll();
   }
@@ -965,7 +1336,103 @@ final class ChatBook {
 
   void _trim(ChatThread thread) {
     final extra = thread.messages.length - ChatStore.maxMessages;
-    if (extra > 0) thread.messages.removeRange(0, extra);
+    if (extra <= 0) return;
+    final dropped = thread.messages
+        .take(extra)
+        .any((ChatMessage m) => m.attachments.isNotEmpty);
+    thread.messages.removeRange(0, extra);
+    // Файлы обрезанных сообщений больше не нужны.
+    if (dropped) _sweep(thread);
+  }
+
+  /// Стереть файлы чата [thread], на которые не ссылается ни одно
+  /// сообщение (и которые не ждут своего сообщения, [attach]).
+  void _sweep(ChatThread thread) {
+    final live = <String>{
+      for (final message in thread.messages)
+        for (final attachment in message.attachments) attachment.path,
+      ...?_pendingFiles[thread.id],
+    };
+    unawaited(_store.attachments.sweep(thread.id, live));
+  }
+
+  /// Скопировать файлы [files] (источник и имя для показа, уже без
+  /// секретов) в папку чата [chatId] для сообщения [messageId] (ADR-019).
+  /// Сначала дочитывается сам чат: его чтение убирает файлы без сообщений
+  /// и не должно задеть новые. Берутся первые
+  /// [AttachmentStore.maxPerMessage]; файл больше лимита пропускается
+  /// ([AttachmentImport.tooLarge]). Сохранённые вложения нужно передать в
+  /// сообщении [append].
+  Future<AttachmentImport> attach(
+    String chatId,
+    String messageId,
+    List<(AttachmentSource, String)> files,
+  ) async {
+    final id = resolve(chatId);
+    final thread = _chats[id];
+    if (thread != null) await _ensureLoaded(thread);
+    final saved = <ChatAttachment>[];
+    final tooLarge = <String>[];
+    var failed = 0;
+    final now = _clock.now();
+    for (final (source, name) in files.take(AttachmentStore.maxPerMessage)) {
+      // Чат удалили, пока копировались файлы: дальше не копировать.
+      if (thread != null && !identical(_chats[id], thread)) break;
+      final index = saved.length + tooLarge.length + failed;
+      // Путь копии — в «ждущие» до копирования: уборка ([_sweep]) в это
+      // время не примет её (и `.tmp`) за файл без сообщения.
+      final expected = AttachmentPaths.relative(id, messageId, index, name);
+      final pending = _pendingFiles[id] ??= <String>{};
+      pending.add(expected);
+      try {
+        final attachment = await _store.attachments.import(
+          id,
+          messageId,
+          index,
+          source,
+          name: name,
+          now: now,
+        );
+        saved.add(attachment);
+        (_pendingFiles[id] ??= <String>{}).add(attachment.path);
+      } on AttachmentTooLarge {
+        tooLarge.add(name);
+      } on Object {
+        failed++;
+      }
+      if (saved.isEmpty || saved.last.path != expected) {
+        _pendingFiles[id]?.remove(expected);
+        if (_pendingFiles[id]?.isEmpty ?? false) _pendingFiles.remove(id);
+      }
+    }
+    if (thread != null && !identical(_chats[id], thread)) {
+      // Чат удалён во время копирования ([remove]): его папка уже стёрта,
+      // а скопированное после этого снова её создало. Стереть ещё раз —
+      // файлы удалённой сессии не должны оставаться на диске.
+      _pendingFiles.remove(id);
+      await _store.attachments.eraseChat(id);
+      return (saved: <ChatAttachment>[], tooLarge: tooLarge, failed: failed);
+    }
+    return (saved: saved, tooLarge: tooLarge, failed: failed);
+  }
+
+  /// Вложения не понадобились (сообщение не отправлено): их копии
+  /// стираются.
+  Future<void> discard(String chatId, List<ChatAttachment> attachments) {
+    final id = resolve(chatId);
+    final pending = _pendingFiles[id];
+    if (pending != null) {
+      pending.removeAll(<String>[for (final a in attachments) a.path]);
+      if (pending.isEmpty) _pendingFiles.remove(id);
+    }
+    final thread = _chats[id];
+    final live = <String>{
+      if (thread != null)
+        for (final message in thread.messages)
+          for (final attachment in message.attachments) attachment.path,
+      ...?_pendingFiles[id],
+    };
+    return _store.attachments.sweep(id, live);
   }
 
   void _save(ChatThread thread) {

@@ -128,6 +128,7 @@ Future<_Calls> _pump(
   List<SessionGroupEntry>? groups,
   SectionCounts counts = const SectionCounts(),
   List<Persona>? assistants,
+  List<ProjectEntry> projects = const <ProjectEntry>[],
 }) async {
   final calls = _Calls();
   tester.view.physicalSize = size;
@@ -174,6 +175,9 @@ Future<_Calls> _pump(
           onOpenHit: (ChatSearchHit hit) => calls.log.add('hit:${hit.chatId}'),
           timeLabel: (DateTime at) => sessionTimeLabel(at, _now),
           assistants: assistants,
+          projects: projects,
+          onOpenProject: (String id) => calls.log.add('project:$id'),
+          onNewProject: () => calls.log.add('new-project'),
         ),
       ),
     ),
@@ -182,7 +186,7 @@ Future<_Calls> _pump(
 }
 
 void main() {
-  testWidgets('знак приложения — три точки цветами Садо, Лиорио и Ноды',
+  testWidgets('знак приложения — три точки цветами Связной, Лиорио и Ноды',
       (tester) async {
     await _pump(tester);
     final glyph = find.byKey(const ValueKey<String>('app-glyph'));
@@ -302,8 +306,10 @@ void main() {
       final title = tester.widget<Text>(
         find.descendant(of: card, matching: find.text(AppInfo.hubName)),
       );
-      expect(title.style!.fontSize, wide ? 16 : 18);
-      expect(title.style!.fontWeight, FontWeight.w600);
+      // «Мой» — Inter, само «Tridot» — шрифтом названия (ADR-021).
+      final style = title.textSpan!.style!;
+      expect(style.fontSize, wide ? 16 : 18);
+      expect(style.fontWeight, FontWeight.w600);
     }
   });
 
@@ -907,6 +913,97 @@ void main() {
     expect(sessionTimeLabel(DateTime(2026, 11, 8, 23), _now), 'вчера');
     expect(sessionTimeLabel(DateTime(2026, 11, 5), _now), 'чт');
     expect(sessionTimeLabel(DateTime(2026, 10, 9), _now), '9 окт.');
+  });
+
+  group('проекты-папки (ADR-018)', () {
+    testWidgets('папки под «Проектами», «+» — новый проект', (tester) async {
+      final calls = await _pump(
+        tester,
+        projects: const <ProjectEntry>[
+          ProjectEntry(id: 'project:1', name: 'Ремонт', sessions: 2),
+          ProjectEntry(
+            id: 'project:2',
+            name: 'Отпуск',
+            sessions: 0,
+            active: true,
+          ),
+        ],
+      );
+      final projects = tester.getTopLeft(find.byKey(const Key('nav-projects')));
+      final folder =
+          tester.getTopLeft(find.byKey(const Key('project-project:1')));
+      final planning = tester.getTopLeft(find.byKey(const Key('nav-planning')));
+      expect(folder.dy, greaterThan(projects.dy));
+      expect(folder.dy, lessThan(planning.dy));
+      expect(find.text('Ремонт'), findsOneWidget);
+      expect(find.text('2'), findsWidgets);
+
+      await tester.tap(find.byKey(const Key('project-project:1')));
+      await tester.tap(find.byKey(const Key('project-new')));
+      expect(calls.log, <String>['project:project:1', 'new-project']);
+      expect(
+        tester.getSemantics(find.byKey(const Key('project-project:1'))),
+        matchesSemantics(
+          label: 'Проект «Ремонт», 2 сессии',
+          isButton: true,
+          hasSelectedState: true,
+          hasTapAction: true,
+        ),
+      );
+    });
+
+    testWidgets('больше пяти папок — «Все проекты»', (tester) async {
+      final calls = await _pump(
+        tester,
+        projects: <ProjectEntry>[
+          for (var i = 0; i < 7; i++)
+            ProjectEntry(id: 'project:$i', name: 'Папка $i', sessions: i),
+        ],
+      );
+      expect(find.byKey(const Key('project-project:4')), findsOneWidget);
+      expect(find.byKey(const Key('project-project:5')), findsNothing);
+      await tester.tap(find.byKey(const Key('project-all')));
+      expect(calls.log, <String>['projects']);
+    });
+
+    testWidgets('строка сессии в проекте — значок папки и название',
+        (tester) async {
+      await _pump(
+        tester,
+        groups: <SessionGroupEntry>[
+          _group('today', 'Сегодня', <SessionEntry>[
+            const SessionEntry(
+              id: 'session:p',
+              title: 'Плитка',
+              time: '12:00',
+              itemKey: Key('chat-session:p'),
+              dotKey: Key('chat-unread-session:p'),
+              preview: 'Добавил задачу',
+              projectName: 'Ремонт',
+              canAct: true,
+              canRename: true,
+              canMove: true,
+            ),
+          ]),
+        ],
+      );
+      expect(find.byKey(const Key('chat-project-session:p')), findsOneWidget);
+      expect(find.textContaining('Ремонт'), findsOneWidget);
+      await tester.longPress(find.byKey(const Key('chat-session:p')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('session-menu-move')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('session-menu-move')));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('без canMove (чат задачи) «В проект…» нет', (tester) async {
+      await _pump(tester);
+      final row = find.byKey(const Key('chat-session:1'));
+      await tester.ensureVisible(row);
+      await tester.longPress(row);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('session-menu-move')), findsNothing);
+    });
   });
 }
 

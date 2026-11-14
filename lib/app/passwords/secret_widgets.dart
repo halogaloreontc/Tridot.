@@ -72,7 +72,8 @@ class _SecretFieldState extends State<SecretField> {
       maxLines: obscure || !widget.multiline ? 1 : 5,
       onSubmitted: widget.onSubmitted,
       onChanged: widget.onChanged,
-      style: const TextStyle(color: AssistantColors.textStrong),
+      // Пароль — моноширинным, как везде в навыке (ADR-021).
+      style: monoTextStyle.copyWith(color: AssistantColors.textStrong),
       decoration: InputDecoration(
         labelText: widget.label,
         helperText: widget.helper,
@@ -281,7 +282,7 @@ class _SecretRevealTextState extends State<SecretRevealText>
               ? Text(
                   _expired ? '${widget.kind}: ••••••••  (скрыт)' : '••••••••',
                   key: const ValueKey<String>('secret-masked'),
-                  style: technicalTextStyle.copyWith(
+                  style: monoTextStyle.copyWith(
                     fontSize: 15,
                     letterSpacing: 2,
                     color: AssistantColors.muted,
@@ -317,7 +318,7 @@ class _SecretRevealTextState extends State<SecretRevealText>
           ),
         ),
         if (!widget.compact)
-          const Text('или удерживайте', style: technicalTextStyle),
+          const Text('или удерживайте', style: metaTextStyle),
       ],
     );
     return Column(
@@ -346,9 +347,7 @@ class _SecretRevealTextState extends State<SecretRevealText>
   }
 
   static TextSpan _colored(String text) {
-    const base = TextStyle(
-      fontFamily: 'JetBrains Mono',
-      fontFamilyFallback: <String>['monospace'],
+    final base = monoTextStyle.copyWith(
       fontSize: 15,
       color: AssistantColors.textStrong,
     );

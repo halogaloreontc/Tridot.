@@ -200,7 +200,7 @@ class _ActionCardViewState extends State<ActionCardView> {
                       Text(
                         'до ${_time(card.deadline)}',
                         key: const Key('action-until'),
-                        style: technicalTextStyle,
+                        style: metaTextStyle,
                       ),
                   ],
                 ),
@@ -301,7 +301,7 @@ class _ActionCardViewState extends State<ActionCardView> {
                 width: 76,
                 child: Text(
                   ActionCardView.labelOf(line.label),
-                  style: technicalTextStyle,
+                  style: metaTextStyle,
                 ),
               ),
               Expanded(

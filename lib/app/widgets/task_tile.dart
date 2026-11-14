@@ -104,7 +104,7 @@ final class TaskTile extends StatelessWidget {
                         details.join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: technicalTextStyle.copyWith(
+                        style: metaTextStyle.copyWith(
                           color: overdue ? AssistantColors.danger : null,
                         ),
                       ),
@@ -144,7 +144,7 @@ final class SectionLabel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
       child: Text(
         text,
-        style: technicalTextStyle.copyWith(
+        style: metaTextStyle.copyWith(
           color: danger ? AssistantColors.danger : null,
           letterSpacing: .3,
         ),
@@ -181,7 +181,7 @@ final class EmptyState extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 hint!,
-                style: technicalTextStyle,
+                style: metaTextStyle,
                 textAlign: TextAlign.center,
               ),
             ],

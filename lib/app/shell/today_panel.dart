@@ -192,14 +192,14 @@ final class TodayPanel extends StatelessWidget {
                       Wrap(
                         spacing: 8,
                         children: <Widget>[
-                          Text(todayDateLabel(now), style: technicalTextStyle),
+                          Text(todayDateLabel(now), style: metaTextStyle),
                           const ExcludeSemantics(
-                            child: Text('·', style: technicalTextStyle),
+                            child: Text('·', style: metaTextStyle),
                           ),
                           Text(
                             todaySummary(tasks.length, overdue),
                             key: const Key('today-summary'),
-                            style: technicalTextStyle,
+                            style: metaTextStyle,
                           ),
                         ],
                       ),
@@ -322,7 +322,7 @@ final class TodayPanel extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '$error',
-                style: technicalTextStyle,
+                style: metaTextStyle,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
@@ -348,7 +348,7 @@ final class TodayPanel extends StatelessWidget {
               ),
               if (emptyHint != null) ...<Widget>[
                 const SizedBox(height: 4),
-                Text(emptyHint!, style: technicalTextStyle),
+                Text(emptyHint!, style: metaTextStyle),
               ],
             ],
           ),
@@ -467,7 +467,7 @@ final class _TaskRow extends StatelessWidget {
                           Flexible(
                             child: Text(
                               due,
-                              style: technicalTextStyle.copyWith(
+                              style: metaTextStyle.copyWith(
                                 color: overdue
                                     ? AssistantColors.danger
                                     : AssistantColors.muted,

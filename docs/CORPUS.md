@@ -38,7 +38,7 @@
 | `targetQuery` | нет | для переноса и завершения без кавычек — слова, по которым ищется задача; `null` — кавычки или команда относится к выбранной задаче |
 | `due` | нет | ожидаемый срок `YYYY-MM-DD` или `YYYY-MM-DDTHH:MM` (для `partOfDay` — с условным временем части суток: `2026-11-03T19:00`); `null` — срока нет |
 | `precision` | нет | `date`, `dateTime` или `partOfDay` (часть суток без точного времени: «завтра вечером»). Независимо от поля всегда проверяется, что точность есть ровно тогда, когда есть срок (`dueAt == null` ⇔ `duePrecision == null`) |
-| `issue` | нет | `inPast`, `invalidDate`, `invalidTime`, `conflictingDays`, `conflictingTimes`, `ambiguousHour` (час 1–6 без уточнения: «к 5»); отсутствие означает `none` и проверяется всегда |
+| `issue` | нет | `inPast`, `invalidDate`, `invalidTime`, `conflictingDays`, `conflictingTimes`, `ambiguousHour` (час 1–6 без уточнения: «к 5»), `missingTime` (день есть, а фраза кончается висящим «в/на/к/до»: «перенеси её на завтра в»); отсутствие означает `none` и проверяется всегда |
 | `titleIssue` | нет | `unbalancedQuotes`, `multipleTitles`; отсутствие означает `none` и проверяется всегда |
 | `projects` | нет | метки проектов из команды (`#работа` вне кавычек) в нижнем регистре, без `#`; у массовых команд — метки выбора задач |
 | `scope` | нет | только у `rescheduleMany` и `completeMany`: какие задачи выбраны — `all`, `overdue`, `noDue` или `date:ГГГГ-ММ-ДД`, затем метки через пробел: `overdue #работа` (`BulkSelection.label`) |

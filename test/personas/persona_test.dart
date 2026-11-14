@@ -46,10 +46,13 @@ void main() {
       ('НОДЬ! 2+2', 'noda', '2+2'),
       ('нодь покажи задачи', 'noda', 'покажи задачи'),
       ('Нодь?', 'noda', ''),
-      // Садо — главный: к нему тоже можно обратиться.
-      ('Садо, привет', 'sado', 'привет'),
-      ('садо: добавь задачу хлеб', 'sado', 'добавь задачу хлеб'),
-      ('Sado — 2+2', 'sado', '2+2'),
+      // Связной — главный: к нему тоже можно обратиться.
+      ('Связной, привет', 'sado', 'привет'),
+      ('связной: добавь задачу хлеб', 'sado', 'добавь задачу хлеб'),
+      ('Svyaznoy — 2+2', 'sado', '2+2'),
+      // Встроенное имя другого рода — тоже обращение (ADR-017).
+      ('Связная, покажи задачи', 'sado', 'покажи задачи'),
+      ('СВЯЗНАЯ! 2+2', 'sado', '2+2'),
     ]) {
       test(text, () {
         final addressing = PersonaAddressing.parse(text);
@@ -201,10 +204,10 @@ void main() {
 
     test('обращение снимается перед разбором команды', () {
       expect(
-        PersonaAddressing.commandText('Садо, добавь задачу хлеб'),
+        PersonaAddressing.commandText('Связной, добавь задачу хлеб'),
         'добавь задачу хлеб',
       );
-      expect(PersonaAddressing.commandText('Садо'), 'Садо');
+      expect(PersonaAddressing.commandText('Связной'), 'Связной');
       expect(
         PersonaAddressing.commandText('добавь задачу хлеб'),
         'добавь задачу хлеб',
@@ -345,9 +348,12 @@ void main() {
       expect(noda.russianName, 'Мира');
       expect(noda.gender, ReplyGender.male);
       expect(noda.addressNames, <String>['мира']);
-      // У нового имени — только творительный падеж для просьб беседы
-      // («дуэт с Мирой»), обращением он не считается.
-      expect(noda.inflectedForms, <String>['мирой', 'мирей']);
+      // У нового имени — косвенные падежи для просьб беседы («дуэт с
+      // Мирой», «сделай Миру основной»), обращением они не считаются.
+      expect(
+        noda.inflectedForms,
+        <String>['миру', 'мире', 'миры', 'мирой', 'мирей'],
+      );
       expect(cast.byId('rio').nicknames, <String>['lio', 'лио']);
       expect(settings.voiceOf(Personas.noda).gender, ReplyGender.male);
       expect(settings.voiceOf(Personas.sado).gender, ReplyGender.female);
@@ -445,7 +451,7 @@ void main() {
       expect(json['duty_notifications'], 'rio');
     });
 
-    test('род Садо не выбран — ключа sado нет, после чтения тоже', () {
+    test('род Связной не выбран — ключа sado нет, после чтения тоже', () {
       final json = const PersonaSettings().toJson();
       expect(json['persona_genders'], <String, String>{
         'rio': 'm',
@@ -500,30 +506,30 @@ void main() {
     });
 
     for (final (label, steps) in <(String, List<(String, String)>)>[
-      // Лиорио → «Вега», затем Садо → «Лиорио»: экран принимает (имя
+      // Лиорио → «Вега», затем Связной → «Лиорио»: экран принимает (имя
       // Лиорио свободно), файл должен прочитаться так же.
       (
-        'Садо берёт прежнее имя Лиорио',
+        'Связной берёт прежнее имя Лиорио',
         <(String, String)>[
           ('rio', 'Вега'),
           ('sado', 'Лиорио'),
         ]
       ),
-      // Обмен через третье имя: Садо → «Мира», Нода → «Садо», Садо →
+      // Обмен через третье имя: Связной → «Мира», Нода → «Связной», Связной →
       // «Нода».
       (
-        'Садо и Нода меняются именами',
+        'Связной и Нода меняются именами',
         <(String, String)>[
           ('sado', 'Мира'),
-          ('noda', 'Садо'),
+          ('noda', 'Связной'),
           ('sado', 'Нода'),
         ]
       ),
       (
-        'Нода берёт прежнее имя Садо',
+        'Нода берёт прежнее имя Связной',
         <(String, String)>[
           ('sado', 'Ника'),
-          ('noda', 'Садо'),
+          ('noda', 'Связной'),
         ]
       ),
     ]) {
@@ -626,7 +632,7 @@ void main() {
           'noda': 'тим',
         },
       });
-      expect(personas.nameOf('sado'), 'Садо');
+      expect(personas.nameOf('sado'), 'Связной');
       expect(personas.nameOf('rio'), 'Тим');
       expect(personas.nameOf('noda'), 'Нода');
     });
@@ -700,7 +706,8 @@ void main() {
         'jokes': 'normal',
       };
 
-      test('дуэт Лиорио + Нода — Трио; Садо говорит, как основной', () async {
+      test('дуэт Лиорио + Нода — Трио; Связной говорит, как основной',
+          () async {
         final folder = await Directory.systemTemp.createTemp('migrate_');
         addTearDown(() => folder.delete(recursive: true));
         final path = '${folder.path}/settings.json';
@@ -764,7 +771,7 @@ void main() {
         expect(personas.styleOf(Personas.sado), 'brief');
       });
 
-      test('основной была Нода — Садо говорит её стилем', () {
+      test('основной была Нода — Связной говорит её стилем', () {
         final personas = PersonaSettings.fromJson(<String, Object?>{
           'assistant_mode': 'duo',
           'main_persona': 'noda',
@@ -773,7 +780,7 @@ void main() {
         expect(personas.styleOf(Personas.sado), ReplyStyles.friendly);
       });
 
-      test('соло — Соло, всё делает Садо стилем прежнего отвечающего', () {
+      test('соло — Соло, всё делает Связной стилем прежнего отвечающего', () {
         final personas = PersonaSettings.fromJson(<String, Object?>{
           'assistant_mode': 'solo',
           'main_persona': 'rio',
@@ -788,7 +795,7 @@ void main() {
         expect(personas.styleOf(Personas.noda), 'business');
       });
 
-      test('битый прежний файл — нейтральный Садо, Трио', () {
+      test('битый прежний файл — нейтральный Связной, Трио', () {
         final personas = PersonaSettings.fromJson(<String, Object?>{
           'assistant_mode': 7,
           'main_persona': <String, Object?>{'x': 1},

@@ -1,5 +1,5 @@
 # Иконки запуска Tridot: три точки цветами помощников на фоне workspace.
-# Цвета — из lib/core/personas/persona_palette.dart (Садо, Лиорио, Нода).
+# Цвета — из lib/core/personas/persona_palette.dart (Связной, Лиорио, Нода).
 # Запуск из корня репозитория: python3 tool/gen_launcher_icons.py .
 import sys
 from PIL import Image, ImageDraw

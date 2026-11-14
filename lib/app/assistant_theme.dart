@@ -116,11 +116,11 @@ abstract final class AssistantColors {
   /// Просрочено, ошибка.
   static const danger = Color(0xFFFF6B6B);
 
-  /// Садо: акцент и фон знака. Третий акцент П1, фиолетовый (ADR-016).
+  /// Связной: акцент и фон знака. Третий акцент П1, фиолетовый (ADR-016).
   static const sado = Color(PersonaPalette.sado);
   static const sadoBg = Color(PersonaPalette.sadoBg);
 
-  /// Садо на светлом фоне: светлой темы пока нет (ADR-016).
+  /// Связной на светлом фоне: светлой темы пока нет (ADR-016).
   static const sadoOnLight = Color(PersonaPalette.sadoOnLight);
 
   /// Лиорио: акцент и фон знака.
@@ -145,6 +145,14 @@ abstract final class AssistantColors {
   /// Затемнение под выдвижной панелью.
   static const scrim = Color(0x9E000000);
 
+  /// Подсветка команды (ADR-021): слово команды, срок и числа, метки.
+  /// Мягкие, чтобы фраза читалась целиком; контраст на пузыре и поле
+  /// ввода не ниже 7:1.
+  static const commandVerb = Color(0xFFA8DCC0);
+  static const commandValue = Color(0xFFE3D3A6);
+  static const commandTag = Color(0xFFB4CBEA);
+  static const commandAddress = Color(0xFFCDBEF2);
+
   /// Лёгкое затемнение под меню действий с сессией (макет «Ж2»).
   static const scrimLight = Color(0x4D000000);
 
@@ -152,11 +160,45 @@ abstract final class AssistantColors {
   static const shadow = Color(0x99000000);
 }
 
-/// Метаданные: время, пути, подписи. 11 px — минимум для читаемости.
-const technicalTextStyle = TextStyle(
-  fontFamily: 'JetBrains Mono',
-  fontFamilyFallback: <String>['monospace'],
+/// Шрифты приложения (ADR-021). Основной — Inter (тема); моноширинный
+/// JetBrains Mono — только пароли и распознанные части команды;
+/// Cormorant Unicase SemiBold — название «Tridot» и названия проектов.
+abstract final class AppFonts {
+  static const String text = 'Inter';
+  static const String mono = 'JetBrains Mono';
+  static const String display = 'Cormorant Unicase';
+}
+
+/// Метаданные: время, счётчики, версия, подписи. Inter с табличными
+/// цифрами — числа в столбик не прыгают. 11 px — минимум для читаемости.
+const metaTextStyle = TextStyle(
+  fontFamily: AppFonts.text,
   fontSize: 12,
   height: 1.45,
   color: AssistantColors.muted,
+  fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
 );
+
+/// Моноширинный текст: значения паролей, вывод генератора, маска «••••».
+/// Больше нигде (ADR-021).
+const monoTextStyle = TextStyle(
+  fontFamily: AppFonts.mono,
+  fontFamilyFallback: <String>['monospace'],
+);
+
+/// Название приложения и проектов: Cormorant Unicase SemiBold. Буквы у
+/// него одной высоты и мельче Inter того же кегля — размер задаёт место.
+const displayTextStyle = TextStyle(
+  fontFamily: AppFonts.display,
+  fontFamilyFallback: <String>[AppFonts.text],
+  fontWeight: FontWeight.w600,
+  color: AssistantColors.textStrong,
+);
+
+/// Название проекта-папки в списках и меню ([displayTextStyle]).
+TextStyle projectNameStyle({double fontSize = 17, Color? color}) =>
+    displayTextStyle.copyWith(
+      fontSize: fontSize,
+      height: 1.2,
+      color: color ?? AssistantColors.textStrong,
+    );

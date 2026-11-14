@@ -1,3 +1,4 @@
+import '../commands/command_suggest.dart';
 import '../personas/persona.dart';
 import 'action_card.dart';
 import 'bulk.dart';
@@ -22,6 +23,7 @@ final class AssistantResponse {
     this.card,
     this.secureCard,
     this.clarification,
+    this.suggestions,
   });
 
   /// Готовый текст для пользователя. В истории чата хранится именно он:
@@ -71,6 +73,31 @@ final class AssistantResponse {
   /// сессии. В историю чата не попадает. `null` — без вариантов.
   final Clarification? clarification;
 
+  /// Подсказка команд под ответом «не до конца понял» (ADR-022): кнопки
+  /// похожих команд и «Найти команду». Нажатие вставляет шаблон в поле
+  /// ввода — отправляет пользователь сам. Только в памяти, в историю чата
+  /// не попадает. `null` — без подсказки.
+  final CommandSuggestions? suggestions;
+
+  /// Тот же ответ с подсказкой команд [suggestions].
+  AssistantResponse withSuggestions(CommandSuggestions? suggestions) =>
+      AssistantResponse(
+        message: message,
+        intent: intent,
+        status: status,
+        task: task,
+        replyId: replyId,
+        values: values,
+        personaId: personaId,
+        settingsChange: settingsChange,
+        addressedPersonaId: addressedPersonaId,
+        checklist: checklist,
+        card: card,
+        secureCard: secureCard,
+        clarification: clarification,
+        suggestions: suggestions,
+      );
+
   /// Тот же ответ от помощника [personaId].
   AssistantResponse withPersona(String personaId) => AssistantResponse(
         message: message,
@@ -86,6 +113,7 @@ final class AssistantResponse {
         card: card,
         secureCard: secureCard,
         clarification: clarification,
+        suggestions: suggestions,
       );
 
   /// Тот же ответ, в котором пользователь обратился к [personaId] по имени.
@@ -103,6 +131,7 @@ final class AssistantResponse {
         card: card,
         secureCard: secureCard,
         clarification: clarification,
+        suggestions: suggestions,
       );
 
   /// Тот же ответ с другим текстом и фактами (выходной фильтр паролей).
@@ -121,5 +150,6 @@ final class AssistantResponse {
         card: card,
         secureCard: secureCard,
         clarification: clarification,
+        suggestions: suggestions,
       );
 }

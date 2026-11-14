@@ -6,11 +6,15 @@ import 'dart:async';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
 import 'package:local_assistant/app/widgets/bulk_checklist_card.dart';
+import 'package:local_assistant/core/chats/attachments.dart';
+import 'package:local_assistant/core/chats/chat_book.dart';
 import 'package:local_assistant/core/chats/chat_models.dart';
+import 'package:local_assistant/core/chats/chat_projects.dart';
 import 'package:local_assistant/core/chats/chat_store.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
@@ -148,7 +152,9 @@ List<String> _history(WidgetTester tester) {
       author = key.value.substring('message-author-'.length);
     }
     if (widget is SelectableText) {
-      rows.add('${author ?? 'user'}: ${widget.data}');
+      rows.add(
+        '${author ?? 'user'}: ${widget.data ?? widget.textSpan?.toPlainText()}',
+      );
       author = null;
     }
   }
@@ -385,13 +391,20 @@ void main() {
         tester.getTopLeft(find.byKey(Key('chat-$taskId'))).dy;
     expect(find.byKey(const Key('chat-main')), findsNothing);
     expect(find.text('Главный'), findsNothing);
-    expect(top(report.id), lessThan(top(bread.id)), reason: 'свежий выше');
+    // В чатах задач пока только копии команды из сессии: строк для них
+    // нет, команды видны в самой сессии.
+    expect(find.byKey(Key('chat-${bread.id}')), findsNothing);
+    expect(find.byKey(Key('chat-${report.id}')), findsNothing);
+    expect(sessionEntries(), findsOneWidget);
 
-    await _tap(tester, find.byKey(Key('chat-${bread.id}')));
+    await _openFromTasks(tester, report);
+    clock.value = DateTime(2026, 11, 4, 12, 7);
+    await _say(tester, 'на пятницу');
+    await _openFromTasks(tester, bread);
     expect(_headerTitle(tester), 'Купить хлеб');
     clock.value = DateTime(2026, 11, 4, 12, 10);
     await _say(tester, 'на пятницу');
-    expect(top(bread.id), lessThan(top(report.id)));
+    expect(top(bread.id), lessThan(top(report.id)), reason: 'свежий выше');
 
     // Новый день: о просроченной говорит строка в пустой сессии; в
     // сессии ничего не пишется, точек «новое сообщение» нет.
@@ -463,6 +476,8 @@ void main() {
     await _tap(tester, find.byKey(const Key('task-chat-done')));
     expect((await h.byTitle(task.title)).status, TaskStatus.done);
     expect(_history(tester).last, contains('завершена'));
+    // Своя реплика в чате задачи: теперь он и в меню.
+    await _say(tester, 'спасибо');
 
     // Меню «Чаты» в выдвижной панели.
     await _tap(tester, find.byKey(const Key('task-back')));
@@ -551,9 +566,13 @@ void main() {
     await _say(tester, 'добавь задачу купить хлеб');
     final bread = await h.byTitle('Купить хлеб');
     final item = find.byKey(Key('chat-${bread.id}'));
-    expect(item, findsOneWidget, reason: 'сессия задачи видна в меню');
-    await _tap(tester, item);
+    expect(item, findsNothing, reason: 'только копия команды — строки нет');
+    await _tap(
+      tester,
+      find.byKey(ValueKey<String>('open-task-chat-${bread.id}')),
+    );
     expect(_headerTitle(tester), 'Купить хлеб');
+    expect(item, findsOneWidget, reason: 'открытый чат задачи — в меню');
 
     repository.delay = const Duration(seconds: 2);
     await tester.enterText(find.byKey(const Key('assistant-input')), 'готово');
@@ -580,10 +599,16 @@ void main() {
       expect(_history(tester), isEmpty);
       expect(find.textContaining('Главный'), findsNothing);
       expect(sessionEntries(), findsOneWidget);
+      String? headerTitle() =>
+          tester.widget<Text>(find.byKey(const Key('session-title-text'))).data;
+      expect(headerTitle(), 'Новая сессия');
       expect(
-        find.byKey(const Key('session-subtitle')),
+        find.descendant(
+          of: find.byKey(const Key('session-title')),
+          matching: find.byIcon(Icons.keyboard_arrow_down),
+        ),
         findsNothing,
-        reason: 'у пустой сессии подписи нет',
+        reason: 'у пустой сессии меню нет',
       );
       await _tap(tester, find.byKey(const Key('new-session')));
       expect(sessionEntries(), findsOneWidget, reason: 'та же пустая');
@@ -592,10 +617,7 @@ void main() {
       );
       expect(input.focusNode!.hasFocus, isTrue);
       await _say(tester, 'Покажи задачи');
-      expect(
-        tester.widget<Text>(find.byKey(const Key('session-subtitle'))).data,
-        'сессия «Покажи задачи»',
-      );
+      expect(headerTitle(), 'Покажи задачи');
       final store = h.chats as InMemoryChatStore;
       expect(store.chatIds.single, startsWith(ChatThread.sessionPrefix));
     });
@@ -884,6 +906,9 @@ void main() {
       final h = await _pump(tester, chats: store);
       await _say(tester, 'Добавь задачу «Купить хлеб»');
       final bread = await h.byTitle('Купить хлеб');
+      // Своя реплика в чате задачи — у него появляется строка в меню.
+      await _openFromTasks(tester, bread);
+      await _say(tester, 'спасибо');
       final row = find.byKey(Key('chat-${bread.id}'));
       await hold(tester, row);
       expect(find.byKey(const Key('session-menu-rename')), findsNothing);
@@ -903,6 +928,298 @@ void main() {
       await _openFromTasks(tester, bread);
       expect(_headerTitle(tester), 'Купить хлеб');
       expect(_history(tester), isEmpty);
+    });
+  });
+
+  group('логика сессий (аудит чатов)', () {
+    Future<void> hold(WidgetTester tester, Finder row) async {
+      await openDrawerIfNeeded(tester);
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.longPress(row);
+      await tester.pumpAndSettle();
+    }
+
+    String? headerTitle(WidgetTester tester) =>
+        tester.widget<Text>(find.byKey(const Key('session-title-text'))).data;
+
+    Future<void> openHeaderMenu(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('session-title')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('шапка: название сессии, меню — переименовать', (
+      tester,
+    ) async {
+      final store = InMemoryChatStore();
+      await _pump(tester, chats: store, size: const Size(390, 844));
+      await _say(tester, '2+2');
+      expect(headerTitle(tester), '2+2');
+      final id = onlySessionId(store.chatIds);
+      await openHeaderMenu(tester);
+      await tester.tap(find.byKey(const Key('session-menu-rename')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('rename-field')), 'Счёт');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('rename-save')));
+      await tester.pumpAndSettle();
+      expect(headerTitle(tester), 'Счёт');
+      await openDrawerIfNeeded(tester);
+      expect(
+        find.descendant(
+          of: find.byKey(Key('chat-$id')),
+          matching: find.text('Счёт'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('my-relay')), findsNothing);
+    });
+
+    for (final size in <Size>[const Size(390, 844), _desktop]) {
+      testWidgets(
+          'задача в фокусе (${size.width.toInt()} px): меню сессии в шапке '
+          'остаётся', (tester) async {
+        final store = InMemoryChatStore();
+        await _pump(tester, chats: store, size: size);
+        await _say(
+          tester,
+          'Добавь задачу купить краску завтра в 10 #ремонт',
+        );
+        // Новая задача выбрана («её»): в шапке «Задачи › «её»» и рядом —
+        // меню сессии.
+        expect(find.byKey(const Key('selected-task-strip')), findsWidgets);
+        expect(find.byKey(const Key('session-title')), findsOneWidget);
+        await openHeaderMenu(tester);
+        expect(find.byKey(const Key('session-menu-rename')), findsOneWidget);
+        expect(find.byKey(const Key('session-menu-delete')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('session-menu-rename')));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('rename-field')), 'Ремонт');
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('rename-save')));
+        await tester.pumpAndSettle();
+        final id = onlySessionId(store.chatIds);
+        await openDrawerIfNeeded(tester);
+        expect(
+          find.descendant(
+            of: find.byKey(Key('chat-$id')),
+            matching: find.text('Ремонт'),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('шапка: «Удалить» — открыта пустая сессия', (tester) async {
+      final store = InMemoryChatStore();
+      await _pump(tester, chats: store);
+      await _say(tester, '2+2');
+      await openHeaderMenu(tester);
+      await tester.tap(find.byKey(const Key('session-menu-delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(headerTitle(tester), 'Новая сессия');
+      expect(find.byKey(const Key('session-hero')), findsOneWidget);
+      expect(store.chatIds, isEmpty);
+    });
+
+    testWidgets('шапка: подписан тот, кто отвечает в этой сессии', (
+      tester,
+    ) async {
+      await _pump(tester);
+      String persona() => tester
+          .widget<Text>(
+            find
+                .descendant(
+                  of: find.byKey(const Key('session-persona')),
+                  matching: find.byType(Text),
+                )
+                .last,
+          )
+          .data!;
+      expect(persona(), 'Связной');
+      await _say(tester, 'Нода, 2+2');
+      expect(_history(tester).last, startsWith('noda: '));
+      expect(persona(), 'Нода');
+      // Новая сессия — снова тот, кто ответит по составу.
+      await tapInDrawer(tester, const Key('new-session'));
+      expect(persona(), 'Связной');
+    });
+
+    testWidgets('поиск открывает сессию у найденного сообщения', (
+      tester,
+    ) async {
+      await _pump(tester, size: const Size(390, 844));
+      await _say(tester, '1+1');
+      await _say(tester, 'черника');
+      for (var i = 2; i < 18; i++) {
+        await _say(tester, '$i+$i');
+      }
+      await tapInDrawer(tester, const Key('new-session'));
+      expect(find.byKey(const Key('session-hero')), findsOneWidget);
+      await openDrawerIfNeeded(tester);
+      await tester.tap(find.byKey(const Key('session-search')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('session-search')),
+        'черника',
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      final hit = find.byWidgetPredicate(
+        (Widget w) =>
+            w.key is ValueKey<String> &&
+            (w.key! as ValueKey<String>).value.startsWith('search-hit-'),
+      );
+      expect(hit, findsOneWidget);
+      await tester.tap(hit);
+      await tester.pumpAndSettle();
+      final row = find.byWidgetPredicate(
+        (Widget w) =>
+            w.key is ValueKey<String> &&
+            (w.key! as ValueKey<String>).value.startsWith('msg-'),
+      );
+      expect(row, findsOneWidget);
+      expect(
+        find.descendant(of: row, matching: find.text('черника')),
+        findsOneWidget,
+      );
+      // Строка видна на экране, а не внизу ленты за краем.
+      final rect = tester.getRect(row);
+      expect(rect.top, greaterThanOrEqualTo(0));
+      expect(rect.bottom, lessThanOrEqualTo(844));
+      expect(find.text('17+17'), findsNothing, reason: 'низ ленты ушёл');
+    });
+
+    testWidgets('ответ в другой сессии: заставка и честное «дождитесь»', (
+      tester,
+    ) async {
+      final repository = _SlowRepository();
+      await _pump(tester, repository: repository);
+      repository.delay = const Duration(seconds: 2);
+      await tester.enterText(
+        find.byKey(const Key('assistant-input')),
+        'добавь задачу купить хлеб',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('new-session')));
+      await tester.pump();
+      expect(
+        find.byKey(const Key('session-hero')),
+        findsOneWidget,
+        reason: 'новая сессия — с заставкой, хоть ответ и готовится',
+      );
+      await tester.enterText(find.byKey(const Key('assistant-input')), '2+2');
+      await tester.testTextInput.receiveAction(TextInputAction.send);
+      await tester.pump();
+      expect(find.text('Дождитесь ответа в другой сессии'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('assistant-input')))
+            .controller!
+            .text,
+        '2+2',
+        reason: 'текст не пропал',
+      );
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      await _say(tester, '2+2');
+      expect(_history(tester).first, 'user: 2+2');
+    });
+
+    testWidgets('↑ в поле ввода — команды этой сессии, а не всех', (
+      tester,
+    ) async {
+      await _pump(tester);
+      await _say(tester, '2+2');
+      await tapInDrawer(tester, const Key('new-session'));
+      final input = find.byKey(const Key('assistant-input'));
+      String text() => tester.widget<TextField>(input).controller!.text;
+      await tester.tap(input);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(text(), isEmpty, reason: 'в новой сессии команд нет');
+      await _say(tester, '3+3');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(text(), '3+3');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(text(), '3+3', reason: '«2+2» — из другой сессии');
+      await openSessionTitled(tester, '2+2');
+      await tester.tap(input);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(text(), '2+2');
+    });
+
+    testWidgets('удалили открытую сессию из панели — раздел «Задачи» открыт', (
+      tester,
+    ) async {
+      final store = InMemoryChatStore();
+      await _pump(tester, chats: store);
+      await _say(tester, '2+2');
+      final id = onlySessionId(store.chatIds);
+      await tapInDrawer(tester, const Key('nav-tasks'));
+      expect(find.byKey(const Key('tasks-panel')), findsOneWidget);
+      await hold(tester, find.byKey(Key('chat-$id')));
+      await tester.tap(find.byKey(const Key('session-menu-delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(store.chatIds, isEmpty);
+      expect(find.byKey(const Key('tasks-panel')), findsOneWidget);
+    });
+
+    testWidgets('сессии сверх 50 — «Показать ещё»', (tester) async {
+      final store = InMemoryChatStore();
+      final clock = _Clock(DateTime(2026, 11, 4, 12));
+      final book = ChatBook(store: store, clock: clock);
+      await book.load();
+      final ids = <String>[];
+      for (var i = 0; i < 55; i++) {
+        clock.value = DateTime(2026, 11, 4, 11).subtract(Duration(hours: i));
+        await book.newSession();
+        book.append(
+          book.currentId,
+          ChatMessage(
+            id: book.newMessageId(),
+            author: ChatAuthor.user,
+            text: 'команда $i',
+            timestamp: DateTime(2026, 11, 4, 11).subtract(Duration(hours: i)),
+          ),
+        );
+        ids.add(book.currentId);
+      }
+      await book.flush();
+      await _pump(tester, chats: store, size: const Size(390, 844));
+      await openDrawerIfNeeded(tester);
+      final more = find.byKey(const Key('sessions-more'));
+      final scrollable = find
+          .descendant(
+            of: find.byKey(const Key('drawer-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.scrollUntilVisible(more, 400, scrollable: scrollable);
+      // 55 сессий и открытая пустая: 50 видно, 6 — за «ещё».
+      expect(
+        find.descendant(of: more, matching: find.text('Показать ещё 6')),
+        findsOneWidget,
+      );
+      expect(find.byKey(Key('chat-${ids.last}')), findsNothing);
+      await tester.tap(more);
+      await tester.pumpAndSettle();
+      expect(more, findsNothing);
+      await tester.scrollUntilVisible(
+        find.byKey(Key('chat-${ids.last}')),
+        400,
+        scrollable: scrollable,
+      );
+      expect(find.byKey(Key('chat-${ids.last}')), findsOneWidget);
     });
   });
 }
@@ -931,6 +1248,16 @@ final class _GatedStore implements ChatStore {
 
   @override
   Future<void> clearAll() => _inner.clearAll();
+
+  @override
+  Future<List<ChatProject>> loadProjects() => _inner.loadProjects();
+
+  @override
+  Future<void> saveProjects(List<ChatProject> projects) =>
+      _inner.saveProjects(projects);
+
+  @override
+  AttachmentStore get attachments => _inner.attachments;
 
   @override
   Future<void> flush() {

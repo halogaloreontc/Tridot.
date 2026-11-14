@@ -6,7 +6,9 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../services/clock.dart';
+import 'attachments.dart';
 import 'chat_models.dart';
+import 'chat_projects.dart';
 
 /// Где живут чаты и их сообщения (ADR-010, docs/ARCHITECTURE.md, «История
 /// чатов»).
@@ -44,8 +46,24 @@ abstract interface class ChatStore {
   /// отменяется.
   Future<void> erase(String chatId);
 
-  /// Удалить все чаты вместе с архивом.
+  /// Удалить все чаты вместе с архивом. Проекты-папки ([loadProjects])
+  /// остаются: очищается история, а не их список (ADR-018).
   Future<void> clearAll();
+
+  /// Проекты-папки из `projects/projects.json` (ADR-018). Нет файла —
+  /// пустой список; повреждённый файл (не UTF-8, не JSON, не та
+  /// структура) откладывается в сторону, и список тоже пуст. Файл есть,
+  /// но не прочитался (ошибка файловой системы: файл заблокирован, нет
+  /// доступа) — исключение: «папок нет» тогда сказать нельзя, иначе
+  /// следующая запись затёрла бы их.
+  Future<List<ChatProject>> loadProjects();
+
+  /// Записать все проекты-папки [projects] (целиком, атомарно).
+  Future<void> saveProjects(List<ChatProject> projects);
+
+  /// Копии прикреплённых файлов (ADR-019): [erase] стирает и их,
+  /// [clearAll] — все, [delete] (архив чата задачи) — не трогает.
+  AttachmentStore get attachments;
 
   /// Дописать отложенные записи и дождаться их.
   Future<void> flush();
@@ -148,12 +166,19 @@ abstract final class ChatCodec {
 /// над тем же хранилищем) восстанавливает чаты так же, как с диска:
 /// карточки, ждавшие ответа, становятся устаревшими.
 final class InMemoryChatStore implements ChatStore {
-  InMemoryChatStore();
+  InMemoryChatStore({AttachmentStore? attachments})
+      : attachments = attachments ?? InMemoryAttachmentStore();
+
+  @override
+  final AttachmentStore attachments;
 
   final Map<String, String> _files = <String, String>{};
   final Map<String, String> _archive = <String, String>{};
   final Map<String, Map<String, Object?>> _index =
       <String, Map<String, Object?>>{};
+
+  /// Текст projects.json; `null` — файла нет.
+  String? projectsFile;
 
   /// Сколько раз чат записывался (для тестов).
   int saves = 0;
@@ -202,6 +227,7 @@ final class InMemoryChatStore implements ChatStore {
     _files.remove(chatId);
     _archive.remove(chatId);
     _index.remove(chatId);
+    await attachments.eraseChat(chatId);
   }
 
   @override
@@ -209,6 +235,19 @@ final class InMemoryChatStore implements ChatStore {
     _files.clear();
     _archive.clear();
     _index.clear();
+    await attachments.clearAll();
+  }
+
+  @override
+  Future<List<ChatProject>> loadProjects() async {
+    final content = projectsFile;
+    if (content == null) return <ChatProject>[];
+    return ChatProjectCodec.decode(content) ?? <ChatProject>[];
+  }
+
+  @override
+  Future<void> saveProjects(List<ChatProject> projects) async {
+    projectsFile = ChatProjectCodec.encode(projects);
   }
 
   @override
@@ -239,10 +278,15 @@ final class JsonChatStore implements ChatStore {
     this.directory, {
     this.debounce = const Duration(milliseconds: 500),
     Clock clock = const SystemClock(),
-  }) : _clock = clock;
+  })  : _clock = clock,
+        attachments = IoAttachmentStore(directory);
 
   /// Папка чатов.
   final String directory;
+
+  /// Вложения — в `<папка чатов>/files/` (ADR-019).
+  @override
+  final IoAttachmentStore attachments;
 
   /// Задержка отложенной записи.
   final Duration debounce;
@@ -262,6 +306,15 @@ final class JsonChatStore implements ChatStore {
   Future<void> _writes = Future<void>.value();
 
   String get indexPath => p.join(directory, 'index.json');
+
+  /// Файл проектов-папок (ADR-018).
+  String get projectsPath =>
+      p.join(directory, ChatProjectCodec.folder, ChatProjectCodec.fileName);
+
+  /// Где файл проектов лежал в сборках до переноса в подпапку: читается,
+  /// только если нового файла ещё нет (и его копия `.broken`, которую
+  /// оставила откаченная версия).
+  String get legacyProjectsPath => p.join(directory, ChatProjectCodec.fileName);
 
   /// Папка архива: чаты задач, которых больше нет в tasks.json.
   String get archiveDirectory => p.join(directory, 'archive');
@@ -317,6 +370,7 @@ final class JsonChatStore implements ChatStore {
               e is File &&
               e.path.endsWith('.json') &&
               p.basename(e.path) != 'index.json' &&
+              p.basename(e.path) != ChatProjectCodec.fileName &&
               !known.contains(p.basename(e.path)),
         )
         .cast<File>()
@@ -346,6 +400,9 @@ final class JsonChatStore implements ChatStore {
           preview: meta.preview,
           lastPersonaId: meta.lastPersonaId,
           unread: meta.unread,
+          projectId: meta.projectId,
+          ownTalk:
+              meta.kind == ChatKind.task && ChatThread.hasOwnTalk(messages),
           loaded: false,
           storedCount: messages.length,
         ),
@@ -425,6 +482,7 @@ final class JsonChatStore implements ChatStore {
         if (await file.exists()) await file.delete();
       }
       await _writeAtomic(indexPath, index);
+      await attachments.eraseChat(chatId);
     });
   }
 
@@ -438,7 +496,10 @@ final class JsonChatStore implements ChatStore {
       if (!await folder.exists()) return;
       final archive = Directory(archiveDirectory);
       if (await archive.exists()) await archive.delete(recursive: true);
+      await attachments.clearAll();
       await for (final entity in folder.list()) {
+        // Проекты-папки остаются: очищается история сессий.
+        if (p.basename(entity.path) == ChatProjectCodec.fileName) continue;
         if (entity is File &&
             (entity.path.endsWith('.json') ||
                 entity.path.endsWith('.json.tmp'))) {
@@ -446,6 +507,46 @@ final class JsonChatStore implements ChatStore {
         }
       }
     });
+  }
+
+  @override
+  Future<List<ChatProject>> loadProjects() async {
+    await _writes;
+    final file = File(projectsPath);
+    if (!await file.exists()) return _loadLegacyProjects();
+    // Ошибка файловой системы — наружу (см. [ChatStore.loadProjects]).
+    final content = await _readText(file);
+    final projects = content == null ? null : ChatProjectCodec.decode(content);
+    if (projects == null) {
+      await _quarantine(file);
+      return <ChatProject>[];
+    }
+    return projects;
+  }
+
+  /// Папки из прежнего места: `projects.json` в самой папке чатов или его
+  /// копия `projects.json.broken`, если старая версия отложила его при
+  /// пересборке index.json. Только чтение: следующая запись — уже в
+  /// подпапку. Не разбирается — папок нет (старые файлы не трогаются).
+  Future<List<ChatProject>> _loadLegacyProjects() async {
+    for (final path in <String>[
+      legacyProjectsPath,
+      '$legacyProjectsPath.broken',
+    ]) {
+      final file = File(path);
+      if (!await file.exists()) continue;
+      final content = await _readText(file);
+      final projects =
+          content == null ? null : ChatProjectCodec.decode(content);
+      if (projects != null) return projects;
+    }
+    return <ChatProject>[];
+  }
+
+  @override
+  Future<void> saveProjects(List<ChatProject> projects) {
+    final content = ChatProjectCodec.encode(projects);
+    return _enqueue(() => _writeAtomic(projectsPath, content));
   }
 
   @override

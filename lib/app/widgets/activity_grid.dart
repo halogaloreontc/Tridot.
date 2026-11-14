@@ -298,7 +298,7 @@ final class ActivityGrid extends StatelessWidget {
                       '${weeksLabel(weeks)} · ${_daysWord(activeDays)}'
                       '${approximate ? ' · по сессиям приблизительно' : ''}',
                       key: const Key('activity-total'),
-                      style: technicalTextStyle,
+                      style: metaTextStyle,
                     ),
                   ],
                 ),
@@ -308,7 +308,7 @@ final class ActivityGrid extends StatelessWidget {
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: <Widget>[
-                      const Text('меньше', style: technicalTextStyle),
+                      const Text('меньше', style: metaTextStyle),
                       for (var level = 0; level < 4; level++)
                         Container(
                           width: 10,
@@ -318,7 +318,7 @@ final class ActivityGrid extends StatelessWidget {
                             borderRadius: BorderRadius.circular(3),
                           ),
                         ),
-                      const Text('больше', style: technicalTextStyle),
+                      const Text('больше', style: metaTextStyle),
                     ],
                   ),
                 ),

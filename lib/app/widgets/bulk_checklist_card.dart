@@ -146,7 +146,7 @@ final class BulkChecklistCard extends StatelessWidget {
                           ? 'отмечено $checked из $total'
                           : '$total ${_tasks(total)} в списке',
                       key: const Key('bulk-counter'),
-                      style: technicalTextStyle,
+                      style: metaTextStyle,
                     ),
                   ],
                 ),
@@ -295,7 +295,7 @@ final class BulkChecklistCard extends StatelessWidget {
       ),
       subtitle: Text(
         due ?? 'без срока',
-        style: technicalTextStyle,
+        style: metaTextStyle,
       ),
     );
   }

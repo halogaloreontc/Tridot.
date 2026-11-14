@@ -287,7 +287,7 @@ final class PlanningScreen extends StatelessWidget {
                   '$window ${_daysWord(window)} вперёд · '
                   'с ${_weekdaysShort[now.weekday - 1]}, '
                   '${_dayMonth(now, now)}',
-                  style: technicalTextStyle,
+                  style: metaTextStyle,
                 ),
               ),
               if (!hasTasks)
@@ -321,7 +321,7 @@ final class PlanningScreen extends StatelessWidget {
               Expanded(
                 child: Text(
                   section.label,
-                  style: technicalTextStyle.copyWith(
+                  style: metaTextStyle.copyWith(
                     fontStyle: FontStyle.italic,
                   ),
                 ),

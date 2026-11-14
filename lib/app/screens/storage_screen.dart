@@ -169,7 +169,7 @@ class _StorageScreenState extends State<StorageScreen> {
                             : SelectableText(
                                 location,
                                 key: const ValueKey<String>('storage-location'),
-                                style: technicalTextStyle.copyWith(
+                                style: metaTextStyle.copyWith(
                                   color: AssistantColors.text,
                                 ),
                               ),
@@ -244,7 +244,7 @@ class _StorageScreenState extends State<StorageScreen> {
                           padding: EdgeInsets.only(top: 6),
                           child: Text(
                             'Данные только в памяти — копия недоступна',
-                            style: technicalTextStyle,
+                            style: metaTextStyle,
                           ),
                         ),
                     ],
@@ -307,7 +307,7 @@ class _InfoRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(label, style: technicalTextStyle),
+          Text(label, style: metaTextStyle),
           const SizedBox(height: 2),
           child,
         ],

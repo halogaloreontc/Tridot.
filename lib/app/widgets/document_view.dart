@@ -61,7 +61,7 @@ final class DocumentView extends StatelessWidget {
         controller: scrollController,
         padding: EdgeInsets.fromLTRB(24, 20 + topInset, 24, 24),
         children: <Widget>[
-          const Text('Задачи → Документ', style: technicalTextStyle),
+          const Text('Задачи → Документ', style: metaTextStyle),
           const SizedBox(height: 32),
           const Icon(
             Icons.description_outlined,
@@ -77,7 +77,7 @@ final class DocumentView extends StatelessWidget {
           const Text(
             'Выберите задачу в списке или создайте её командой в сессии.',
             textAlign: TextAlign.center,
-            style: technicalTextStyle,
+            style: metaTextStyle,
           ),
           const SizedBox(height: 16),
           Center(
@@ -103,7 +103,7 @@ final class DocumentView extends StatelessWidget {
             if (current.project != null) '#${current.project}',
             if (due != null) formatDue(due, current.duePrecision, now),
           ].join(' → '),
-          style: technicalTextStyle,
+          style: metaTextStyle,
         ),
         if (done)
           Container(
@@ -141,17 +141,23 @@ final class DocumentView extends StatelessWidget {
             contentPadding: EdgeInsets.symmetric(vertical: 12),
           ),
         ),
-        TextField(
-          key: const Key('document-project'),
-          controller: projectController,
-          style: technicalTextStyle.copyWith(color: AssistantColors.text),
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            isDense: true,
-            prefixText: '#',
-            labelText: 'Проект',
-            floatingLabelBehavior: FloatingLabelBehavior.never,
-            contentPadding: EdgeInsets.symmetric(vertical: 12),
+        // Проект — первая метка задачи (ADR-018): очистка поля убирает
+        // только её, остальные метки остаются.
+        Tooltip(
+          message: 'Проект — первая метка задачи. Очистка убирает только её',
+          waitDuration: const Duration(milliseconds: 600),
+          child: TextField(
+            key: const Key('document-project'),
+            controller: projectController,
+            style: metaTextStyle.copyWith(color: AssistantColors.text),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              isDense: true,
+              prefixText: '#',
+              labelText: 'Проект — первая метка задачи',
+              floatingLabelBehavior: FloatingLabelBehavior.never,
+              contentPadding: EdgeInsets.symmetric(vertical: 12),
+            ),
           ),
         ),
         _FormattingToolbar(controller: bodyController, focus: bodyFocus),
@@ -174,7 +180,7 @@ final class DocumentView extends StatelessWidget {
               child: Text(
                 _saveLabel(),
                 key: const Key('document-save-status'),
-                style: technicalTextStyle.copyWith(
+                style: metaTextStyle.copyWith(
                   color: saveState == DocumentSaveState.failed ||
                           saveState == DocumentSaveState.titleRequired
                       ? AssistantColors.danger

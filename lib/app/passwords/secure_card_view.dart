@@ -289,7 +289,7 @@ class _SecureCardViewState extends State<SecureCardView> {
 
   Widget _loginRow(VaultEntry entry) => Row(
         children: <Widget>[
-          const Text('Логин: ', style: technicalTextStyle),
+          const Text('Логин: ', style: metaTextStyle),
           Expanded(
             child: Text(
               entry.login,
@@ -419,7 +419,7 @@ class _SecureCardViewState extends State<SecureCardView> {
       children: <Widget>[
         Text(
           choose ? 'Какую запись?' : 'Записи сейфа',
-          style: technicalTextStyle,
+          style: metaTextStyle,
         ),
         for (final entry in entries.take(choose ? 12 : 50))
           EntryTile(
@@ -492,7 +492,7 @@ class _SecureCardViewState extends State<SecureCardView> {
       children: <Widget>[
         _title(entry),
         if (entry.login.isNotEmpty)
-          Text(VaultFacade.maskLogin(entry.login), style: technicalTextStyle),
+          Text(VaultFacade.maskLogin(entry.login), style: metaTextStyle),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,

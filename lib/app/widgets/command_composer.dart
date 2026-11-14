@@ -1,60 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/chats/attachments.dart';
+import '../../core/cloud/cloud_disk.dart';
+import '../../core/commands/command_catalog.dart';
 import '../assistant_theme.dart';
+import '../attachments/attachment_picker.dart';
+import '../attachments/attachment_views.dart';
+import 'command_finder_sheet.dart';
 
 enum AssistantViewMode { dialogue, document }
 
-/// Шаблон команды из меню «+». `|` в [template] — место курсора.
-final class CommandTemplate {
-  const CommandTemplate(this.label, this.template, {this.icon = Icons.bolt});
+/// Файл, выбранный для следующего сообщения: чип над полем ввода.
+final class PendingAttachmentChip {
+  const PendingAttachmentChip({
+    required this.name,
+    required this.kind,
+    required this.size,
+  });
 
-  final String label;
-  final String template;
-  final IconData icon;
+  final String name;
+  final AttachmentKind kind;
+  final int size;
 }
 
-/// Источники документов для «+». Подключение дисков — следующий этап;
-/// пункты видны заранее, а нажатие честно сообщает, что это в разработке.
-enum DocumentSource {
-  googleDrive('Google Диск', Icons.add_to_drive),
-  yandexDisk('Яндекс Диск', Icons.cloud_outlined);
-
-  const DocumentSource(this.label, this.icon);
-
-  final String label;
-  final IconData icon;
+/// Пункт «Найти команду» в «+» → «Шаблоны команд».
+final class _FindCommand {
+  const _FindCommand();
 }
-
-/// Пункт «+» навыка (например, «Пароли»): открывает экран, а не
-/// вставляет текст.
-final class ComposerAction {
-  const ComposerAction(this.label, this.icon, this.onSelected);
-
-  final String label;
-  final IconData icon;
-  final VoidCallback onSelected;
-}
-
-const List<CommandTemplate> defaultTemplates = <CommandTemplate>[
-  CommandTemplate('Новая задача', 'Добавь задачу «|»', icon: Icons.add),
-  CommandTemplate(
-    'Задача на завтра в 10:00',
-    'Добавь задачу «|» на завтра в 10:00',
-    icon: Icons.event_outlined,
-  ),
-  CommandTemplate(
-    'Задача в проект',
-    'Добавь задачу «|» #проект',
-    icon: Icons.tag,
-  ),
-  CommandTemplate(
-    'Перенести выбранную',
-    'Перенеси её на завтра в |',
-    icon: Icons.update,
-  ),
-  CommandTemplate('Показать задачи', 'Покажи задачи', icon: Icons.checklist),
-];
 
 /// Поле команды. Не блокируется во время отправки, чтобы не терять фокус:
 /// повторную отправку отсекает хозяин.
@@ -67,13 +40,19 @@ final class CommandComposer extends StatefulWidget {
     required this.mode,
     required this.onModeChanged,
     required this.onSend,
-    required this.onTemplate,
-    required this.onDocumentSource,
+    required this.onCommand,
     required this.onVoice,
     required this.previousCommand,
     required this.nextCommand,
+    this.onAttach,
+    this.onCloudDisk,
+    this.onConnectDisk,
+    this.cloudDisks = const <CloudDisk>[],
+    this.templates = const <CommandEntry>[],
+    this.onFindCommand,
+    this.pending = const <PendingAttachmentChip>[],
+    this.onRemovePending,
     this.header,
-    this.extraActions = const <ComposerAction>[],
   });
 
   final TextEditingController controller;
@@ -82,10 +61,33 @@ final class CommandComposer extends StatefulWidget {
   final AssistantViewMode mode;
   final ValueChanged<AssistantViewMode> onModeChanged;
   final VoidCallback onSend;
-  final ValueChanged<CommandTemplate> onTemplate;
 
-  /// Выбран источник документа в меню «+».
-  final ValueChanged<DocumentSource> onDocumentSource;
+  /// Команда из «+» → «Шаблоны команд» (ADR-020).
+  final ValueChanged<CommandEntry> onCommand;
+
+  /// «+» → «Прикрепить файл» → вид файла (ADR-019).
+  final ValueChanged<PickKind>? onAttach;
+
+  /// «+» → «Облачный диск» → подключённый диск.
+  final ValueChanged<CloudDisk>? onCloudDisk;
+
+  /// «+» → «Облачный диск» → «Подключить диск» (ни одного не подключено).
+  final VoidCallback? onConnectDisk;
+
+  /// Подключённые облачные диски ([CloudDiskMenu.entries]).
+  final List<CloudDisk> cloudDisks;
+
+  /// Частые команды в «+» → «Шаблоны команд» ([CommandCatalog.top]).
+  final List<CommandEntry> templates;
+
+  /// «Найти команду» — пятый пункт «Шаблонов команд»; `null` — пункта нет.
+  final VoidCallback? onFindCommand;
+
+  /// Файлы, выбранные для следующего сообщения.
+  final List<PendingAttachmentChip> pending;
+
+  /// Крестик на чипе файла [pending]`[i]`.
+  final ValueChanged<int>? onRemovePending;
 
   /// Микрофон при пустом поле: голосовое общение с помощником.
   final VoidCallback onVoice;
@@ -96,10 +98,6 @@ final class CommandComposer extends StatefulWidget {
 
   /// Строка над полем: выбор адресата в дуэте помощников.
   final Widget? header;
-
-  /// Пункты включённых навыков в «+» (раздел 8: «Пароли», «Добавить
-  /// запись»).
-  final List<ComposerAction> extraActions;
 
   @override
   State<CommandComposer> createState() => _CommandComposerState();
@@ -166,12 +164,47 @@ final class _CommandComposerState extends State<CommandComposer> {
     );
   }
 
+  /// «+»: три пункта со своими списками — «Облачный диск», «Прикрепить
+  /// файл», «Шаблоны команд» (действия сейфа — там же, в «Найти
+  /// команду»). Выбор
+  /// выполняется после закрытия листа: выбор файлов и диалоги открываются
+  /// уже над экраном.
+  Future<void> _openPlus() async {
+    final choice = await showModalBottomSheet<Object>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AssistantColors.raised,
+      constraints: const BoxConstraints(maxWidth: 560),
+      builder: (BuildContext context) => _PlusSheet(
+        cloudDisks: widget.cloudDisks,
+        canAttach: widget.onAttach != null,
+        templates: widget.templates,
+        canFind: widget.onFindCommand != null,
+      ),
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case CommandEntry entry:
+        widget.onCommand(entry);
+      case _FindCommand _:
+        widget.onFindCommand?.call();
+      case PickKind kind:
+        widget.onAttach?.call(kind);
+      case CloudDisk disk:
+        widget.onCloudDisk?.call(disk);
+      case CloudDiskConnect _:
+        widget.onConnectDisk?.call();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.controller,
       builder: (BuildContext context, _) {
-        final hasText = widget.controller.text.trim().isNotEmpty;
+        // Файлы можно отправить и без текста.
+        final hasText = widget.controller.text.trim().isNotEmpty ||
+            widget.pending.isNotEmpty;
         // Пустое поле — микрофон для голоса, с текстом — кнопка отправки.
         final voice = !hasText && !widget.sending;
         return Container(
@@ -187,6 +220,29 @@ final class _CommandComposerState extends State<CommandComposer> {
             children: <Widget>[
               if (widget.header case final Widget header)
                 Align(alignment: Alignment.centerLeft, child: header),
+              if (widget.pending.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 2, 4, 6),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: <Widget>[
+                        for (var i = 0; i < widget.pending.length; i++)
+                          AttachmentChip(
+                            key: Key('pending-attachment-$i'),
+                            name: widget.pending[i].name,
+                            kind: widget.pending[i].kind,
+                            size: widget.pending[i].size,
+                            onRemove: widget.onRemovePending == null
+                                ? null
+                                : () => widget.onRemovePending!(i),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               TextField(
                 key: const Key('assistant-input'),
                 controller: widget.controller,
@@ -215,75 +271,14 @@ final class _CommandComposerState extends State<CommandComposer> {
               ),
               LayoutBuilder(
                 builder: (BuildContext context, BoxConstraints constraints) {
-                  final plus = PopupMenuButton<Object>(
-                    key: const Key('templates-button'),
-                    tooltip: 'Документы и шаблоны команд',
-                    onSelected: (Object value) {
-                      if (value is CommandTemplate) widget.onTemplate(value);
-                      if (value is DocumentSource) {
-                        widget.onDocumentSource(value);
-                      }
-                      if (value is ComposerAction) value.onSelected();
-                    },
-                    color: AssistantColors.raised,
-                    itemBuilder: (BuildContext context) =>
-                        <PopupMenuEntry<Object>>[
-                      const PopupMenuItem<Object>(
-                        enabled: false,
-                        height: 28,
-                        child:
-                            Text('Документ с диска', style: technicalTextStyle),
-                      ),
-                      for (final source in DocumentSource.values)
-                        PopupMenuItem<Object>(
-                          key: Key('source-${source.name}'),
-                          value: source,
-                          child: Row(
-                            children: <Widget>[
-                              Icon(source.icon, size: 18),
-                              const SizedBox(width: 10),
-                              Flexible(child: Text(source.label)),
-                              const SizedBox(width: 8),
-                              const Text('скоро', style: technicalTextStyle),
-                            ],
-                          ),
-                        ),
-                      const PopupMenuDivider(),
-                      if (widget
-                          .extraActions.isNotEmpty) ...<PopupMenuEntry<Object>>[
-                        for (final action in widget.extraActions)
-                          PopupMenuItem<Object>(
-                            key: Key('composer-action-${action.label}'),
-                            value: action,
-                            child: Row(
-                              children: <Widget>[
-                                Icon(action.icon, size: 18),
-                                const SizedBox(width: 10),
-                                Flexible(child: Text(action.label)),
-                              ],
-                            ),
-                          ),
-                        const PopupMenuDivider(),
-                      ],
-                      const PopupMenuItem<Object>(
-                        enabled: false,
-                        height: 28,
-                        child:
-                            Text('Шаблоны команд', style: technicalTextStyle),
-                      ),
-                      for (final template in defaultTemplates)
-                        PopupMenuItem<Object>(
-                          value: template,
-                          child: Row(
-                            children: <Widget>[
-                              Icon(template.icon, size: 18),
-                              const SizedBox(width: 10),
-                              Flexible(child: Text(template.label)),
-                            ],
-                          ),
-                        ),
-                    ],
-                    child: const _RoundIcon(icon: Icons.add),
+                  final plus = Tooltip(
+                    message: 'Файлы, диски и шаблоны команд',
+                    child: InkResponse(
+                      key: const Key('templates-button'),
+                      onTap: _openPlus,
+                      radius: 24,
+                      child: const _RoundIcon(icon: Icons.add),
+                    ),
                   );
                   final send = IconButton(
                     key: const Key('assistant-send'),
@@ -486,6 +481,190 @@ final class _ModeSwitch extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Лист «+» (ADR-019): у каждого из трёх пунктов свой раскрывающийся
+/// список. Возвращает выбор: [CommandEntry], [_FindCommand], [PickKind],
+/// [CloudDisk] или [CloudDiskConnect].
+final class _PlusSheet extends StatefulWidget {
+  const _PlusSheet({
+    required this.cloudDisks,
+    required this.canAttach,
+    required this.templates,
+    required this.canFind,
+  });
+
+  final List<CloudDisk> cloudDisks;
+  final bool canAttach;
+  final List<CommandEntry> templates;
+  final bool canFind;
+
+  @override
+  State<_PlusSheet> createState() => _PlusSheetState();
+}
+
+enum _PlusGroup { cloud, attach, templates }
+
+final class _PlusSheetState extends State<_PlusSheet> {
+  _PlusGroup? _open;
+
+  void _pick(Object value) => Navigator.of(context).pop(value);
+
+  void _toggle(_PlusGroup group) =>
+      setState(() => _open = _open == group ? null : group);
+
+  @override
+  Widget build(BuildContext context) {
+    final cloud = CloudDiskMenu.entries(widget.cloudDisks);
+    return SafeArea(
+      child: SingleChildScrollView(
+        key: const Key('composer-plus-sheet'),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            // Один подключённый диск — пункт сразу открывает его, без
+            // выбора диска.
+            if (cloud case CloudDiskSingle(:final disk))
+              _row(
+                key: const Key('composer-cloud'),
+                icon: Icons.cloud_outlined,
+                label: 'Облачный диск',
+                detail: disk.label,
+                onTap: () => _pick(disk),
+              )
+            else
+              ..._group(
+                group: _PlusGroup.cloud,
+                key: const Key('composer-cloud'),
+                icon: Icons.cloud_outlined,
+                label: 'Облачный диск',
+                children: switch (cloud) {
+                  CloudDiskChoice(:final disks) => <Widget>[
+                      for (final disk in disks)
+                        _row(
+                          key: Key('cloud-${disk.name}'),
+                          icon: Icons.folder_open_outlined,
+                          label: disk.label,
+                          onTap: () => _pick(disk),
+                          nested: true,
+                        ),
+                    ],
+                  _ => <Widget>[
+                      _row(
+                        key: const Key('cloud-connect'),
+                        icon: Icons.add_link,
+                        label: CloudDiskConnect.label,
+                        detail: 'Яндекс Диск, Google Диск',
+                        onTap: () => _pick(const CloudDiskConnect()),
+                        nested: true,
+                      ),
+                    ],
+                },
+              ),
+            if (widget.canAttach)
+              ..._group(
+                group: _PlusGroup.attach,
+                key: const Key('composer-attach'),
+                icon: Icons.attach_file,
+                label: 'Прикрепить файл',
+                children: <Widget>[
+                  for (final kind in PickKind.values)
+                    _row(
+                      key: Key('attach-${kind.name}'),
+                      icon: kind.icon,
+                      label: kind.label,
+                      onTap: () => _pick(kind),
+                      nested: true,
+                    ),
+                ],
+              ),
+            ..._group(
+              group: _PlusGroup.templates,
+              key: const Key('composer-templates'),
+              icon: Icons.bolt,
+              label: 'Шаблоны команд',
+              children: <Widget>[
+                for (final entry in widget.templates)
+                  _row(
+                    key: Key('command-top-${entry.id}'),
+                    icon: commandIcon(entry.iconName),
+                    label: entry.label,
+                    onTap: () => _pick(entry),
+                    nested: true,
+                  ),
+                if (widget.canFind)
+                  _row(
+                    key: const Key('command-find'),
+                    icon: Icons.search,
+                    label: 'Найти команду',
+                    detail: 'Все команды по разделам',
+                    onTap: () => _pick(const _FindCommand()),
+                    nested: true,
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _group({
+    required _PlusGroup group,
+    required Key key,
+    required IconData icon,
+    required String label,
+    required List<Widget> children,
+  }) {
+    final open = _open == group;
+    return <Widget>[
+      _row(
+        key: key,
+        icon: icon,
+        label: label,
+        trailing: Icon(
+          open ? Icons.expand_less : Icons.expand_more,
+          color: AssistantColors.icon,
+        ),
+        expanded: open,
+        onTap: () => _toggle(group),
+      ),
+      if (open) ...children,
+    ];
+  }
+
+  Widget _row({
+    required Key key,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    String? detail,
+    Widget? trailing,
+    bool nested = false,
+    bool? expanded,
+  }) {
+    return Semantics(
+      expanded: expanded,
+      child: ListTile(
+        key: key,
+        onTap: onTap,
+        minTileHeight: 48,
+        contentPadding: EdgeInsets.only(left: nested ? 56 : 20, right: 16),
+        leading: Icon(icon, size: 20, color: AssistantColors.textStrong),
+        title: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 15,
+            color: AssistantColors.textStrong,
+          ),
+        ),
+        subtitle: detail == null ? null : Text(detail, style: metaTextStyle),
+        trailing: trailing,
       ),
     );
   }

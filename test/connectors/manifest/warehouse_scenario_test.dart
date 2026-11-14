@@ -54,7 +54,7 @@ void main() {
     expect(rio.message, startsWith('«товар»: 30 позиций'));
     expect(rio.message, endsWith('Показаны не все — уточните запрос.'));
 
-    // Дуэт с Нодой: Лиорио выключен, склад отвечает Садо.
+    // Дуэт с Нодой: Лиорио выключен, склад отвечает Связной.
     assistant.personas = const PersonaSettings(
       teamMode: TeamMode.duo,
       duoHelper: 'noda',

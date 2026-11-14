@@ -166,7 +166,7 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('today-collapse')));
     await tester.pumpAndSettle();
-    final header = tester.getRect(find.byKey(const Key('session-subtitle')));
+    final header = tester.getRect(find.byKey(const Key('session-title')));
     final show = tester.getRect(find.byKey(const Key('today-show')));
     expect(show.left, greaterThan(header.right));
     expect(show.right, greaterThan(1440 - 24), reason: 'прижата вправо');

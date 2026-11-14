@@ -135,7 +135,7 @@ void main() {
           trio.copyWith(teamMode: TeamMode.duo, duoHelper: Personas.noda.id),
         ),
         Personas.sado,
-        reason: 'ведущий расширений выключен режимом — ведёт Садо',
+        reason: 'ведущий расширений выключен режимом — ведёт Связной',
       );
       // Прежний выбор ведущего роли (role_owners) на ответы не влияет.
       registry.apply(
@@ -155,7 +155,7 @@ void main() {
           noda.copyWith(teamMode: TeamMode.duo, duoHelper: Personas.liorio.id),
         ),
         Personas.sado,
-        reason: 'ведущая расширений Нода выключена режимом — ведёт Садо',
+        reason: 'ведущая расширений Нода выключена режимом — ведёт Связной',
       );
       registry.apply(registry.choice.withOwner(Roles.storekeeperId, null));
       expect(registry.choice.roleOwners, isEmpty);

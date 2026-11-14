@@ -49,6 +49,10 @@ Widget host({
   String? selectedId,
   ValueChanged<Task>? onOpenTask,
   ValueChanged<Task>? onToggleDone,
+  List<ProjectFolderCard> folders = const <ProjectFolderCard>[],
+  ValueChanged<String>? onOpenFolder,
+  VoidCallback? onNewFolder,
+  ValueChanged<String>? onMakeFolder,
 }) {
   return MaterialApp(
     theme: AssistantTheme.dark(),
@@ -59,6 +63,10 @@ Widget host({
         selectedId: selectedId,
         onOpenTask: onOpenTask ?? (_) {},
         onToggleDone: onToggleDone ?? (_) {},
+        folders: folders,
+        onOpenFolder: onOpenFolder,
+        onNewFolder: onNewFolder,
+        onMakeFolder: onMakeFolder,
       ),
     ),
   );
@@ -71,8 +79,9 @@ void main() {
     expect(find.text('Проекты'), findsOneWidget);
     expect(
       find.text(
-        'Проект задаётся меткой в команде: Добавь задачу «Отчёт» '
-        '#работа — или в документе задачи.',
+        'Проект — папка для сессий: из неё сразу начинают новую '
+        'сессию. Метку задачи задают в команде: Добавь задачу '
+        '«Отчёт» #работа — или в документе задачи.',
       ),
       findsOneWidget,
     );
@@ -100,7 +109,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(host());
 
-    await tester.tap(find.byKey(const ValueKey<String>('project-работа')));
+    await tester.tap(find.byKey(const ValueKey<String>('tag-работа')));
     await tester.pump();
     expect(find.text('Отчёт'), findsOneWidget);
     expect(find.text('Созвон'), findsOneWidget);
@@ -114,13 +123,13 @@ void main() {
     );
     expect(label.danger, isTrue);
 
-    await tester.tap(find.byKey(const ValueKey<String>('project-none')));
+    await tester.tap(find.byKey(const ValueKey<String>('tag-none')));
     await tester.pump();
     expect(find.text('Отчёт'), findsNothing);
     expect(find.text('Позвонить маме'), findsOneWidget);
     expect(find.text('Без срока · 1'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey<String>('project-none')));
+    await tester.tap(find.byKey(const ValueKey<String>('tag-none')));
     await tester.pump();
     expect(find.byType(TaskTile), findsNothing);
   });
@@ -136,7 +145,7 @@ void main() {
         onToggleDone: (t) => toggled.add(t.id),
       ),
     );
-    await tester.tap(find.byKey(const ValueKey<String>('project-работа')));
+    await tester.tap(find.byKey(const ValueKey<String>('tag-работа')));
     await tester.pump();
 
     await tester.tap(find.text('Отчёт'));
@@ -149,6 +158,59 @@ void main() {
     );
     expect(tile.selected, isTrue);
     expect(tile.showProject, isFalse);
+  });
+
+  testWidgets('два блока: «Папки» и «Метки задач»; связанная метка — в папке',
+      (tester) async {
+    final opened = <String>[];
+    var created = 0;
+    final made = <String>[];
+    await tester.pumpWidget(
+      host(
+        folders: const <ProjectFolderCard>[
+          ProjectFolderCard(
+            id: 'project:1',
+            name: 'Ремонт',
+            sessions: 2,
+            description: 'Кухня и ванная',
+            taskTag: 'дом',
+          ),
+        ],
+        onOpenFolder: opened.add,
+        onNewFolder: () => created++,
+        onMakeFolder: made.add,
+      ),
+    );
+    expect(find.text('Папки'), findsOneWidget);
+    expect(find.text('Метки задач'), findsOneWidget);
+    expect(find.text('Ремонт'), findsOneWidget);
+    expect(find.text('2 сессии'), findsOneWidget);
+    expect(find.text('Кухня и ванная'), findsOneWidget);
+    // Метка «дом» связана с папкой: среди меток её нет.
+    expect(find.byKey(const ValueKey<String>('tag-дом')), findsNothing);
+    expect(find.byKey(const ValueKey<String>('tag-работа')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('folder-project:1')));
+    expect(opened, <String>['project:1']);
+    await tester.tap(find.byKey(const Key('projects-new')));
+    expect(created, 1);
+
+    await tester.tap(find.byKey(const ValueKey<String>('tag-работа')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('make-folder-работа')));
+    expect(made, <String>['работа']);
+    // «Без метки» папкой не делается.
+    await tester.ensureVisible(find.byKey(const ValueKey<String>('tag-none')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey<String>('tag-none')));
+    await tester.pump();
+    expect(find.byKey(const Key('make-folder-null')), findsNothing);
+    expect(find.text('Сделать папкой'), findsNothing);
+  });
+
+  testWidgets('без папок — подсказка', (tester) async {
+    await tester.pumpWidget(host());
+    expect(find.byKey(const Key('projects-no-folders')), findsOneWidget);
   });
 
   testWidgets('shows empty state without tasks', (tester) async {
@@ -179,7 +241,7 @@ void main() {
       await tester.pumpWidget(host(tasks: many, selectedId: 'a'));
       expect(tester.takeException(), isNull);
 
-      final card = find.byKey(const ValueKey<String>('project-работа'));
+      final card = find.byKey(const ValueKey<String>('tag-работа'));
       await tester.ensureVisible(card);
       await tester.pump();
       await tester.tap(card);

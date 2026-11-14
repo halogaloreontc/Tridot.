@@ -382,7 +382,7 @@ final class _Case {
       ];
     }
 
-    // Обращение по имени в начале («Садо, …») маршрутизатор снимает до
+    // Обращение по имени в начале («Связной, …») маршрутизатор снимает до
     // разбора (AssistantController.resolve): навыки получают фразу без
     // него.
     var phrase = PersonaAddressing.commandText(text);

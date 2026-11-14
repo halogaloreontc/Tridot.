@@ -648,7 +648,7 @@ class _LockViewState extends State<_LockView> {
         Text(
           widget.kit.platform.unlockNote,
           textAlign: TextAlign.center,
-          style: technicalTextStyle,
+          style: metaTextStyle,
         ),
         const SizedBox(height: 8),
         TextButton(

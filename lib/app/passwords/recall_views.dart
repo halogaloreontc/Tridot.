@@ -538,12 +538,12 @@ class CheckView extends StatelessWidget {
         Text(
           'Проверено записей: ${groups.total}. Утечки по базам не '
           'проверяются — только надёжность, повторы и возраст.',
-          style: technicalTextStyle,
+          style: metaTextStyle,
         ),
         if (groups.unchecked.isNotEmpty)
           Text(
             'Ещё не оценены: ${groups.unchecked.length}.',
-            style: technicalTextStyle,
+            style: metaTextStyle,
           ),
         // Важные записи без свежего мастер-пароля (15.2): их надёжность и
         // «название в пароле» не пересчитываются и не показываются.
@@ -552,7 +552,7 @@ class CheckView extends StatelessWidget {
             'Важные записи (${groups.pending.length}) — проверка после '
             'мастер-пароля.',
             key: const ValueKey<String>('check-pending'),
-            style: technicalTextStyle,
+            style: metaTextStyle,
           ),
         if (visible.isEmpty)
           const Padding(
@@ -576,7 +576,7 @@ class CheckView extends StatelessWidget {
           for (final (index, list) in lists.indexed)
             if (list.isNotEmpty) ...<Widget>[
               if (lists.length > 1)
-                Text('Группа ${index + 1}', style: technicalTextStyle),
+                Text('Группа ${index + 1}', style: metaTextStyle),
               for (final entry in list)
                 EntryTile(
                   entry: entry,
@@ -784,7 +784,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                 const Text(
                   'Интервалы: 1 → 3 → 7 → 14 → 30 → 60 → 120 дней. Ошибка — '
                   'снова через день.',
-                  style: technicalTextStyle,
+                  style: metaTextStyle,
                 ),
                 for (final ref in queue)
                   if (kit.vault.entry(ref.id) case final VaultEntry entry)
@@ -796,7 +796,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                             : 'через '
                                 '${TrainingSchedule.daysUntil(entry.train, now)} '
                                 'дн.',
-                        style: technicalTextStyle,
+                        style: metaTextStyle,
                       ),
                       onTap: () => setState(() {
                         _current = entry.id;

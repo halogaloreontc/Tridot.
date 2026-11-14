@@ -6,6 +6,7 @@
   "entries": {
     "common.welcome": "{м:Готов|ж:Готова}. Пример: {example}",
     "common.unknown": "Умею только задачи. Пример: {example}",
+    "common.unknown.suggest": "Не до конца {м:понял|ж:поняла}. Возможно: {options}.",
     "common.addressed": "Слушаю. Пример: {example}",
     "common.working": "Обрабатываю…",
     "router.ambiguous": "«{first}» или «{second}»?",
@@ -113,6 +114,7 @@
     "task.due.conflictingDays": "Несколько дней. Какой?",
     "task.due.conflictingTimes": "Несколько времён. Какое?",
     "task.due.ambiguousHour": "Утра или вечера? Например «в 17:00».",
+    "task.due.missingTime": "Во сколько? Например «в 15:00».",
     "task.title.unbalancedQuotes": "Кавычка не закрыта. Название — в парных кавычках или без них.",
     "task.title.multiple": "Несколько названий. По одной задаче.",
 
@@ -229,6 +231,7 @@
     "passwords.hint.used": "«{service}»: ступень подсказки {count}.",
     "passwords.import.card": "Импорт CSV — в карточке. Пароли в чат не попадут.",
     "passwords.backup.card": "Копия — в карточке. Зашифрована; {вы:храните|ты:храни} не только здесь.",
-    "passwords.restore.card": "Восстановление — в карточке: файл .relaybak и пароль копии."
+    "passwords.restore.card": "Восстановление — в карточке: файл .relaybak и пароль копии.",
+    "attachments.saved": "{м:Сохранил|ж:Сохранила}: {count} {мн:count|файл|файла|файлов}. Обработки файлов пока нет."
   }
 }

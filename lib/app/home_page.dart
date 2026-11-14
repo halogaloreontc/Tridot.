@@ -7,10 +7,15 @@ import 'package:flutter/semantics.dart' show OrdinalSortKey;
 import 'package:flutter/services.dart';
 
 import '../core/app_info.dart';
+import '../core/chats/attachments.dart';
 import '../core/chats/chat_book.dart';
 import '../core/chats/chat_models.dart';
+import '../core/chats/chat_projects.dart';
 import '../core/chats/chat_search.dart';
 import '../core/chats/chat_store.dart';
+import '../core/cloud/cloud_disk.dart';
+import '../core/commands/command_catalog.dart';
+import '../core/commands/command_suggest.dart';
 import '../core/connectors/connector.dart';
 import '../core/connectors/login_link.dart';
 import '../core/connectors/manifest/connection_service.dart';
@@ -30,6 +35,8 @@ import '../core/settings/app_settings.dart';
 import '../core/stats/relay_stats.dart';
 import '../core/storage/storage_info.dart';
 import 'assistant_theme.dart';
+import 'attachments/attachment_picker.dart';
+import 'attachments/attachment_views.dart';
 import 'passwords/entry_screens.dart';
 import 'passwords/generator_view.dart';
 import 'passwords/passwords_kit.dart';
@@ -38,10 +45,12 @@ import 'passwords/secure_card_view.dart';
 import 'screens/my_relay_screen.dart';
 import 'screens/my_relay_tabs.dart';
 import 'screens/planning_screen.dart';
+import 'screens/project_screen.dart';
 import 'screens/projects_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/storage_screen.dart';
 import 'shell/drawer_swipe.dart';
+import 'shell/project_dialogs.dart';
 import 'shell/quick_actions.dart';
 import 'shell/relay_drawer.dart';
 import 'shell/session_hold_menu.dart';
@@ -51,6 +60,8 @@ import 'shell/today_panel.dart';
 import 'widgets/action_card_view.dart';
 import 'widgets/bulk_checklist_card.dart';
 import 'widgets/command_composer.dart';
+import 'widgets/command_finder_sheet.dart';
+import 'widgets/command_highlight.dart';
 import 'widgets/connection_screen.dart';
 import 'widgets/document_view.dart';
 import 'widgets/extensions_section.dart';
@@ -62,13 +73,14 @@ import 'widgets/task_chat_header.dart';
 import 'widgets/task_tile.dart';
 
 /// Разделы оболочки «Д»: сессия (главный экран), задачи, проекты,
-/// планирование и «Мой Tridot».
-enum AppSection { session, tasks, projects, planning, myRelay }
+/// экран одного проекта-папки, планирование и «Мой Tridot».
+enum AppSection { session, tasks, projects, project, planning, myRelay }
 
 extension AppSectionInfo on AppSection {
   String get title => switch (this) {
         AppSection.session => 'Сессия',
         AppSection.projects => 'Проекты',
+        AppSection.project => 'Проект',
         AppSection.tasks => 'Задачи',
         AppSection.planning => 'Планирование',
         AppSection.myRelay => AppInfo.hubName,
@@ -116,6 +128,7 @@ final class HomePage extends StatefulWidget {
     this.chatStore,
     this.connections = const <ConnectionService>[],
     this.passwords,
+    this.attachmentPicker = const FileSelectorAttachmentPicker(),
   });
 
   final AssistantController assistant;
@@ -135,14 +148,28 @@ final class HomePage extends StatefulWidget {
   /// Подключения к приложениям (склад): «Настройки → Подключения».
   final List<ConnectionService> connections;
 
+  /// Выбор файлов для «+» → «Прикрепить файл» (ADR-019); в тестах —
+  /// подделка.
+  final AttachmentPicker attachmentPicker;
+
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final TextEditingController _input = TextEditingController();
+
+  /// Поле ввода: распознанные части команды подсвечиваются по ходу
+  /// набора (ADR-021).
+  late final CommandInputController _input = CommandInputController(
+    highlighter: widget.assistant.highlight,
+  );
   final FocusNode _inputFocus = FocusNode();
+
+  /// Подсветка отправленных команд в ленте: разбор один раз на текст
+  /// сообщения, а не на каждую перерисовку.
+  final Map<String, List<CommandSpan>> _spanCache =
+      <String, List<CommandSpan>>{};
 
   /// Растёт после каждого чтения задач: открытые поверх маршруты
   /// («Данные и резервная копия») перестраиваются по нему.
@@ -198,15 +225,37 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// Чат, в котором ждут ответа [_working].
   String? _workingChatId;
+
+  /// Файлы, выбранные для следующего сообщения (ADR-019).
+  final List<_PendingFile> _pendingFiles = <_PendingFile>[];
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
-  final List<String> _commands = <String>[];
+
+  /// Команды открытого чата для ↑/↓ в поле ввода: у каждого чата своя
+  /// история, а не общая на все сессии.
+  List<String> get _commands => <String>[
+        for (final message in _messages)
+          if (message.fromUser && message.text.isNotEmpty) message.text,
+      ];
   int? _commandCursor;
+
+  /// Сообщение, к которому перешли из поиска: подсвечено, пока открыт
+  /// этот чат.
+  String? _highlightedMessageId;
+
+  /// Строка сообщения из поиска — к ней прокручивается лента.
+  final GlobalKey _hitRowKey = GlobalKey(debugLabel: 'search-hit-row');
+
+  /// Сколько сессий показывает боковая панель: «Показать ещё» добавляет.
+  int _sessionsShown = ChatBook.sessionsLimit;
 
   /// Черновик, который был в поле до листания истории стрелками.
   String _draftBeforeRecall = '';
   int? _highlightedCommand;
 
   AppSection _section = AppSection.session;
+
+  /// Проект-папка, чей экран открыт ([AppSection.project]).
+  String? _openProjectId;
   MyRelayTab _myRelayTab = MyRelayTab.summary;
 
   /// Сообщения непрочитанных чатов для точной активности в «Мой
@@ -474,6 +523,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         card: response.card,
         secureCard: response.secureCard,
         clarification: response.clarification,
+        suggestions: response.suggestions,
       );
 
   // ------------------------------------------------------------- данные
@@ -488,6 +538,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (pruned != null) unawaited(_settingsStore.save(pruned));
     _applyExtensions(settings);
     widget.assistant.personas = settings.personas;
+    widget.assistant.commandUsage = settings.commandUsage;
     widget.passwords?.syncSettings(
       seenRev: settings.passwordsSeenRev,
       vaultExisted: settings.passwordsVaultExisted,
@@ -509,6 +560,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _chatsLoaded = true;
       _messageKeys.clear();
     });
+    if (_book.projectsUnreadable) {
+      _announce('Не удалось прочитать проекты — они целы, '
+          'попробуйте перезапустить приложение');
+    }
     _dailyChecks();
     // Вторая строка в меню у чатов из прежних версий — из их файлов.
     if (await _book.backfillPreviews() && mounted) setState(() {});
@@ -683,7 +738,20 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _input.text).trim();
-    if (text.isEmpty || _sending) return;
+    // Файлы уходят с командой из поля ввода, не с быстрой кнопкой.
+    final files = preset == null
+        ? List<_PendingFile>.of(_pendingFiles)
+        : const <_PendingFile>[];
+    if (text.isEmpty && files.isEmpty) return;
+    if (_sending) {
+      // Ответ готовится в другой сессии: текст остаётся в поле, а не
+      // пропадает молча.
+      final working = _workingChatId;
+      if (working != null && working != _book.currentId) {
+        _announce('Дождитесь ответа в другой сессии');
+      }
+      return;
+    }
     if (!_settingsLoaded || !_chatsLoaded) {
       // Настройки или чаты ещё читаются: ждём их, иначе ответит помощник
       // по умолчанию, а не выбранный, и сообщение затрётся историей с
@@ -722,11 +790,46 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
     final shown = guard.text;
     final secret = guard.guarded;
+    final commandId = _book.newMessageId();
+    // Файлы — в папку сессии, до сообщения (ADR-019). Никуда, кроме неё,
+    // они не уходят.
+    var attachments = const <ChatAttachment>[];
+    if (files.isNotEmpty) {
+      setState(() {
+        _sending = true;
+        _workingChatId = chatId;
+        _pendingFiles.clear();
+      });
+      final AttachmentImport imported;
+      try {
+        imported = await _book.attach(chatId, commandId, <(
+          AttachmentSource,
+          String,
+        )>[
+          for (final file in files) (file.source, file.name),
+        ]);
+      } finally {
+        _sending = false;
+        _workingChatId = null;
+      }
+      if (!mounted) return;
+      attachments = imported.saved;
+      _reportImport(imported, files.length);
+      if (attachments.isEmpty && text.isEmpty) {
+        setState(() {});
+        return;
+      }
+      if (text.isEmpty) {
+        _sendFilesOnly(chatId, commandId, attachments);
+        return;
+      }
+    }
     final command = ChatMessage(
-      id: _book.newMessageId(),
+      id: commandId,
       author: ChatAuthor.user,
       text: shown,
       timestamp: _now,
+      attachments: attachments,
     );
     setState(() {
       _sending = true;
@@ -740,18 +843,23 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
       _workingChatId = chatId;
       _book.append(chatId, command);
-      _commands.add(shown);
       _commandCursor = null;
       if (preset == null) _input.clear();
     });
     _scrollToLatest();
     await _saveDocument();
-    final response = await widget.assistant.handle(
+    final handled = await widget.assistant.handle(
       secret ? shown : text,
       chatTaskId: chatTaskId,
       secretRedacted: secret,
     );
     if (!mounted) return;
+    // Файлы с непонятным текстом («Смета и эскиз») — подпись к файлам, а
+    // не команда: ответ тот же, что на одни файлы, без «Пока понимаю…».
+    final response = attachments.isNotEmpty && handled.intent == 'unknown'
+        ? widget.assistant.attachmentsSaved(attachments.length)
+        : handled;
+    final filesOnlyReply = !identical(response, handled);
     // «Говори короче», «давай на ты»: тот же путь, что у экрана настроек,
     // — к настройкам на сейчас, с сохранением в settings.json.
     final change = response.settingsChange;
@@ -764,6 +872,12 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final task = response.task;
     final aboutTask = response.intent == 'task.create' && task != null;
     var reply = _answer(response);
+    if (attachments.isNotEmpty && !filesOnlyReply) {
+      reply = reply.withText(
+        '${reply.text}\n\n'
+        '${widget.assistant.attachmentsNote(attachments.length, reply.personaId)}',
+      );
+    }
     if (aboutTask) {
       reply = reply.withLink(
         ChatLink(chatId: ChatThread.taskChatId(task.id), taskId: task.id),
@@ -800,6 +914,174 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _scrollToLatest();
     _inputFocus.requestFocus();
     await _refresh();
+  }
+
+  /// Сообщение только из файлов: в помощника команда не идёт, он честно
+  /// отвечает, что файлы сохранены в сессии (ADR-019).
+  void _sendFilesOnly(
+    String chatId,
+    String commandId,
+    List<ChatAttachment> attachments,
+  ) {
+    final command = ChatMessage(
+      id: commandId,
+      author: ChatAuthor.user,
+      text: '',
+      timestamp: _now,
+      attachments: attachments,
+    );
+    final response = widget.assistant.attachmentsSaved(attachments.length);
+    setState(() {
+      _book.append(chatId, command);
+      _book.append(chatId, _answer(response));
+      _commandCursor = null;
+      _cube = cubeStateFor(response.status);
+    });
+    _cubeTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted && !_sending) setState(() => _cube = CubeState.idle);
+    });
+    _scrollToLatest();
+    _inputFocus.requestFocus();
+  }
+
+  /// Что не прикрепилось: слишком большие файлы и сбои копирования.
+  void _reportImport(AttachmentImport imported, int requested) {
+    final skipped = requested - AttachmentStore.maxPerMessage;
+    if (imported.tooLarge.isNotEmpty) {
+      _announce(
+        imported.tooLarge.length == 1
+            ? 'Файл больше 25 МБ — такие пока не прикрепляются'
+            : 'Файлы больше 25 МБ — такие пока не прикрепляются '
+                '(${imported.tooLarge.length})',
+      );
+    } else if (imported.failed > 0) {
+      _announce('Не удалось сохранить файл в сессии');
+    } else if (skipped > 0) {
+      _announce(
+        'К сообщению прикрепляется не больше '
+        '${AttachmentStore.maxPerMessage} файлов',
+      );
+    }
+  }
+
+  /// «+» → «Прикрепить файл»: системный выбор файлов. Файлы ждут
+  /// отправки чипами над полем ввода.
+  Future<void> _pickFiles(PickKind kind) async {
+    if (!_book.store.attachments.persistent) {
+      _announce('В режиме «Только в памяти» файлы не сохраняются');
+      return;
+    }
+    final room = AttachmentStore.maxPerMessage - _pendingFiles.length;
+    if (room <= 0) {
+      _announce(
+        'К сообщению прикрепляется не больше '
+        '${AttachmentStore.maxPerMessage} файлов',
+      );
+      return;
+    }
+    final List<AttachmentSource> picked;
+    try {
+      picked = await widget.attachmentPicker.pick(kind);
+    } on Object {
+      if (mounted) _announce('Не удалось открыть выбор файлов');
+      return;
+    }
+    if (!mounted || picked.isEmpty) return;
+    final chosen = <_PendingFile>[];
+    var tooLarge = 0;
+    for (final source in picked) {
+      int size;
+      try {
+        size = await source.length();
+      } on Object {
+        continue;
+      }
+      if (size > AttachmentStore.maxBytes) {
+        tooLarge++;
+        continue;
+      }
+      // Имя файла может нести токен или пароль: в чат и на диск — без
+      // них.
+      final name = ChatAttachment.cleanName(
+        SecretGuard.redact(
+          LoginLinks.redact(source.name),
+          known: widget.assistant.knownSecret,
+        ).text,
+      );
+      chosen.add(
+        (
+          source: source,
+          name: name,
+          kind: AttachmentKind.of(name, source.mimeType),
+          size: size,
+        ),
+      );
+    }
+    if (!mounted) return;
+    if (tooLarge > 0) {
+      _announce('Файл больше 25 МБ — такие пока не прикрепляются');
+    }
+    if (chosen.length > room) {
+      _announce(
+        'К сообщению прикрепляется не больше '
+        '${AttachmentStore.maxPerMessage} файлов',
+      );
+    }
+    setState(() => _pendingFiles.addAll(chosen.take(room)));
+    _inputFocus.requestFocus();
+  }
+
+  /// «+» → «Облачный диск» → «Подключить диск»: дисков ещё нет, честное
+  /// пояснение и путь к файлам с устройства.
+  Future<void> _explainCloudDisks() async {
+    final attach = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: AssistantColors.raised,
+      builder: (BuildContext context) => SafeArea(
+        child: Padding(
+          key: const Key('cloud-disk-info'),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text(
+                'Облачный диск',
+                style: TextStyle(
+                  fontSize: 17,
+                  color: AssistantColors.textStrong,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '${CloudDisk.yandex.label} и ${CloudDisk.google.label} '
+                'появятся позже. Пока файлы можно прикрепить с устройства.',
+                style: const TextStyle(fontSize: 14, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Понятно'),
+                  ),
+                  FilledButton.icon(
+                    key: const Key('cloud-disk-attach'),
+                    onPressed: () => Navigator.of(context).pop(true),
+                    icon: const Icon(Icons.attach_file, size: 18),
+                    label: const Text('Прикрепить файл'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (attach == true && mounted) await _pickFiles(PickKind.any);
   }
 
   /// Ответ на команду из режима «Документ» — коротким уведомлением над
@@ -850,17 +1132,80 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
   }
 
-  void _insertTemplate(CommandTemplate template) =>
-      _applyTemplate(template.template);
+  /// Каталог команд включённых навыков для «+» и «Найти команду»
+  /// (ADR-020): с выбранной задачей — и команды о ней, в сессии папки с
+  /// меткой — «Задача в проект» с этой меткой.
+  CommandCatalog get _catalog {
+    final selected = _selectedTask;
+    return CommandCatalog.build(
+      connectors: widget.assistant.connectors,
+      hasSelection: selected != null && selected.isActive,
+      projectTag: _book.projectOf(_book.current.id)?.taskTag,
+      passwordActions: widget.passwords != null,
+    );
+  }
 
+  /// Выбор команды из «+» или «Найти команду»: счётчик по id (текст не
+  /// хранится), затем вставка шаблона или действие.
+  void _runCommand(CommandEntry entry) {
+    _countCommand(entry.id);
+    switch (entry.kind) {
+      case CommandKind.insert:
+        _applyTemplate(entry.template);
+      case CommandKind.action:
+        switch (entry.id) {
+          case 'pw.open':
+            unawaited(_openPasswords());
+          case 'pw.generate':
+            unawaited(_openGenerator());
+          case 'pw.add':
+            unawaited(_openPasswords(add: true));
+        }
+    }
+  }
+
+  void _countCommand(String id) {
+    final usage = CommandUsage.bump(_settings.commandUsage, id);
+    if (identical(usage, _settings.commandUsage)) return;
+    final settings = _settings.copyWith(commandUsage: usage);
+    widget.assistant.commandUsage = usage;
+    setState(() => _settings = settings);
+    unawaited(_settingsStore.save(settings));
+  }
+
+  Future<void> _findCommand() async {
+    final entry = await showCommandFinder(context, _catalog);
+    if (!mounted || entry == null) return;
+    _runCommand(entry);
+  }
+
+  /// Шаблон в поле ввода; `|` — место курсора. Пустое поле шаблон
+  /// заменяет, а в начатый черновик он вставляется на место курсора
+  /// через пробел: набранное не теряется.
   void _applyTemplate(String template) {
     final cursor = template.indexOf('|');
-    final text = template.replaceFirst('|', '');
+    final insert = template.replaceFirst('|', '');
+    final value = _input.value;
+    final String text;
+    final int offset;
+    if (value.text.trim().isEmpty) {
+      text = insert;
+      offset = cursor < 0 ? text.length : cursor;
+    } else {
+      final selection = value.selection.isValid
+          ? value.selection
+          : TextSelection.collapsed(offset: value.text.length);
+      final before = value.text.substring(0, selection.start);
+      final after = value.text.substring(selection.end);
+      final lead = before.isEmpty || RegExp(r'\s$').hasMatch(before) ? '' : ' ';
+      final tail = after.isEmpty || RegExp(r'^\s').hasMatch(after) ? '' : ' ';
+      text = '$before$lead$insert$tail$after';
+      offset =
+          before.length + lead.length + (cursor < 0 ? insert.length : cursor);
+    }
     _input.value = TextEditingValue(
       text: text,
-      selection: TextSelection.collapsed(
-        offset: cursor < 0 ? text.length : cursor,
-      ),
+      selection: TextSelection.collapsed(offset: offset),
     );
     if (_section != AppSection.session) {
       setState(() => _section = AppSection.session);
@@ -904,7 +1249,28 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (messageIndex < 0) return;
     setState(() => _highlightedCommand = commandIndex);
-    final key = _messageKeys.putIfAbsent(messageIndex, GlobalKey.new);
+    await _scrollToRow(_messageKeys.putIfAbsent(messageIndex, GlobalKey.new));
+  }
+
+  /// Прокручивает ленту к сообщению [messageId] из поиска и подсвечивает
+  /// его. Сообщения уже нет (обрезано, удалено) — лента остаётся внизу.
+  Future<void> _jumpToMessage(String messageId) async {
+    if (!_messages.any((ChatMessage m) => m.id == messageId)) return;
+    if (_mode != AssistantViewMode.dialogue) {
+      _setMode(AssistantViewMode.dialogue);
+    }
+    setState(() {
+      _highlightedCommand = null;
+      _highlightedMessageId = messageId;
+    });
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    await _scrollToRow(_hitRowKey);
+  }
+
+  /// Лента строится лениво: строки [key] может ещё не быть — прокручиваем
+  /// шагами вверх, пока она не появится, и затем выравниваем её.
+  Future<void> _scrollToRow(GlobalKey key) async {
     for (var step = 0; step < 200 && key.currentContext == null; step++) {
       if (!_chatScroll.hasClients) return;
       final position = _chatScroll.position;
@@ -936,13 +1302,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     widget.assistant
       ..forgetChatSelections()
       ..enterChat(sessionId: _book.currentId);
+    if (_section == AppSection.project &&
+        _book.project(_openProjectId) == null) {
+      _section = AppSection.projects;
+    }
     setState(() {
       _mode = AssistantViewMode.dialogue;
       _docToast = null;
       _messageKeys.clear();
-      _commands.clear();
       _commandCursor = null;
       _highlightedCommand = null;
+      _highlightedMessageId = null;
       // Чатов на диске больше нет: активность — по тому, что в памяти.
       _storedChats = <String, List<ChatMessage>>{};
     });
@@ -1037,32 +1407,46 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// — режим после открытия; `null` — прежний (панель «Активные» не
   /// переключает документ на диалог). Повторное нажатие на задачу открытого
   /// чата ничего не меняет.
-  void _openTaskChat(Task task, {AssistantViewMode? mode}) {
+  void _openTaskChat(
+    Task task, {
+    AssistantViewMode? mode,
+    VoidCallback? onLoaded,
+  }) {
     if (_book.current.taskId == task.id) {
       // Тот же чат: только вернуться в сессию из раздела — контекст
       // помощника (ожидание ответа, «её») не сбрасывается.
       _closeDrawers();
       _showSession();
       if (mode != null && mode != _mode) _setMode(mode);
+      onLoaded?.call();
       return;
     }
     _chatCreations++;
-    _switchChat(() => _book.openTask(task.id), mode: mode);
+    _switchChat(
+      () => _book.openTask(task.id),
+      mode: mode,
+      onLoaded: onLoaded,
+    );
   }
 
   /// Открывает чат [chatId] в «Диалоге». Тот же чат в «Документе» тоже
   /// переключается на «Диалог»: в документе ленты нет, и карточка, ради
   /// которой пришли (например, из «Сводки»), иначе не видна.
-  void _openChat(String chatId) {
-    if (chatId == _book.currentId) {
+  void _openChat(String chatId, {VoidCallback? onLoaded}) {
+    if (_book.resolve(chatId) == _book.currentId) {
       _closeDrawers();
       _showSession();
       if (_mode != AssistantViewMode.dialogue) {
         _setMode(AssistantViewMode.dialogue);
       }
+      onLoaded?.call();
       return;
     }
-    _switchChat(() => _book.open(chatId), mode: AssistantViewMode.dialogue);
+    _switchChat(
+      () => _book.open(chatId),
+      mode: AssistantViewMode.dialogue,
+      onLoaded: onLoaded,
+    );
   }
 
   void _showSession() {
@@ -1076,41 +1460,51 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// Переключение сразу: сообщения незагруженного чата появятся, когда
   /// прочитаются.
+  ///
+  /// [keepSection] — остаться в открытом разделе («Задачи», «Проекты»):
+  /// удалили открытую сессию из панели, а смотрят не её. [onLoaded] —
+  /// после того как сообщения чата прочитаны и показаны.
   void _switchChat(
     Future<ChatThread> Function() open, {
     AssistantViewMode? mode,
     bool closeDrawer = true,
+    bool keepSection = false,
+    VoidCallback? onLoaded,
   }) {
     if (closeDrawer) _closeDrawers();
     unawaited(_saveDocument());
     final wasLoaded = _book.loaded;
     final loading = open();
-    if (wasLoaded) _onChatChanged(mode: mode);
+    if (wasLoaded) _onChatChanged(mode: mode, keepSection: keepSection);
     unawaited(
       loading.then((_) {
         if (!mounted) return;
         if (wasLoaded) {
           setState(() {});
         } else {
-          _onChatChanged(mode: mode);
+          _onChatChanged(mode: mode, keepSection: keepSection);
         }
+        onLoaded?.call();
       }),
     );
   }
 
   /// Открыт другой чат: контекст помощника («её», ожидание вопроса),
   /// документ и лента — по нему.
-  void _onChatChanged({AssistantViewMode? mode}) {
+  void _onChatChanged({AssistantViewMode? mode, bool keepSection = false}) {
     final current = _book.current;
     widget.assistant.enterChat(
       taskId: current.taskId,
       sessionId: current.isSession ? current.id : null,
+      projectTag: _book.projectOf(current.id)?.taskTag,
     );
     setState(() {
-      _section = AppSection.session;
+      if (!keepSection) _section = AppSection.session;
       if (mode != null) _mode = mode;
       _messageKeys.clear();
       _highlightedCommand = null;
+      _highlightedMessageId = null;
+      _commandCursor = null;
       _docToast = null;
     });
     unawaited(_syncDocument());
@@ -1472,7 +1866,23 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         AppSection.planning => 'planning',
         _ => null,
       },
+      projects: <ProjectEntry>[
+        for (final project in _book.projects())
+          ProjectEntry(
+            id: project.id,
+            name: project.name,
+            sessions: _book.projectSessionCount(project.id),
+            active:
+                _section == AppSection.project && _openProjectId == project.id,
+          ),
+      ],
+      onOpenProject: _openProject,
+      onNewProject: () => unawaited(_createProject()),
       groups: _sessionGroups(now),
+      hiddenSessions: _book.groups(now, limit: _sessionsShown).hidden,
+      onShowMoreSessions: () => setState(
+        () => _sessionsShown += ChatBook.sessionsLimit,
+      ),
       counts: _sectionCounts(now),
       extensions: _extensionEntries(),
       onOpenMyRelay: () => _openMyRelay(MyRelayTab.summary),
@@ -1487,7 +1897,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         query,
         titles: <String, String>{for (final task in _all) task.id: task.title},
       ),
-      onOpenHit: (ChatSearchHit hit) => _openSessionEntry(hit.chatId),
+      onOpenHit: (ChatSearchHit hit) =>
+          _openSessionEntry(hit.chatId, messageId: hit.messageId),
       timeLabel: (DateTime at) => sessionTimeLabel(at, _now),
       assistants: _settings.personas.cast.active,
     );
@@ -1497,10 +1908,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// просроченные задачи, проекты с открытыми задачами, задачи со сроком
   /// сегодня и дальше. Нечего считать — без счётчика.
   SectionCounts _sectionCounts(DateTime now) {
-    final projects = <String>{
-      for (final task in _active)
-        if (task.project case final String project) project,
-    };
+    // «Проекты» — папки (ADR-018); метки задач — на экране «Проекты».
+    final projects = _book.projects();
     final planning = upcomingCount(_active, now);
     return SectionCounts(
       tasks: _active.length,
@@ -1514,7 +1923,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// «Ранее» (ChatBook.groups).
   List<SessionGroupEntry> _sessionGroups(DateTime now) {
     final inSession = _section == AppSection.session;
-    final groups = _book.groups(now);
+    final groups = _book.groups(now, limit: _sessionsShown);
     SessionGroupEntry group(String id, String label, List<ChatThread> list) =>
         SessionGroupEntry(
           id: id,
@@ -1539,12 +1948,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     ChatThread thread,
     DateTime now,
     bool inSession,
-    String group,
-  ) {
+    String group, {
+    bool showProject = true,
+  }) {
     final active = inSession && _book.currentId == thread.id;
     final time = sessionRowTimeLabel(thread.lastActivityAt, now, group);
     final persona = _settings.personas.cast.find(thread.lastPersonaId);
     final canAct = thread.messageCount > 0;
+    // На экране самого проекта его название в каждой строке не нужно.
+    final projectName =
+        showProject ? _book.project(thread.projectId)?.name : null;
     switch (thread.kind) {
       // ChatKind.main в книге не бывает (переносится в сессию при чтении).
       case ChatKind.main:
@@ -1562,6 +1975,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           pinned: thread.pinned,
           canAct: canAct,
           canRename: canAct,
+          canMove: canAct,
+          projectName: projectName,
         );
       case ChatKind.task:
         final task = _findTask(thread.taskId);
@@ -1579,6 +1994,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           persona: persona,
           pinned: thread.pinned,
           canAct: canAct,
+          projectName: projectName,
         );
     }
   }
@@ -1596,6 +2012,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         setState(() => _book.rename(thread.id, name));
       case SessionAction.pin:
         setState(() => _book.setPinned(thread.id, !thread.pinned));
+      case SessionAction.move:
+        await _moveSession(thread);
       case SessionAction.delete:
         final confirmed = await showDeleteSessionDialog(
           context,
@@ -1609,12 +2027,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           // Ответ в удалённую сессию пропадёт (ChatBook.append — false).
           _workingChatId = null;
         }
+        // Выбор («её») удалённой сессии больше не нужен.
+        if (thread.isSession) widget.assistant.forgetChat(thread.id);
         if (wasCurrent) {
-          // Открыта пустая сессия, как по «+»; меню остаётся открытым.
+          // Открыта пустая сессия, как по «+»; меню остаётся открытым, а
+          // раздел («Задачи» на компьютере) — тот же.
           _switchChat(
             _book.newSession,
             mode: AssistantViewMode.dialogue,
             closeDrawer: false,
+            keepSection: true,
           );
         } else {
           setState(() {});
@@ -1622,14 +2044,201 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  void _openSessionEntry(String chatId) {
+  // ------------------------------------------------------ проекты-папки
+
+  /// «В проект…»: лист с папками, «Новый проект…», «Убрать из проекта».
+  Future<void> _moveSession(ChatThread thread) async {
+    final choice = await showMoveToProjectSheet(
+      context,
+      projects: _book.projects(),
+      currentProjectId: thread.projectId,
+    );
+    if (choice == null || !mounted) return;
+    String? target;
+    switch (choice) {
+      case MoveToProject(:final projectId):
+        target = projectId;
+      case MoveOutOfProject():
+        target = null;
+      case MoveToNewProject():
+        final created = await _createProject(open: false);
+        if (created == null || !mounted) return;
+        target = created.id;
+    }
+    setState(() => _book.moveToProject(thread.id, target));
+    if (thread.id == _book.currentId) {
+      widget.assistant.setProjectTag(_book.project(target)?.taskTag);
+    }
+    final name = _book.project(target)?.name;
+    _announce(
+      name == null
+          ? 'Сессия вынесена из проекта'
+          : 'Сессия — в проекте «$name»',
+    );
+  }
+
+  /// «Новый проект»: окно с названием и описанием; [open] — сразу открыть
+  /// его экран. [taskTag] — связать с меткой задач («Сделать папкой»).
+  Future<ChatProject?> _createProject({
+    bool open = true,
+    String? name,
+    String? taskTag,
+  }) async {
+    final draft = await showProjectDialog(context, name: name ?? '');
+    if (draft == null || !mounted) return null;
+    final project = _book.createProject(
+      draft.name,
+      description: draft.description,
+      taskTag: taskTag,
+    );
+    if (project == null) return null;
+    if (open) {
+      _openProject(project.id);
+    } else {
+      setState(() {});
+    }
+    return project;
+  }
+
+  /// Экран проекта-папки [projectId].
+  void _openProject(String projectId) {
+    if (_book.project(projectId) == null) return;
+    unawaited(_saveDocument());
+    _closeDrawers();
+    setState(() {
+      _section = AppSection.project;
+      _openProjectId = projectId;
+    });
+    unawaited(_refresh());
+  }
+
+  /// «Новая сессия в проекте»: пустая сессия сразу в этой папке.
+  void _newSessionIn(String projectId) {
+    unawaited(_saveDocument());
+    _switchChat(
+      () => _book.newSession(projectId: projectId),
+      mode: AssistantViewMode.dialogue,
+    );
+    _inputFocus.requestFocus();
+  }
+
+  /// Меню «⋯» на экране проекта.
+  Future<void> _projectAction(ChatProject project, ProjectAction action) async {
+    switch (action) {
+      case ProjectAction.rename:
+        final name = await showRenameSessionDialog(
+          context,
+          current: project.name,
+          title: 'Переименовать проект',
+        );
+        if (name == null || !mounted) return;
+        setState(() => _book.renameProject(project.id, name));
+      case ProjectAction.describe:
+        final draft = await showProjectDialog(
+          context,
+          title: 'Проект',
+          action: 'Сохранить',
+          name: project.name,
+          description: project.description,
+        );
+        if (draft == null || !mounted) return;
+        setState(() {
+          _book
+            ..renameProject(project.id, draft.name)
+            ..setProjectDescription(project.id, draft.description);
+        });
+      case ProjectAction.tag:
+        final linked = <String>{
+          for (final p in _book.projects())
+            if (p.taskTag case final String tag) tag,
+        };
+        final free = <String>{
+          for (final task in _active)
+            if (task.project case final String tag)
+              if (!linked.contains(tag)) tag,
+        }.toList()
+          ..sort();
+        final result = await showProjectTagDialog(
+          context,
+          current: project.taskTag,
+          suggestions: free.take(8).toList(),
+        );
+        if (result == null || !mounted) return;
+        final other =
+            result.tag == null ? null : _book.projectForTag(result.tag!);
+        if (other != null && other.id != project.id) {
+          _announce('Метка #${result.tag} уже у проекта «${other.name}»');
+          return;
+        }
+        setState(() => _book.linkProjectTag(project.id, result.tag));
+        if (_book.current.projectId == project.id) {
+          widget.assistant.setProjectTag(result.tag);
+        }
+      case ProjectAction.pin:
+        setState(() => _book.setProjectPinned(project.id, !project.pinned));
+      case ProjectAction.delete:
+        final count = _book.projectSessionCount(project.id);
+        final choice = await showDeleteProjectDialog(
+          context,
+          name: project.name,
+          sessions: count,
+        );
+        if (choice == null || !mounted) return;
+        final deleting = choice == ProjectDeleteChoice.deleteSessions;
+        // Забыть в помощнике ровно стёртые чаты: не открытую пустую сессию
+        // (она остаётся), но и чаты задач проекта (их тоже стирают).
+        final removed = <String>{};
+        final wasCurrent = await _book.deleteProject(
+          project.id,
+          deleteSessions: deleting,
+          removed: removed,
+        );
+        if (!mounted) return;
+        for (final id in removed) {
+          if (_workingChatId == id) _workingChatId = null;
+          widget.assistant.forgetChat(id);
+        }
+        setState(() {
+          _section = AppSection.projects;
+          _openProjectId = null;
+        });
+        if (wasCurrent) {
+          _switchChat(
+            _book.newSession,
+            mode: AssistantViewMode.dialogue,
+            closeDrawer: false,
+            keepSection: true,
+          );
+        } else {
+          // Открытая сессия могла быть в этом проекте (и остаться, если она
+          // пустая, — даже при «Удалить вместе с сессиями»): метки больше
+          // нет.
+          widget.assistant.setProjectTag(
+            _book.projectOf(_book.currentId)?.taskTag,
+          );
+        }
+    }
+  }
+
+  /// Открывает строку панели или результат поиска; [messageId] — к
+  /// найденному сообщению: лента прокручивается к нему, оно подсвечено.
+  void _openSessionEntry(String chatId, {String? messageId}) {
     final thread = _book.thread(chatId);
     final task =
         thread?.kind == ChatKind.task ? _findTask(thread!.taskId) : null;
+    final VoidCallback? onLoaded = messageId == null
+        ? null
+        : () => WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) unawaited(_jumpToMessage(messageId));
+            });
     if (task != null) {
-      _openTaskChat(task, mode: AssistantViewMode.dialogue);
+      _openTaskChat(
+        task,
+        mode: AssistantViewMode.dialogue,
+        onLoaded: onLoaded,
+      );
     } else {
-      _openChat(chatId);
+      _openChat(chatId, onLoaded: onLoaded);
     }
   }
 
@@ -1929,14 +2538,20 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       );
     } else if (!inSession) {
-      title = _SectionTitle(title: _section.title);
+      title = _SectionTitle(
+        title: _section == AppSection.project
+            ? _book.project(_openProjectId)?.name ?? _section.title
+            : _section.title,
+      );
     } else {
       title = null;
     }
     final current = _book.current;
-    final sessionTitle = current.kind == ChatKind.task
-        ? (_findTask(current.taskId)?.title ?? 'Задача')
-        : ChatBook.titleOf(current);
+    // В шапке — тот, кто отвечает в этой сессии: последний ответивший, а
+    // до первого ответа — кто ответит по составу.
+    final responder =
+        _settings.personas.cast.find(current.lastPersonaId) ?? persona;
+    final canAct = current.messageCount > 0;
     // Material, а не ColoredBox: на нём рисуются подсветка и всплески
     // нажатий у ListTile и кнопок во всех разделах.
     final workspace = Material(
@@ -1947,12 +2562,22 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             wide: wide || title != null,
             leading: leading,
             title: title,
-            personaName: persona.russianName,
-            onPersona: () => _openMyRelay(MyRelayTab.assistants),
-            // У пустой сессии названия ещё нет — подпись не нужна.
-            subtitle: wide && current.messageCount > 0
-                ? 'сессия «$sessionTitle»'
+            // Задача в фокусе: меню сессии — кнопкой рядом с «Задачи ›
+            // «её»», а не пропадает до «назад».
+            sessionMenuBeside: taskInFocus != null,
+            sessionTitle: ChatBook.titleOf(current),
+            persona: responder,
+            // Меню сессии — как долгое нажатие в панели. Пустую сессию
+            // переименовывать и удалять ещё нечего.
+            onSessionAction: canAct
+                ? (SessionAction action) =>
+                    unawaited(_sessionAction(current.id, action))
                 : null,
+            pinned: current.pinned,
+            canRename: current.isSession,
+            canMove: current.isSession,
+            projectName: _book.projectOf(current.id)?.name,
+            reduceMotion: _settings.reduceMotion,
             // «Сегодня» — колонкой справа на компьютере; свёрнута — кнопка
             // в шапке. На телефоне кнопки нет: это «Мой Tridot» → «Сводка».
             trailing: wide && !today ? _todayShowButton() : null,
@@ -2124,6 +2749,64 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           selectedId: selectedId,
           onOpenTask: open,
           onToggleDone: _toggleDone,
+          folders: <ProjectFolderCard>[
+            for (final project in _book.projects())
+              ProjectFolderCard(
+                id: project.id,
+                name: project.name,
+                description: project.description,
+                taskTag: project.taskTag,
+                sessions: _book.projectSessionCount(project.id),
+              ),
+          ],
+          onOpenFolder: _openProject,
+          onNewFolder: () => unawaited(_createProject()),
+          onMakeFolder: (String tag) =>
+              unawaited(_createProject(name: tag, taskTag: tag)),
+        );
+      case AppSection.project:
+        final project = _book.project(_openProjectId);
+        if (project == null) {
+          return ProjectsScreen(
+            tasks: _active,
+            now: now,
+            selectedId: selectedId,
+            onOpenTask: open,
+            onToggleDone: _toggleDone,
+          );
+        }
+        final tag = project.taskTag;
+        return ProjectScreen(
+          project: project,
+          now: now,
+          reduceMotion: _settings.reduceMotion,
+          sessions: <SessionEntry>[
+            for (final thread in _book.sessionsOf(project.id))
+              if (_sessionEntry(
+                thread,
+                now,
+                false,
+                'pinned',
+                showProject: false,
+              )
+                  case final SessionEntry e)
+                e,
+          ],
+          tasks: tag == null
+              ? const <Task>[]
+              : <Task>[
+                  for (final task in _active)
+                    if (task.tags.contains(tag)) task,
+                ],
+          selectedTaskId: selectedId,
+          onOpenTask: open,
+          onToggleDone: _toggleDone,
+          onNewSession: () => _newSessionIn(project.id),
+          onOpenSession: _openSessionEntry,
+          onSessionAction: (String id, SessionAction action) =>
+              unawaited(_sessionAction(id, action)),
+          onAction: (ProjectAction action) =>
+              unawaited(_projectAction(project, action)),
         );
       case AppSection.planning:
         return PlanningScreen(
@@ -2144,15 +2827,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  /// Пустая новая сессия: знак Садо, строки ведущего оповещений, строка
-  /// о ролях помощников голосом Садо и, пока род Садо не выбран, карточка
-  /// выбора.
+  /// Пустая новая сессия: знак главного, строки ведущего оповещений,
+  /// строка о ролях помощников голосом главного и, пока род главного не
+  /// выбран, карточка выбора.
   Widget _sessionHero(int overdue) {
     final personas = _settings.personas;
     final main = personas.responder;
     final extensions = widget.assistant.extensions;
     return SessionHero(
       persona: main,
+      projectName: _book.projectOf(_book.currentId)?.name,
       notifier: personas.notifier,
       overdue: overdue,
       onOverdue: () => _openMyRelay(MyRelayTab.summary),
@@ -2188,10 +2872,12 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _buildConversationColumn(double height, {required bool wide}) {
     final current = _book.current;
+    // Ответ готовится в другой сессии — эта пустая сессия всё равно
+    // показывает заставку.
     final hero = _mode == AssistantViewMode.dialogue &&
         current.isSession &&
         current.messageCount == 0 &&
-        !_sending;
+        !(_sending && _workingChatId == current.id);
     final history = hero ? const <HistoryEntry>[] : _historyEntries;
     final rail = history.isNotEmpty;
     final now = _now;
@@ -2342,38 +3028,49 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ? ValueKey<String>('secure-row-${message.id}')
               : null;
       final (linkLabel, linkKey) = _linkOf(message);
+      final hit = message.id == _highlightedMessageId;
+      final row = _MessageRow(
+        cast: _settings.personas.cast,
+        key: key,
+        message: message,
+        attachments: _book.store.attachments,
+        commandSpans: _commandSpansOf(message),
+        // В чате задачи плитка самой задачи под ответами не нужна: она в
+        // шапке.
+        task: message.taskId == _book.current.taskId
+            ? null
+            : _findTask(message.taskId),
+        now: _now,
+        showTime: _settings.showTimestamps,
+        highlighted: hit || commandIndexOf[i] == _highlightedCommand,
+        cube: i == latestAnswer && !_sending ? _cubeWidget() : null,
+        selectedId: _selectedTask?.id,
+        onOpenTask: (Task task) =>
+            _openTaskChat(task, mode: AssistantViewMode.dialogue),
+        onToggleDone: _toggleDone,
+        linkLabel: linkLabel,
+        linkKey: linkKey,
+        onOpenLink: linkLabel == null ? null : () => _followLink(message.link!),
+        checklist: _checklistCard(
+              message,
+              i,
+              lastWithChecklist,
+              viewportHeight,
+            ) ??
+            _actionCard(message, i, lastWithCard) ??
+            _secureCard(message) ??
+            _clarifyOptions(message) ??
+            (i == latestAnswer ? _suggestionChips(message) : null),
+      );
+      // Сообщение из поиска: к нему прокручивается лента
+      // ([_jumpToMessage]).
       rows.add(
-        _MessageRow(
-          cast: _settings.personas.cast,
-          key: key,
-          message: message,
-          // В чате задачи плитка самой задачи под ответами не нужна: она в
-          // шапке.
-          task: message.taskId == _book.current.taskId
-              ? null
-              : _findTask(message.taskId),
-          now: _now,
-          showTime: _settings.showTimestamps,
-          highlighted: commandIndexOf[i] == _highlightedCommand,
-          cube: i == latestAnswer && !_sending ? _cubeWidget() : null,
-          selectedId: _selectedTask?.id,
-          onOpenTask: (Task task) =>
-              _openTaskChat(task, mode: AssistantViewMode.dialogue),
-          onToggleDone: _toggleDone,
-          linkLabel: linkLabel,
-          linkKey: linkKey,
-          onOpenLink:
-              linkLabel == null ? null : () => _followLink(message.link!),
-          checklist: _checklistCard(
-                message,
-                i,
-                lastWithChecklist,
-                viewportHeight,
-              ) ??
-              _actionCard(message, i, lastWithCard) ??
-              _secureCard(message) ??
-              _clarifyOptions(message),
-        ),
+        hit
+            ? KeyedSubtree(
+                key: _hitRowKey,
+                child: KeyedSubtree(key: Key('msg-${message.id}'), child: row),
+              )
+            : row,
       );
     }
     final working = _working;
@@ -2420,6 +3117,19 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// в чате задачи (сессия, где задачу создали, или задача-родитель).
   /// Ссылка на открытый чат, на удалённую задачу или на чат, которого
   /// больше нет, не показывается.
+  /// Что навыки распознали в команде [message] (ADR-021): только у
+  /// сообщений пользователя.
+  List<CommandSpan> _commandSpansOf(ChatMessage message) {
+    if (!message.fromUser || message.text.trim().isEmpty) {
+      return const <CommandSpan>[];
+    }
+    final key = '${message.id}\u0000${message.text}';
+    final cached = _spanCache[key];
+    if (cached != null) return cached;
+    if (_spanCache.length >= 600) _spanCache.clear();
+    return _spanCache[key] = widget.assistant.highlight(message.text);
+  }
+
   (String?, Key?) _linkOf(ChatMessage message) {
     final link = message.link;
     if (link == null) return (null, null);
@@ -2551,6 +3261,44 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  /// Подсказка команд под ответом «не до конца понял» (ADR-022): кнопки
+  /// похожих команд и последней — «Найти команду». Только под последним
+  /// ответом и только в памяти. Нажатие вставляет шаблон в поле ввода
+  /// (`|` — курсор), отправляет пользователь сам; счётчики выбора команд
+  /// не меняются — подсказка ничего не запоминает.
+  Widget? _suggestionChips(ChatMessage message) {
+    final suggestions = message.suggestions;
+    if (suggestions == null) return null;
+    ButtonStyle style() => OutlinedButton.styleFrom(
+          minimumSize: const Size(40, 44),
+          foregroundColor: AssistantColors.textStrong,
+          side: const BorderSide(color: AssistantColors.border),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: <Widget>[
+          for (final suggestion in suggestions.commands)
+            OutlinedButton(
+              key: ValueKey<String>('suggest-${suggestion.entryId}'),
+              style: style(),
+              onPressed: () => _applyTemplate(suggestion.template),
+              child: Text(suggestion.label),
+            ),
+          OutlinedButton.icon(
+            key: const ValueKey<String>('suggest-find'),
+            style: style(),
+            onPressed: () => unawaited(_findCommand()),
+            icon: const Icon(Icons.search, size: 18),
+            label: const Text(CommandSuggestions.findLabel),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Временная карточка навыка «Пароли» (D10): только в памяти, после
   /// перезапуска её нет.
   Widget? _secureCard(ChatMessage message) {
@@ -2671,17 +3419,30 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  /// Отправка занята в открытом чате: ответ готовится здесь (или ещё
+  /// читаются настройки и чаты). Ответ в другой сессии кнопку не
+  /// блокирует — [_send] скажет «Дождитесь ответа в другой сессии».
+  bool get _busyHere =>
+      _sending && (_workingChatId == null || _workingChatId == _book.currentId);
+
   List<HistoryEntry> get _historyEntries => <HistoryEntry>[
         for (var i = 0; i < _messages.length; i++)
           if (_messages[i].fromUser)
             HistoryEntry(
-              command: _messages[i].text,
+              command: _commandLabel(_messages[i]),
               timestamp: _timeLabel(_messages[i].timestamp),
               result: i + 1 < _messages.length && !_messages[i + 1].fromUser
                   ? _messages[i + 1].text
                   : null,
             ),
       ];
+
+  /// Команда в хронике: текст, а у сообщения только из файлов — «Фото»,
+  /// «Файл: отчёт.pdf».
+  static String _commandLabel(ChatMessage message) =>
+      message.text.isNotEmpty || message.attachments.isEmpty
+          ? message.text
+          : message.attachments.first.sessionTitle;
 
   Widget _cubeWidget() => StatusCube(
         state: _cube,
@@ -2725,7 +3486,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   // Кнопки включённых ролей («Кладовщик»): пропадают, как
                   // только роль или её навык выключили.
                   roleChips: widget.assistant.extensions.activeChips,
-                  sending: _sending,
+                  sending: _busyHere,
                   onSend: _send,
                   onTemplate: _applyTemplate,
                   onPassword: _passwordsEnabled ? _openPasswordActions : null,
@@ -2735,35 +3496,32 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: CommandComposer(
               controller: _input,
               focusNode: _inputFocus,
-              sending: _sending,
+              sending: _busyHere,
               mode: _mode,
               onModeChanged: _setMode,
               onSend: _send,
-              onTemplate: _insertTemplate,
-              // Пункты навыка «Пароли» в «+» — пока он включён.
-              extraActions: _passwordsEnabled
-                  ? <ComposerAction>[
-                      ComposerAction(
-                        'Пароли',
-                        Icons.key_outlined,
-                        () => unawaited(_openPasswords()),
-                      ),
-                      ComposerAction(
-                        'Сгенерировать пароль',
-                        Icons.password,
-                        () => unawaited(_openGenerator()),
-                      ),
-                      ComposerAction(
-                        'Добавить запись',
-                        Icons.add_moderator_outlined,
-                        () => unawaited(_openPasswords(add: true)),
-                      ),
-                    ]
-                  : const <ComposerAction>[],
-              onDocumentSource: (DocumentSource source) => _announce(
-                'Подключение «${source.label}» — следующий этап: '
-                'документы будут создаваться и правиться через помощника.',
+              // Четыре частые команды и «Найти команду» (ADR-020);
+              // действия сейфа — там же, пока навык «Пароли» включён.
+              templates: _catalog.top(_settings.commandUsage),
+              onCommand: _runCommand,
+              onFindCommand: () => unawaited(_findCommand()),
+              // Дисков пока нет: список подключённых пуст (ADR-019).
+              cloudDisks: const <CloudDisk>[],
+              onConnectDisk: () => unawaited(_explainCloudDisks()),
+              onCloudDisk: (CloudDisk disk) => _announce(
+                'Выбор файлов с диска «${disk.label}» — следующий этап',
               ),
+              onAttach: (PickKind kind) => unawaited(_pickFiles(kind)),
+              pending: <PendingAttachmentChip>[
+                for (final file in _pendingFiles)
+                  PendingAttachmentChip(
+                    name: file.name,
+                    kind: file.kind,
+                    size: file.size,
+                  ),
+              ],
+              onRemovePending: (int i) =>
+                  setState(() => _pendingFiles.removeAt(i)),
               onVoice: () => _announce(
                 'Голосовой режим в разработке. Пока напишите команду '
                 'текстом.',
@@ -2793,7 +3551,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               const SizedBox(height: 4),
               Text(
                 '$_loadError',
-                style: technicalTextStyle,
+                style: metaTextStyle,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
@@ -2868,7 +3626,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 Text(
                   _panelSummary(),
                   key: const Key('tasks-panel-summary'),
-                  style: technicalTextStyle,
+                  style: metaTextStyle,
                 ),
               ],
             ),
@@ -2934,7 +3692,7 @@ final class _DaySeparator extends StatelessWidget {
           const Expanded(child: Divider()),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(label, style: technicalTextStyle),
+            child: Text(label, style: metaTextStyle),
           ),
           const Expanded(child: Divider()),
         ],
@@ -2987,7 +3745,7 @@ final class _ChatLinkChip extends StatelessWidget {
               ),
               Text(
                 label,
-                style: technicalTextStyle.copyWith(color: AssistantColors.text),
+                style: metaTextStyle.copyWith(color: AssistantColors.text),
               ),
             ],
           ),
@@ -3014,9 +3772,18 @@ final class _MessageRow extends StatelessWidget {
     this.linkLabel,
     this.linkKey,
     this.onOpenLink,
+    this.attachments,
+    this.commandSpans = const <CommandSpan>[],
   });
 
   final ChatMessage message;
+
+  /// Распознанные части команды пользователя: моноширинным с мягким
+  /// цветом (ADR-021).
+  final List<CommandSpan> commandSpans;
+
+  /// Хранилище копий вложений: превью и «файл не найден» (ADR-019).
+  final AttachmentStore? attachments;
 
   /// Состав помощников: старые ответы `rio`/`noda` подписаны текущими
   /// именами.
@@ -3071,7 +3838,7 @@ final class _MessageRow extends StatelessWidget {
                   child: Text(
                     author.russianName,
                     overflow: TextOverflow.ellipsis,
-                    style: technicalTextStyle.copyWith(
+                    style: metaTextStyle.copyWith(
                       color: Color(author.accentColor),
                     ),
                   ),
@@ -3092,42 +3859,80 @@ final class _MessageRow extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 2),
             child: Text(
               label,
-              style: technicalTextStyle.copyWith(color: labelColor),
+              style: metaTextStyle.copyWith(color: labelColor),
             ),
           ),
-        Container(
-          padding: fromUser
-              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
-              : EdgeInsets.zero,
-          decoration: BoxDecoration(
-            color: fromUser ? AssistantColors.bubble : Colors.transparent,
-            border: fromUser
-                ? Border.all(
-                    color: highlighted
-                        ? AssistantColors.textStrong
-                        : AssistantColors.border,
-                    width: highlighted ? 1 : .5,
-                  )
-                : null,
-            borderRadius: fromUser
-                ? const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                    bottomLeft: Radius.circular(16),
-                    bottomRight: Radius.circular(4),
-                  )
-                : BorderRadius.zero,
-          ),
-          child: SelectableText(
-            message.text,
-            style: TextStyle(
-              fontSize: 14,
-              height: 1.5,
-              color:
-                  fromUser ? AssistantColors.textStrong : AssistantColors.text,
+        if (attachments != null && message.attachments.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: message.text.isEmpty ? 0 : 6,
+            ),
+            child: MessageAttachments(
+              attachments: message.attachments,
+              store: attachments!,
+              alignEnd: fromUser,
             ),
           ),
-        ),
+        if (message.text.isNotEmpty || message.attachments.isEmpty)
+          Container(
+            padding: fromUser
+                ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
+                : highlighted
+                    ? const EdgeInsets.only(left: 10)
+                    : EdgeInsets.zero,
+            decoration: BoxDecoration(
+              color: fromUser ? AssistantColors.bubble : Colors.transparent,
+              // Ответ, найденный поиском, — чертой слева: у него нет пузыря.
+              border: fromUser
+                  ? Border.all(
+                      color: highlighted
+                          ? AssistantColors.textStrong
+                          : AssistantColors.border,
+                      width: highlighted ? 1 : .5,
+                    )
+                  : highlighted
+                      ? const Border(
+                          left: BorderSide(
+                            color: AssistantColors.textStrong,
+                            width: 2,
+                          ),
+                        )
+                      : null,
+              borderRadius: fromUser
+                  ? const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(4),
+                    )
+                  : null,
+            ),
+            child: fromUser && commandSpans.isNotEmpty
+                ? SelectableText.rich(
+                    highlightedCommand(
+                      message.text,
+                      CommandSpans.normalize(
+                        commandSpans,
+                        message.text.length,
+                      ),
+                      const TextStyle(
+                        fontSize: 14,
+                        height: 1.5,
+                        color: AssistantColors.textStrong,
+                      ),
+                    ),
+                  )
+                : SelectableText(
+                    message.text,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                      color: fromUser
+                          ? AssistantColors.textStrong
+                          : AssistantColors.text,
+                    ),
+                  ),
+          ),
         if (checklist != null) checklist!,
         if (current != null)
           Container(
@@ -3163,7 +3968,7 @@ final class _MessageRow extends StatelessWidget {
             padding: const EdgeInsets.only(top: 4),
             child: Text(
               _HomePageState._timeLabel(message.timestamp),
-              style: technicalTextStyle,
+              style: metaTextStyle,
             ),
           ),
       ],
@@ -3275,7 +4080,7 @@ final class _TaskCrumb extends StatelessWidget {
             Text(
               'Задачи › «её»',
               maxLines: 1,
-              style: technicalTextStyle.copyWith(height: 1.2),
+              style: metaTextStyle.copyWith(height: 1.2),
             ),
             Text(
               task.title,
@@ -3318,7 +4123,7 @@ final class _TaskCrumb extends StatelessWidget {
                   color: AssistantColors.textStrong,
                 ),
                 const SizedBox(width: 8),
-                const Text('«её»', style: technicalTextStyle),
+                const Text('«её»', style: metaTextStyle),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
@@ -3339,7 +4144,7 @@ final class _TaskCrumb extends StatelessWidget {
                       formatDue(due, task.duePrecision, now),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: technicalTextStyle,
+                      style: metaTextStyle,
                     ),
                   ),
                 ],
@@ -3513,3 +4318,12 @@ final class _DocToast extends StatelessWidget {
     );
   }
 }
+
+/// Файл, выбранный для следующего сообщения: источник, имя для показа
+/// (без секретов), вид и размер.
+typedef _PendingFile = ({
+  AttachmentSource source,
+  String name,
+  AttachmentKind kind,
+  int size,
+});

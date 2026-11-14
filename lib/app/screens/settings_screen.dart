@@ -65,7 +65,7 @@ class SettingsScreen extends StatelessWidget {
         title: const Text('Очистить историю сессий?'),
         content: const Text(
           'Сообщения всех сессий, в том числе сессий задач, будут удалены. '
-          'Задачи останутся на месте.',
+          'Задачи останутся на месте, проекты — пустыми.',
         ),
         actions: <Widget>[
           TextButton(
@@ -116,7 +116,7 @@ class SettingsScreen extends StatelessWidget {
                 title: const Text('Уменьшить анимацию', style: switchTitle),
                 subtitle: const Text(
                   'Кубик и переходы без движения',
-                  style: technicalTextStyle,
+                  style: metaTextStyle,
                 ),
                 value: settings.reduceMotion,
                 onChanged: (value) =>
@@ -174,7 +174,7 @@ class SettingsScreen extends StatelessWidget {
                       canClear
                           ? 'Сообщений: $messageCount'
                           : 'История пуста — очищать нечего',
-                      style: technicalTextStyle,
+                      style: metaTextStyle,
                     ),
                   ],
                 ),

@@ -1,5 +1,6 @@
 import '../../connectors/connector.dart';
 import '../../connectors/social_prefix.dart';
+import '../../scenario/command_spans.dart';
 import 'calculator.dart';
 
 /// Навык «Калькулятор»: считает примеры из сообщения.
@@ -7,7 +8,8 @@ import 'calculator.dart';
 /// Свой разбор выражений и словесных форм ([Calculator]), точная
 /// рациональная арифметика, никакого выполнения кода. Без сети и без
 /// изменения данных.
-final class CalculatorConnector implements Connector, ConnectorHealth {
+final class CalculatorConnector
+    implements Connector, ConnectorHealth, CommandSpanSource {
   const CalculatorConnector();
 
   static const String id = 'calc';
@@ -100,6 +102,30 @@ final class CalculatorConnector implements Connector, ConnectorHealth {
                   : expressionConfidence,
       payload: recognition,
       implicit: !parsed || recognition.clause,
+    );
+  }
+
+  /// Подсветка команды (ADR-021): числа и знаки разобранного примера. У
+  /// примера после «, а …» — только в этой части.
+  @override
+  List<CommandSpan> spansOf(Utterance utterance, ConnectorMatch match) {
+    final recognition = match.payload;
+    if (recognition is! CalcRecognition || recognition.expression == null) {
+      return const <CommandSpan>[];
+    }
+    final text = utterance.original;
+    var from = 0;
+    if (recognition.clause) {
+      final clause = _clause.firstMatch(text);
+      if (clause == null) return const <CommandSpan>[];
+      from = clause.start;
+    }
+    return CommandSpans.normalize(
+      <CommandSpan>[
+        for (final span in CommandSpans.arithmetic(text.substring(from)))
+          span.shift(from),
+      ],
+      text.length,
     );
   }
 

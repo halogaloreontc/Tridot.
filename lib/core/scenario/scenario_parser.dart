@@ -7,6 +7,7 @@ import '../models/bulk.dart';
 import '../models/task.dart';
 import '../services/clock.dart';
 import 'bulk_parser.dart';
+import 'command_spans.dart';
 
 export '../connectors/due_parser.dart' show CharSpan, DueIssue, DueParseResult;
 
@@ -123,8 +124,111 @@ final class ScenarioParser {
 
   final Clock _clock;
 
+  /// Пока работает [spansOf]: какие слова стали названием или целью
+  /// (каждый вызов [_titleText] — по порядку).
+  List<(Utterance, List<UtteranceToken>)>? _probe;
+
   ParsedCommand parse(String message) =>
       parseUtterance(Utterance.analyze(message, now: _clock.now()));
+
+  /// Что из [_titleText] осталось названием: текст для команды, а при
+  /// работе [spansOf] — ещё и слова, из которых он собран.
+  String _titleText(Utterance utterance, List<CharSpan> remove) {
+    final text = utterance.remainder(remove);
+    final probe = _probe;
+    if (probe != null && text.isNotEmpty) {
+      probe.add((utterance, utterance.tokensOutside(remove)));
+    }
+    return text;
+  }
+
+  /// Какие части [utterance] разбор понял (подсветка команды, ADR-021):
+  /// слово команды, название или цель, срок, метки. Тот же разбор, что
+  /// [parseUtterance], — ничего не угадывается отдельно. Пусто, если
+  /// команды нет.
+  List<CommandSpan> spansOf(Utterance utterance) {
+    final probe = <(Utterance, List<UtteranceToken>)>[];
+    final ParsedCommand command;
+    _probe = probe;
+    try {
+      command = parseUtterance(utterance);
+    } finally {
+      _probe = null;
+    }
+    if (command.intent == CommandIntent.unknown) return const <CommandSpan>[];
+    final tokens = utterance.tokens;
+    final dueSpans = command.dueAt != null ||
+            command.shift != null ||
+            command.dueIssue != DueIssue.none
+        ? utterance.due.spans
+        : const <CharSpan>[];
+    final spans = <CommandSpan>[
+      for (final tag in utterance.hashtags)
+        CommandSpan(tag.span.start, tag.span.end, CommandSpanKind.tag),
+      for (final span in dueSpans)
+        if (span.length > 0)
+          CommandSpan(span.start, span.end, CommandSpanKind.due),
+    ];
+    final titleTokens = <UtteranceToken>[];
+    if (command.title != null || command.targetQuery != null) {
+      final quoted = utterance.quotedTitles;
+      if (command.title != null && quoted.length == 1) {
+        final span = quoted.single.span;
+        if (span.length > 2) {
+          spans.add(
+            CommandSpan(span.start + 1, span.end - 1, CommandSpanKind.title),
+          );
+        }
+      } else {
+        // Название собрано из слов этой же фразы (не из «всё, …»).
+        for (final (source, words) in probe.reversed) {
+          if (!identical(source, utterance)) continue;
+          for (final token in words) {
+            if (Utterance.isCovered(token, dueSpans)) continue;
+            titleTokens.add(token);
+            spans.add(
+              CommandSpan(
+                token.span.start,
+                token.span.end,
+                CommandSpanKind.title,
+              ),
+            );
+          }
+          break;
+        }
+      }
+    }
+    if (!command.implicit) {
+      final marker = _detectIntent(utterance);
+      final tail = _commandTail(utterance);
+      final verbs = <UtteranceToken>[];
+      if (marker.found && marker.index >= 0) {
+        for (var i = marker.index;
+            i < marker.index + marker.length && i < tokens.length;
+            i++) {
+          verbs.add(tokens[i]);
+        }
+        final next = marker.index + marker.length;
+        if (next < tokens.length && _objectNouns.contains(tokens[next].text)) {
+          verbs.add(tokens[next]);
+        }
+      } else if (tail != null && command.intent == CommandIntent.createTask) {
+        verbs.addAll(tokens.skip(tail));
+      }
+      for (final token in verbs) {
+        if (titleTokens.contains(token)) continue;
+        if (Utterance.isCovered(token, dueSpans)) continue;
+        spans.add(
+          CommandSpan(token.span.start, token.span.end, CommandSpanKind.verb),
+        );
+      }
+    }
+    final text = utterance.original;
+    return CommandSpans.merge(
+      CommandSpans.normalize(spans, text.length),
+      text,
+    );
+  }
 
   /// Разбор уже проанализированного сообщения: так коннектор не строит
   /// [Utterance] второй раз.
@@ -194,16 +298,32 @@ final class ScenarioParser {
         utterance.quotedTitles.isNotEmpty || utterance.unbalancedQuotes;
     final due = utterance.due;
 
+    // «Перенеси её на завтра в» — шаблон из «+», где время не дописали:
+    // висящий предлог — не название и не цель, а вопрос «Во сколько?».
+    final dangling = _danglingPreposition(utterance);
+    final dueIssue = dangling != null &&
+            due.issue == DueIssue.none &&
+            due.dueAt != null &&
+            due.precision == DuePrecision.date
+        ? DueIssue.missingTime
+        : due.issue;
+
     switch (intent) {
       case CommandIntent.createTask:
         return ParsedCommand(
           intent: intent,
           title: hasQuotes
               ? quoted
-              : _createTitle(utterance, marker.index, marker.length),
+              : _createTitle(
+                  utterance,
+                  marker.index,
+                  marker.length,
+                  // Без срока «на» в конце может быть частью названия.
+                  dangling: due.dueAt == null ? null : dangling,
+                ),
           dueAt: due.dueAt,
           duePrecision: due.precision,
-          dueIssue: due.issue,
+          dueIssue: dueIssue,
           titleIssue: titleIssue,
           projects: <String>[
             for (final tag in utterance.hashtags) tag.name,
@@ -215,10 +335,15 @@ final class ScenarioParser {
           title: quoted,
           targetQuery: hasQuotes
               ? null
-              : _targetQuery(utterance, marker.index, _rescheduleFiller),
+              : _targetQuery(
+                  utterance,
+                  marker.index,
+                  _rescheduleFiller,
+                  dangling: dangling,
+                ),
           dueAt: due.dueAt,
           duePrecision: due.precision,
-          dueIssue: due.issue,
+          dueIssue: dueIssue,
           titleIssue: titleIssue,
         );
       case CommandIntent.completeTask:
@@ -349,10 +474,37 @@ final class ScenarioParser {
   };
 
   /// Название новой задачи без кавычек или `null`, если ничего не осталось.
-  String? _createTitle(Utterance utterance, int markerIndex, int length) {
+  /// Предлог последним словом, не входящий в срок: «… на завтра в»,
+  /// «перенеси её на». Время или день не дописали.
+  static UtteranceToken? _danglingPreposition(Utterance utterance) {
+    final tokens = utterance.tokens;
+    if (tokens.length < 2) return null;
+    final last = tokens.last;
+    if (!_danglingWords.contains(last.text)) return null;
+    if (Utterance.isCovered(last, utterance.due.spans)) return null;
+    return last;
+  }
+
+  static const Set<String> _danglingWords = <String>{
+    'в',
+    'во',
+    'на',
+    'к',
+    'ко',
+    'до',
+    'около',
+  };
+
+  String? _createTitle(
+    Utterance utterance,
+    int markerIndex,
+    int length, {
+    UtteranceToken? dangling,
+  }) {
     final tokens = utterance.tokens;
     final dueSpans = utterance.due.spans;
     final remove = <CharSpan>[
+      if (dangling != null) dangling.span,
       ...dueSpans,
       ..._tailSpans(utterance, markerIndex),
       ..._leadInSpans(utterance, markerIndex),
@@ -457,7 +609,7 @@ final class ScenarioParser {
     if (signUp) remove.add(tokens[i].span);
 
     _trimEdgeWords(utterance, remove, _politeWords);
-    final text = utterance.remainder(remove);
+    final text = _titleText(utterance, remove);
     if (text.isEmpty) return null;
     if (signUp) return 'Записаться $text';
     return Utterance.capitalize(NounForms.nominative(text));
@@ -666,7 +818,7 @@ final class ScenarioParser {
           : null;
     } else {
       _trimEdgeWords(utterance, remove, _politeWords);
-      final text = utterance.remainder(remove);
+      final text = _titleText(utterance, remove);
       if (text.isEmpty) return null;
       title = Utterance.capitalize(
         NounForms.nominative(text, allowPreposition: remind),
@@ -878,7 +1030,7 @@ final class ScenarioParser {
     final reflexive = verb.endsWith('ся') || verb.endsWith('сь');
     if (after.isEmpty && !reflexive && due.spans.isEmpty) return null;
     _trimEdgeWords(utterance, remove, _politeWords);
-    final text = utterance.remainder(remove);
+    final text = _titleText(utterance, remove);
     if (text.isEmpty) return null;
     return ParsedCommand(
       intent: CommandIntent.createTask,
@@ -952,7 +1104,7 @@ final class ScenarioParser {
         .every((UtteranceToken t) => _aboutPronouns.contains(t.text))) {
       return null;
     }
-    final text = utterance.remainder(remove);
+    final text = _titleText(utterance, remove);
     final title = NounForms.nominative(text);
     final preposition = rest.first.original;
     if (title.toLowerCase().startsWith('${preposition.toLowerCase()} ')) {
@@ -1348,7 +1500,7 @@ final class ScenarioParser {
     )) {
       return null;
     }
-    final text = utterance.remainder(remove);
+    final text = _titleText(utterance, remove);
     if (text.isEmpty) return null;
     return ParsedCommand(
       intent: CommandIntent.completeTask,
@@ -1516,8 +1668,9 @@ final class ScenarioParser {
   String? _targetQuery(
     Utterance utterance,
     int markerIndex,
-    Set<String> filler,
-  ) {
+    Set<String> filler, {
+    UtteranceToken? dangling,
+  }) {
     final tokens = utterance.tokens;
     final complete = identical(filler, _completeFiller);
     final dueSpans = <CharSpan>[
@@ -1526,6 +1679,7 @@ final class ScenarioParser {
         if (!complete || !_followsAbout(utterance, span)) span,
     ];
     final remove = <CharSpan>[
+      if (dangling != null) dangling.span,
       ...dueSpans,
       ..._tailSpans(utterance, markerIndex),
       ..._leadInSpans(utterance, markerIndex),
@@ -1592,7 +1746,7 @@ final class ScenarioParser {
     // «перенеси на завтра и потом на послезавтра звонить»: союз между
     // сроками и целью — не цель.
     _trimEdgeWords(utterance, remove, _targetEdgeConjunctions);
-    final text = utterance.remainder(remove);
+    final text = _titleText(utterance, remove);
     if (text.isEmpty) return null;
     // «Перенеси встречу» → «Встреча»: поиск сравнивает слова по основе,
     // поэтому задача находится и по старому названию «Встречу». У цели

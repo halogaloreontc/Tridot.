@@ -9,6 +9,7 @@ import '../../core/chats/chat_search.dart';
 import '../../core/formatting/plural.dart';
 import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
+import '../widgets/app_name_text.dart';
 import '../widgets/personas_section.dart';
 import 'session_hold_menu.dart';
 
@@ -30,6 +31,8 @@ final class SessionEntry {
     this.pinned = false,
     this.canAct = false,
     this.canRename = false,
+    this.canMove = false,
+    this.projectName,
   });
 
   final String id;
@@ -64,6 +67,32 @@ final class SessionEntry {
 
   /// Можно переименовать (сессия; у чата задачи название — задачи).
   final bool canRename;
+
+  /// Можно перенести в проект-папку («В проект…», ADR-018).
+  final bool canMove;
+
+  /// Проект-папка, в которой лежит сессия: маленькая подпись со значком
+  /// папки; `null` — вне проектов.
+  final String? projectName;
+}
+
+/// Проект-папка в панели под «Проектами» (ADR-018).
+final class ProjectEntry {
+  const ProjectEntry({
+    required this.id,
+    required this.name,
+    required this.sessions,
+    this.active = false,
+  });
+
+  final String id;
+  final String name;
+
+  /// Сколько в нём сессий.
+  final int sessions;
+
+  /// Его экран открыт.
+  final bool active;
 }
 
 /// Группа строк в меню: «Закреплённые», «Сегодня», «Вчера», «На неделе»,
@@ -96,7 +125,7 @@ final class SectionCounts {
   /// Из них просрочены: вторая строка «N просрочена» у «Задач».
   final int overdue;
 
-  /// Проекты с открытыми задачами.
+  /// Проекты-папки (ADR-018).
   final int? projects;
 
   /// Задачи со сроком сегодня и дальше.
@@ -237,6 +266,8 @@ final class RelayDrawer extends StatefulWidget {
     required this.onOpenHit,
     required this.timeLabel,
     this.onSessionAction,
+    this.hiddenSessions = 0,
+    this.onShowMoreSessions,
     this.counts = const SectionCounts(),
     this.wide = false,
     this.onCollapse,
@@ -244,7 +275,21 @@ final class RelayDrawer extends StatefulWidget {
     this.reduceMotion = false,
     this.activeSection,
     this.assistants,
+    this.projects = const <ProjectEntry>[],
+    this.onOpenProject,
+    this.onNewProject,
   });
+
+  /// Проекты-папки: строки под «Проектами» ([onOpenProject]), не больше
+  /// [projectsShown]; остальные — на экране «Проекты».
+  final List<ProjectEntry> projects;
+  final ValueChanged<String>? onOpenProject;
+
+  /// «Новый проект» под проектами; `null` — строки нет.
+  final VoidCallback? onNewProject;
+
+  /// Сколько проектов видно в панели.
+  static const int projectsShown = 5;
 
   /// Активные помощники для знаков на карточке «Мой …»; `null` — по
   /// текущему составу.
@@ -262,6 +307,12 @@ final class RelayDrawer extends StatefulWidget {
 
   /// Выбрано действие с сессией (id, действие).
   final void Function(String id, SessionAction action)? onSessionAction;
+
+  /// Сколько сессий не вошло в список ([ChatBook.groups]): под группами —
+  /// строка «Показать ещё N» ([onShowMoreSessions]), и старые сессии не
+  /// пропадают из панели насовсем.
+  final int hiddenSessions;
+  final VoidCallback? onShowMoreSessions;
 
   final SectionCounts counts;
 
@@ -430,6 +481,9 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                         onTasks: widget.onTasks,
                         onProjects: widget.onProjects,
                         onPlanning: widget.onPlanning,
+                        projects: widget.projects,
+                        onOpenProject: widget.onOpenProject,
+                        onNewProject: widget.onNewProject,
                       ),
                       const Padding(
                         padding: EdgeInsets.fromLTRB(10, 6, 10, 0),
@@ -444,6 +498,12 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                       ..._buildHits()
                     else ...<Widget>[
                       ..._buildGroups(),
+                      if (widget.hiddenSessions > 0 &&
+                          widget.onShowMoreSessions != null)
+                        _ShowMoreRow(
+                          count: widget.hiddenSessions,
+                          onTap: widget.onShowMoreSessions!,
+                        ),
                       if (widget.extensions.isNotEmpty) _buildExtensions(),
                     ],
                   ],
@@ -732,7 +792,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                                   widget.wide && !_searching && field >= 200
                                       ? 'Ctrl K'
                                       : null,
-                              suffixStyle: technicalTextStyle,
+                              suffixStyle: metaTextStyle,
                             ),
                           ),
                         ),
@@ -837,7 +897,7 @@ final class _NewSessionButton extends StatelessWidget {
   }
 }
 
-/// Знак приложения: три точки цветами помощников — Садо, Лиорио и Нода
+/// Знак приложения: три точки цветами помощников — Связной, Лиорио и Нода
 /// (ADR-016).
 final class _RelayGlyph extends StatelessWidget {
   const _RelayGlyph();
@@ -857,7 +917,7 @@ final class _RelayGlyph extends StatelessWidget {
 final class RelayGlyphPainter extends CustomPainter {
   const RelayGlyphPainter();
 
-  /// Цвета точек слева направо: Садо, Лиорио, Нода.
+  /// Цвета точек слева направо: Связной, Лиорио, Нода.
   static const List<Color> colors = <Color>[
     AssistantColors.sado,
     AssistantColors.liorio,
@@ -905,16 +965,15 @@ final class _TitlePlate extends StatelessWidget {
                   Flexible(
                     child: Semantics(
                       header: true,
-                      child: const Text(
+                      // Название приложения — шрифтом названия (ADR-021).
+                      child: Text(
                         AppInfo.name,
-                        key: ValueKey<String>('app-name'),
+                        key: const ValueKey<String>('app-name'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w600,
-                          height: 1.2,
-                          color: AssistantColors.textStrong,
+                        style: displayTextStyle.copyWith(
+                          fontSize: 23,
+                          height: 1.1,
                         ),
                       ),
                     ),
@@ -929,7 +988,7 @@ final class _TitlePlate extends StatelessWidget {
                         AppInfo.version,
                         key: const ValueKey<String>('app-version'),
                         maxLines: 1,
-                        style: technicalTextStyle.copyWith(
+                        style: metaTextStyle.copyWith(
                           fontSize: 13,
                           color: AssistantColors.faint,
                         ),
@@ -996,16 +1055,18 @@ final class _MyRelayCard extends StatelessWidget {
                   RelayAvatars(personas: assistants, size: size),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      AppInfo.hubName,
+                    child: Text.rich(
+                      appNameSpan(
+                        AppInfo.hubName,
+                        TextStyle(
+                          fontSize: wide ? 16 : 18,
+                          fontWeight: FontWeight.w600,
+                          height: 1.3,
+                          color: AssistantColors.textStrong,
+                        ),
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: wide ? 16 : 18,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                        color: AssistantColors.textStrong,
-                      ),
                     ),
                   ),
                   Icon(
@@ -1023,7 +1084,7 @@ final class _MyRelayCard extends StatelessWidget {
   }
 }
 
-/// Знаки активных помощников внахлёст: в Соло — один Садо, в Дуэте — два,
+/// Знаки активных помощников внахлёст: в Соло — один Связной, в Дуэте — два,
 /// в Трио — три.
 final class RelayAvatars extends StatelessWidget {
   const RelayAvatars({
@@ -1076,6 +1137,9 @@ final class _Sections extends StatelessWidget {
     required this.onTasks,
     required this.onProjects,
     required this.onPlanning,
+    this.projects = const <ProjectEntry>[],
+    this.onOpenProject,
+    this.onNewProject,
   });
 
   final String? active;
@@ -1084,6 +1148,45 @@ final class _Sections extends StatelessWidget {
   final VoidCallback onTasks;
   final VoidCallback onProjects;
   final VoidCallback onPlanning;
+  final List<ProjectEntry> projects;
+  final ValueChanged<String>? onOpenProject;
+  final VoidCallback? onNewProject;
+
+  /// Папки под строкой «Проекты»: не больше [RelayDrawer.projectsShown],
+  /// затем «Все проекты» (если не вошли). «Новый проект» — кнопка «+» в
+  /// строке «Проекты»: панель не становится длиннее.
+  List<Widget> _folders() {
+    final open = onOpenProject;
+    final shown = open == null
+        ? const <ProjectEntry>[]
+        : projects.take(RelayDrawer.projectsShown).toList();
+    final more = open == null ? 0 : projects.length - shown.length;
+    return <Widget>[
+      for (final project in shown)
+        _ProjectRow(
+          key: Key('project-${project.id}'),
+          icon: Icons.folder_outlined,
+          label: project.name,
+          projectName: true,
+          count: project.sessions,
+          selected: project.active,
+          wide: wide,
+          semantics: 'Проект «${project.name}», '
+              '${project.sessions} '
+              '${ruPlural(project.sessions, 'сессия', 'сессии', 'сессий')}',
+          onTap: () => open!(project.id),
+        ),
+      if (more > 0)
+        _ProjectRow(
+          key: const Key('project-all'),
+          icon: Icons.more_horiz,
+          label: 'Все проекты · ${projects.length}',
+          wide: wide,
+          semantics: 'Все проекты, ${projects.length}',
+          onTap: onProjects,
+        ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1125,18 +1228,129 @@ final class _Sections extends StatelessWidget {
           for (final (index, (id, label, icon, count, alert, onTap))
               in items.indexed) ...<Widget>[
             if (index > 0) const SizedBox(height: 2),
-            _SectionRow(
-              id: id,
-              label: label,
-              icon: icon,
-              count: count,
-              alert: alert,
-              selected: active == id,
-              wide: wide,
-              onTap: onTap,
-            ),
+            if (id == 'projects' && onNewProject != null)
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: _SectionRow(
+                      id: id,
+                      label: label,
+                      icon: icon,
+                      count: count,
+                      alert: alert,
+                      selected: active == id,
+                      wide: wide,
+                      onTap: onTap,
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('project-new'),
+                    tooltip: 'Новый проект',
+                    onPressed: onNewProject,
+                    iconSize: 20,
+                    color: AssistantColors.icon,
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(44, 44),
+                    ),
+                    icon: const Icon(Icons.create_new_folder_outlined),
+                  ),
+                ],
+              )
+            else
+              _SectionRow(
+                id: id,
+                label: label,
+                icon: icon,
+                count: count,
+                alert: alert,
+                selected: active == id,
+                wide: wide,
+                onTap: onTap,
+              ),
+            if (id == 'projects') ..._folders(),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Строка проекта-папки под «Проектами»: с отступом, значок, название и
+/// число сессий.
+final class _ProjectRow extends StatelessWidget {
+  const _ProjectRow({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.wide,
+    required this.semantics,
+    required this.onTap,
+    this.count,
+    this.selected = false,
+    this.projectName = false,
+  });
+
+  final IconData icon;
+  final String label;
+
+  /// [label] — название проекта: шрифтом названия (ADR-021).
+  final bool projectName;
+  final int? count;
+  final bool selected;
+  final bool wide;
+  final String semantics;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: semantics,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.fromLTRB(28, 4, 10, 4),
+          decoration: BoxDecoration(
+            color: selected ? AssistantColors.raised : null,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(icon, size: wide ? 18 : 20, color: AssistantColors.icon),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: projectName
+                      ? projectNameStyle(
+                          fontSize: wide ? 16 : 17,
+                          color: AssistantColors.text,
+                        )
+                      : TextStyle(
+                          fontSize: wide ? 14 : 15,
+                          color: AssistantColors.text,
+                        ),
+                ),
+              ),
+              if (count != null) ...<Widget>[
+                const SizedBox(width: 8),
+                Text(
+                  '$count',
+                  style: metaTextStyle.copyWith(
+                    color: AssistantColors.faint,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1264,7 +1478,7 @@ final class _SectionRow extends StatelessWidget {
                             child: Text(
                               '$count',
                               maxLines: 1,
-                              style: technicalTextStyle.copyWith(
+                              style: metaTextStyle.copyWith(
                                 fontSize: 13,
                                 height: 1.2,
                                 fontWeight: FontWeight.w500,
@@ -1370,7 +1584,7 @@ final class _GroupToggle extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     '$count',
-                    style: technicalTextStyle.copyWith(
+                    style: metaTextStyle.copyWith(
                       fontSize: 13,
                       color: AssistantColors.faint,
                     ),
@@ -1380,6 +1594,58 @@ final class _GroupToggle extends StatelessWidget {
                     open ? Icons.keyboard_arrow_down : Icons.chevron_right,
                     size: 16,
                     color: AssistantColors.icon,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// «Показать ещё N»: сессии сверх лимита панели.
+final class _ShowMoreRow extends StatelessWidget {
+  const _ShowMoreRow({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = 'Показать ещё $count';
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Semantics(
+        button: true,
+        label: '$label ${ruPlural(count, 'сессию', 'сессии', 'сессий')}',
+        onTap: onTap,
+        excludeSemantics: true,
+        child: InkWell(
+          key: const Key('sessions-more'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.expand_more,
+                    size: 16,
+                    color: AssistantColors.icon,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: metaTextStyle.copyWith(
+                        fontSize: 13,
+                        color: AssistantColors.muted,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1462,7 +1728,7 @@ final class _ExtensionRow extends StatelessWidget {
                               key: Key('drawer-extension-status-${entry.id}'),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: technicalTextStyle.copyWith(
+                              style: metaTextStyle.copyWith(
                                 fontSize: 13,
                                 color: entry.statusColor,
                               ),
@@ -1547,6 +1813,7 @@ final class _SessionRowState extends State<_SessionRow> {
       title: _entry.title,
       pinned: _entry.pinned,
       canRename: _entry.canRename,
+      canMove: _entry.canMove,
       reduceMotion: widget.reduceMotion,
       liftedRow: SessionRowBody(entry: _entry, wide: widget.wide),
     );
@@ -1610,6 +1877,8 @@ final class _SessionRowState extends State<_SessionRow> {
                   selected: entry.active,
                   label: <String>[
                     label,
+                    if (entry.projectName != null)
+                      'в проекте «${entry.projectName}»',
                     if (entry.pinned) 'закреплена',
                     if (entry.unread) 'новое сообщение',
                     if (entry.preview != null) entry.preview!,
@@ -1625,6 +1894,9 @@ final class _SessionRowState extends State<_SessionRow> {
                           CustomSemanticsAction(
                             label: entry.pinned ? 'Открепить' : 'Закрепить',
                           ): () => onAction(SessionAction.pin),
+                          if (entry.canMove)
+                            const CustomSemanticsAction(label: 'В проект'):
+                                () => onAction(SessionAction.move),
                           const CustomSemanticsAction(label: 'Удалить'): () =>
                               onAction(SessionAction.delete),
                         },
@@ -1687,7 +1959,7 @@ final class SessionRowBody extends StatelessWidget {
     final time = Text(
       entry.time,
       maxLines: 1,
-      style: technicalTextStyle.copyWith(
+      style: metaTextStyle.copyWith(
         fontSize: 13,
         color: AssistantColors.faint,
       ),
@@ -1758,10 +2030,38 @@ final class SessionRowBody extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (entry.preview != null) ...<Widget>[
+                  if (entry.preview != null ||
+                      entry.projectName != null) ...<Widget>[
                     const SizedBox(height: 1),
-                    Text(
-                      entry.preview!,
+                    Text.rich(
+                      TextSpan(
+                        children: <InlineSpan>[
+                          if (entry.projectName != null) ...<InlineSpan>[
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.middle,
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 4),
+                                child: Icon(
+                                  Icons.folder_outlined,
+                                  key: Key('chat-project-${entry.id}'),
+                                  size: wide ? 13 : 14,
+                                  color: AssistantColors.faint,
+                                ),
+                              ),
+                            ),
+                            TextSpan(
+                              text: entry.projectName,
+                              style: const TextStyle(
+                                color: AssistantColors.faint,
+                              ),
+                            ),
+                            if (entry.preview != null)
+                              const TextSpan(text: ' · '),
+                          ],
+                          if (entry.preview != null)
+                            TextSpan(text: entry.preview),
+                        ],
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1795,7 +2095,9 @@ final class _HitRow extends StatelessWidget {
     final end = hit.matchEnd.clamp(start, snippet.length);
     return Semantics(
       button: true,
-      label: '${hit.title}: $snippet',
+      label: hit.projectName == null
+          ? '${hit.title}: $snippet'
+          : '${hit.title}, проект «${hit.projectName}»: $snippet',
       onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
@@ -1820,8 +2122,22 @@ final class _HitRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
+                  if (hit.projectName case final String project) ...<Widget>[
+                    Flexible(
+                      child: Text(
+                        'Проект · $project',
+                        key: Key('search-project-${hit.chatId}'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: metaTextStyle.copyWith(
+                          color: AssistantColors.faint,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   // Время сессии, как в списке сессий (12:40, вчера).
-                  Text(time, style: technicalTextStyle),
+                  Text(time, style: metaTextStyle),
                 ],
               ),
               Text.rich(

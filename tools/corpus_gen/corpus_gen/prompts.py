@@ -12,7 +12,7 @@ from typing import Any
 from .topics import DEFAULT_CONNECTOR, ConnectorTopics, Topic
 
 # Намерения и темы каждого коннектора описаны в topics/*.toml (corpus_gen/topics.py).
-ISSUES = ["none", "inPast", "invalidDate", "invalidTime", "conflictingDays", "conflictingTimes", "ambiguousHour"]
+ISSUES = ["none", "inPast", "invalidDate", "invalidTime", "conflictingDays", "conflictingTimes", "ambiguousHour", "missingTime"]
 TITLE_ISSUES = ["none", "unbalancedQuotes", "multipleTitles"]
 PRECISIONS = ["date", "dateTime", "partOfDay"]
 
@@ -392,6 +392,8 @@ LABEL_SYSTEM = """Ты размечаешь фразы для регрессио
   случаях due = null. Один и тот же день двумя способами («сегодня, 02.11») — не конфликт.
 - Час от 1 до 6 без минут и без уточнения «утра/дня/вечера/ночи» («к 5», «в 3») может быть и
   утром, и вечером: due = null, issue = ambiguousHour. «в 5 утра», «в 17», «в 5:00» — понятны.
+- День есть, а фраза кончается висящим предлогом «в/на/к/до» («перенеси её на завтра в»): время не
+  дописали — due = день (date), issue = missingTime; предлог не входит ни в title, ни в targetQuery.
 - Одиночное число после «в/к» — час, если дальше нет обычного слова, если дальше глагол («в 10
   позвонить») или если сразу перед ним день («завтра в 10 созвон с командой» — 10:00, title
   «Созвон с командой»; «добавь в следующий понедельник в 9 планёрка» — 09:00, «Планёрка»). Без
