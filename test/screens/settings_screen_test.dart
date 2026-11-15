@@ -715,18 +715,21 @@ void main() {
       bool installed = false,
       String? sha,
       VoiceSupport support = VoiceSupport.supported,
+      FakeDeviceRecognizer? device,
     }) async {
       final spec = fakeVoiceSpec(bytes, sha: sha);
       if (installed) installFakeModelSync(dir, spec);
       final downloader = FakeFileDownloader(bytes);
       final voice = fakeVoiceKit(
         recognizer: FakeVoiceRecognizer(support: support),
+        device: device,
         downloader: downloader,
         spec: spec,
         dir: dir,
-      );
+      )..choice = settings.voiceEngine;
       addTearDown(voice.dispose);
       await tester.runAsync(voice.refresh);
+      await tester.runAsync(voice.refreshDevice);
       final changes = <AppSettings>[];
       var current = settings;
       await tester.pumpWidget(
@@ -758,6 +761,137 @@ void main() {
       await tester.tap(find.byKey(key));
       await tester.pump();
     }
+
+    group('распознавание', () {
+      String? subtitleOf(WidgetTester tester, String key) {
+        final row = tester.widget<GroupedRow>(find.byKey(Key(key)));
+        return row.subtitle;
+      }
+
+      testWidgets('телефон готов: выбран, без загрузки модели', (tester) async {
+        final (voice, _, _) = await pumpVoice(
+          tester,
+          device: FakeDeviceRecognizer(),
+        );
+        expect(find.text('Распознавание'), findsOneWidget);
+        expect(
+          subtitleOf(tester, 'voice-engine-device'),
+          'Встроено в Android, без загрузки и без интернета',
+        );
+        expect(
+          subtitleOf(tester, 'voice-engine-vosk'),
+          startsWith('Модель ~'),
+        );
+        expect(voice.engine, VoiceEngine.device);
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('voice-engine-device')),
+            matching: find.byIcon(Icons.check),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Распознаёт сам телефон, без интернета'),
+          findsOneWidget,
+        );
+        // Строки модели Vosk не нужны.
+        expect(find.byKey(const Key('voice-download')), findsNothing);
+        expect(find.byKey(const Key('voice-delete')), findsNothing);
+      });
+
+      final subtitles = <DeviceVoiceStatus, String>{
+        DeviceVoiceStatus.notInstalled:
+            'Нужен русский язык, Android скачает его сам',
+        DeviceVoiceStatus.pending: 'Android скачивает русский язык',
+        DeviceVoiceStatus.unsupported: 'Не знает русский без интернета',
+        DeviceVoiceStatus.unavailable:
+            'Этот телефон не распознаёт речь без интернета',
+      };
+      for (final MapEntry(key: status, value: text) in subtitles.entries) {
+        testWidgets('${status.name}: «$text»', (tester) async {
+          final (voice, _, _) = await pumpVoice(
+            tester,
+            device: FakeDeviceRecognizer(status: status),
+          );
+          expect(subtitleOf(tester, 'voice-engine-device'), text);
+          expect(voice.engine, VoiceEngine.vosk);
+          final row = tester.widget<GroupedRow>(
+            find.byKey(const Key('voice-engine-device')),
+          );
+          final disabled = status == DeviceVoiceStatus.unsupported ||
+              status == DeviceVoiceStatus.unavailable;
+          expect(row.onTap == null, disabled);
+        });
+      }
+
+      testWidgets('выбор сохраняется в voice.engine', (tester) async {
+        final (voice, _, changes) = await pumpVoice(
+          tester,
+          device: FakeDeviceRecognizer(),
+        );
+        await tapVisible(tester, const Key('voice-engine-vosk'));
+        expect(changes.last.voiceEngine, VoiceEngineChoice.vosk);
+        expect(changes.last.toJson()['voice.engine'], 'vosk');
+        expect(voice.engine, VoiceEngine.vosk);
+        await tester.pump();
+        expect(find.byKey(const Key('voice-engine-vosk')), findsOneWidget);
+        await tapVisible(tester, const Key('voice-engine-device'));
+        expect(changes.last.voiceEngine, VoiceEngineChoice.device);
+        expect(voice.engine, VoiceEngine.device);
+      });
+
+      testWidgets('телефон выбран, язык не скачан: «Скачать русский язык»',
+          (tester) async {
+        final device = FakeDeviceRecognizer(
+          status: DeviceVoiceStatus.notInstalled,
+        );
+        final (voice, downloader, _) = await pumpVoice(
+          tester,
+          device: device,
+          settings: const AppSettings(
+            voiceInput: true,
+            voiceEngine: VoiceEngineChoice.device,
+          ),
+        );
+        expect(voice.engine, VoiceEngine.device);
+        expect(find.byKey(const Key('voice-download')), findsNothing);
+        await tapVisible(tester, const Key('voice-device-download'));
+        await tester.pumpAndSettle();
+        expect(find.text('Скачать русский язык?'), findsOneWidget);
+        await tester.tap(find.byKey(const Key('voice-language-download')));
+        await pumpUntilVoice(tester, () => !voice.isDeviceDownloading);
+        await tester.pumpAndSettle();
+        expect(device.downloadCalls, 1);
+        expect(downloader.calls, 0);
+        expect(voice.deviceStatus, DeviceVoiceStatus.ready);
+        expect(find.byKey(const Key('voice-device-download')), findsNothing);
+      });
+
+      testWidgets('процент загрузки в подписи', (tester) async {
+        final device = FakeDeviceRecognizer(
+          status: DeviceVoiceStatus.notInstalled,
+        )
+          ..downloadScript = const <DeviceLanguageDownload>[
+            DeviceDownloadProgress(40),
+            DeviceDownloadSuccess(),
+          ]
+          ..downloadGate = Completer<void>();
+        final (voice, _, _) = await pumpVoice(
+          tester,
+          device: device,
+          settings: const AppSettings(voiceEngine: VoiceEngineChoice.device),
+        );
+        unawaited(voice.downloadDeviceLanguage());
+        await pumpUntilVoice(tester, () => voice.deviceDownloadPercent == 40);
+        await tester.pump();
+        expect(
+          subtitleOf(tester, 'voice-engine-device'),
+          'Android скачивает русский язык: 40\u00A0%',
+        );
+        device.downloadGate!.complete();
+        await pumpUntilVoice(tester, () => !voice.isDeviceDownloading);
+      });
+    });
 
     /// Переключатель «Голосовой ввод» без модели: предложение с размером и
     /// источником, затем «Скачать».

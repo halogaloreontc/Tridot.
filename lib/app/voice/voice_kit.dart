@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/downloads/safe_zip.dart';
 import '../../core/downloads/verified_download.dart';
+import '../../core/settings/app_settings.dart' show VoiceEngineChoice;
 import '../../core/voice/voice_model.dart';
 import '../../core/voice/voice_recognizer.dart';
 
@@ -73,6 +74,7 @@ typedef ZipExtractor = Future<void> Function(
 final class VoiceKit extends ChangeNotifier {
   VoiceKit({
     required this.recognizer,
+    this.device,
     required this.downloader,
     required this.spec,
     required this.dir,
@@ -83,7 +85,12 @@ final class VoiceKit extends ChangeNotifier {
         _extractor = extractor,
         _now = now;
 
+  /// Vosk: модель на диске.
   final VoiceRecognizer recognizer;
+
+  /// Распознавание телефона (ADR-023); `null` — его нет (не Android).
+  final OnDeviceRecognizer? device;
+
   final FileDownloader downloader;
   final VoiceModelSpec spec;
 
@@ -105,7 +112,150 @@ final class VoiceKit extends ChangeNotifier {
   Future<void>? _loading;
   bool _disposed = false;
 
-  VoiceSupport get support => recognizer.support;
+  DeviceVoiceStatus _deviceStatus = DeviceVoiceStatus.unavailable;
+  int? _devicePercent;
+  bool _deviceDownloading = false;
+  VoiceEngineChoice _choice = VoiceEngineChoice.auto;
+
+  /// Голосовой ввод есть, если есть хоть одно распознавание.
+  VoiceSupport get support => recognizer.support == VoiceSupport.supported ||
+          (device != null &&
+              _deviceStatus != DeviceVoiceStatus.unavailable &&
+              _deviceStatus != DeviceVoiceStatus.unsupported)
+      ? VoiceSupport.supported
+      : VoiceSupport.unsupported;
+
+  /// Что распознавание телефона знает о русском ([refreshDevice]).
+  DeviceVoiceStatus get deviceStatus =>
+      device == null ? DeviceVoiceStatus.unavailable : _deviceStatus;
+
+  /// Процент системной загрузки русского языка (Android 14+), если идёт.
+  int? get deviceDownloadPercent => _devicePercent;
+
+  /// Идёт системная загрузка русского языка, начатая отсюда.
+  bool get isDeviceDownloading => _deviceDownloading;
+
+  /// Выбор в настройках (`voice.engine`).
+  VoiceEngineChoice get choice => _choice;
+
+  set choice(VoiceEngineChoice value) {
+    if (_choice == value) return;
+    _choice = value;
+    _notify();
+  }
+
+  /// Распознавание телефона можно выбрать: оно есть и знает русский
+  /// (хотя бы после загрузки).
+  bool get deviceSelectable => switch (deviceStatus) {
+        DeviceVoiceStatus.unavailable || DeviceVoiceStatus.unsupported => false,
+        _ => true,
+      };
+
+  /// Чем распознаётся сейчас. «Авто» — телефон, если он готов: тогда не
+  /// нужна загрузка 44 МБ. Выбран телефон, но русский ещё не скачан —
+  /// Vosk, если его модель есть, иначе телефон (микрофон предложит
+  /// скачать язык).
+  VoiceEngine get engine {
+    if (_choice == VoiceEngineChoice.vosk || device == null) {
+      return VoiceEngine.vosk;
+    }
+    final status = deviceStatus;
+    if (status == DeviceVoiceStatus.ready ||
+        status == DeviceVoiceStatus.unknown) {
+      return VoiceEngine.device;
+    }
+    if (_choice == VoiceEngineChoice.device &&
+        (status == DeviceVoiceStatus.notInstalled ||
+            status == DeviceVoiceStatus.pending)) {
+      return isInstalled ? VoiceEngine.vosk : VoiceEngine.device;
+    }
+    return VoiceEngine.vosk;
+  }
+
+  /// Распознаватель выбранного движка.
+  VoiceRecognizer get active =>
+      engine == VoiceEngine.device ? device! : recognizer;
+
+  /// Можно слушать без загрузок: телефон знает русский или модель Vosk
+  /// установлена.
+  bool get isReady => engine == VoiceEngine.device
+      ? deviceStatus == DeviceVoiceStatus.ready ||
+          deviceStatus == DeviceVoiceStatus.unknown
+      : isInstalled;
+
+  /// Узнаёт у телефона, знает ли он русский: при запуске, при возврате в
+  /// приложение (после системной загрузки) и после загрузки.
+  Future<void> refreshDevice() async {
+    final device = this.device;
+    if (device == null) return;
+    DeviceVoiceStatus status;
+    try {
+      status = await device.checkStatus();
+    } on Object {
+      status = DeviceVoiceStatus.unavailable;
+    }
+    if (_disposed) return;
+    // Ошибка 12 в этой сессии важнее «unknown» Android 12.
+    if (_deviceStatus == DeviceVoiceStatus.unsupported &&
+        status == DeviceVoiceStatus.unknown) {
+      return;
+    }
+    if (status == _deviceStatus) return;
+    _deviceStatus = status;
+    if (status != DeviceVoiceStatus.pending) _devicePercent = null;
+    _notify();
+  }
+
+  /// Просит Android скачать русский язык. Возвращает итог загрузки.
+  Future<DeviceLanguageDownload> downloadDeviceLanguage() async {
+    final device = this.device;
+    if (device == null) return const DeviceDownloadError();
+    _deviceDownloading = true;
+    _devicePercent = null;
+    _notify();
+    DeviceLanguageDownload last = const DeviceDownloadError();
+    try {
+      await for (final update in device.downloadLanguage()) {
+        if (_disposed) break;
+        last = update;
+        switch (update) {
+          case DeviceDownloadProgress(:final percent):
+            _devicePercent = percent.clamp(0, 100);
+            _deviceStatus = DeviceVoiceStatus.pending;
+          case DeviceDownloadSuccess():
+            _devicePercent = null;
+            _deviceStatus = DeviceVoiceStatus.ready;
+          case DeviceDownloadScheduled():
+            _devicePercent = null;
+            _deviceStatus = DeviceVoiceStatus.pending;
+          case DeviceDownloadError():
+            _devicePercent = null;
+        }
+        _notify();
+      }
+    } on Object {
+      last = const DeviceDownloadError();
+    }
+    _deviceDownloading = false;
+    if (_disposed) return last;
+    _notify();
+    if (last is! DeviceDownloadSuccess) await refreshDevice();
+    return last;
+  }
+
+  /// Ошибка распознавания телефона о языке (коды 12 и 13): статус
+  /// понижается, следующее нажатие берёт новый движок. Текущая попытка не
+  /// переключается на ходу.
+  void reportDeviceError(VoiceErrorCode code) {
+    final next = switch (code) {
+      VoiceErrorCode.languageUnsupported => DeviceVoiceStatus.unsupported,
+      VoiceErrorCode.languageUnavailable => DeviceVoiceStatus.notInstalled,
+      _ => null,
+    };
+    if (next == null || device == null || next == _deviceStatus) return;
+    _deviceStatus = next;
+    _notify();
+  }
 
   VoiceKitPhase get phase => _phase;
 
@@ -357,6 +507,7 @@ final class VoiceKit extends ChangeNotifier {
   /// признака «загружено» здесь нет, чтобы он не устаревал). Ошибка —
   /// [VoiceEngineException].
   Future<void> ensureLoaded() {
+    if (engine == VoiceEngine.device) return Future<void>.value();
     if (!isInstalled) {
       return Future<void>.error(
         const VoiceEngineException(VoiceErrorCode.modelLoad),
@@ -416,6 +567,8 @@ final class VoiceKit extends ChangeNotifier {
     _disposed = true;
     _cancel?.cancel();
     unawaited(recognizer.dispose());
+    final device = this.device;
+    if (device != null) unawaited(device.dispose());
     super.dispose();
   }
 }

@@ -30,6 +30,7 @@ final class AssistantResponse {
     this.job,
     this.weather,
     this.launch,
+    this.draft,
   });
 
   /// Готовый текст для пользователя. В истории чата хранится именно он:
@@ -98,6 +99,11 @@ final class AssistantResponse {
   /// памяти и только у живого ответа: в историю не попадает.
   final LaunchRequest? launch;
 
+  /// Команда, которую интерфейс кладёт в поле ввода, не отправляя: ответ
+  /// «Исправить» на «Понял так: … Создать?» подставляет понятую фразу,
+  /// чтобы её можно было поправить. `null` — поле ввода не трогается.
+  final String? draft;
+
   /// Тот же ответ с подсказкой команд [suggestions].
   AssistantResponse withSuggestions(CommandSuggestions? suggestions) =>
       AssistantResponse(
@@ -118,6 +124,7 @@ final class AssistantResponse {
         job: job,
         weather: weather,
         launch: launch,
+        draft: draft,
       );
 
   /// Тот же ответ от помощника [personaId].
@@ -139,6 +146,7 @@ final class AssistantResponse {
         job: job,
         weather: weather,
         launch: launch,
+        draft: draft,
       );
 
   /// Тот же ответ, в котором пользователь обратился к [personaId] по имени.
@@ -160,6 +168,7 @@ final class AssistantResponse {
         job: job,
         weather: weather,
         launch: launch,
+        draft: draft,
       );
 
   /// Тот же ответ с другим текстом и фактами (выходной фильтр паролей).
@@ -182,5 +191,6 @@ final class AssistantResponse {
         job: job,
         weather: weather,
         launch: launch,
+        draft: draft,
       );
 }

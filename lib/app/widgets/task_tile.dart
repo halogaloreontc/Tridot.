@@ -78,7 +78,9 @@ final class TaskTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      Text(
+                      // Длинное слово на узком экране не рвётся посередине:
+                      // «Позвони / ть» — только целыми словами.
+                      WholeWordText(
                         task.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,

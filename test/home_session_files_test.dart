@@ -28,6 +28,7 @@ import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
 import 'package:local_assistant/core/skills/archiver/archiver_connector.dart';
+import 'package:local_assistant/core/skills/files/files_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 import 'package:path/path.dart' as p;
@@ -146,6 +147,7 @@ Future<_Harness> _pump(
               ),
               TalkConnector(taskService: tasks),
               ArchiverConnector(),
+              FilesConnector(),
             ],
           ),
           clock: clock,
@@ -403,6 +405,57 @@ void main() {
       await tester.pumpAndSettle();
       expect(_panel, findsNothing);
       expect(find.byKey(const Key('today-panel')), findsOneWidget);
+    });
+
+    testWidgets(
+        '«удали этот файл» после архива: вопрос с именем, «Удалить» стирает '
+        'результат, исходник остаётся (ADR-028)', (tester) async {
+      final h = await _pump(
+        tester,
+        size: const Size(1440, 900),
+        temp: temp.path,
+      );
+      await _say(tester, 'сожми в zip');
+      final source = File(p.join(temp.path, 'отчёт.txt'))
+        ..writeAsStringSync('x');
+      h.jobPicker.next = <JobFile>[
+        JobFile(path: source.path, name: 'отчёт.txt'),
+      ];
+      await tester.tap(find.byKey(const Key('ext-card-pick-files')));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const Key('ext-card-run')));
+        for (var i = 0; i < 50 && h.runner.requests.isEmpty; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      await tester.pump();
+      final request = h.runner.requests.single;
+      final zip = File(request.target!)..writeAsStringSync('zip');
+      h.runner.jobs[request.cardId]!.add(
+        JobDone(outputs: <String>[zip.path], outputDir: temp.path),
+      );
+      await tester.pumpAndSettle();
+      final row = find.byKey(Key('session-file-out:${request.cardId}:0'));
+      expect(row, findsOneWidget);
+
+      await _say(tester, 'удали этот файл');
+      expect(
+        find.textContaining('Удалить «отчёт.zip» из файлов сессии?'),
+        findsWidgets,
+      );
+      expect(zip.existsSync(), isTrue, reason: 'до ответа ничего не удалено');
+      await tester.runAsync(() async {
+        await tester.tap(find.widgetWithText(FilledButton, 'Удалить'));
+        for (var i = 0; i < 50 && zip.existsSync(); i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      await tester.pumpAndSettle();
+      expect(zip.existsSync(), isFalse);
+      expect(source.existsSync(), isTrue, reason: 'исходник не трогается');
+      expect(row, findsNothing);
+      expect(find.textContaining('«отчёт.zip»'), findsWidgets);
     });
   });
 }

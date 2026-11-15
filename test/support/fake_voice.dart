@@ -200,12 +200,14 @@ VoiceModelSpec fakeVoiceSpec(List<int> bytes, {String? sha}) => VoiceModelSpec(
 /// «распаковка» просто создаёт обязательные файлы модели.
 VoiceKit fakeVoiceKit({
   required FakeVoiceRecognizer recognizer,
+  OnDeviceRecognizer? device,
   required FakeFileDownloader downloader,
   required VoiceModelSpec spec,
   required String dir,
 }) =>
     VoiceKit(
       recognizer: recognizer,
+      device: device,
       downloader: downloader,
       spec: spec,
       dir: dir,
@@ -249,4 +251,49 @@ Future<void> pumpUntilVoice(WidgetTester tester, bool Function() done) async {
     await tester.pump(const Duration(milliseconds: 16));
   }
   expect(done(), isTrue, reason: 'состояние голосового ввода не наступило');
+}
+
+/// Распознавание телефона для тестов: статус задаётся руками, загрузка
+/// языка отдаёт [downloadScript].
+final class FakeDeviceRecognizer extends FakeVoiceRecognizer
+    implements OnDeviceRecognizer {
+  FakeDeviceRecognizer({
+    this.status = DeviceVoiceStatus.ready,
+    super.permission,
+  });
+
+  DeviceVoiceStatus status;
+
+  /// Что отдаст [downloadLanguage]; после успеха [status] — ready.
+  List<DeviceLanguageDownload> downloadScript = const <DeviceLanguageDownload>[
+    DeviceDownloadSuccess(),
+  ];
+
+  /// Если задан — [downloadLanguage] ждёт его перед итогом.
+  Completer<void>? downloadGate;
+
+  int statusCalls = 0;
+  int downloadCalls = 0;
+
+  @override
+  Future<DeviceVoiceStatus> checkStatus() async {
+    statusCalls++;
+    return status;
+  }
+
+  @override
+  Stream<DeviceLanguageDownload> downloadLanguage() async* {
+    downloadCalls++;
+    for (final update in downloadScript) {
+      if (update is! DeviceDownloadProgress) {
+        final gate = downloadGate;
+        if (gate != null) await gate.future;
+      }
+      if (update is DeviceDownloadSuccess) status = DeviceVoiceStatus.ready;
+      if (update is DeviceDownloadScheduled) {
+        status = DeviceVoiceStatus.pending;
+      }
+      yield update;
+    }
+  }
 }

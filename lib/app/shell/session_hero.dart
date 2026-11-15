@@ -86,6 +86,30 @@ final class SessionHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Не уместилась (крупный шрифт, маленький экран) — низ заставки
+    // гаснет над быстрыми действиями, а не обрезан посреди строки; дальше
+    // она прокручивается. Целиком видимую заставку маска не задевает:
+    // снизу у неё поле 32.
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (Rect bounds) {
+        final fade = bounds.height <= 0 ? 0.0 : 28 / bounds.height;
+        return LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: const <Color>[
+            Colors.black,
+            Colors.black,
+            Colors.transparent,
+          ],
+          stops: <double>[0, (1 - fade).clamp(0.0, 1.0), 1],
+        ).createShader(bounds);
+      },
+      child: _scroll(context),
+    );
+  }
+
+  Widget _scroll(BuildContext context) {
     return Center(
       child: SingleChildScrollView(
         key: const Key('session-hero'),

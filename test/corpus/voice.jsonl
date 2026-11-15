@@ -1,0 +1,79 @@
+{"id":"vox-001","text":"Можешь поставить зэд напоминание с утра чтобы я написал андрею","now":"2026-11-02T23:30","intent":"createTask","title":"Написать Андрею","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual","note":"снимок владельца: мусор распознавателя, «с утра», «чтобы я …» → инфинитив"}
+{"id":"vox-002","text":"Можешь поставить зэд напоминание с утра чтобы я написал андрею","now":"2026-11-03T07:10","intent":"createTask","title":"Написать Андрею","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual","note":"до утра — это утро"}
+{"id":"vox-003","text":"поставь напоминание на утро написать андрею","intent":"createTask","title":"Написать Андрею","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-004","text":"напомни с утра написать андрею","intent":"createTask","title":"Написать Андрею","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-005","text":"напомни утром чтобы я написал андрею","intent":"createTask","title":"Написать Андрею","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-006","text":"напомни чтобы я завтра оплатил интернет","intent":"createTask","title":"Оплатить интернет","due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"vox-007","text":"сделай напоминание через час чтобы я выключил духовку","intent":"createTask","title":"Выключить духовку","due":"2026-11-02T17:30","precision":"dateTime","source":"manual"}
+{"id":"vox-008","text":"поставь напоминалку на вечер купить хлеб","intent":"createTask","title":"Купить хлеб","due":"2026-11-02T19:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-009","text":"мне нужно напоминание на вечер чтобы я купил хлеб","intent":"createTask","title":"Купить хлеб","due":"2026-11-02T19:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-010","text":"нужен напоминание завтра в девять позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T09:00","precision":"dateTime","source":"manual"}
+{"id":"vox-011","text":"напомни завтра в восемь утра отправить отчёт","intent":"createTask","title":"Отправить отчёт","due":"2026-11-03T08:00","precision":"dateTime","source":"manual"}
+{"id":"vox-012","text":"слушай поставь напоминание завтра на десять позвонить сергею","intent":"createTask","title":"Позвонить Сергею","due":"2026-11-03T10:00","precision":"dateTime","source":"manual"}
+{"id":"vox-013","text":"напомни завтра на 10 позвонить сергею","intent":"createTask","title":"Позвонить Сергею","due":"2026-11-03T10:00","precision":"dateTime","source":"manual"}
+{"id":"vox-014","text":"ну это напомни завтра оплатить интернет","intent":"createTask","title":"Оплатить интернет","due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"vox-015","text":"эм напомни в пятницу забрать посылку","intent":"createTask","title":"Забрать посылку","due":"2026-11-06","precision":"date","source":"manual"}
+{"id":"vox-016","text":"можешь напомнить написать андрею утром пожалуйста","intent":"createTask","title":"Написать Андрею","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-017","text":"добавь напоминание чтобы я не забыл купить молоко","intent":"createTask","title":"Купить молоко","due":null,"source":"manual"}
+{"id":"vox-018","text":"напомни мне чтобы я позвонил андрею в обед","intent":"createTask","title":"Позвонить Андрею","due":"2026-11-03T13:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-019","text":"поставь зэд напоминание вечером полить цветы","intent":"createTask","title":"Полить цветы","due":"2026-11-02T19:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-020","text":"создай напоминание на утро чтобы я написал ольге","intent":"createTask","title":"Написать Ольге","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-021","text":"напомни завтра с утра пораньше написать андрею","intent":"createTask","title":"Написать Андрею","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-022","text":"напомни мне в полдевятого выпить таблетку","now":"2026-11-02T23:30","intent":"createTask","title":"Выпить таблетку","due":"2026-11-03T08:30","precision":"dateTime","source":"manual"}
+{"id":"vox-023","text":"напомни купить формулу для детского питания","intent":"createTask","title":"Купить формулу для детского питания","source":"manual","note":"не вопрос: вопросительного слова нет"}
+{"id":"vox-024","text":"напомни завтра спросить какая формула суммы","intent":"createTask","title":"Спросить какая формула суммы","due":"2026-11-03","precision":"date","source":"manual","note":"вопросительное слово после инфинитива — задача"}
+{"id":"vox-025","text":"напомни что завтра встреча с андреем","intent":"createTask","title":"Встреча с Андреем","due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"vox-026","text":"напоминание с утра написать андрею","intent":"createTask","title":"Написать Андрею","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual","note":"команда — одно существительное"}
+{"id":"vox-027","text":"можешь поставить зэд на утро напоминание написать андрею","intent":"createTask","title":"Написать Андрею","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-028","text":"напомни завтра утром чтобы я позвонил маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-029","text":"можешь напомнить мне завтра в восемь утра что надо отправить отчёт","intent":"createTask","title":"Надо отправить отчёт","due":"2026-11-03T08:00","precision":"dateTime","source":"manual"}
+{"id":"vox-030","text":"напомни завтра в девять позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T09:00","precision":"dateTime","source":"manual"}
+{"id":"vox-031","text":"напомни завтра в половине девятого позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T08:30","precision":"dateTime","source":"manual"}
+{"id":"vox-032","text":"напомни завтра в восемь тридцать позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T08:30","precision":"dateTime","source":"manual"}
+{"id":"vox-033","text":"напомни завтра к десяти отвезти документы","intent":"createTask","title":"Отвезти документы","due":"2026-11-03T10:00","precision":"dateTime","source":"manual"}
+{"id":"vox-034","text":"напомни завтра без пятнадцати девять выйти из дома","intent":"createTask","title":"Выйти из дома","due":"2026-11-03T08:45","precision":"dateTime","source":"manual"}
+{"id":"vox-035","text":"напомни сделать зарядку на десять минут","intent":"createTask","title":"Сделать зарядку на десять минут","due":null,"source":"manual","note":"«на десять минут» — длительность, не время"}
+{"id":"vox-036","text":"напомни завтра на 10 минут позвонить маме","intent":"createTask","title":"На 10 минут позвонить маме","due":"2026-11-03","precision":"date","source":"manual","note":"«на 10 минут» после дня — длительность, а не 10:00"}
+{"id":"vox-037","text":"напомни чтобы я принёс зарядку","intent":"createTask","title":"Принести зарядку","due":null,"source":"manual"}
+{"id":"vox-038","text":"поставь напоминание чтобы я сходил в аптеку","intent":"createTask","title":"Сходить в аптеку","due":null,"source":"manual"}
+{"id":"vox-039","text":"напомни что я обещал перезвонить вере","intent":"unknown","source":"manual","note":"вспомнить за пользователя без срока — вопрос"}
+{"id":"vox-040","text":"напомни вечером купить хлеб для мамы","intent":"createTask","title":"Купить хлеб для мамы","due":"2026-11-02T19:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-041","text":"напомни купить марку и семена","intent":"createTask","title":"Купить марку и семена","due":null,"source":"manual","note":"имена-омонимы без глагола общения остаются со строчной"}
+{"id":"vox-042","text":"напомни позвонить вере","intent":"createTask","title":"Позвонить Вере","due":null,"source":"manual"}
+{"id":"vox-043","text":"напомни весь день с утра пить воду","intent":"createTask","title":"Весь день с утра пить воду","due":null,"source":"manual","note":"«весь день с утра» — не срок"}
+{"id":"vox-044","text":"перенеси встречу с утра на вечер","intent":"rescheduleTask","title":"Встреча","due":"2026-11-02T19:00","precision":"partOfDay","source":"manual","note":"«с утра на вечер» — откуда и куда, как раньше"}
+{"id":"vox-045","text":"напоминание про встречу перенеси на завтра","intent":"rescheduleTask","source":"manual","note":"о существующем напоминании — не новое"}
+{"id":"vox-046","text":"надо напомнить маме про лекарства","intent":"createTask","title":"Напомнить маме про лекарства","source":"manual","note":"«напомнить» без «можешь» — само дело"}
+{"id":"vox-047","text":"напомни завтра в 9 какая формула суммы","intent":"createTask","title":"Узнать, какая формула суммы","due":"2026-11-03T09:00","precision":"dateTime","source":"manual","note":"вопрос со сроком — дело «узнать», с переспросом"}
+{"id":"vox-048","text":"Нужен напомни пожалуйста какая формула суммы в гугл таблицах?","intent":"unknown","source":"manual","note":"снимок владельца: вопрос, а не задача «Нужен какая формула …»"}
+{"id":"vox-049","text":"напомни как называется столица австралии","intent":"unknown","source":"manual"}
+{"id":"vox-050","text":"напомни где лежат ключи от гаража?","intent":"unknown","source":"manual"}
+{"id":"vox-051","text":"добавь задачу купить сверло 6 мм","intent":"createTask","title":"Купить сверло 6 мм","note":"«мм» после числа — миллиметры, не шум","source":"manual"}
+{"id":"vox-052","text":"напомни купить саморезы 4 мм","intent":"createTask","title":"Купить саморезы 4 мм","source":"manual"}
+{"id":"vox-053","text":"купить футболку размер эм","intent":"createTask","title":"Купить футболку размер эм","source":"manual"}
+{"id":"vox-054","text":"хм купить хлеб","intent":"createTask","title":"Купить хлеб","note":"шум перед делом без маркера — как в надиктованном","source":"manual"}
+{"id":"vox-055","text":"мм напомни купить хлеб","intent":"createTask","title":"Купить хлеб","note":"«мм» в начале фразы — междометие","source":"manual"}
+{"id":"vox-056","text":"напомни в шесть ноль пять позвонить","intent":"createTask","title":"Позвонить","due":"2026-11-03T06:05","precision":"dateTime","source":"manual"}
+{"id":"vox-057","text":"напомни в двадцать один ноль ноль позвонить","intent":"createTask","title":"Позвонить","due":"2026-11-02T21:00","precision":"dateTime","source":"manual"}
+{"id":"vox-058","text":"напомни когда приду домой купить хлеб","intent":"createTask","title":"Когда приду домой купить хлеб","note":"условие напоминания, а не вопрос","source":"manual"}
+{"id":"vox-059","text":"напомни как приеду позвонить маме","intent":"createTask","title":"Как приеду позвонить маме","source":"manual"}
+{"id":"vox-060","text":"напомни как только проснусь выпить таблетку","intent":"createTask","title":"Как только проснусь выпить таблетку","source":"manual"}
+{"id":"vox-061","text":"напомни, когда придёт посылка, забрать её","intent":"createTask","title":"Когда придёт посылка, забрать её","source":"manual"}
+{"id":"vox-062","text":"напомни когда день рождения у андрея","intent":"unknown","note":"без дела после — вопрос","source":"manual"}
+{"id":"vox-063","text":"напомни чтобы я перевёл деньги андрею","intent":"createTask","title":"Перевести деньги Андрею","source":"manual"}
+{"id":"vox-064","text":"напомни чтобы я провёл встречу","intent":"createTask","title":"Провести встречу","source":"manual"}
+{"id":"vox-065","text":"напомни чтобы я сел за отчёт","intent":"createTask","title":"Сесть за отчёт","source":"manual"}
+{"id":"vox-066","text":"напомни чтобы я подстригся","intent":"createTask","title":"Подстричься","source":"manual"}
+{"id":"vox-067","text":"напомни чтобы я пил воду","intent":"createTask","title":"Пить воду","source":"manual"}
+{"id":"vox-068","text":"напомни чтобы я сходил в магазин и купил хлеб","intent":"createTask","title":"Сходить в магазин и купить хлеб","source":"manual"}
+{"id":"vox-069","text":"напомни вечером позвонить маме","now":"2026-11-02T23:30","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T19:00","precision":"partOfDay","note":"последний час вечера без дня — завтра вечером","source":"manual"}
+{"id":"vox-070","text":"поставь напоминание на вечер купить хлеб","now":"2026-11-02T23:30","intent":"createTask","title":"Купить хлеб","due":"2026-11-03T19:00","precision":"partOfDay","source":"manual"}
+{"id":"vox-072","text":"напомни пятнадцатого ноября оплатить кредит","intent":"createTask","title":"Оплатить кредит","due":"2026-11-15","precision":"date","source":"manual"}
+{"id":"vox-073","text":"напомни двадцать пятого ноября оплатить кредит","intent":"createTask","title":"Оплатить кредит","due":"2026-11-25","precision":"date","source":"manual"}
+{"id":"vox-074","text":"напомни первого декабря оплатить кредит","intent":"createTask","title":"Оплатить кредит","due":"2026-12-01","precision":"date","source":"manual"}
+{"id":"vox-075","text":"ок гугл напомни утром выпить таблетки","intent":"createTask","title":"Выпить таблетки","due":"2026-11-03T09:00","precision":"partOfDay","note":"обращение к другому помощнику по привычке","source":"manual"}
+{"id":"vox-076","text":"напомни какой сегодня день недели","intent":"unknown","note":"вопрос к часам устройства, не задача","source":"manual"}
+{"id":"vox-077","text":"напомни, какая погода завтра","intent":"unknown","note":"вопрос о погоде — к «Погоде»","source":"manual"}
+{"id":"vox-090","text":"Можешь поставить зэд напоминание с утра чтобы я написал андрею","now":"2026-11-03T09:31","intent":"createTask","title":"Написать Андрею","due":"2026-11-04T09:00","precision":"partOfDay","source":"manual","note":"условный час утра прошёл, день не назван — следующее утро (иначе напоминание не придёт)"}
+{"id":"vox-091","text":"напомни утром позвонить маме","now":"2026-11-03T11:50","intent":"createTask","title":"Позвонить маме","due":"2026-11-04T09:00","precision":"partOfDay","source":"manual","note":"«утром» в 11:50 без дня — завтра"}
+{"id":"vox-092","text":"напомни сегодня утром позвонить маме","now":"2026-11-03T08:10","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual","note":"явный день и час утра ещё впереди — сегодня"}

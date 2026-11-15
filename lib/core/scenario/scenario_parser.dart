@@ -1,6 +1,9 @@
 import '../connectors/due_parser.dart';
 import '../connectors/noun_forms.dart';
+import '../connectors/person_names.dart';
+import '../connectors/question_phrases.dart';
 import '../connectors/social_prefix.dart';
+import '../connectors/speech_noise.dart';
 import '../connectors/utterance.dart';
 import '../connectors/verb_forms.dart';
 import '../models/bulk.dart';
@@ -52,7 +55,20 @@ final class ParsedCommand {
     this.selection,
     this.shift,
     this.exclude = const <String>[],
+    this.certainty = 1,
+    this.reminder = false,
   });
+
+  /// Насколько разбор уверен в создании задачи: 1 — фраза ясная, меньше —
+  /// пришлось угадывать (слова-шум распознавателя, «чтобы я написал» →
+  /// «Написать», вопросительное слово в названии). По ней коннектор задач
+  /// решает, спросить ли «Понял так: … Создать?» (docs/DECISIONS.md,
+  /// ADR-023). Для остальных намерений — 1.
+  final double certainty;
+
+  /// Создание — просьба напомнить: «напомни …», «поставь напоминание …».
+  /// Так звучит переспрос «Понял так: напомнить …».
+  final bool reminder;
 
   /// Массовая команда ([CommandIntent.rescheduleMany],
   /// [CommandIntent.completeMany]): какие задачи выбраны. Метки выбора
@@ -230,9 +246,178 @@ final class ScenarioParser {
     );
   }
 
+  /// Сомнения разбора текущей фразы ([ParsedCommand.certainty]): их
+  /// копит [_createTitle], а [parseUtterance] вычитает из уверенности.
+  double _doubt = 0;
+
+  /// Создание из текущей фразы — просьба напомнить.
+  bool _reminder = false;
+
   /// Разбор уже проанализированного сообщения: так коннектор не строит
   /// [Utterance] второй раз.
   ParsedCommand parseUtterance(Utterance utterance) {
+    final savedDoubt = _doubt;
+    final savedReminder = _reminder;
+    _doubt = 0;
+    _reminder = false;
+    try {
+      return _finish(utterance, _parseUtterance(utterance));
+    } finally {
+      _doubt = savedDoubt;
+      _reminder = savedReminder;
+    }
+  }
+
+  /// Последний шаг создания: вопрос — не задача («напомни, какая формула
+  /// суммы»), слова-шум распознавателя убраны, имена с заглавной
+  /// («Написать Андрею»), уверенность — по тому, сколько пришлось угадать.
+  ParsedCommand _finish(Utterance utterance, ParsedCommand command) {
+    if (command.intent != CommandIntent.createTask) return command;
+    final quoted = utterance.quotedTitles.isNotEmpty;
+    var title = command.title;
+    var certainty = 1.0 - _doubt;
+    if (!quoted) {
+      // «Напомни, какой сегодня день недели» — вопрос к часам устройства.
+      if (ClockQuestion.of(utterance) != null) {
+        return const ParsedCommand(intent: CommandIntent.unknown);
+      }
+      final question = QuestionPhrases.detect(utterance);
+      if (question != null &&
+          (question.opener != null || utterance.isQuestion) &&
+          !_infinitiveBefore(utterance, question.whIndex)) {
+        // «Напомни завтра в 9, какая формула суммы»: со сроком это может
+        // быть и дело «узнать». Без него — вопрос, на который помощник
+        // не ответит: задачей он не становится. Срок внутри вопроса
+        // («напомни, какая погода завтра») — часть вопроса, а не срок.
+        // «Напомни, какая погода завтра» — к «Погоде», не задача.
+        if (question.remindOpener &&
+            utterance.words.any((String w) => w.startsWith('погод'))) {
+          return const ParsedCommand(intent: CommandIntent.unknown);
+        }
+        final whStart = utterance.tokens[question.whIndex].span.start;
+        final dueOutside =
+            utterance.due.spans.any((CharSpan span) => span.start < whStart);
+        if (question.kind != QuestionKind.info ||
+            !question.remindOpener ||
+            command.dueAt == null ||
+            !dueOutside ||
+            title == null) {
+          return const ParsedCommand(intent: CommandIntent.unknown);
+        }
+        title = 'Узнать, ${_lowerFirst(title)}';
+        certainty -= 0.5;
+      }
+    }
+    final junk = utterance.tokens
+        .where((UtteranceToken t) => SpeechNoise.isJunk(t.text))
+        .length;
+    certainty -= 0.25 * junk;
+    if (title != null && !quoted) {
+      title = _withoutJunk(title);
+      if (title.isEmpty) {
+        title = null;
+      } else {
+        title = PersonNames.capitalizeIn(Utterance.capitalize(title));
+        if (_looksUnparsed(title)) certainty -= 0.4;
+      }
+    }
+    if (certainty < 0) certainty = 0;
+    return ParsedCommand(
+      intent: command.intent,
+      title: title,
+      targetQuery: command.targetQuery,
+      dueAt: command.dueAt,
+      duePrecision: command.duePrecision,
+      dueIssue: command.dueIssue,
+      titleIssue: command.titleIssue,
+      projects: command.projects,
+      implicit: command.implicit,
+      pastTense: command.pastTense,
+      selection: command.selection,
+      shift: command.shift,
+      exclude: command.exclude,
+      certainty: certainty,
+      reminder: _reminder,
+    );
+  }
+
+  /// Перед вопросительным словом — инфинитив: «напомни спросить, какая
+  /// формула», «добавь узнать, где ключи» — это дело, а не вопрос.
+  static bool _infinitiveBefore(Utterance utterance, int whIndex) {
+    for (var i = 0; i < whIndex; i++) {
+      final word = utterance.tokens[i].text;
+      if (DueParser.isInfinitive(word) && word != 'напомнить') return true;
+    }
+    return false;
+  }
+
+  static String _lowerFirst(String text) =>
+      text.isEmpty ? text : '${text[0].toLowerCase()}${text.substring(1)}';
+
+  static final RegExp _spaces = RegExp(r'\s+');
+
+  /// Название без слов-шума распознавателя: «Зэд купить хлеб» → «купить
+  /// хлеб».
+  static String _withoutJunk(String title) {
+    final words = title.split(_spaces);
+    String bare(String word) =>
+        DueParser.normalizeChars(word).replaceAll(RegExp('[^а-я]'), '');
+    final kept = <String>[
+      for (var i = 0; i < words.length; i++)
+        if (!(i == 0
+            ? SpeechNoise.isLeadNoise(bare(words[i]))
+            : SpeechNoise.isJunk(bare(words[i]))))
+          words[i],
+    ];
+    if (kept.length == words.length) return title;
+    return kept.join(' ').trim();
+  }
+
+  /// Слова, с которых название не начинается, если фраза понята верно:
+  /// «На утро написать …», «Чтобы я …», «С утра …».
+  static const Set<String> _badTitleStarts = <String>{
+    'на',
+    'с',
+    'со',
+    'в',
+    'во',
+    'к',
+    'чтобы',
+    'что',
+    'я',
+    'мы',
+    'это',
+  };
+
+  /// Слова времени, которые остались в названии неразобранными.
+  static const Set<String> _timeLeftovers = <String>{
+    'утро',
+    'утра',
+    'утром',
+    'вечер',
+    'вечера',
+    'вечером',
+    'обед',
+    'пораньше',
+    'часов',
+    'девять',
+    'восемь',
+    'десять',
+    'семь',
+    'полдевятого',
+  };
+
+  static bool _looksUnparsed(String title) {
+    final words = <String>[
+      for (final word in DueParser.normalizeChars(title).split(_spaces))
+        if (word.isNotEmpty) word,
+    ];
+    if (words.isEmpty) return false;
+    return _badTitleStarts.contains(words.first) ||
+        words.any(_timeLeftovers.contains);
+  }
+
+  ParsedCommand _parseUtterance(Utterance utterance) {
     final words = utterance.words;
     if (words.isEmpty && utterance.quotedTitles.isEmpty) {
       return const ParsedCommand(intent: CommandIntent.unknown);
@@ -402,7 +587,19 @@ final class ScenarioParser {
     'задача',
     'задачи',
     'напоминание',
+    'напоминалку',
+    'напоминалка',
+    'напоминалочку',
     'дело',
+  };
+
+  /// Существительные-напоминания: с ними «что»/«чтобы» после команды —
+  /// союз, как после «напомни» («поставь напоминание, чтобы я …»).
+  static const Set<String> _reminderNouns = <String>{
+    'напоминание',
+    'напоминалку',
+    'напоминалка',
+    'напоминалочку',
   };
 
   /// «Создай новую задачу», «добавь новое напоминание».
@@ -516,9 +713,17 @@ final class ScenarioParser {
     // Продолжение маркера: «мне», «пожалуйста», «задачу», «в список»,
     // а после «напомни» — «что»/«чтобы». Срок между ними пропускается:
     // «Добавь на завтра задачу купить хлеб».
-    final remind = _remindVerbs.contains(tokens[markerIndex].text);
-    var nounTaken = length > 1; // «новая задача» уже содержит существительное
+    final markerWord = tokens[markerIndex].text;
+    var remind = _remindVerbs.contains(markerWord) ||
+        markerWord == 'напомнить' ||
+        _reminderNouns.contains(markerWord);
+    // «Напоминание на вечер купить хлеб»: команда — одно существительное.
+    if (_reminderNouns.contains(markerWord)) _doubt += 0.2;
+    var nounTaken = length > 1 || _reminderNouns.contains(markerWord);
     var conjunctionTaken = false;
+    // «…, чтобы я написал Андрею»: глагол прошедшего времени станет
+    // инфинитивом названия.
+    UtteranceToken? pastVerb;
     var i = markerIndex + length;
     while (i < tokens.length) {
       final token = tokens[i];
@@ -527,7 +732,9 @@ final class ScenarioParser {
         i++;
         continue;
       }
-      if (_politeWords.contains(word) || _addressees.contains(word)) {
+      if (_politeWords.contains(word) ||
+          _addressees.contains(word) ||
+          SpeechNoise.isJunk(word)) {
         remove.add(token.span);
         i++;
         continue;
@@ -535,6 +742,7 @@ final class ScenarioParser {
       if (!nounTaken && _objectNouns.contains(word)) {
         remove.add(token.span);
         nounTaken = true;
+        if (_reminderNouns.contains(word)) remind = true;
         i++;
         continue;
       }
@@ -581,6 +789,11 @@ final class ScenarioParser {
         remove.add(token.span);
         conjunctionTaken = true;
         i++;
+        if (word == 'чтобы') {
+          final (next, verb) = _subjectClause(utterance, i, remove);
+          i = next;
+          pastVerb = verb;
+        }
         continue;
       }
       // «Напомни о том, что …», «напомни про то, что …».
@@ -609,11 +822,121 @@ final class ScenarioParser {
     if (signUp) remove.add(tokens[i].span);
 
     _trimEdgeWords(utterance, remove, _politeWords);
-    final text = _titleText(utterance, remove);
+    if (remind) _reminder = true;
+    var text = _titleText(utterance, remove);
     if (text.isEmpty) return null;
     if (signUp) return 'Записаться $text';
+    if (pastVerb != null) {
+      final infinitive = VerbForms.toInfinitive(pastVerb.text);
+      final first = _spaces.firstMatch(text);
+      final head = first == null ? text : text.substring(0, first.start);
+      if (infinitive != null &&
+          DueParser.normalizeChars(head) == pastVerb.text) {
+        text = _joinedInfinitives(
+          '$infinitive${text.substring(head.length)}',
+        );
+        _doubt += 0.1;
+      }
+      return Utterance.capitalize(text);
+    }
     return Utterance.capitalize(NounForms.nominative(text));
   }
+
+  static const Set<String> _subjectPronouns = <String>{'я', 'мы'};
+
+  /// После «чтобы»: «я», «я не забыл», затем глагол прошедшего времени —
+  /// «чтобы я написал Андрею», «чтобы я не забыл купить молоко». Слова
+  /// «я» и «не забыл» уходят из названия; глагол прошедшего времени
+  /// возвращается, чтобы стать инфинитивом. Перед инфинитивом он лишний
+  /// («чтобы я обещал позвонить» → «Позвонить») и тоже уходит.
+  (int, UtteranceToken?) _subjectClause(
+    Utterance utterance,
+    int start,
+    List<CharSpan> remove,
+  ) {
+    final tokens = utterance.tokens;
+    final due = utterance.due.spans;
+    var i = start;
+    int skipDue(int k) {
+      while (k < tokens.length && Utterance.isCovered(tokens[k], due)) {
+        k++;
+      }
+      return k;
+    }
+
+    i = skipDue(i);
+    var subject = false;
+    if (i < tokens.length && _subjectPronouns.contains(tokens[i].text)) {
+      remove.add(tokens[i].span);
+      subject = true;
+      i = skipDue(i + 1);
+    }
+    if (i + 1 < tokens.length &&
+        tokens[i].text == 'не' &&
+        _forgotForms.contains(tokens[i + 1].text)) {
+      remove
+        ..add(tokens[i].span)
+        ..add(tokens[i + 1].span);
+      return (skipDue(i + 2), null);
+    }
+    if (!subject || i >= tokens.length) return (i, null);
+    final verb = tokens[i];
+    if (!VerbForms.isPastVerb(verb.text) &&
+        VerbForms.toInfinitive(verb.text) == null) {
+      return (i, null);
+    }
+    final next = skipDue(i + 1);
+    if (next < tokens.length &&
+        DueParser.isInfinitive(tokens[next].text) &&
+        !_keptBeforeInfinitive.contains(verb.text)) {
+      remove.add(verb.span);
+      return (next, null);
+    }
+    return (i, verb);
+  }
+
+  /// Глаголы, которые перед инфинитивом — тоже дело: «чтобы я лёг спать»
+  /// → «Лечь спать», «чтобы я пошёл гулять» → «Пойти гулять».
+  static const Set<String> _keptBeforeInfinitive = <String>{
+    'лег',
+    'легла',
+    'легли',
+    'пошел',
+    'пошла',
+    'пошли',
+    'поехал',
+    'поехала',
+    'поехали',
+    'сел',
+    'села',
+    'сели',
+    'сходил',
+    'сходила',
+    'съездил',
+    'съездила',
+    'вышел',
+    'вышла',
+  };
+
+  /// «Сходить в магазин и купил хлеб» → «… и купить хлеб»: глагол
+  /// прошедшего времени после «и» — второе дело той же фразы.
+  static String _joinedInfinitives(String text) {
+    final words = text.split(' ');
+    for (var k = 1; k < words.length; k++) {
+      if (words[k - 1].toLowerCase() != 'и') continue;
+      final bare = DueParser.normalizeChars(words[k]);
+      if (!VerbForms.isPastVerb(bare)) continue;
+      final infinitive = VerbForms.toInfinitive(bare);
+      if (infinitive != null) words[k] = infinitive;
+    }
+    return words.join(' ');
+  }
+
+  static const Set<String> _forgotForms = <String>{
+    'забыл',
+    'забыла',
+    'забыли',
+  };
 
   /// Вступление перед маркером: приветствие ([SocialPrefix]), слова
   /// из [_leadIns] и срок с самого начала фразы до первого другого слова.
@@ -627,7 +950,10 @@ final class ScenarioParser {
     for (var i = start; i < markerIndex; i++) {
       final token = utterance.tokens[i];
       if (Utterance.isCovered(token, utterance.due.spans)) continue;
-      if (!_leadIns.contains(token.text)) break;
+      if (!_leadIns.contains(token.text) &&
+          !SpeechNoise.isLeadFiller(token.text)) {
+        break;
+      }
       result.add(token.span);
     }
     return result;
@@ -974,7 +1300,9 @@ final class ScenarioParser {
         i++;
         continue;
       }
-      if (_implicitLeadIns.contains(token.text)) {
+      // «хм, купить хлеб»: шум перед делом, как и в надиктованном.
+      if (_implicitLeadIns.contains(token.text) ||
+          SpeechNoise.isLeadNoise(token.text)) {
         remove.add(token.span);
         i++;
         continue;
@@ -1891,15 +2219,96 @@ final class ScenarioParser {
     'сделайте',
   };
 
-  /// Есть ли после глагола в позиции [index] существительное «задачу»
-  /// (через «мне», «пожалуйста», «новую»): «поставь мне новую задачу».
-  bool _nounFollows(int index, List<String> words) {
-    for (var i = index + 1; i < words.length && i <= index + 3; i++) {
-      final word = words[i];
-      if (_objectNouns.contains(word)) return true;
+  /// «Можешь», «можете», «сможешь» перед «напомнить».
+  static const Set<String> _canYou = <String>{
+    'можешь',
+    'можете',
+    'сможешь',
+    'сможете',
+    'мог',
+    'могла',
+    'могли',
+    'бы',
+  };
+
+  /// Слово перед [index], не считая «мне», «пожалуйста» и шума.
+  String? _previousWord(Utterance utterance, int index) {
+    for (var i = index - 1; i >= 0; i--) {
+      final word = utterance.tokens[i].text;
       if (_addressees.contains(word) ||
           _politeWords.contains(word) ||
-          _newAdjectives.contains(word)) {
+          SpeechNoise.isJunk(word)) {
+        continue;
+      }
+      return word;
+    }
+    return null;
+  }
+
+  /// «Напоминание завтра в 9 позвонить маме», «мне нужно напоминание на
+  /// вечер, чтобы я купил хлеб»: существительное в начале (после «мне
+  /// нужно», «нужен»), а за ним — дело: инфинитив или «чтобы». «Напоминание
+  /// про встречу перенеси» — о существующем напоминании, не команда.
+  bool _reminderLeads(Utterance utterance, int index) {
+    final tokens = utterance.tokens;
+    final due = utterance.due.spans;
+    final start = SocialPrefix.length(utterance);
+    for (var i = start < index ? start : 0; i < index; i++) {
+      final token = tokens[i];
+      if (Utterance.isCovered(token, due)) continue;
+      if (_leadIns.contains(token.text) ||
+          SpeechNoise.isLeadFiller(token.text) ||
+          _newAdjectives.contains(token.text)) {
+        continue;
+      }
+      return false;
+    }
+    var i = index + 1;
+    while (i < tokens.length &&
+        (Utterance.isCovered(tokens[i], due) ||
+            _politeWords.contains(tokens[i].text) ||
+            _addressees.contains(tokens[i].text) ||
+            SpeechNoise.isJunk(tokens[i].text))) {
+      i++;
+    }
+    if (i >= tokens.length) return false;
+    final word = tokens[i].text;
+    if (word == 'чтобы') return true;
+    return DueParser.isInfinitive(word) &&
+        !_notImplicitVerbs.contains(word) &&
+        !_isAssistantVerb(word);
+  }
+
+  /// Глаголы о самих задачах: «напоминание перенести», «напоминание
+  /// удалить» — о существующем.
+  static bool _isAssistantVerb(String word) =>
+      word.startsWith('перенес') ||
+      word.startsWith('передвин') ||
+      word.startsWith('сдвин') ||
+      word.startsWith('отлож') ||
+      word.startsWith('удал') ||
+      word.startsWith('выполн') ||
+      word.startsWith('заверш');
+
+  /// Есть ли после глагола в позиции [index] существительное «задачу»
+  /// (через «мне», «пожалуйста», «новую»): «поставь мне новую задачу».
+  bool _nounFollows(Utterance utterance, int index, List<String> words) {
+    final tokens = utterance.tokens;
+    var budget = 4;
+    for (var i = index + 1; i < words.length && budget > 0; i++) {
+      final word = words[i];
+      if (_objectNouns.contains(word)) return true;
+      // «поставь на утро напоминание»: срок между глаголом и
+      // существительным не считается.
+      if (i < tokens.length &&
+          Utterance.isCovered(tokens[i], utterance.due.spans)) {
+        continue;
+      }
+      budget--;
+      if (_addressees.contains(word) ||
+          _politeWords.contains(word) ||
+          _newAdjectives.contains(word) ||
+          SpeechNoise.isJunk(word)) {
         continue;
       }
       return false;
@@ -1995,6 +2404,7 @@ final class ScenarioParser {
     while (i < tokens.length &&
         (_addressees.contains(tokens[i].text) ||
             _politeWords.contains(tokens[i].text) ||
+            SpeechNoise.isJunk(tokens[i].text) ||
             Utterance.isCovered(tokens[i], utterance.due.spans))) {
       i++;
     }
@@ -2022,7 +2432,19 @@ final class ScenarioParser {
     if (_createVerbs.contains(word)) {
       return _signsUpOther(utterance, word, index) ? 0 : 1;
     }
-    if (_createWithNounVerbs.contains(word) && _nounFollows(index, words)) {
+    // «Можешь напомнить написать Андрею»: инфинитив после «можешь» —
+    // та же просьба, что «напомни». Без него («надо напомнить маме про
+    // лекарства») «напомнить» — само дело.
+    if (word == 'напомнить' &&
+        index > 0 &&
+        _canYou.contains(_previousWord(utterance, index))) {
+      return 1;
+    }
+    if (_reminderNouns.contains(word) && _reminderLeads(utterance, index)) {
+      return 1;
+    }
+    if (_createWithNounVerbs.contains(word) &&
+        _nounFollows(utterance, index, words)) {
       return 1;
     }
     // «сделай recurring по пятницам — выносить мусор»: сразу после глагола

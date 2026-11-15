@@ -232,7 +232,7 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
           key: const ValueKey<String>('generator-bits'),
           style: TextStyle(color: context.colors.text),
         ),
-        Text(
+        WholeWordText(
           'Подсказка по структуре: ${o.structureHint}. Она не снижает '
           'стойкость: биты посчитаны так, будто устройство пароля известно. '
           'Допишите к ней своё — то, что напомнит именно вам.',

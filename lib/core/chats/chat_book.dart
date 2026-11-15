@@ -527,6 +527,32 @@ final class ChatBook {
     return true;
   }
 
+  /// Убирает вложение [attachmentId] из сообщения [messageId] и стирает
+  /// его копию в папке сессии (ADR-028, «удали этот файл»). Исходный файл
+  /// пользователя не трогается: у приложения только копия. `false` —
+  /// такого вложения нет.
+  bool removeAttachment(String chatId, String messageId, String attachmentId) {
+    final id = resolve(chatId);
+    final thread = _chats[id];
+    if (thread == null) return false;
+    final message =
+        thread.messages.where((ChatMessage m) => m.id == messageId).firstOrNull;
+    if (message == null ||
+        !message.attachments.any((ChatAttachment a) => a.id == attachmentId)) {
+      return false;
+    }
+    replace(
+      id,
+      messageId,
+      message.withAttachments(<ChatAttachment>[
+        for (final attachment in message.attachments)
+          if (attachment.id != attachmentId) attachment,
+      ]),
+    );
+    _sweep(thread);
+    return true;
+  }
+
   /// Превью и последний ответивший по сообщениям чата [thread] из прежних
   /// версий (перенос прежнего «Главного», [backfillPreviews]).
   ///

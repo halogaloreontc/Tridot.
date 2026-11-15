@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../app_info.dart';
 import '../../connectors/connector.dart';
+import '../../connectors/question_phrases.dart';
 import '../../extensions/extension_registry.dart';
 import '../../formatting/due_format.dart';
 import '../../models/task.dart';
@@ -39,6 +40,15 @@ final class TalkConnector implements Connector, ConnectorHealth {
   /// «Открой мой Связной»: оболочка открывает раздел по этому intent.
   static const String openHubCommand = 'talk.openHub';
 
+  /// Справочный вопрос («напомни, какая формула суммы в гугл-таблицах?»):
+  /// без сети помощник на него не ответит и честно об этом говорит, а не
+  /// заводит задачу из вопроса.
+  static const String questionCommand = 'talk.question';
+
+  /// Уверенность справочного вопроса: ниже реплик беседы — «как дела?»
+  /// и «который час» понимаются точнее.
+  static const double questionConfidence = 0.5;
+
   /// Ответ «да» на «Передать жалобу администратору?».
   static const String complaintCommand = 'talk.complaint';
 
@@ -55,6 +65,7 @@ final class TalkConnector implements Connector, ConnectorHealth {
     rudeCommand,
     settingCommand,
     openHubCommand,
+    questionCommand,
   ];
 
   /// Уверенность беседы. Ниже явных команд других навыков, а флаг
@@ -118,7 +129,31 @@ final class TalkConnector implements Connector, ConnectorHealth {
   @override
   ConnectorMatch? match(Utterance utterance) {
     final request = TalkPhrases.recognize(utterance.original);
-    if (request == null) return null;
+    if (request == null) {
+      // «Который час?», «какой сегодня день недели» — ответ есть на самом
+      // устройстве, без справочника.
+      final clock = ClockQuestion.of(utterance);
+      if (clock != null) {
+        return ConnectorMatch(
+          connectorId: id,
+          commandId: questionCommand,
+          confidence: confidence,
+          payload: clock,
+          fallback: true,
+        );
+      }
+      final question = QuestionPhrases.detect(utterance);
+      if (question == null || QuestionPhrases.aboutApp(utterance)) {
+        return null;
+      }
+      return ConnectorMatch(
+        connectorId: id,
+        commandId: questionCommand,
+        confidence: questionConfidence,
+        payload: question,
+        fallback: true,
+      );
+    }
     return ConnectorMatch(
       connectorId: id,
       commandId: _commandOf[request.topic.name]!,
@@ -139,6 +174,29 @@ final class TalkConnector implements Connector, ConnectorHealth {
   ) async {
     final payload = match.payload;
     if (payload is ConfirmationAnswer) return _complaint(payload, session);
+    if (payload is ClockQuestion) {
+      final now = session.clock.now();
+      return _say(
+        session,
+        payload == ClockQuestion.time ? 'talk.clock.time' : 'talk.clock.date',
+        command: questionCommand,
+        values: <String, String>{
+          'time': formatTime(now),
+          'date': '${ClockQuestion.weekdays[now.weekday - 1]}, '
+              '${now.day} ${ClockQuestion.months[now.month - 1]}',
+        },
+      );
+    }
+    if (payload is QuestionMatch) {
+      return _say(
+        session,
+        payload.kind == QuestionKind.recall
+            ? 'talk.question.recall'
+            : 'talk.question.offline',
+        command: questionCommand,
+        status: AssistantStatus.noAction,
+      );
+    }
     final request = payload! as TalkRequest;
     final command = match.commandId;
     // «Спасибо, Нода», «как дела, Нода?»: отвечает названный активный

@@ -404,6 +404,11 @@ void main() {
       assistant.extensions.choiceWith(PasswordsConnector.id, true),
     );
     await tester.pumpAndSettle();
+    // Переписка начата: кнопок навыка над полем ввода нет (ADR-027) —
+    // они в новой сессии.
+    expect(find.byKey(const Key('quick-Открыть пароли')), findsNothing);
+    await tapInDrawer(tester, const Key('new-session'));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('quick-Открыть пароли')), findsOne);
     expect(find.byKey(const Key('quick-Подсказка к паролю…')), findsOne);
     await openCommandFinder(tester, 'сейф');

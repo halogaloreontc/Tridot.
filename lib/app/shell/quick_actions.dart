@@ -11,12 +11,12 @@ import '../widgets/whole_word_text.dart';
 /// что делать; `null` — недоступно (идёт отправка).
 typedef QuickAction = (String label, IconData icon, VoidCallback? onTap);
 
-/// Быстрые действия над полем ввода (макет «Д»).
+/// Быстрые действия над полем ввода (макет «Д») — только в новой сессии
+/// (ADR-027): в начатой переписке над полем ввода их нет, а действия к
+/// происходящему — одной строкой поверх ленты ([QuickActionsRow]).
 ///
-/// - [big] — пустая (новая) сессия: круглые кнопки 52 px «Задача»,
-///   «Напомнить» и, если включён навык «Пароли», «Пароль». Только здесь:
-///   когда в сессии уже есть сообщения, этих трёх кнопок нет — поле ввода
-///   и «+» их заменяют.
+/// - [big] — плитки «Задача», «Напомнить» и, если включён навык
+///   «Пароли», «Пароль».
 /// - Ниже — кнопки включённых ролей и действия выбранной задачи
 ///   («Перенести», «Заверши её»): переносом по строкам ('quick-rows').
 ///   Нет ни того, ни другого — виджет пустой, без отступов.
@@ -57,6 +57,9 @@ final class QuickActions extends StatefulWidget {
 }
 
 final class _QuickActionsState extends State<QuickActions> {
+  /// Место под полосу прокрутки справа от плиток и кнопок.
+  static const double _scrollbarRoom = 6;
+
   final ScrollController _rows = ScrollController();
   final ScrollController _strip = ScrollController();
 
@@ -168,6 +171,8 @@ final class _QuickActionsState extends State<QuickActions> {
             thumbVisibility: true,
             child: SingleChildScrollView(
               controller: _rows,
+              // Видимая полоса не ложится на правую плитку.
+              padding: const EdgeInsets.only(right: _scrollbarRoom),
               child: Column(
                 key: const Key('quick-actions'),
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -180,15 +185,34 @@ final class _QuickActionsState extends State<QuickActions> {
                     ),
                   if (extra.isNotEmpty) ...<Widget>[
                     if (main.isNotEmpty) const SizedBox(height: 8),
-                    Wrap(
-                      key: const Key('quick-rows'),
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: <Widget>[
-                        for (final item in extra)
-                          _Pill(item: item, small: true),
-                      ],
-                    ),
+                    if (_extraInOneLine(context, constraints, extra))
+                      // Телефон и крупный шрифт: кнопки паролей и ролей в
+                      // несколько строк съели бы заставку новой сессии —
+                      // одна строка с прокруткой вбок.
+                      SingleChildScrollView(
+                        key: const Key('quick-rows'),
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: <Widget>[
+                            for (final (index, item) in extra.indexed)
+                              Padding(
+                                padding:
+                                    EdgeInsets.only(left: index == 0 ? 0 : 8),
+                                child: _Pill(item: item, strip: true),
+                              ),
+                          ],
+                        ),
+                      )
+                    else
+                      Wrap(
+                        key: const Key('quick-rows'),
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: <Widget>[
+                          for (final item in extra)
+                            _Pill(item: item, small: true),
+                        ],
+                      ),
                   ],
                 ],
               ),
@@ -197,6 +221,20 @@ final class _QuickActionsState extends State<QuickActions> {
         );
       },
     );
+  }
+
+  /// В новой сессии на телефоне с крупным шрифтом (или на совсем узком
+  /// экране) три и больше кнопок паролей и ролей — одной строкой.
+  bool _extraInOneLine(
+    BuildContext context,
+    BoxConstraints constraints,
+    List<QuickAction> extra,
+  ) {
+    if (!widget.big || extra.length < 3) return false;
+    final width = constraints.maxWidth;
+    if (width >= 600) return false;
+    final scale = MediaQuery.textScalerOf(context).scale(10) / 10;
+    return scale >= 1.25 || width < 330;
   }
 
   static bool _isSelection(QuickAction action) =>
@@ -216,8 +254,7 @@ final class _BigRow extends StatelessWidget {
         color: context.colors.text,
       );
 
-  Widget _button(BuildContext context, QuickAction item) {
-    final labelStyle = _labelOf(context);
+  Widget _button(BuildContext context, QuickAction item, TextStyle labelStyle) {
     final (label, icon, onTap) = item;
     return Semantics(
       button: true,
@@ -257,6 +294,29 @@ final class _BigRow extends StatelessWidget {
     );
   }
 
+  /// Подпись плиток с одним на всех размером: самый мелкий из нужных,
+  /// чтобы самая длинная подпись уместилась в плитку целиком.
+  TextStyle _sharedLabel(BuildContext context, double width) {
+    final style = _labelOf(context);
+    if (!width.isFinite || items.isEmpty) return style;
+    final tile = (width - 8 * (items.length - 1)) / items.length - 16;
+    if (tile <= 0) return style;
+    final scaler = MediaQuery.textScalerOf(context);
+    var widest = 0.0;
+    for (final (label, _, _) in items) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      widest = math.max(widest, painter.width);
+      painter.dispose();
+    }
+    if (widest <= tile) return style;
+    return style.copyWith(fontSize: style.fontSize! * tile / widest);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Всегда одна строка (ADR-021): плитка не уходит вниз и не прячется
@@ -264,14 +324,98 @@ final class _BigRow extends StatelessWidget {
     // плитки уменьшается целиком («Напомнить» не рвётся).
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          // Подписи уменьшаются одинаково: «Напомнить» не мельче «Задачи».
+          final style = _sharedLabel(context, constraints.maxWidth);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              for (var i = 0; i < items.length; i++) ...<Widget>[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(child: _button(context, items[i], style)),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Кнопка строки [QuickActionsRow]: ключ кнопки и само действие.
+typedef QuickRowItem = (Key key, QuickAction action);
+
+/// Одна строка действий в начатой переписке (ADR-027): над полем ввода,
+/// поверх ленты и без своего фона — у каждой кнопки только её заливка.
+/// Не помещается — прокручивается вбок, края гаснут. Пусто — ничего.
+///
+/// Высота строки — [height]: на столько лента поднимает последнее
+/// сообщение, чтобы строка не закрывала карточки.
+final class QuickActionsRow extends StatelessWidget {
+  const QuickActionsRow({
+    super.key,
+    required this.items,
+    this.label = 'Действия',
+    this.inset = 16,
+  });
+
+  final List<QuickRowItem> items;
+
+  /// Поле слева и справа: первая кнопка — по краю ленты.
+  final double inset;
+
+  /// Подпись группы для экранного диктора.
+  final String label;
+
+  /// Кнопка 44 (пилюля 36 и поля 4) и зазор до поля ввода.
+  static const double height = 44;
+
+  /// Ширина, на которой гаснут края (не больше [inset]).
+  static const double _fade = 16;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    final row = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const ClampingScrollPhysics(),
+      padding: EdgeInsets.symmetric(horizontal: inset),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          for (var i = 0; i < items.length; i++) ...<Widget>[
-            if (i > 0) const SizedBox(width: 8),
-            Expanded(child: _button(context, items[i])),
-          ],
+          for (final (index, (key, action)) in items.indexed)
+            Padding(
+              padding: EdgeInsets.only(left: index == 0 ? 0 : 8),
+              child: _Pill(item: action, strip: true, inkKey: key),
+            ),
         ],
+      ),
+    );
+    return Semantics(
+      container: true,
+      label: label,
+      child: SizedBox(
+        key: const Key('quick-float-row'),
+        width: double.infinity,
+        height: height,
+        child: ShaderMask(
+          shaderCallback: (Rect bounds) {
+            final fade = math.min(_fade, inset);
+            final edge = bounds.width <= 0 ? 0.0 : fade / bounds.width;
+            return LinearGradient(
+              // Маска, а не цвет: важна только непрозрачность.
+              colors: const <Color>[
+                Colors.transparent,
+                Colors.black,
+                Colors.black,
+                Colors.transparent,
+              ],
+              stops: <double>[0, edge, 1 - edge, 1],
+            ).createShader(bounds);
+          },
+          blendMode: BlendMode.dstIn,
+          child: row,
+        ),
       ),
     );
   }
@@ -283,10 +427,14 @@ final class _Pill extends StatelessWidget {
     required this.item,
     this.small = false,
     this.strip = false,
+    this.inkKey,
   });
 
   final QuickAction item;
   final bool small;
+
+  /// Ключ кнопки; `null` — `quick-<подпись>`.
+  final Key? inkKey;
 
   /// В строке с горизонтальной прокруткой: ширина по тексту, без сжатия.
   final bool strip;
@@ -309,7 +457,7 @@ final class _Pill extends StatelessWidget {
       onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
-        key: Key('quick-$label'),
+        key: inkKey ?? Key('quick-$label'),
         onTap: onTap,
         customBorder: const StadiumBorder(),
         // Пилюля 36, цель нажатия — 44 по высоте.

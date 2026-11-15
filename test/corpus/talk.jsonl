@@ -177,3 +177,21 @@
 {"id": "talk-177", "text": "открой мою связную", "connector": "talk", "intent": "talk.openHub", "note": "винительный падеж", "source": "manual"}
 {"id": "talk-178", "text": "Мой Связной открой", "connector": "talk", "intent": "talk.openHub", "note": "глагол после названия", "source": "manual"}
 {"id": "talk-179", "text": "открой мой связный", "connector": "talk", "intent": "talk.openHub", "note": "так пишет голосовой ввод", "source": "manual"}
+{"id": "talk-q01", "text": "Нужен напомни пожалуйста какая формула суммы в гугл таблицах?", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q02", "text": "напомни какая формула суммы в гугл таблицах", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q03", "text": "напомни пожалуйста как сделать сумму в экселе", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q04", "text": "напомни как называется столица австралии", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q05", "text": "подскажи какая формула суммы в гугл таблицах", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q06", "text": "какая формула суммы в гугл таблицах", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q07", "text": "напомни где лежат ключи от гаража?", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q08", "text": "напомни что я хотел купить", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q09", "text": "напомни мне сколько стоит подписка", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q10", "text": "напомни когда день рождения у андрея", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q11", "text": "напомни кто звонил вчера", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q12", "text": "не подскажешь как называется эта песня", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q13", "text": "эм подскажите что такое ипотека", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id": "talk-q14", "text": "скажи почему небо голубое", "connector": "talk", "intent": "talk.question", "source": "manual"}
+{"id":"talk-q15","text":"сколько времени","connector":"talk","intent":"talk.question","source":"manual"}
+{"id":"talk-q16","text":"который сейчас час?","connector":"talk","intent":"talk.question","source":"manual"}
+{"id":"talk-q17","text":"какой сегодня день недели","connector":"talk","intent":"talk.question","source":"manual"}
+{"id":"talk-q18","text":"а какое сегодня число","connector":"talk","intent":"talk.question","source":"manual"}

@@ -261,6 +261,24 @@
     "weather.day": "{place}, {day}: {sky}, {min}…{max}, осадки {chance}.",
     "weather.rain.yes": "{place}, {day}: {kind}, {chance}. Нужен зонт.",
     "weather.rain.no": "{place}, {day}: без осадков.",
-    "weather.week": "{place}: неделя — в карточке."
+    "weather.week": "{place}: неделя — в карточке.",
+    "talk.question.offline": "Такое не подскажу: справочника нет, в сеть не хожу. Могу записать задачей: «добавь задачу узнать …».",
+    "talk.clock.time": "Сейчас {time}.",
+    "talk.clock.date": "Сегодня {date}.",
+    "talk.question.recall": "Помню только задачи: «покажи задачи».",
+    "task.clarify.reminder": "Напомнить «{title}» {due}?",
+    "task.clarify.task": "Задача «{title}» {due}?",
+    "task.clarify.task.noDue": "Задача «{title}»?",
+    "task.clarify.edit": "Не создаю. Команда в поле ввода.",
+    "files.delete.confirm": "Удалить «{name}»? Исходник останется.",
+    "files.delete.confirm.attachment": "Удалить «{name}» из сессии? Исходный файл останется.",
+    "files.delete.confirm.downloads": "Удалить «{name}» из «{folder}»?",
+    "files.delete.done": "«{name}» удалён.",
+    "files.delete.cancelled": "Не удаляю.",
+    "files.delete.none": "Файлов в сессии нет.",
+    "files.delete.noneOfKind": "Такого файла в сессии нет.",
+    "files.delete.which": "Какой: {options}?",
+    "files.delete.failed": "Не удалось удалить «{name}».",
+    "files.delete.unavailable": "Отсюда не удалить: «Файлы сессии» → меню файла."
   }
 }

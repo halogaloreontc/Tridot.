@@ -276,9 +276,58 @@ void main() {
         (WidgetTester tester) async {
       await _pump(tester);
       await send(tester, 'расскаж шутку');
+      // Строка подсказок прокручивается вбок: последняя кнопка — за краем.
+      await tester.ensureVisible(find.byKey(const Key('suggest-find')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('suggest-find')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('command-finder')), findsOneWidget);
+    });
+
+    testWidgets('начатая переписка: одна строка поверх ленты (ADR-027)',
+        (WidgetTester tester) async {
+      await _pump(tester);
+      // Новая сессия: крупные быстрые действия у поля ввода.
+      expect(find.byKey(const Key('quick-Задача')), findsOneWidget);
+      await send(tester, 'Добавь задачу купить хлеб');
+      expect(find.byKey(const Key('quick-Задача')), findsNothing);
+      expect(find.byKey(const Key('quick-rows')), findsNothing);
+      final row = find.byKey(const Key('quick-float-row'));
+      expect(row, findsOneWidget);
+      expect(
+        find.descendant(
+          of: row,
+          matching: find.byKey(const Key('quick-Заверши её')),
+        ),
+        findsOneWidget,
+      );
+
+      await send(tester, 'расскаж шутку');
+      expect(row, findsOneWidget);
+      expect(find.byKey(const Key('quick-rows')), findsNothing);
+      final rowRect = tester.getRect(row);
+      expect(rowRect.height, lessThanOrEqualTo(52));
+      // Последний ответ в покое — над строкой, строка его не закрывает.
+      final answer = tester.getRect(
+        find.textContaining('Не до конца понял').last,
+      );
+      expect(answer.bottom, lessThanOrEqualTo(rowRect.top));
+      // Строка — над полем ввода.
+      expect(
+        rowRect.bottom,
+        lessThanOrEqualTo(
+          tester.getRect(find.byKey(const Key('assistant-input'))).top,
+        ),
+      );
+
+      // Набирают текст — строка прячется; стёрли — вернулась.
+      await tester.enterText(find.byKey(const Key('assistant-input')), 'п');
+      await tester.pumpAndSettle();
+      expect(row, findsNothing);
+      await tester.enterText(find.byKey(const Key('assistant-input')), '');
+      await tester.pumpAndSettle();
+      expect(row, findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('понятая фраза — без кнопок', (WidgetTester tester) async {

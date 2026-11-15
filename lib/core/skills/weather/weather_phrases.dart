@@ -1,3 +1,4 @@
+import '../../connectors/question_phrases.dart';
 import '../../connectors/utterance.dart';
 import 'place_names.dart';
 
@@ -276,11 +277,23 @@ abstract final class WeatherPhrases {
     'снег',
   };
 
+  static bool _remindQuestion(Utterance utterance) {
+    final question = QuestionPhrases.detect(utterance);
+    return question != null &&
+        question.remindOpener &&
+        question.kind == QuestionKind.info &&
+        utterance.words.where(_taskVerbs.contains).length == 1;
+  }
+
   /// Разбирает фразу; `null` — не о погоде.
   static WeatherAsk? parse(Utterance utterance, DateTime now) {
     final words = utterance.words;
     if (words.isEmpty) return null;
-    if (words.any(_taskVerbs.contains)) return null;
+    // «Напомни, какая погода завтра» — вопрос, а не задача: «напомни»
+    // здесь просит подсказать.
+    if (words.any(_taskVerbs.contains) && !_remindQuestion(utterance)) {
+      return null;
+    }
     final weather = words.any(_weather.contains);
     var forecast = false;
     for (var i = 0; i < words.length; i++) {

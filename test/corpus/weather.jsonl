@@ -43,3 +43,4 @@
 {"id": "wth-n13", "text": "подготовить отчёт о погоде для клиента", "intent": "createTask"}
 {"id": "wth-n14", "text": "перенеси задачу про зонт на завтра", "intent": "rescheduleTask"}
 {"id": "wth-n15", "text": "выполнил задачу про зонт", "intent": "completeTask"}
+{"id":"wth-v01","text":"напомни, какая погода завтра","connector":"weather","intent":"weather.day","form":{"day":"2026-11-03"},"source":"manual"}

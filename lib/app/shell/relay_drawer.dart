@@ -1187,48 +1187,32 @@ final class _Sections extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          for (final (index, (id, label, icon, count, alert, onTap))
-              in items.indexed) ...<Widget>[
-            if (index > 0) const SizedBox(height: 2),
-            if (id == 'projects' && onNewProject != null)
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: _SectionRow(
-                      id: id,
-                      label: label,
-                      icon: icon,
-                      count: count,
-                      alert: alert,
-                      selected: active == id,
-                      wide: wide,
-                      onTap: onTap,
-                    ),
-                  ),
-                  IconButton(
-                    key: const Key('project-new'),
-                    tooltip: 'Новый проект',
-                    onPressed: onNewProject,
-                    iconSize: 20,
-                    color: context.colors.icon,
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(44, 44),
-                    ),
-                    icon: const Icon(Icons.create_new_folder_outlined),
-                  ),
-                ],
-              )
-            else
-              _SectionRow(
-                id: id,
-                label: label,
-                icon: icon,
-                count: count,
-                alert: alert,
-                selected: active == id,
-                wide: wide,
-                onTap: onTap,
-              ),
+          for (final (id, label, icon, count, alert, onTap)
+              in items) ...<Widget>[
+            // Заливка выбранной строки — по всей строке, вместе с «+».
+            _SectionRow(
+              id: id,
+              label: label,
+              icon: icon,
+              count: count,
+              alert: alert,
+              selected: active == id,
+              wide: wide,
+              onTap: onTap,
+              trailing: id == 'projects' && onNewProject != null
+                  ? IconButton(
+                      key: const Key('project-new'),
+                      tooltip: 'Новый проект',
+                      onPressed: onNewProject,
+                      iconSize: 20,
+                      color: context.colors.icon,
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(44, 44),
+                      ),
+                      icon: const Icon(Icons.create_new_folder_outlined),
+                    )
+                  : null,
+            ),
             if (id == 'projects') ..._folders(),
           ],
         ],
@@ -1271,13 +1255,17 @@ final class _ProjectRow extends StatelessWidget {
       label: semantics,
       onTap: onTap,
       excludeSemantics: true,
-      child: InkWell(
+      child: SelectableRow(
+        selected: selected,
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 48),
-          padding: const EdgeInsets.fromLTRB(56, 4, 16, 4),
-          color: selected ? context.colors.bubble : null,
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.fromLTRB(
+            56 - AppSpace.selectionInsetH,
+            4,
+            16 - AppSpace.selectionInsetH,
+            4,
+          ),
           child: Row(
             children: <Widget>[
               Icon(icon, size: wide ? 18 : 20, color: context.colors.icon),
@@ -1290,7 +1278,9 @@ final class _ProjectRow extends StatelessWidget {
                   style: projectName
                       ? projectNameStyle(
                           fontSize: 17,
-                          color: context.colors.text,
+                          color: selected
+                              ? context.colors.textStrong
+                              : context.colors.text,
                         )
                       : TextStyle(
                           fontSize: 15,
@@ -1326,12 +1316,16 @@ final class _SectionRow extends StatelessWidget {
     required this.selected,
     required this.wide,
     required this.onTap,
+    this.trailing,
   });
 
   final String id;
   final String label;
   final IconData icon;
   final int? count;
+
+  /// Кнопка в конце строки («+» у «Проектов»): внутри заливки выбора.
+  final Widget? trailing;
 
   /// Вторая строка цветом опасности: «1 просрочена».
   final String? alert;
@@ -1350,7 +1344,7 @@ final class _SectionRow extends StatelessWidget {
     final loud = alert != null;
     final labelStyle = TextStyle(
       fontSize: 17,
-      fontWeight: FontWeight.w400,
+      fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
       height: 1.35,
       color: context.colors.textStrong,
     );
@@ -1360,13 +1354,18 @@ final class _SectionRow extends StatelessWidget {
       label: semantics,
       onTap: onTap,
       excludeSemantics: true,
-      child: InkWell(
-        key: Key('nav-$id'),
+      child: SelectableRow(
+        inkKey: Key('nav-$id'),
+        selected: selected,
         onTap: onTap,
         child: Container(
           constraints: const BoxConstraints(minHeight: AppSize.rowMin),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          color: selected ? context.colors.bubble : null,
+          padding: EdgeInsets.only(
+            left: 16 - AppSpace.selectionInsetH,
+            right: (trailing == null ? 16 : 4) - AppSpace.selectionInsetH,
+            top: 4,
+            bottom: 4,
+          ),
           child: Row(
             children: <Widget>[
               IconTile(icon: icon, color: tile(context)),
@@ -1425,6 +1424,10 @@ final class _SectionRow extends StatelessWidget {
                   size: 20,
                   color: context.colors.faint,
                 ),
+              ],
+              if (trailing case final Widget trailing) ...<Widget>[
+                const SizedBox(width: 4),
+                trailing,
               ],
             ],
           ),
@@ -1772,17 +1775,20 @@ final class _SessionRowState extends State<_SessionRow> {
     final label = 'Сессия «${entry.title}»';
     final onAction = widget.onAction;
     final showMore = widget.wide && _acts && (_hover || _focused);
+    final radius = SelectableRow.radiusOf(inGroup: false);
     final row = InkWell(
       key: entry.itemKey,
       focusNode: _rowFocus,
       onTap: widget.onTap,
       onLongPress: _acts ? _openMenu : null,
       onSecondaryTap: _acts ? _openMenu : null,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: radius,
+      // Контейнер, а не Ink: «поднятая» в меню строка прячется вместе с
+      // заливкой.
       child: Container(
         decoration: BoxDecoration(
-          color: entry.active ? context.colors.bubble : null,
-          borderRadius: BorderRadius.circular(AppRadius.field),
+          color: entry.active ? context.colors.selection : null,
+          borderRadius: radius,
         ),
         child: Opacity(
           // Строка «поднята» в меню действий: на месте — пусто.

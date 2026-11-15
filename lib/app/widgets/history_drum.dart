@@ -775,21 +775,16 @@ final class _DrumCard extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        _WordEllipsis(
-                          entry.command,
-                          maxLines: layout.commandLines,
-                          style: text.bodyLarge!.copyWith(color: textColor),
+                        _CommandAndResult(
+                          command: entry.command,
+                          result: result,
+                          commandLines: layout.commandLines,
+                          resultLines: layout.resultLines,
+                          commandStyle:
+                              text.bodyLarge!.copyWith(color: textColor),
+                          resultStyle:
+                              text.bodyMedium!.copyWith(color: colors.muted),
                         ),
-                        if (result != null && layout.resultLines > 0)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: _WordEllipsis(
-                              result,
-                              maxLines: layout.resultLines,
-                              style: text.bodyMedium!
-                                  .copyWith(color: colors.muted),
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -819,6 +814,90 @@ final class _DrumCard extends StatelessWidget {
   }
 }
 
+/// Команда и под ней ответ. Ответу места нет ([HistoryDrumLayout]
+/// отдал его команде), а команда короче — свободные строки достаются
+/// ответу: на карточке не остаётся пустого места над подсказкой.
+final class _CommandAndResult extends StatelessWidget {
+  const _CommandAndResult({
+    required this.command,
+    required this.result,
+    required this.commandLines,
+    required this.resultLines,
+    required this.commandStyle,
+    required this.resultStyle,
+  });
+
+  final String command;
+  final String? result;
+  final int commandLines;
+  final int resultLines;
+  final TextStyle commandStyle;
+  final TextStyle resultStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        var lines = resultLines;
+        var commandMax = commandLines;
+        final result = this.result;
+        if (result != null && lines == 0 && constraints.maxWidth.isFinite) {
+          final painter = TextPainter(
+            text: TextSpan(text: _glued(command), style: commandStyle),
+            textDirection: direction,
+            textScaler: scaler,
+            maxLines: commandLines,
+          )..layout(maxWidth: constraints.maxWidth);
+          final used = painter.computeLineMetrics().length;
+          painter.dispose();
+          final commandLine = scaler.scale(commandStyle.fontSize ?? 17) *
+              (commandStyle.height ?? 1.45);
+          final resultLine = scaler.scale(resultStyle.fontSize ?? 15) *
+              (resultStyle.height ?? 1.4);
+          final spare = (commandLines - used) * commandLine - 2;
+          if (spare >= resultLine) {
+            lines = (spare / resultLine).floor();
+            commandMax = used;
+          }
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            _WordEllipsis(command, maxLines: commandMax, style: commandStyle),
+            if (result != null && lines > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: _WordEllipsis(
+                  result,
+                  maxLines: lines,
+                  style: resultStyle,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Однобуквенное слово не висит в конце строки: «в 7» — вместе; число
+/// в конце — при слове перед ним: «на 7», а не «на» и «7» строкой ниже.
+/// Тире — при слове перед ним: строка с «—» не начинается.
+String _glued(String text) => bindDashes(
+      text
+          .replaceAllMapped(
+            RegExp(r'(^|\s)(\S) '),
+            (Match m) => '${m[1]}${m[2]}\u00a0',
+          )
+          .replaceAllMapped(
+            RegExp(r' (\d[\d:.,]*)$'),
+            (Match m) => '\u00a0${m[1]}',
+          ),
+    );
+
 /// Текст не длиннее [maxLines] строк; не входит — обрезан по границе слова
 /// с «…» («разбуди меня в…», а не «разбуди меня в пя…»).
 final class _WordEllipsis extends StatelessWidget {
@@ -834,11 +913,7 @@ final class _WordEllipsis extends StatelessWidget {
     final direction = Directionality.of(context);
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        // Однобуквенное слово не висит в конце строки: «в 7» — вместе.
-        final glued = text.replaceAllMapped(
-          RegExp(r'(^|\s)(\S) '),
-          (Match m) => '${m[1]}${m[2]}\u00a0',
-        );
+        final glued = _glued(text);
         final shown = fitWords(
           glued,
           style: style,
@@ -889,8 +964,10 @@ String fitWords(
   var best = 0;
   while (low <= high) {
     final mid = (low + high) ~/ 2;
-    final head =
-        words.take(mid).join(' ').replaceFirst(RegExp(r'[ .,;:!?…—–-]+$'), '');
+    final head = words
+        .take(mid)
+        .join(' ')
+        .replaceFirst(RegExp(r'[ \u00a0.,;:!?…—–·-]+$'), '');
     if (fits('$head…')) {
       best = mid;
       low = mid + 1;
@@ -901,8 +978,10 @@ String fitWords(
   // Даже первое слово не входит — пусть режет сам [Text].
   if (best == 0) return text;
   // «сутки.…» — без знака перед многоточием.
-  final head =
-      words.take(best).join(' ').replaceFirst(RegExp(r'[ .,;:!?…—–-]+$'), '');
+  final head = words
+      .take(best)
+      .join(' ')
+      .replaceFirst(RegExp(r'[ \u00a0.,;:!?…—–·-]+$'), '');
   return '$head…';
 }
 

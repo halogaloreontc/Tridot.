@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, listEquals, setEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -550,6 +552,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    // «Удали этот файл» (ADR-028): навык спрашивает, удаляет лента.
+    widget.assistant.session.fileRemover = _fileRemover;
     WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
     widget.voice?.addListener(_onVoiceChanged);
@@ -811,6 +815,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    if (identical(widget.assistant.session.fileRemover, _fileRemover)) {
+      widget.assistant.session.fileRemover = null;
+    }
     unawaited(_openedTask?.cancel());
     widget.ffmpeg?.removeListener(_onJobsChanged);
     widget.ytdl?.tool.removeListener(_onJobsChanged);
@@ -826,7 +833,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _voiceAttempt++;
     if (_voiceListening || _voiceLoading) {
       unawaited(_voiceEvents?.cancel());
-      unawaited(widget.voice?.recognizer.cancel());
+      unawaited((_voiceRecognizer ?? widget.voice?.active)?.cancel());
     }
     _dataRevision.dispose();
     _underHeader.dispose();
@@ -877,6 +884,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _refresh();
       _preloadVoice();
+      // После системной загрузки русского языка распознавание телефона
+      // могло стать готовым.
+      unawaited(widget.voice?.refreshDevice());
     }
     if (state == AppLifecycleState.paused) _saveDocument();
     // В фоне не слушаем: распознавание прерывается без итога.
@@ -1090,6 +1100,82 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return files.length <= 20 ? files : files.sublist(files.length - 20);
   }
 
+  /// «Файлы сессии» [chatId] для навыков, новые первыми: по ним «удали
+  /// этот файл» находит результат карточки или вложение (ADR-028).
+  List<SessionFileRef> _recentFiles(String chatId) {
+    final thread = _book.thread(chatId);
+    if (thread == null) return const <SessionFileRef>[];
+    final lists = SessionFiles.of(thread);
+    final files = <SessionFile>[...lists.outputs, ...lists.attachments]
+      ..sort((SessionFile a, SessionFile b) => b.at.compareTo(a.at));
+    return <SessionFileRef>[
+      for (final file in files.take(20))
+        SessionFileRef(
+          id: file.id,
+          name: file.name,
+          output: file.isOutput,
+          path: file.absolute,
+          extensionId: file.extensionId,
+          messageId: file.messageId,
+        ),
+    ];
+  }
+
+  late final SessionFileRemover _fileRemover =
+      _SessionFileRemover(_removeSessionFile);
+
+  /// Удаляет файл сессии после подтверждения: результат — с диска и из
+  /// карточки, вложение — из сообщения вместе с копией приложения.
+  /// Исходник пользователя не трогается: у вложения это чужой файл, а
+  /// результат карточки — новый файл, сделанный приложением. Папку
+  /// результата (распакованный архив) так не удалить.
+  Future<bool> _removeSessionFile(SessionFileRef ref) async {
+    final chatId = _workingChatId ?? _book.currentId;
+    final thread = _book.thread(chatId);
+    final messageId = ref.messageId;
+    if (thread == null || messageId == null) return false;
+    if (!ref.output) {
+      final attachmentId = ref.id.startsWith('att:') ? ref.id.substring(4) : '';
+      final removed = _book.removeAttachment(chatId, messageId, attachmentId);
+      if (removed && mounted) setState(() {});
+      return removed;
+    }
+    final path = ref.path;
+    final job = thread.messages
+        .where((ChatMessage m) => m.id == messageId)
+        .firstOrNull
+        ?.job;
+    if (path == null || job == null || !job.outputs.contains(path)) {
+      return false;
+    }
+    try {
+      final type = await FileSystemEntity.type(path);
+      if (type == FileSystemEntityType.directory) return false;
+      if (type != FileSystemEntityType.notFound) await File(path).delete();
+    } on FileSystemException {
+      return false;
+    }
+    job.outputs = <String>[
+      for (final output in job.outputs)
+        if (output != path) output,
+    ];
+    _book.touch(chatId);
+    unawaited(_book.flush());
+    if (mounted) setState(() {});
+    return true;
+  }
+
+  /// «Удалить» в меню «Файлов сессии»: тот же вопрос, что у фразы «удали
+  /// этот файл», — в чате, с кнопками «Удалить» и «Отмена».
+  void _deleteFromPanel(SessionFile file) {
+    if (_sending) return;
+    // На телефоне панель выдвижная: вопрос — в ленте под ней.
+    if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
+      _scaffoldKey.currentState?.closeEndDrawer();
+    }
+    unawaited(_send('удали файл «${file.name}»'));
+  }
+
   /// Чат прочитан с диска: хвосты задач, прерванных перезапуском
   /// (`.part`, временные папки рядом с исходником), убираются сразу.
   void _sweepInterruptedJobs(ChatThread thread) {
@@ -1145,6 +1231,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _applyAppLock(settings);
     widget.onAppearanceChanged?.call(settings.appearance);
     widget.onReduceMotionChanged?.call(settings.reduceMotion);
+    widget.voice?.choice = settings.voiceEngine;
     setState(() {
       _settings = settings;
       _settingsLoaded = true;
@@ -1236,6 +1323,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (settings.reduceMotion != _settings.reduceMotion) {
       widget.onReduceMotionChanged?.call(settings.reduceMotion);
     }
+    widget.voice?.choice = settings.voiceEngine;
     setState(() => _settings = settings);
     unawaited(_settingsStore.save(settings));
     _preloadVoice();
@@ -1375,6 +1463,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _input.text).trim();
+    // Надиктовано и отправлено без правки: разбор строже переспрашивает
+    // («Понял так: …»).
+    final voiced = _voiceText;
+    final fromVoice = preset == null && voiced != null && voiced.trim() == text;
     // Файлы уходят с командой из поля ввода, не с быстрой кнопкой.
     final files = preset == null
         ? List<_PendingFile>.of(_pendingFiles)
@@ -1489,6 +1581,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
     _scrollToLatest();
     await _saveDocument();
+    _voiceText = null;
     final handled = await widget.assistant.handle(
       secret ? shown : text,
       chatTaskId: chatTaskId,
@@ -1502,6 +1595,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
       ],
       recentAttachments: _sessionFiles(chatId, skipMessageId: commandId),
+      recentFiles: secret ? const <SessionFileRef>[] : _recentFiles(chatId),
+      fromVoice: fromVoice,
     );
     if (!mounted) return;
     // Файлы с непонятным текстом («Смета и эскиз») — подпись к файлам, а
@@ -1555,6 +1650,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _cubeTimer = Timer(const Duration(milliseconds: 1600), () {
       if (mounted && !_sending) setState(() => _cube = CubeState.idle);
     });
+    // «Исправить» на «Понял так: …»: понятая команда — в поле ввода, курсор
+    // в конце; черновик, который человек успел набрать, не затирается.
+    final draft = response.draft;
+    if (draft != null &&
+        _input.text.trim().isEmpty &&
+        chatId == _book.currentId) {
+      _input.value = TextEditingValue(
+        text: draft,
+        selection: TextSelection.collapsed(offset: draft.length),
+      );
+    }
     // Своя страница или приложение погоды: только у живого ответа, в
     // истории запроса нет.
     if (response.launch case final LaunchRequest launch) {
@@ -2281,18 +2387,22 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (_voiceListening) return VoiceButtonMode.listening;
     if (_voiceLoading) return VoiceButtonMode.loading;
-    if (!_settings.voiceInput || !voice.isInstalled) return VoiceButtonMode.off;
+    if (!_settings.voiceInput || !voice.isReady) return VoiceButtonMode.off;
     return VoiceButtonMode.idle;
   }
 
   void _onVoiceChanged() {
     if (!mounted) return;
     final voice = widget.voice;
-    if (_voiceAwaitInstall && voice != null && !voice.isBusy) {
+    if (_voiceAwaitInstall &&
+        voice != null &&
+        !voice.isBusy &&
+        !voice.isDeviceDownloading) {
       _voiceAwaitInstall = false;
-      if (voice.isInstalled) {
+      if (voice.isReady) {
         _voiceSay('Голосовой ввод готов');
-      } else if (voice.error case final VoiceKitError error) {
+      } else if (voice.engine == VoiceEngine.vosk && voice.error != null) {
+        final error = voice.error!;
         _voiceSay(error.message);
       }
     }
@@ -2307,7 +2417,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (voice == null ||
         voice.support == VoiceSupport.unsupported ||
         !_settings.voiceInput ||
-        !voice.isInstalled) {
+        !voice.isReady) {
       return;
     }
     unawaited(
@@ -2341,7 +2451,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _startVoice() async {
     final voice = widget.voice;
     if (voice == null || _sending || _voiceListening || _voiceLoading) return;
-    if (!_settings.voiceInput || !voice.isInstalled) {
+    if (!_settings.voiceInput || !voice.isReady) {
       await _offerVoice();
       return;
     }
@@ -2354,7 +2464,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final VoicePermission permission;
       _voiceAskingPermission = true;
       try {
-        permission = await voice.recognizer.ensurePermission();
+        permission = await voice.active.ensurePermission();
       } finally {
         _voiceAskingPermission = false;
       }
@@ -2372,6 +2482,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _voiceLoading = true;
       _voicePartial = '';
+      _voicePartialRaw = '';
       _voiceNotice = null;
     });
     // Доступ спрашивается каждый раз: на Android 13+ «Только в этот раз»
@@ -2379,7 +2490,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     VoicePermission permission;
     _voiceAskingPermission = true;
     try {
-      permission = await voice.recognizer.ensurePermission();
+      permission = await voice.active.ensurePermission();
     } on Object {
       permission = VoicePermission.denied;
     } finally {
@@ -2411,8 +2522,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
     final Stream<VoiceEvent> events;
+    final recognizer = _voiceRecognizer = voice.active;
     try {
-      events = voice.recognizer.start();
+      events = recognizer.start();
     } on Object {
       _endVoice();
       _voiceSay(VoiceErrorCode.engine.message);
@@ -2469,7 +2581,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _voiceMaxTimer?.cancel();
     final subscription = _voiceEvents;
     try {
-      await voice.recognizer.stop();
+      await (_voiceRecognizer ?? voice.active).stop();
     } on Object {
       if (_voiceEvents != subscription) return;
       _endVoice();
@@ -2483,7 +2595,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _voiceAutoStop = null;
     final active = _voiceListening || _voiceLoading;
     final subscription = _voiceEvents;
-    final recognizer = widget.voice?.recognizer;
+    final recognizer = _voiceRecognizer ?? widget.voice?.active;
     _voiceEvents = null;
     _endVoice();
     if (!active) return;
@@ -2507,6 +2619,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _voiceListening = false;
       _voiceLoading = false;
       _voicePartial = '';
+      _voicePartialRaw = '';
     });
   }
 
@@ -2515,10 +2628,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     switch (event) {
       case VoicePartial(:final text):
         final partial = normalizeRecognized(text);
-        // Тишина считается от последнего нового слова.
-        if (partial.isNotEmpty && partial != _voicePartial) {
+        // Тишина считается от последнего нового слова — по сырому тексту:
+        // чистка схлопывает повторы («слово слово»), а речь всё равно идёт.
+        final raw = text.trim();
+        if (raw.isNotEmpty && raw != _voicePartialRaw) {
           _armVoiceSilence(_voiceAttempt, _voiceSilence);
         }
+        _voicePartialRaw = raw;
         setState(() => _voicePartial = partial);
       case VoiceFinal(:final text):
         final reason = _voiceAutoStop;
@@ -2535,6 +2651,23 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       case VoiceError(:final code):
         _voiceAutoStop = null;
         _endVoice();
+        final voice = widget.voice;
+        if (voice != null &&
+            (code == VoiceErrorCode.languageUnsupported ||
+                code == VoiceErrorCode.languageUnavailable)) {
+          // Следующее нажатие возьмёт другой движок; эта попытка не
+          // переключается на ходу.
+          voice.reportDeviceError(code);
+          if (code == VoiceErrorCode.languageUnsupported &&
+              voice.engine == VoiceEngine.vosk &&
+              voice.isInstalled) {
+            _voiceSay(
+              'Распознавание телефона не знает русский. Включено '
+              'распознавание Tridot',
+            );
+            return;
+          }
+        }
         _voiceSay(code.message);
     }
   }
@@ -2544,6 +2677,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ? 'Нет доступа к микрофону. Разрешите его в настройках Android'
             : 'Нет доступа к микрофону. Разрешите его в настройках системы',
       );
+
+  /// Распознаватель текущей попытки: смена движка в настройках не
+  /// переключает уже начатую.
+  VoiceRecognizer? _voiceRecognizer;
+
+  /// Последний промежуточный текст распознавателя как есть, до чистки.
+  String _voicePartialRaw = '';
+
+  /// Текст поля ввода сразу после вставки распознанного: если его
+  /// отправят без правки, сообщение — голосовое ([AssistantSession.fromVoice]).
+  String? _voiceText;
 
   /// Распознанное — в поле ввода, на место курсора или через пробел после
   /// черновика. Дальше пользователь правит и отправляет сам; с «Отправлять
@@ -2578,6 +2722,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
     _commandCursor = null;
+    _voiceText = updated;
     if (!_settings.voiceSendImmediately) return;
     if (_looksSecret(updated)) {
       _voiceSay('Похоже на пароль — проверьте текст и отправьте вручную');
@@ -2605,7 +2750,19 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_voiceOffering) return;
     _voiceOffering = true;
     try {
-      if (voice.isInstalled) {
+      if (voice.engine == VoiceEngine.device && !voice.isReady) {
+        await _offerDeviceLanguage(voice);
+        return;
+      }
+      if (voice.engine == VoiceEngine.device && !_settings.voiceInput) {
+        // Телефон сам знает русский: загрузок нет, только согласие.
+        final enable = await showDeviceVoiceOffer(context);
+        if (!mounted || !enable) return;
+        _changeSettings(_settings.copyWith(voiceInput: true));
+        _voiceSay('Голосовой ввод включён');
+        return;
+      }
+      if (voice.isReady) {
         // Модель есть, выключен только переключатель.
         _changeSettings(_settings.copyWith(voiceInput: true));
         _voiceSay('Голосовой ввод включён');
@@ -2636,6 +2793,35 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
     } finally {
       _voiceOffering = false;
+    }
+  }
+
+  /// Распознавание телефона выбрано, а русский не скачан: системная
+  /// загрузка только после «Скачать»; о готовности скажет поле ввода.
+  Future<void> _offerDeviceLanguage(VoiceKit voice) async {
+    if (voice.deviceStatus == DeviceVoiceStatus.pending ||
+        voice.isDeviceDownloading) {
+      _voiceSay('Android скачивает русский язык. Голосовой ввод заработает '
+          'после загрузки');
+      return;
+    }
+    final download = await showDeviceLanguageOffer(context);
+    if (!mounted || !download) return;
+    _changeSettings(_settings.copyWith(voiceInput: true));
+    _voiceAwaitInstall = true;
+    final outcome = await voice.downloadDeviceLanguage();
+    if (!mounted) return;
+    switch (outcome) {
+      case DeviceDownloadSuccess():
+        // «Голосовой ввод готов» скажет _onVoiceChanged.
+        break;
+      case DeviceDownloadScheduled():
+      case DeviceDownloadProgress():
+        _voiceAwaitInstall = false;
+        _voiceSay(deviceLanguageScheduledNotice);
+      case DeviceDownloadError():
+        _voiceAwaitInstall = false;
+        _voiceSay(deviceLanguageErrorNotice);
     }
   }
 
@@ -3860,7 +4046,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       AxisDirection.up => m.extentAfter,
       _ => m.extentBefore,
     };
-    _underHeader.value = hidden > 0.5;
+    final under = hidden > 0.5;
+    // Уведомление приходит и посреди раскладки (лента сменила высоту и
+    // докатывается до края): тогда — после кадра, а не в нём.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _underHeader.value = under;
+      });
+    } else {
+      _underHeader.value = under;
+    }
     return false;
   }
 
@@ -4182,12 +4378,19 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // хроники: место нужнее ленте, список команд остаётся в «⋯».
     final rail = history.isNotEmpty && height >= HistoryRail.minColumnHeight;
     final now = _now;
+    // Строка действий начатой переписки; на низком окне её нет, как и
+    // быстрых действий у поля ввода.
+    final floating =
+        hero || height < 420 ? const <QuickRowItem>[] : _floatingItems();
     final overdue =
         hero ? _active.where((Task t) => isOverdue(t, now)).length : 0;
     final Widget content = hero
         ? _sessionHero(overdue)
         : _mode == AssistantViewMode.dialogue
-            ? _buildDialogue()
+            ? _buildDialogue(
+                bottomInset:
+                    floating.isEmpty ? 0 : QuickActionsRow.height + AppSpace.xs,
+              )
             : _withDocToast(
                 DocumentView(
                   scrollController: _docScroll,
@@ -4237,7 +4440,26 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ),
           ),
-        Expanded(child: content),
+        Expanded(
+          child: floating.isEmpty
+              ? content
+              : Stack(
+                  children: <Widget>[
+                    Positioned.fill(child: content),
+                    // Начатая переписка: действия — одной строкой поверх
+                    // ленты над полем ввода, без фона (ADR-027).
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: _chatColumn(
+                        alignment: Alignment.bottomCenter,
+                        child: _floatingRow(floating),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
         // Свайп вправо по полю ввода и кнопкам меню не открывает.
         DrawerSwipeBlocker(child: _buildBottomArea(height)),
       ],
@@ -4379,6 +4601,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       now: _now,
       onShowInMessage: _showFileInMessage,
       onMessage: _announce,
+      onDelete: _deleteFromPanel,
       closeTooltip: drawer ? 'Закрыть' : 'Свернуть «Файлы сессии»',
       onClose: drawer
           ? () => _scaffoldKey.currentState?.closeEndDrawer()
@@ -4426,9 +4649,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildChat(double viewportHeight) {
+  Widget _buildChat(double viewportHeight, {double bottomInset = 0}) {
     final rows = <Widget>[];
-    final latestAnswer = _messages.lastIndexWhere((m) => !m.fromUser);
     var commandIndex = -1;
     final commandIndexOf = <int, int>{};
     // Карточка списка — под последним ответом с этим списком: после
@@ -4508,8 +4730,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           _secureCard(message) ??
           _jobCard(message) ??
           _weatherCard(message) ??
-          _clarifyOptions(message) ??
-          (i == latestAnswer ? _suggestionChips(message) : null);
+          _clarifyOptions(message);
       final row = _MessageRow(
         cast: _settings.personas.cast,
         key: key,
@@ -4578,19 +4799,61 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       // поиск, «История команд», колесо и тачпад.
       child: ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-        child: ListView(
-          key: const Key('chat-list'),
-          controller: _chatScroll,
-          reverse: true,
-          padding: const EdgeInsets.fromLTRB(
-            chatInset,
-            AppSpace.xs,
-            chatInset,
-            AppSpace.m,
+        child: _fadeUnderRow(
+          bottomInset,
+          ListView(
+            key: const Key('chat-list'),
+            controller: _chatScroll,
+            reverse: true,
+            // Под строкой действий ([_floatingRow]) последнее сообщение не
+            // прячется: лента поднимает его над строкой.
+            padding: EdgeInsets.fromLTRB(
+              chatInset,
+              AppSpace.xs,
+              chatInset,
+              AppSpace.m + bottomInset,
+            ),
+            children: rows.reversed.toList(),
           ),
-          children: rows.reversed.toList(),
         ),
       ),
+    );
+  }
+
+  /// Лента под строкой действий гаснет: строка без фона, и прокрученный
+  /// текст не просвечивает между кнопками обрывками букв (ADR-027).
+  static Widget _fadeUnderRow(double height, Widget child) {
+    if (height <= 0) return child;
+    return ShaderMask(
+      key: const Key('chat-fade'),
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (Rect bounds) {
+        final total = bounds.height;
+        if (total <= height) {
+          return const LinearGradient(
+            colors: <Color>[Colors.black, Colors.black],
+          ).createShader(bounds);
+        }
+        final clear = (total - height + AppSpace.xs) / total;
+        final solid = (total - height - AppSpace.m) / total;
+        return LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: const <Color>[
+            Colors.black,
+            Colors.black,
+            Colors.transparent,
+            Colors.transparent,
+          ],
+          stops: <double>[
+            0,
+            solid.clamp(0.0, 1.0),
+            clear.clamp(0.0, 1.0),
+            1,
+          ],
+        ).createShader(bounds);
+      },
+      child: child,
     );
   }
 
@@ -4651,11 +4914,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Widget _buildDialogue() {
+  Widget _buildDialogue({double bottomInset = 0}) {
     // Карточке списка нужна высота видимой части чата, а не экрана.
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) =>
-          _buildChat(constraints.maxHeight),
+          _buildChat(constraints.maxHeight, bottomInset: bottomInset),
     );
   }
 
@@ -4726,63 +4989,168 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         !identical(widget.assistant.pendingClarification, clarification)) {
       return null;
     }
+    final enabled = !(_sending || _bulkBusy);
+    // «Создать», «Удалить», «Поставить» — главное действие вопроса:
+    // залитая кнопка; остальные — контурные.
+    Widget button(int index, ClarifyOption option) {
+      final key = ValueKey<String>('clarify-option-$index');
+      final onPressed = enabled ? () => unawaited(_send(option.label)) : null;
+      final child = Text(option.label, textAlign: TextAlign.center);
+      if (option.answer ?? false) {
+        return FilledButton(
+          key: key,
+          style: FilledButton.styleFrom(minimumSize: const Size(40, 44)),
+          onPressed: onPressed,
+          child: child,
+        );
+      }
+      return OutlinedButton(
+        key: key,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(40, 44),
+          foregroundColor: context.colors.textStrong,
+        ),
+        onPressed: onPressed,
+        child: child,
+      );
+    }
+
+    final options = clarification.options;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: <Widget>[
-          for (final (index, option) in clarification.options.indexed)
-            OutlinedButton(
-              key: ValueKey<String>('clarify-option-$index'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(40, 44),
-                foregroundColor: context.colors.textStrong,
-              ),
-              onPressed: _sending || _bulkBusy
-                  ? null
-                  : () => unawaited(_send(option.label)),
-              child: Text(option.label),
-            ),
-        ],
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          // Не помещаются в строку (крупный текст, узкий экран) — столбиком
+          // во всю ширину, а не лесенкой разной длины.
+          final style = Theme.of(context).textTheme.labelLarge;
+          final scaler = MediaQuery.textScalerOf(context);
+          var width = 0.0;
+          for (final option in options) {
+            final painter = TextPainter(
+              text: TextSpan(text: option.label, style: style),
+              textDirection: TextDirection.ltr,
+              textScaler: scaler,
+              maxLines: 1,
+            )..layout();
+            width += painter.width + 48 + 8;
+            painter.dispose();
+          }
+          if (width - 8 <= constraints.maxWidth) {
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <Widget>[
+                for (final (index, option) in options.indexed)
+                  button(index, option),
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              for (final (index, option) in options.indexed) ...<Widget>[
+                if (index > 0) const SizedBox(height: 8),
+                button(index, option),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
 
-  /// Подсказка команд под ответом «не до конца понял» (ADR-022): кнопки
-  /// похожих команд и последней — «Найти команду». Только под последним
-  /// ответом и только в памяти. Нажатие вставляет шаблон в поле ввода
-  /// (`|` — курсор), отправляет пользователь сам; счётчики выбора команд
-  /// не меняются — подсказка ничего не запоминает.
-  Widget? _suggestionChips(ChatMessage message) {
-    final suggestions = message.suggestions;
-    if (suggestions == null) return null;
-    ButtonStyle style() => OutlinedButton.styleFrom(
-          minimumSize: const Size(40, 44),
-          foregroundColor: context.colors.textStrong,
-        );
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: <Widget>[
-          for (final suggestion in suggestions.commands)
-            OutlinedButton(
-              key: ValueKey<String>('suggest-${suggestion.entryId}'),
-              style: style(),
-              onPressed: () => _applyTemplate(suggestion.template),
-              child: Text(suggestion.label),
+  /// В сессии ещё нет ни одного сообщения пользователя: только здесь
+  /// крупные быстрые действия, кнопки ролей и паролей (ADR-027).
+  bool get _isNewChat => !_messages.any((ChatMessage m) => m.fromUser);
+
+  /// Кнопки строки действий начатой переписки ([QuickActionsRow]):
+  /// действия выбранной задачи и подсказка команд под ответом «не до конца
+  /// понял» (ADR-022) — пока этот ответ последний. Кнопки ролей и паролей
+  /// здесь не повторяются: они — в новой сессии.
+  List<QuickRowItem> _floatingItems() {
+    if (_isNewChat || _mode != AssistantViewMode.dialogue) {
+      return const <QuickRowItem>[];
+    }
+    final selected = _selectedTask;
+    final busy = _busyHere;
+    final last = _messages.isEmpty ? null : _messages.last;
+    // Последний ответ ждёт своего выбора («Понял так: … Создать?»,
+    // «Удалить «…»?»): его кнопки — единственные, чужие действия под ними
+    // только путают.
+    if (last != null && !last.fromUser && _clarifyOptions(last) != null) {
+      return const <QuickRowItem>[];
+    }
+    final suggestions =
+        last == null || last.fromUser || busy ? null : last.suggestions;
+    return <QuickRowItem>[
+      // Подсказка ведёт: она отвечает на только что сказанное.
+      if (suggestions != null) ...<QuickRowItem>[
+        for (final suggestion in suggestions.commands)
+          (
+            ValueKey<String>('suggest-${suggestion.entryId}'),
+            (
+              suggestion.label,
+              Icons.edit_outlined,
+              () => _applyTemplate(suggestion.template),
             ),
-          OutlinedButton.icon(
-            key: const ValueKey<String>('suggest-find'),
-            style: style(),
-            onPressed: () => unawaited(_findCommand()),
-            icon: const Icon(Icons.search, size: 18),
-            label: const Text(CommandSuggestions.findLabel),
           ),
-        ],
-      ),
+        (
+          const ValueKey<String>('suggest-find'),
+          (
+            CommandSuggestions.findLabel,
+            Icons.search,
+            () => unawaited(_findCommand()),
+          ),
+        ),
+      ],
+      if (selected != null && selected.isActive) ...<QuickRowItem>[
+        (
+          const Key('quick-Перенести'),
+          (
+            'Перенести',
+            Icons.update,
+            () => _applyTemplate('Перенеси её на завтра в |'),
+          ),
+        ),
+        (
+          const Key('quick-Заверши её'),
+          (
+            'Заверши её',
+            Icons.check,
+            busy ? null : () => unawaited(_send('Заверши её')),
+          ),
+        ),
+      ],
+    ];
+  }
+
+  /// Строка действий начатой переписки: прячется, пока пользователь
+  /// набирает текст или говорит, — тогда она не нужна и не мешает.
+  Widget _floatingRow(List<QuickRowItem> items) {
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[_input, _inputFocus]),
+      builder: (BuildContext context, Widget? _) {
+        final typing = _inputFocus.hasFocus && _input.text.trim().isNotEmpty;
+        final show = items.isNotEmpty && !typing && !_voiceListening;
+        final instant =
+            _settings.reduceMotion || MediaQuery.disableAnimationsOf(context);
+        return AnimatedSwitcher(
+          duration: instant ? Duration.zero : const Duration(milliseconds: 160),
+          child: show
+              ? Padding(
+                  key: const ValueKey<String>('quick-float-on'),
+                  padding: const EdgeInsets.only(bottom: AppSpace.xxs),
+                  child: QuickActionsRow(
+                    items: items,
+                    inset: chatInset,
+                    label: _selectedTask != null && _selectedTask!.isActive
+                        ? 'Действия с задачей'
+                        : 'Подсказки команд',
+                  ),
+                )
+              : const SizedBox.shrink(key: ValueKey<String>('quick-float-off')),
+        );
+      },
     );
   }
 
@@ -4961,13 +5329,15 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               104 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0),
           // В «Документе» — только поле ввода: ни быстрых действий, ни
           // кнопок ролей.
-          actions: compact || _mode != AssistantViewMode.dialogue
+          // Начатая переписка — тоже: её действия — одной строкой поверх
+          // ленты ([_floatingRow]).
+          actions: compact || _mode != AssistantViewMode.dialogue || !_isNewChat
               ? const SizedBox.shrink()
               : QuickActions(
                   // «Задача», «Напомнить», «Пароль» — только в новой
                   // сессии (крупные круглые кнопки); потом остаются лишь
                   // кнопки выбранной задачи и ролей.
-                  big: !_messages.any((ChatMessage m) => m.fromUser),
+                  big: true,
                   hasSelection: selected != null && selected.isActive,
                   // Кнопки включённых ролей («Кладовщик»): пропадают, как
                   // только роль или её навык выключили.
@@ -5361,10 +5731,12 @@ final class _MessageRow extends StatelessWidget {
 
   Widget _text(BuildContext context) {
     final fromUser = message.fromUser;
+    // Тире не начинает строку (длина та же — отметки команд на месте).
+    final text = bindDashes(message.text);
     final body = Theme.of(context).textTheme.bodyLarge!;
     if (thinking) {
       return Text(
-        message.text,
+        text,
         style: Theme.of(context)
             .textTheme
             .bodyMedium!
@@ -5374,8 +5746,8 @@ final class _MessageRow extends StatelessWidget {
     if (fromUser && commandSpans.isNotEmpty) {
       return SelectableText.rich(
         highlightedCommand(
-          message.text,
-          CommandSpans.normalize(commandSpans, message.text.length),
+          text,
+          CommandSpans.normalize(commandSpans, text.length),
           body.copyWith(color: context.colors.textStrong),
           colors: context.colors,
           // В ленте команда — обычный текст (ADR-027).
@@ -5387,14 +5759,14 @@ final class _MessageRow extends StatelessWidget {
     final style = body.copyWith(
       color: fromUser ? context.colors.textStrong : context.colors.text,
     );
-    if (!fromUser && message.text.contains('\n\n')) {
+    if (!fromUser && text.contains('\n\n')) {
       return SelectableText.rich(
-        _paragraphs(message.text, style),
+        _paragraphs(text, style),
         contextMenuBuilder: _menu,
       );
     }
     return SelectableText(
-      message.text,
+      text,
       style: style,
       contextMenuBuilder: _menu,
     );
@@ -5862,3 +6234,13 @@ typedef _PendingFile = ({
   AttachmentKind kind,
   int size,
 });
+
+/// [SessionFileRemover] ленты: удаление делает [HomePage].
+final class _SessionFileRemover implements SessionFileRemover {
+  const _SessionFileRemover(this._remove);
+
+  final Future<bool> Function(SessionFileRef file) _remove;
+
+  @override
+  Future<bool> remove(SessionFileRef file) => _remove(file);
+}

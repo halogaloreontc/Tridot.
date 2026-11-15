@@ -458,6 +458,44 @@ final class Reroute {
   final Object? orElse;
 }
 
+/// Файл из «Файлов сессии» (ADR-028) для навыков: что удалить по «удали
+/// этот файл».
+final class SessionFileRef {
+  const SessionFileRef({
+    required this.id,
+    required this.name,
+    required this.output,
+    this.path,
+    this.extensionId,
+    this.messageId,
+  });
+
+  /// Id в «Файлах сессии»: `out:<карточка>:<номер>` или `att:<вложение>`.
+  final String id;
+
+  /// Имя для показа.
+  final String name;
+
+  /// Результат карточки расширения (`true`) или вложение (`false`).
+  final bool output;
+
+  /// Где лежит результат; у вложения — `null`.
+  final String? path;
+
+  /// Расширение-автор результата: `converter`, `archiver`, `ytdl`.
+  final String? extensionId;
+
+  /// Сообщение, к которому привязан файл.
+  final String? messageId;
+}
+
+/// Удаление файла сессии по подтверждённой просьбе. Реализует интерфейс:
+/// он стирает копию с устройства и убирает файл из карточки и панели.
+abstract interface class SessionFileRemover {
+  /// Удалить [file]; `false` — файла уже нет или удалить нельзя.
+  Future<bool> remove(SessionFileRef file);
+}
+
 /// Состояние диалога, общее для всех коннекторов.
 ///
 /// Живёт столько же, сколько контроллер. Коннектор читает и меняет выбор
@@ -532,6 +570,7 @@ final class AssistantSession {
     ExtensionCard? job,
     WeatherCard? weather,
     LaunchRequest? launch,
+    String? draft,
     String? prefix,
   }) =>
       AssistantResponse(
@@ -550,6 +589,7 @@ final class AssistantSession {
         job: job,
         weather: weather,
         launch: launch,
+        draft: draft,
       );
 
   /// Файлы, прикреплённые к текущему сообщению (ADR-019), — только для
@@ -559,6 +599,21 @@ final class AssistantSession {
 
   /// Файлы недавних сообщений этой сессии (без файлов текущего).
   List<JobFile> recentAttachments = const <JobFile>[];
+
+  /// «Файлы сессии» (ADR-028) на начало сообщения, новые первыми:
+  /// результаты готовых карточек и вложения. По ним «удали этот файл»
+  /// находит, о каком файле речь. Маршрутизатор ставит их в начале
+  /// сообщения.
+  List<SessionFileRef> recentFiles = const <SessionFileRef>[];
+
+  /// Удаляет файл сессии: ставит интерфейс, у которого есть лента и
+  /// хранилище вложений. `null` — удалять нечем (тесты ядра, экран без
+  /// ленты).
+  SessionFileRemover? fileRemover;
+
+  /// Текущее сообщение надиктовано и отправлено без правки: разбор
+  /// строже переспрашивает, если пришлось угадывать («Понял так: …»).
+  bool fromVoice = false;
 
   SelectedItem? _selection;
 

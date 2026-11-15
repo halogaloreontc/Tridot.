@@ -700,7 +700,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   }
 
   List<Widget> _openView() => <Widget>[
-        Text(
+        WholeWordText(
           'Выберите файл копии (.relaybak) и введите её пароль — код '
           'восстановления, мастер-пароль (старые копии) или отдельный '
           'пароль копии.',

@@ -53,3 +53,5 @@
 {"id": "alm-053", "text": "будильник не прозвенел", "intent": "unknown", "note": "не будильник", "source": "manual"}
 {"id": "alm-054", "text": "выбрать новый будильник", "intent": "createTask", "title": "Выбрать новый будильник", "note": "не будильник", "source": "manual"}
 {"id": "alm-055", "text": "напомни через 5 минут выключить духовку", "intent": "createTask", "title": "Выключить духовку", "note": "не будильник", "source": "manual"}
+{"id":"alm-v01","text":"нужен будильник на семь","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual"}
+{"id":"alm-v02","text":"мне нужен таймер на пять минут","connector":"alarm","intent":"alarm.timer","form":{"seconds":"300"},"source":"manual"}

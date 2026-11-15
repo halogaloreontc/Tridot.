@@ -11,6 +11,7 @@ import '../layout.dart';
 import '../attachments/attachment_picker.dart';
 import '../attachments/attachment_views.dart';
 import 'command_finder_sheet.dart';
+import 'grouped.dart' show segmentThumbShadow;
 import 'whole_word_text.dart';
 
 enum AssistantViewMode { dialogue, document }
@@ -855,9 +856,11 @@ final class _ModeSwitch extends StatelessWidget {
       alignment: Alignment.center,
       padding: EdgeInsets.symmetric(horizontal: labels ? 12 : 8),
       decoration: BoxDecoration(
-        // Выбранный сегмент — светлее панели поля, как в «Заметках».
-        color: active ? context.colors.fieldOnRaised : Colors.transparent,
+        // Выбранный сегмент — «бегунок», как у вкладок «Мой Связной»: тот
+        // же цвет и, в светлой теме, лёгкая тень (ADR-027).
+        color: active ? context.colors.segmentSelected : Colors.transparent,
         borderRadius: BorderRadius.circular(999),
+        boxShadow: active ? segmentThumbShadow(context) : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

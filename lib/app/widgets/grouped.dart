@@ -682,3 +682,72 @@ final class GroupedListCell extends StatelessWidget {
     );
   }
 }
+
+/// Строка навигации с выбором (раздел, проект, сессия; ADR-027): заливка
+/// выбранной строки и волна нажатия — одной формы. В группе ([inGroup])
+/// заливка отступает от краёв группы на [AppSpace.selectionInsetH] и
+/// скруглена концентрично ей ([AppRadius.selection]); на фоне панели —
+/// скругление поля ([AppRadius.field]) без отступа.
+///
+/// Строка внутри ([child]) уменьшает свои боковые поля на
+/// [AppSpace.selectionInsetH], чтобы текст оставался на прежнем месте.
+final class SelectableRow extends StatelessWidget {
+  const SelectableRow({
+    super.key,
+    required this.selected,
+    required this.onTap,
+    required this.child,
+    this.inkKey,
+    this.inGroup = true,
+  });
+
+  final bool selected;
+  final VoidCallback? onTap;
+  final Widget child;
+
+  /// Ключ самой кнопки ([InkWell]).
+  final Key? inkKey;
+  final bool inGroup;
+
+  /// Форма заливки строки [inGroup].
+  static BorderRadius radiusOf({bool inGroup = true}) => BorderRadius.circular(
+        inGroup ? AppRadius.selection : AppRadius.field,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = radiusOf(inGroup: inGroup);
+    final body = Material(
+      type: selected ? MaterialType.canvas : MaterialType.transparency,
+      color: selected ? context.colors.selection : null,
+      borderRadius: radius,
+      child: InkWell(
+        key: inkKey,
+        onTap: onTap,
+        borderRadius: radius,
+        child: child,
+      ),
+    );
+    if (!inGroup) return body;
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.selectionInsetH,
+        vertical: AppSpace.selectionInsetV,
+      ),
+      child: body,
+    );
+  }
+}
+
+/// Тень «бегунка» выбранного сегмента: только в светлой теме — в тёмной
+/// бегунок и так светлее дорожки.
+List<BoxShadow>? segmentThumbShadow(BuildContext context) =>
+    context.colors.isLight
+        ? <BoxShadow>[
+            BoxShadow(
+              color: context.colors.shadow,
+              blurRadius: 6,
+              offset: const Offset(0, 1),
+            ),
+          ]
+        : null;

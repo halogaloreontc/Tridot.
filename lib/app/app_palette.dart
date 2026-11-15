@@ -59,6 +59,8 @@ final class AppPalette extends ThemeExtension<AppPalette> {
     required this.scrim,
     required this.scrimLight,
     required this.shadow,
+    required this.selection,
+    required this.segmentSelected,
   });
 
   /// Яркость палитры: светлая или тёмная.
@@ -202,6 +204,13 @@ final class AppPalette extends ThemeExtension<AppPalette> {
   /// Тень всплывающих меню и «поднятой» строки.
   final Color shadow;
 
+  /// Заливка выбранной строки навигации (раздел, проект, сессия): мягче
+  /// [bubble], видна и на фоне панели, и на группе.
+  final Color selection;
+
+  /// «Бегунок» выбранного сегмента в переключателе вкладок.
+  final Color segmentSelected;
+
   /// Тёмная тема П2: чёрный фон, лист чата #1C1C1E.
   static const AppPalette dark = AppPalette(
     brightness: Brightness.dark,
@@ -251,6 +260,8 @@ final class AppPalette extends ThemeExtension<AppPalette> {
     scrim: Color(0x9E000000),
     scrimLight: Color(0x4D000000),
     shadow: Color(0x99000000),
+    selection: Color(0xFF2C2C2E),
+    segmentSelected: Color(0xFF636366),
   );
 
   /// Светлая тема П2: серый фон #F2F2F7, белый лист.
@@ -302,6 +313,8 @@ final class AppPalette extends ThemeExtension<AppPalette> {
     scrim: Color(0x66000000),
     scrimLight: Color(0x33000000),
     shadow: Color(0x1F000000),
+    selection: Color(0xFFE5E5EA),
+    segmentSelected: Color(0xFFFFFFFF),
   );
 
   /// Палитра для яркости [brightness].
@@ -359,6 +372,8 @@ final class AppPalette extends ThemeExtension<AppPalette> {
     Color? scrim,
     Color? scrimLight,
     Color? shadow,
+    Color? selection,
+    Color? segmentSelected,
   }) =>
       AppPalette(
         brightness: brightness ?? this.brightness,
@@ -408,6 +423,8 @@ final class AppPalette extends ThemeExtension<AppPalette> {
         scrim: scrim ?? this.scrim,
         scrimLight: scrimLight ?? this.scrimLight,
         shadow: shadow ?? this.shadow,
+        selection: selection ?? this.selection,
+        segmentSelected: segmentSelected ?? this.segmentSelected,
       );
 
   @override
@@ -462,6 +479,8 @@ final class AppPalette extends ThemeExtension<AppPalette> {
       scrim: mix(scrim, other.scrim),
       scrimLight: mix(scrimLight, other.scrimLight),
       shadow: mix(shadow, other.shadow),
+      selection: mix(selection, other.selection),
+      segmentSelected: mix(segmentSelected, other.segmentSelected),
     );
   }
 
@@ -514,7 +533,9 @@ final class AppPalette extends ThemeExtension<AppPalette> {
       other.tileAmber == tileAmber &&
       other.scrim == scrim &&
       other.scrimLight == scrimLight &&
-      other.shadow == shadow;
+      other.shadow == shadow &&
+      other.selection == selection &&
+      other.segmentSelected == segmentSelected;
 
   @override
   int get hashCode => Object.hashAll(<Object>[
@@ -565,6 +586,8 @@ final class AppPalette extends ThemeExtension<AppPalette> {
         scrim,
         scrimLight,
         shadow,
+        selection,
+        segmentSelected,
       ]);
 }
 

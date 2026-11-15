@@ -52,6 +52,92 @@ Future<bool> showVoiceOffer(BuildContext context, VoiceKit voice) async {
   return download ?? false;
 }
 
+/// Распознавание телефона: включить голосовой ввод без загрузки модели.
+/// `true` — «Включить».
+Future<bool> showDeviceVoiceOffer(BuildContext context) async {
+  final enable = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext context) => AlertDialog(
+      scrollable: true,
+      title: const WholeWordText('Включить голосовой ввод?'),
+      content: const Text(
+        'Речь распознаёт сам телефон, без интернета. Звук не записывается '
+        'в файл и никуда не отправляется.',
+      ),
+      actions: <Widget>[
+        TextButton(
+          key: const Key('voice-offer-later'),
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Не сейчас'),
+        ),
+        FilledButton(
+          key: const Key('voice-offer-enable'),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Включить'),
+        ),
+      ],
+    ),
+  );
+  return enable ?? false;
+}
+
+/// Распознавание телефона знает русский, но язык не скачан: Android
+/// скачивает его сам, только после «Скачать». `true` — «Скачать».
+Future<bool> showDeviceLanguageOffer(BuildContext context) async {
+  final download = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext context) => AlertDialog(
+      scrollable: true,
+      title: const WholeWordText('Скачать русский язык?'),
+      content: const Text(
+        'Android один раз скачает русскую модель распознавания, чтобы оно '
+        'работало без интернета. Загружает система, звук никуда не '
+        'отправляется.',
+      ),
+      actions: <Widget>[
+        TextButton(
+          key: const Key('voice-language-later'),
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Не сейчас'),
+        ),
+        FilledButton(
+          key: const Key('voice-language-download'),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Скачать'),
+        ),
+      ],
+    ),
+  );
+  return download ?? false;
+}
+
+/// Подсказка поля, когда Android отложил загрузку языка.
+const String deviceLanguageScheduledNotice =
+    'Android скачает русский язык позже. Пока можно выбрать распознавание '
+    'Tridot';
+
+/// Подсказка поля, когда загрузка языка не началась.
+const String deviceLanguageErrorNotice =
+    'Не удалось скачать русский язык. Попробуйте позже';
+
+/// Подпись «Распознавание телефона» по тому, что телефон знает о русском.
+String deviceEngineSubtitle(VoiceKit voice) {
+  final percent = voice.deviceDownloadPercent;
+  return switch (voice.deviceStatus) {
+    DeviceVoiceStatus.ready ||
+    DeviceVoiceStatus.unknown =>
+      'Встроено в Android, без загрузки и без интернета',
+    DeviceVoiceStatus.notInstalled =>
+      'Нужен русский язык, Android скачает его сам',
+    DeviceVoiceStatus.pending => percent == null
+        ? 'Android скачивает русский язык'
+        : 'Android скачивает русский язык: $percent\u00A0%',
+    DeviceVoiceStatus.unsupported => 'Не знает русский без интернета',
+    DeviceVoiceStatus.unavailable =>
+      'Этот телефон не распознаёт речь без интернета',
+  };
+}
+
 /// Зачем микрофон — перед первым системным запросом доступа. `true` —
 /// «Продолжить».
 Future<bool> showVoiceRationale(BuildContext context) async {
@@ -344,10 +430,13 @@ final class VoiceSettingsSection extends StatelessWidget {
   }
 
   Widget _build(BuildContext context, VoiceKit voice) {
+    final device = voice.engine == VoiceEngine.device;
     final installed = voice.isInstalled;
+    final ready = voice.isReady;
     final enabled = settings.voiceInput;
-    final showStatus = voice.isBusy || voice.phase == VoiceKitPhase.error;
-    return InsetGroup(
+    final showStatus =
+        !device && (voice.isBusy || voice.phase == VoiceKitPhase.error);
+    final group = InsetGroup(
       header: 'Голос',
       children: <Widget>[
         GroupedSwitchRow(
@@ -357,12 +446,15 @@ final class VoiceSettingsSection extends StatelessWidget {
             color: context.colors.tileBlue,
           ),
           title: 'Голосовой ввод',
-          subtitle: installed
-              ? 'Модель скачана. Звук не сохраняется и никуда не '
+          subtitle: device
+              ? 'Распознаёт сам телефон, без интернета. Звук никуда не '
                   'отправляется'
-              : 'Модель ${voiceModelSize(voice)} скачается один раз с сайта '
-                  '${voice.spec.uri.host}. Звук не сохраняется и никуда не '
-                  'отправляется',
+              : installed
+                  ? 'Модель скачана. Звук не сохраняется и никуда не '
+                      'отправляется'
+                  : 'Модель ${voiceModelSize(voice)} скачается один раз с '
+                      'сайта ${voice.spec.uri.host}. Звук не сохраняется и '
+                      'никуда не отправляется',
           value: enabled,
           onChanged: (bool value) =>
               unawaited(_toggle(context, voice, value: value)),
@@ -379,7 +471,7 @@ final class VoiceSettingsSection extends StatelessWidget {
               onRetry: () => unawaited(voice.install()),
             ),
           ),
-        if (enabled && voice.phase == VoiceKitPhase.notInstalled)
+        if (!device && enabled && voice.phase == VoiceKitPhase.notInstalled)
           GroupedRow(
             key: const Key('voice-download'),
             accent: true,
@@ -388,13 +480,22 @@ final class VoiceSettingsSection extends StatelessWidget {
                 : 'Скачать модель (${voiceModelSize(voice)})',
             onTap: () => unawaited(voice.install()),
           ),
+        if (device &&
+            voice.deviceStatus == DeviceVoiceStatus.notInstalled &&
+            !voice.isDeviceDownloading)
+          GroupedRow(
+            key: const Key('voice-device-download'),
+            accent: true,
+            title: 'Скачать русский язык',
+            onTap: () => unawaited(_downloadLanguage(context, voice)),
+          ),
         GroupedSwitchRow(
           key: const Key('setting-voice-send-now'),
           title: 'Отправлять сразу',
           subtitle: 'Без правки в поле ввода. Похожее на пароль не '
               'отправляется автоматически',
           value: settings.voiceSendImmediately,
-          onChanged: enabled && installed
+          onChanged: enabled && ready
               ? (bool value) =>
                   onChanged(settings.copyWith(voiceSendImmediately: value))
               : null,
@@ -410,6 +511,76 @@ final class VoiceSettingsSection extends StatelessWidget {
           ),
       ],
     );
+    if (voice.device == null) return group;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[group, _engines(context, voice)],
+    );
+  }
+
+  /// «Распознавание»: телефон или Tridot (Vosk). Отмечен тот, чем
+  /// распознаётся сейчас.
+  Widget _engines(BuildContext context, VoiceKit voice) {
+    final colors = context.colors;
+    Widget row(VoiceEngine engine, {required bool selectable}) {
+      final selected = voice.engine == engine;
+      // Недоступная строка гаснет целиком: заголовок не бледнее подписи.
+      return Semantics(
+        selected: selected,
+        inMutuallyExclusiveGroup: true,
+        enabled: selectable,
+        child: Opacity(
+          opacity: selectable ? 1 : 0.45,
+          child: GroupedRow(
+            key: Key('voice-engine-${engine.name}'),
+            // Под заголовком «Распознавание» — «Телефон» и «Tridot».
+            title: engine == VoiceEngine.device ? 'Телефон' : 'Tridot',
+            subtitle: engine == VoiceEngine.device
+                ? deviceEngineSubtitle(voice)
+                : 'Модель ${voiceModelSize(voice)} скачивается один раз',
+            onTap: selectable ? () => _choose(voice, engine) : null,
+            trailing: SizedBox(
+              width: 24,
+              child: selected
+                  ? Icon(Icons.check, size: 22, color: colors.accent)
+                  : null,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return InsetGroup(
+      header: 'Распознавание',
+      children: <Widget>[
+        row(VoiceEngine.device, selectable: voice.deviceSelectable),
+        row(VoiceEngine.vosk, selectable: true),
+      ],
+    );
+  }
+
+  void _choose(VoiceKit voice, VoiceEngine engine) {
+    final choice = engine == VoiceEngine.device
+        ? VoiceEngineChoice.device
+        : VoiceEngineChoice.vosk;
+    voice.choice = choice;
+    onChanged(settings.copyWith(voiceEngine: choice));
+  }
+
+  /// «Скачать русский язык»: то же предложение, что у микрофона.
+  Future<void> _downloadLanguage(BuildContext context, VoiceKit voice) async {
+    if (!await showDeviceLanguageOffer(context)) return;
+    final outcome = await voice.downloadDeviceLanguage();
+    if (!context.mounted) return;
+    final notice = switch (outcome) {
+      DeviceDownloadSuccess() => null,
+      DeviceDownloadError() => deviceLanguageErrorNotice,
+      _ => deviceLanguageScheduledNotice,
+    };
+    if (notice != null) {
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(SnackBar(content: Text(notice)));
+    }
   }
 
   /// Переключатель «Голосовой ввод». Включение без модели — то же
@@ -426,8 +597,20 @@ final class VoiceSettingsSection extends StatelessWidget {
       if (voice.isBusy) voice.cancel();
       return;
     }
-    if (voice.isInstalled || voice.isBusy) {
+    if (voice.isReady || voice.isBusy) {
       onChanged(settings.copyWith(voiceInput: true));
+      return;
+    }
+    if (voice.engine == VoiceEngine.device) {
+      // Русский ещё не скачан: системная загрузка только после «Скачать».
+      if (voice.deviceStatus == DeviceVoiceStatus.notInstalled &&
+          !await showDeviceLanguageOffer(context)) {
+        return;
+      }
+      onChanged(settings.copyWith(voiceInput: true));
+      if (voice.deviceStatus == DeviceVoiceStatus.notInstalled) {
+        unawaited(voice.downloadDeviceLanguage());
+      }
       return;
     }
     if (!await showVoiceOffer(context, voice)) return;

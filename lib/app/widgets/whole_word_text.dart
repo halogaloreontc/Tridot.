@@ -14,6 +14,20 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+/// Тире не начинает строку: пробел перед ними — неразрывный, знак
+/// остаётся в конце строки при слове перед ним («3 минуты —» / «откроются
+/// «Часы»»). Длина текста та же: отметки команд по смещениям не сдвигаются.
+String bindDashes(String text) => text.contains(' ')
+    ? text.replaceAllMapped(_looseDash, (Match m) => '\u00a0${m[1]}')
+    : text;
+
+final RegExp _looseDash = RegExp(r' ([—–])');
+
+/// То же и для «·» — только в абзаце [WholeWordText], не в тексте виджета.
+final RegExp _looseMark = RegExp(r' ([—–·])');
+
+const String _dashes = '—–·';
+
 /// Ширина [text] одной строкой стилем [style] из контекста [context]
 /// (с масштабом шрифта оттуда же).
 double lineWidth(BuildContext context, String text, {TextStyle? style}) {
@@ -165,6 +179,11 @@ final class _RenderWholeWords extends RenderProxyBox {
       final width = constraints.maxWidth;
       // Менять потомка посреди своей раскладки можно только так.
       invokeLayoutCallback<BoxConstraints>((BoxConstraints _) {
+        // Тире — при слове перед ним (bindDashes): абзацу, а не виджету,
+        // поэтому текст [Text] остаётся прежним, а строка с «—» не
+        // начинается.
+        final bound = _bindSpan(paragraph.text);
+        if (!identical(bound, paragraph.text)) paragraph.text = bound;
         paragraph.textScaler = !width.isFinite
             ? _base
             : firstWordOnly
@@ -188,12 +207,42 @@ final class _RenderWholeWords extends RenderProxyBox {
   }
 }
 
+/// [span] с [bindDashes] во всех частях; без свободных тире — он сам.
+InlineSpan _bindSpan(InlineSpan span) {
+  if (span is! TextSpan) return span;
+  final plain = span.toPlainText(includeSemanticsLabels: false);
+  if (!_looseMark.hasMatch(plain)) return span;
+  TextSpan bind(TextSpan s) => TextSpan(
+        text: s.text?.replaceAllMapped(
+          _looseMark,
+          (Match m) => '\u00a0${m[1]}',
+        ),
+        style: s.style,
+        recognizer: s.recognizer,
+        mouseCursor: s.mouseCursor,
+        onEnter: s.onEnter,
+        onExit: s.onExit,
+        semanticsLabel: s.semanticsLabel,
+        semanticsIdentifier: s.semanticsIdentifier,
+        locale: s.locale,
+        spellOut: s.spellOut,
+        children: s.children == null
+            ? null
+            : <InlineSpan>[
+                for (final child in s.children!)
+                  child is TextSpan ? bind(child) : child,
+              ],
+      );
+  return bind(span);
+}
+
 final RegExp _wordChar = RegExp(r'[\p{L}\p{N}]', unicode: true);
 
 bool _isWordChar(String text, int index) =>
     index >= 0 && index < text.length && _wordChar.hasMatch(text[index]);
 
-/// Кончается ли какая-нибудь строка разложенного [painter] внутри слова.
+/// Кончается ли какая-нибудь строка разложенного [painter] внутри слова
+/// (или начинается ли с тире).
 /// [lines] — сколько первых переносов проверять (`null` — все).
 bool breaksInsideWord(TextPainter painter, String plain, {int? lines}) {
   final metrics = painter.computeLineMetrics().skip(1);
@@ -203,6 +252,11 @@ bool breaksInsideWord(TextPainter painter, String plain, {int? lines}) {
     );
     final start = painter.getLineBoundary(position).start;
     if (_isWordChar(plain, start - 1) && _isWordChar(plain, start)) {
+      return true;
+    }
+    // Строка с тире: слово с «—» после неразрывного пробела не влезло в
+    // строку целиком — тоже уменьшить.
+    if (start > 0 && start < plain.length && _dashes.contains(plain[start])) {
       return true;
     }
   }

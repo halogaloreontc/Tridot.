@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/voice/voice_kit.dart';
 import 'package:local_assistant/core/downloads/safe_zip.dart';
 import 'package:local_assistant/core/downloads/verified_download.dart';
+import 'package:local_assistant/core/settings/app_settings.dart'
+    show VoiceEngineChoice;
 import 'package:local_assistant/core/voice/voice_model.dart';
 import 'package:local_assistant/core/voice/voice_recognizer.dart';
 import 'package:path/path.dart' as p;
@@ -328,6 +330,141 @@ void main() {
     await Future.wait(<Future<void>>[voice.install(), voice.install()]);
     expect(downloader.calls, 1);
     expect(voice.phase, VoiceKitPhase.installed);
+  });
+
+  group('распознавание телефона', () {
+    VoiceKit deviceKit(FakeDeviceRecognizer device) {
+      final bytes = _goodModel();
+      return VoiceKit(
+        recognizer: recognizer,
+        device: device,
+        downloader: FakeFileDownloader(bytes),
+        spec: _spec(bytes),
+        dir: dir,
+      );
+    }
+
+    test('«авто» и русский установлен — телефон, без модели', () async {
+      final device = FakeDeviceRecognizer();
+      final voice = deviceKit(device);
+      await voice.refreshDevice();
+      expect(voice.deviceStatus, DeviceVoiceStatus.ready);
+      expect(voice.engine, VoiceEngine.device);
+      expect(voice.isInstalled, isFalse);
+      expect(voice.isReady, isTrue);
+      expect(identical(voice.active, device), isTrue);
+      await voice.ensureLoaded();
+      expect(recognizer.loadCalls, 0);
+    });
+
+    test('Android 12: «unknown» тоже пробуем', () async {
+      final voice = deviceKit(
+        FakeDeviceRecognizer(status: DeviceVoiceStatus.unknown),
+      );
+      await voice.refreshDevice();
+      expect(voice.engine, VoiceEngine.device);
+      expect(voice.isReady, isTrue);
+    });
+
+    for (final status in <DeviceVoiceStatus>[
+      DeviceVoiceStatus.unavailable,
+      DeviceVoiceStatus.unsupported,
+      DeviceVoiceStatus.notInstalled,
+    ]) {
+      test('«авто» и ${status.name} — Vosk', () async {
+        final voice = deviceKit(FakeDeviceRecognizer(status: status));
+        await voice.refreshDevice();
+        expect(voice.engine, VoiceEngine.vosk);
+        expect(identical(voice.active, recognizer), isTrue);
+        expect(voice.isReady, isFalse);
+      });
+    }
+
+    test('выбран Vosk — Vosk, даже если телефон готов', () async {
+      final voice = deviceKit(FakeDeviceRecognizer())
+        ..choice = VoiceEngineChoice.vosk;
+      await voice.refreshDevice();
+      expect(voice.engine, VoiceEngine.vosk);
+    });
+
+    test(
+        'выбран телефон, язык не скачан: без модели — телефон, с моделью '
+        '— Vosk', () async {
+      final voice = deviceKit(
+        FakeDeviceRecognizer(status: DeviceVoiceStatus.notInstalled),
+      )..choice = VoiceEngineChoice.device;
+      await voice.refreshDevice();
+      expect(voice.engine, VoiceEngine.device);
+      expect(voice.isReady, isFalse);
+      await voice.install();
+      expect(voice.isInstalled, isTrue);
+      expect(voice.engine, VoiceEngine.vosk);
+      expect(voice.isReady, isTrue);
+    });
+
+    test('ошибки 12 и 13 понижают статус', () async {
+      final voice = deviceKit(FakeDeviceRecognizer());
+      await voice.refreshDevice();
+      voice.reportDeviceError(VoiceErrorCode.languageUnavailable);
+      expect(voice.deviceStatus, DeviceVoiceStatus.notInstalled);
+      voice.reportDeviceError(VoiceErrorCode.languageUnsupported);
+      expect(voice.deviceStatus, DeviceVoiceStatus.unsupported);
+      expect(voice.engine, VoiceEngine.vosk);
+      voice.reportDeviceError(VoiceErrorCode.engine);
+      expect(voice.deviceStatus, DeviceVoiceStatus.unsupported);
+    });
+
+    test('загрузка языка: проценты, затем готово', () async {
+      final device = FakeDeviceRecognizer(
+        status: DeviceVoiceStatus.notInstalled,
+      )..downloadScript = const <DeviceLanguageDownload>[
+          DeviceDownloadProgress(10),
+          DeviceDownloadProgress(40),
+          DeviceDownloadSuccess(),
+        ];
+      final voice = deviceKit(device);
+      await voice.refreshDevice();
+      final percents = <int?>[];
+      voice.addListener(() => percents.add(voice.deviceDownloadPercent));
+      final outcome = await voice.downloadDeviceLanguage();
+      expect(outcome, isA<DeviceDownloadSuccess>());
+      expect(percents, containsAllInOrder(<int?>[10, 40]));
+      expect(voice.deviceStatus, DeviceVoiceStatus.ready);
+      expect(voice.deviceDownloadPercent, isNull);
+      expect(voice.isDeviceDownloading, isFalse);
+      expect(voice.engine, VoiceEngine.device);
+    });
+
+    test('загрузка отложена системой — pending', () async {
+      final device = FakeDeviceRecognizer(
+        status: DeviceVoiceStatus.notInstalled,
+      )..downloadScript = const <DeviceLanguageDownload>[
+          DeviceDownloadScheduled(),
+        ];
+      final voice = deviceKit(device);
+      await voice.refreshDevice();
+      final outcome = await voice.downloadDeviceLanguage();
+      expect(outcome, isA<DeviceDownloadScheduled>());
+      expect(voice.deviceStatus, DeviceVoiceStatus.pending);
+    });
+
+    test('голосовой ввод есть, даже если Vosk не поддерживается', () async {
+      recognizer.support = VoiceSupport.unsupported;
+      final voice = deviceKit(FakeDeviceRecognizer());
+      expect(voice.support, VoiceSupport.unsupported);
+      await voice.refreshDevice();
+      expect(voice.support, VoiceSupport.supported);
+    });
+
+    test('«Удалить модель» по-прежнему выгружает Vosk', () async {
+      final voice = deviceKit(FakeDeviceRecognizer())
+        ..choice = VoiceEngineChoice.vosk;
+      await voice.install();
+      await voice.ensureLoaded();
+      await voice.delete();
+      expect(recognizer.unloadCalls, 1);
+      expect(voice.isInstalled, isFalse);
+    });
   });
 }
 

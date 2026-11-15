@@ -9,6 +9,22 @@ import '../personas/persona.dart';
 
 export '../personas/persona.dart';
 
+/// Чем распознавать речь (ADR-023): «Распознавание телефона» или
+/// «Распознавание Tridot» (Vosk). [auto] — по умолчанию: телефон, если он
+/// умеет русский без интернета, иначе Vosk.
+enum VoiceEngineChoice {
+  auto,
+  device,
+  vosk;
+
+  /// Значение `voice.engine` в settings.json; [auto] не пишется.
+  static VoiceEngineChoice parse(Object? value) => switch (value) {
+        'device' => VoiceEngineChoice.device,
+        'vosk' => VoiceEngineChoice.vosk,
+        _ => VoiceEngineChoice.auto,
+      };
+}
+
 /// Оформление (ADR-027): как в системе, светлое или тёмное.
 enum AppAppearance {
   system('system', 'Как в системе'),
@@ -54,6 +70,7 @@ final class AppSettings {
     this.voiceInput = false,
     this.voiceSendImmediately = false,
     this.voiceMicExplained = false,
+    this.voiceEngine = VoiceEngineChoice.auto,
     this.notifyExplained = false,
     this.notifyDismissedDay,
     this.notifyDateOnly = true,
@@ -99,6 +116,7 @@ final class AppSettings {
       voiceInput: json['voice.enabled'] == true,
       voiceSendImmediately: json['voice.send_now'] == true,
       voiceMicExplained: json['voice.mic_explained'] == true,
+      voiceEngine: VoiceEngineChoice.parse(json['voice.engine']),
       notifyExplained: json['notify.explained'] == true,
       notifyDismissedDay: _day(json['notify.dismissed_day']),
       notifyDateOnly: json['notify.date_only'] != false,
@@ -300,6 +318,9 @@ final class AppSettings {
   /// Зачем нужен микрофон, уже объяснено (перед первым запросом доступа).
   final bool voiceMicExplained;
 
+  /// Выбранное распознавание ([VoiceEngineChoice]).
+  final VoiceEngineChoice voiceEngine;
+
   /// Зачем нужны уведомления, уже объяснено (ADR-029): лист «Напоминания
   /// вовремя» показан хотя бы раз.
   final bool notifyExplained;
@@ -347,6 +368,7 @@ final class AppSettings {
     bool? voiceInput,
     bool? voiceSendImmediately,
     bool? voiceMicExplained,
+    VoiceEngineChoice? voiceEngine,
     bool? notifyExplained,
     String? notifyDismissedDay,
     bool? notifyDateOnly,
@@ -376,6 +398,7 @@ final class AppSettings {
         voiceInput: voiceInput ?? this.voiceInput,
         voiceSendImmediately: voiceSendImmediately ?? this.voiceSendImmediately,
         voiceMicExplained: voiceMicExplained ?? this.voiceMicExplained,
+        voiceEngine: voiceEngine ?? this.voiceEngine,
         notifyExplained: notifyExplained ?? this.notifyExplained,
         notifyDismissedDay: notifyDismissedDay ?? this.notifyDismissedDay,
         notifyDateOnly: notifyDateOnly ?? this.notifyDateOnly,
@@ -422,6 +445,8 @@ final class AppSettings {
         if (voiceInput) 'voice.enabled': true,
         if (voiceSendImmediately) 'voice.send_now': true,
         if (voiceMicExplained) 'voice.mic_explained': true,
+        if (voiceEngine != VoiceEngineChoice.auto)
+          'voice.engine': voiceEngine.name,
         if (notifyExplained) 'notify.explained': true,
         if (notifyDismissedDay != null)
           'notify.dismissed_day': notifyDismissedDay,

@@ -1,6 +1,6 @@
 // Проверка «слово не рвётся посреди строки» (ADR-021): обходит все
 // RenderParagraph на экране, заново раскладывает их текст той же ширины и
-// тем же стилем и ищет три беды:
+// тем же стилем и ищет четыре беды:
 //
 // - BREAK — строка кончается внутри слова («Напомнит» / «ь»): буква или
 //   цифра по обе стороны переноса. Дефис, мягкий перенос и «/» — честные
@@ -12,7 +12,9 @@
 //   кроме подписей из списка [whole]: их режут — тоже беда («Поиск по
 //   зада…»);
 // - CLIP — строка без переноса (softWrap: false) шире своего места и
-//   срезана краем.
+//   срезана краем;
+// - DASH — строка начинается с «—», «–» или «·»: знак оторван от слова
+//   перед ним (см. bindDashes).
 //
 // Параграфы с WidgetSpan пропускаем: их ширины зависят от вложенных
 // виджетов. Исключения — явным списком [allow] (ключ предка или сам
@@ -23,6 +25,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 final RegExp _wordChar = RegExp(r'[\p{L}\p{N}]', unicode: true);
 final RegExp _space = RegExp(r'\s');
+
+/// Начало строки, с которого строка начинаться не должна: тире и «·».
+final RegExp _lineLead = RegExp(r'^\s*[—–·]');
 
 bool _isWordChar(String text, int index) =>
     index >= 0 && index < text.length && _wordChar.hasMatch(text[index]);
@@ -167,6 +172,14 @@ List<String> midWordBreaks(
       );
       final start = painter.getLineBoundary(pos).start;
       if (start <= 0 || start >= text.length) continue;
+      // DASH: строка начинается с тире или «·» — знак оторван от слова
+      // перед ним («3 минуты» / «— откроются»).
+      if (_lineLead.hasMatch(text.substring(start))) {
+        problems.add(
+          'DASH «${text.substring(0, start)}|${text.substring(start)}»',
+        );
+        break;
+      }
       if (_isWordChar(text, start - 1) &&
           _isWordChar(text, start) &&
           !_isMachineToken(text, start)) {

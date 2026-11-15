@@ -7,6 +7,7 @@ import '../../core/passwords/import_rules.dart';
 import '../../core/passwords/vault_errors.dart';
 import '../../core/passwords/vault_facade.dart';
 import '../assistant_theme.dart';
+import '../widgets/whole_word_text.dart';
 import 'entry_screens.dart';
 import 'passwords_files.dart';
 import 'passwords_kit.dart';
@@ -774,7 +775,7 @@ class _Hint extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 4),
-        child: Text(
+        child: WholeWordText(
           '• $text',
           style: TextStyle(color: context.colors.text),
         ),

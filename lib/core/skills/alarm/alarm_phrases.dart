@@ -195,6 +195,10 @@ abstract final class AlarmPhrases {
     'новый',
     'один',
     'слушай',
+    // «Нужен будильник на семь», «мне нужен таймер на пять минут».
+    'нужен',
+    'нужна',
+    'нужно',
   };
 
   static const Set<String> _tailFillers = <String>{

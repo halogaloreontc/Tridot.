@@ -62,6 +62,18 @@ final class TasksConnector
 
   static const String unknownReply = 'common.unknown';
 
+  /// Ниже этой уверенности разбора ([ParsedCommand.certainty]) задача
+  /// без вопроса не создаётся: «Понял так: … Создать?». Для голоса порог
+  /// строже: распознаватель ошибается чаще, чем клавиатура.
+  static const double askBelow = 0.6;
+  static const double askBelowVoice = 0.8;
+
+  /// Ниже этой уверенности фраза — не задача: коннектор её не берёт.
+  static const double minCertainty = 0.3;
+
+  /// Вопрос «Понял так: … Создать?».
+  static const String understoodCommand = 'task.create.understood';
+
   /// «Не понял» голосом текущего помощника.
   static AssistantResponse unknown(AssistantSession session) => session.reply(
         unknownReply,
@@ -169,6 +181,12 @@ final class TasksConnector
     };
     if (command.intent == CommandIntent.unknown) return null;
     if (_isTalk(utterance, command)) return null;
+    // Угадано слишком много: лучше «не до конца понял» с подсказками
+    // команд, чем задача наугад.
+    if (command.intent == CommandIntent.createTask &&
+        command.certainty < minCertainty) {
+      return null;
+    }
     // Догадка «это завершение задачи» по форме слов уступает просьбе о
     // копии или восстановлении данных: «восстанови из копии, а то всё
     // пропало» — не задача «Восстанови из копии», а вопрос «Данных»
@@ -264,6 +282,13 @@ final class TasksConnector
     final dueQuestion = _dueClarification(command.dueIssue);
     if (dueQuestion != null) {
       return _ask(session, 'task.create', dueQuestion);
+    }
+    var certainty = command.certainty;
+    // Инфинитив без команды из микрофона: «купить хлеб» мог быть и
+    // обрывком другой фразы.
+    if (session.fromVoice && command.implicit) certainty -= 0.15;
+    if (certainty < (session.fromVoice ? askBelowVoice : askBelow)) {
+      return _askUnderstood(command, session);
     }
     if (command.implicit) {
       // «Купить хлеб» без маркера при уже активной «Купить хлеб» — чаще
@@ -454,12 +479,122 @@ final class TasksConnector
     );
   }
 
+  /// «Понял так: напомнить «Написать Андрею» завтра утром. Создать?» —
+  /// с кнопками «Создать» и «Исправить».
+  AssistantResponse _askUnderstood(
+    ParsedCommand command,
+    AssistantSession session,
+  ) {
+    final title = command.title!;
+    final dueAt = command.dueAt;
+    final due = dueAt == null
+        ? null
+        : formatDue(
+            dueAt,
+            command.duePrecision ?? DuePrecision.dateTime,
+            session.clock.now(),
+          );
+    final clarification = Clarification(
+      questionId: switch ((command.reminder, due)) {
+        (true, _?) => 'task.clarify.reminder',
+        (false, _?) => 'task.clarify.task',
+        (_, null) => 'task.clarify.task.noDue',
+      },
+      options: const <ClarifyOption>[
+        ClarifyOption(
+          label: 'Создать',
+          text: 'Создать',
+          answers: <String>{
+            'создай',
+            'создать',
+            'создавай',
+            'верно',
+            'правильно',
+            'давай',
+            'точно',
+          },
+          connectorId: id,
+          answer: true,
+        ),
+        ClarifyOption(
+          label: 'Исправить',
+          text: 'Исправить',
+          answers: <String>{'исправь', 'исправить', 'поправь', 'поправить'},
+          connectorId: id,
+          answer: false,
+        ),
+      ],
+      context: command,
+    );
+    session.requestConfirmation(
+      PendingConfirmation(
+        connectorId: id,
+        commandId: understoodCommand,
+        payload: clarification,
+      ),
+    );
+    return session.reply(
+      clarification.questionId,
+      values: <String, String>{
+        'title': title,
+        if (due != null) 'due': due,
+      },
+      intent: 'task.create',
+      status: AssistantStatus.needsClarification,
+      clarification: clarification,
+    );
+  }
+
+  /// Ответ на «Понял так: … Создать?»: «Создать» — задача из понятого,
+  /// без нового разбора; «Исправить» — понятая команда в поле ввода.
+  Future<AssistantResponse> _answerUnderstood(
+    ConfirmationAnswer answer,
+    AssistantSession session,
+  ) async {
+    final clarification = answer.pending.payload;
+    final command = clarification is Clarification
+        ? clarification.context as ParsedCommand?
+        : null;
+    if (command == null) {
+      throw StateError('«Понял так» без разобранной команды');
+    }
+    if (answer.confirmed) {
+      return _create(_certain(command), session);
+    }
+    final dueAt = command.dueAt;
+    final due = dueAt == null
+        ? ''
+        : ' ${formatDue(dueAt, command.duePrecision ?? DuePrecision.dateTime, session.clock.now())}';
+    return session.reply(
+      'task.clarify.edit',
+      intent: 'task.create',
+      status: AssistantStatus.noAction,
+      draft: '${command.reminder ? 'Напомни' : 'Добавь задачу'}$due '
+          '«${command.title}»',
+    );
+  }
+
+  /// Та же команда, но уже без сомнений: ответ «Создать» её подтвердил.
+  static ParsedCommand _certain(ParsedCommand command) => ParsedCommand(
+        intent: command.intent,
+        title: command.title,
+        dueAt: command.dueAt,
+        duePrecision: command.duePrecision,
+        dueIssue: command.dueIssue,
+        titleIssue: command.titleIssue,
+        projects: command.projects,
+        reminder: command.reminder,
+      );
+
   /// Ответ на «Отметить «…» выполненной?».
   Future<AssistantResponse> _answer(
     ConfirmationAnswer answer,
     AssistantSession session,
   ) async {
     final pending = answer.pending;
+    if (pending.commandId == understoodCommand) {
+      return _answerUnderstood(answer, session);
+    }
     final taskId = pending.itemId;
     if (pending.commandId != 'task.complete' || taskId == null) {
       throw StateError('Неизвестное подтверждение ${pending.commandId}');

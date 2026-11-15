@@ -284,7 +284,7 @@ class _ActionCardViewState extends State<ActionCardView> {
                         children: <Widget>[
                           Semantics(
                             liveRegion: true,
-                            child: Text(
+                            child: WholeWordText(
                               status.$1,
                               key: const Key('action-result'),
                               maxLines: 3,

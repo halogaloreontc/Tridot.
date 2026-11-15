@@ -105,7 +105,7 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const WholeWordText('Очистить историю сессий?'),
-        content: const Text(
+        content: const WholeWordText(
           'Сообщения всех сессий, в том числе сессий задач, будут удалены. '
           'Задачи останутся на месте, проекты — пустыми.',
         ),

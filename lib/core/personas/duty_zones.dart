@@ -30,6 +30,8 @@ abstract final class DutyZones {
     'converter',
     'archiver',
     'ytdl',
+    // «Удали этот файл» (ADR-028): о результатах расширений.
+    'files',
   };
 
   /// Навыки зоны оповещений.

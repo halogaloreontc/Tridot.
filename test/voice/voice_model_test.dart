@@ -89,6 +89,24 @@ void main() {
       expect(back.showTimestamps, settings.showTimestamps);
     });
 
+    test('voice.engine: «авто» не пишется, выбор переживает сохранение', () {
+      expect(const AppSettings().voiceEngine, VoiceEngineChoice.auto);
+      expect(const AppSettings().toJson().containsKey('voice.engine'), isFalse);
+      for (final choice in <VoiceEngineChoice>[
+        VoiceEngineChoice.device,
+        VoiceEngineChoice.vosk,
+      ]) {
+        final json = const AppSettings().copyWith(voiceEngine: choice).toJson();
+        expect(json['voice.engine'], choice.name);
+        expect(AppSettings.fromJson(json).voiceEngine, choice);
+      }
+      expect(
+        AppSettings.fromJson(<String, dynamic>{'voice.engine': 'cloud'})
+            .voiceEngine,
+        VoiceEngineChoice.auto,
+      );
+    });
+
     test('неверный тип — значение по умолчанию', () {
       final back = AppSettings.fromJson(<String, dynamic>{
         'voice.enabled': 'да',

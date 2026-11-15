@@ -136,7 +136,9 @@ Future<void> _openFromTasks(WidgetTester tester, Task task) async {
 }
 
 Future<void> _tap(WidgetTester tester, Finder finder) async {
-  await tester.ensureVisible(finder);
+  // К середине видимой части: у нижнего края ленты — строка действий
+  // начатой переписки (ADR-027), под ней кнопку не нажать.
+  await Scrollable.ensureVisible(tester.element(finder), alignment: .5);
   await tester.pumpAndSettle();
   await tester.tap(finder);
   await tester.pumpAndSettle();

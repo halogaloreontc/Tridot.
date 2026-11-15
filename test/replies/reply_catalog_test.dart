@@ -28,6 +28,7 @@ const Map<String, String> facts = <String, String>{
   'daypart': 'Добрый вечер',
   'said': 'Доброе утро',
   'time': '22:00',
+  'date': 'суббота, 14 ноября',
   'pun': 'Дедлайн близко — пора дедлать.',
   'active': '5',
   'overdue': '2',
@@ -84,6 +85,8 @@ const Map<String, String> facts = <String, String>{
   'minutes': '5',
   'seconds': '15',
   'code': 'io',
+  // Удаление файла сессии (ADR-028).
+  'folder': 'Загрузки',
   // Конвертер (ADR-026).
   'format': 'WebM',
   'formats': 'картинки png, jpeg, webp, bmp, gif — в png или jpeg; звук и '

@@ -42,7 +42,7 @@ SessionFileStat _statOnDisk(String path) {
 }
 
 /// Действие из меню файла.
-enum _FileAction { open, show, reveal, info }
+enum _FileAction { open, show, reveal, info, delete }
 
 /// Правая панель сессии «Файлы сессии» (ADR-028): что сделали расширения
 /// («Артефакты») и что прикрепили («Вложения»). На телефоне — выдвижная
@@ -63,9 +63,14 @@ final class SessionFilesPanel extends StatefulWidget {
     required this.onClose,
     required this.now,
     this.onMessage,
+    this.onDelete,
     this.stat,
     this.closeTooltip = 'Закрыть',
   });
+
+  /// «Удалить» в меню файла: спросить и удалить (ADR-028). `null` — пункта
+  /// нет.
+  final ValueChanged<SessionFile>? onDelete;
 
   /// Результаты расширений, новые первыми ([SessionFiles.of]).
   final List<SessionFile> outputs;
@@ -215,6 +220,8 @@ final class _SessionFilesPanelState extends State<SessionFilesPanel> {
         unawaited(
           showAttachmentInfo(context, file.attachment!, widget.store),
         );
+      case _FileAction.delete:
+        widget.onDelete?.call(file);
     }
   }
 
@@ -320,6 +327,7 @@ final class _SessionFilesPanelState extends State<SessionFilesPanel> {
         _FileAction.show,
         if (widget.opener.canReveal && !info.missing) _FileAction.reveal,
         if (file.attachment != null) _FileAction.info,
+        if (widget.onDelete != null && !info.folder) _FileAction.delete,
       ],
       onTap: () => unawaited(_open(file)),
       onAction: (_FileAction action) => _act(file, action),
@@ -362,6 +370,7 @@ final class _FileRowState extends State<_FileRow> {
         _FileAction.show => 'Показать в сообщении',
         _FileAction.reveal => 'Показать в папке',
         _FileAction.info => 'Сведения',
+        _FileAction.delete => 'Удалить',
       };
 
   static IconData _icon(_FileAction action) => switch (action) {
@@ -369,6 +378,7 @@ final class _FileRowState extends State<_FileRow> {
         _FileAction.show => Icons.chat_bubble_outline,
         _FileAction.reveal => Icons.folder_outlined,
         _FileAction.info => Icons.info_outline,
+        _FileAction.delete => Icons.delete_outline,
       };
 
   (IconData, Color) _tile(BuildContext context) {

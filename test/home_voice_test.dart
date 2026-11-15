@@ -50,6 +50,7 @@ Future<_Rig> _pump(
   bool installed = false,
   String? sha,
   FakeVoiceRecognizer? recognizer,
+  FakeDeviceRecognizer? device,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -64,12 +65,14 @@ Future<_Rig> _pump(
   final downloader = FakeFileDownloader(bytes);
   final voice = fakeVoiceKit(
     recognizer: fakeRecognizer,
+    device: device,
     downloader: downloader,
     spec: spec,
     dir: dir,
   );
   addTearDown(voice.dispose);
   await tester.runAsync(voice.refresh);
+  await tester.runAsync(voice.refreshDevice);
   final store = InMemorySettingsStore();
   await store.save(settings);
   final tasks = TaskService(
@@ -881,5 +884,174 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Активных задач пока нет.'), findsOneWidget);
     expect(rig.recognizer.startCalls, 0);
+  });
+
+  group('распознавание телефона', () {
+    testWidgets('включение без загрузки: предложение «Включить»',
+        (tester) async {
+      final device = FakeDeviceRecognizer();
+      final rig = await _pump(
+        tester,
+        device: device,
+        settings: const AppSettings(voiceMicExplained: true),
+      );
+      expect(rig.voice.engine, VoiceEngine.device);
+      await tester.tap(find.byKey(_mic));
+      await tester.pumpAndSettle();
+      expect(find.text('Включить голосовой ввод?'), findsOneWidget);
+      expect(find.textContaining('распознаёт сам телефон'), findsOneWidget);
+      expect(find.textContaining('МБ'), findsNothing);
+      await tester.tap(find.byKey(const Key('voice-offer-enable')));
+      await tester.pumpAndSettle();
+      expect(rig.downloader.calls, 0);
+      expect((await rig.store.load()).voiceInput, isTrue);
+      expect(find.text('Голосовой ввод включён'), findsOneWidget);
+
+      await _tapMic(tester);
+      expect(device.startCalls, 1);
+      expect(rig.recognizer.startCalls, 0);
+      // Телефон сам закончил фразу: итог без «стопа».
+      device
+        ..emit(const VoicePartial('ну напомни купить хлеб.'))
+        ..emit(const VoiceFinal('Напомни купить хлеб'));
+      await tester.pump();
+      await tester.pump();
+      expect(_inputText(tester), 'Напомни купить хлеб');
+      expect(device.stopCalls, 0);
+    });
+
+    testWidgets('промежуточный текст проходит общую чистку', (tester) async {
+      final device = FakeDeviceRecognizer();
+      await _pump(tester, device: device, settings: _ready);
+      await _tapMic(tester);
+      device.emit(const VoicePartial('поставь зэд напоминание в девять'));
+      await tester.pump();
+      final partial =
+          tester.widget<Text>(find.byKey(const Key('voice-partial'))).data;
+      expect(partial, isNot(contains('зэд')));
+      expect(partial, contains('в 9'));
+    });
+
+    testWidgets('язык не скачан (13): сообщение, следующее нажатие — Vosk',
+        (tester) async {
+      final device = FakeDeviceRecognizer();
+      final rig = await _pump(
+        tester,
+        device: device,
+        installed: true,
+        settings: _ready,
+      );
+      await _tapMic(tester);
+      expect(device.startCalls, 1);
+      device.emit(const VoiceError(VoiceErrorCode.languageUnavailable));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.text(VoiceErrorCode.languageUnavailable.message),
+        findsOneWidget,
+      );
+      expect(rig.voice.deviceStatus, DeviceVoiceStatus.notInstalled);
+      expect(rig.voice.engine, VoiceEngine.vosk);
+      await _tapMic(tester);
+      await pumpUntilVoice(tester, () => rig.recognizer.startCalls == 1);
+      expect(device.startCalls, 1);
+    });
+
+    testWidgets(
+        'не знает русский (12), модель есть — «Включено '
+        'распознавание Tridot»', (tester) async {
+      final device = FakeDeviceRecognizer();
+      final rig = await _pump(
+        tester,
+        device: device,
+        installed: true,
+        settings: _ready,
+      );
+      await _tapMic(tester);
+      device.emit(const VoiceError(VoiceErrorCode.languageUnsupported));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.textContaining('Включено распознавание Tridot'),
+        findsOneWidget,
+      );
+      expect(rig.voice.engine, VoiceEngine.vosk);
+    });
+
+    testWidgets(
+        'выбран телефон, язык не скачан: «Скачать» — «Голосовой '
+        'ввод готов»', (tester) async {
+      final device = FakeDeviceRecognizer(
+        status: DeviceVoiceStatus.notInstalled,
+      )..downloadGate = Completer<void>();
+      final rig = await _pump(
+        tester,
+        device: device,
+        settings: const AppSettings(
+          voiceMicExplained: true,
+          voiceEngine: VoiceEngineChoice.device,
+        ),
+      );
+      expect(rig.voice.engine, VoiceEngine.device);
+      await tester.tap(find.byKey(_mic));
+      await tester.pumpAndSettle();
+      expect(find.text('Скачать русский язык?'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('voice-language-download')));
+      await tester.pump();
+      expect(device.downloadCalls, 1);
+      expect(rig.voice.isDeviceDownloading, isTrue);
+      expect((await rig.store.load()).voiceInput, isTrue);
+      device.downloadGate!.complete();
+      await pumpUntilVoice(tester, () => !rig.voice.isDeviceDownloading);
+      await tester.pumpAndSettle();
+      expect(find.text('Голосовой ввод готов'), findsOneWidget);
+      expect(rig.voice.isReady, isTrue);
+      expect(rig.downloader.calls, 0);
+    });
+
+    testWidgets('загрузку отложила система — подсказка', (tester) async {
+      final device = FakeDeviceRecognizer(
+        status: DeviceVoiceStatus.notInstalled,
+      )..downloadScript = const <DeviceLanguageDownload>[
+          DeviceDownloadScheduled(),
+        ];
+      await _pump(
+        tester,
+        device: device,
+        settings: const AppSettings(
+          voiceMicExplained: true,
+          voiceEngine: VoiceEngineChoice.device,
+        ),
+      );
+      await tester.tap(find.byKey(_mic));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('voice-language-download')));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Android скачает русский язык позже'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('возврат в приложение спрашивает телефон снова',
+        (tester) async {
+      final device = FakeDeviceRecognizer(
+        status: DeviceVoiceStatus.pending,
+      );
+      final rig = await _pump(tester, device: device, settings: _ready);
+      final before = device.statusCalls;
+      expect(rig.voice.engine, VoiceEngine.vosk);
+      device.status = DeviceVoiceStatus.ready;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(device.statusCalls, greaterThan(before));
+      expect(rig.voice.engine, VoiceEngine.device);
+      final icon = find.descendant(
+        of: find.byKey(_mic),
+        matching: find.byType(Icon),
+      );
+      expect(tester.widget<Icon>(icon).icon, Icons.mic_none);
+    });
   });
 }

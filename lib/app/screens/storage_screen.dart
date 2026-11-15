@@ -6,6 +6,7 @@ import '../assistant_theme.dart';
 import '../layout.dart';
 import '../widgets/grouped.dart';
 import '../widgets/task_tile.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Размер в байтах по-русски: «512 Б», «12,4 КБ», «3,0 МБ».
 String formatBytes(int bytes) {
@@ -156,7 +157,7 @@ class _StorageScreenState extends State<StorageScreen> {
                     children: <Widget>[
                       _InfoRow(
                         label: 'Где',
-                        child: Text(
+                        child: WholeWordText(
                           info.label,
                           style: TextStyle(color: context.colors.text),
                         ),

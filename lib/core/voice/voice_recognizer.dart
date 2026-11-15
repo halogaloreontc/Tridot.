@@ -3,6 +3,10 @@
 /// отправляется и не пишется в журнал; распознанный текст — тоже.
 library;
 
+import 'voice_text.dart';
+
+export 'voice_text.dart';
+
 /// Доступен ли голосовой ввод на этой платформе.
 enum VoiceSupport { supported, unsupported }
 
@@ -19,6 +23,15 @@ enum VoiceErrorCode {
 
   /// Сбой движка распознавания.
   engine,
+
+  /// Распознавание телефона знает русский, но язык ещё не скачан.
+  languageUnavailable,
+
+  /// Распознавание телефона не знает русский без интернета.
+  languageUnsupported,
+
+  /// Распознавание телефона занято другим приложением.
+  busy,
 }
 
 /// Текст ошибки для пользователя. Распознанного текста в нём нет.
@@ -31,6 +44,13 @@ extension VoiceErrorText on VoiceErrorCode {
           'Микрофон недоступен. Проверьте разрешение или закройте '
               'приложение, которое его занимает',
         VoiceErrorCode.engine => 'Распознавание прервалось. Попробуйте ещё раз',
+        VoiceErrorCode.languageUnavailable =>
+          'Русский язык для распознавания ещё не скачан. Скачайте его '
+              'в настройках',
+        VoiceErrorCode.languageUnsupported =>
+          'Распознавание телефона не знает русский. Выберите распознавание '
+              'Tridot в настройках',
+        VoiceErrorCode.busy => 'Распознавание занято. Попробуйте ещё раз',
       };
 }
 
@@ -89,10 +109,81 @@ abstract interface class VoiceRecognizer {
   Future<void> dispose();
 }
 
-/// Распознанный текст для поля ввода: без пробелов по краям, без двойных
-/// пробелов, с заглавной первой буквой. Остальные буквы не трогаются.
+/// Чем распознаётся речь (ADR-023).
+enum VoiceEngine {
+  /// Распознавание телефона: `createOnDeviceSpeechRecognizer`, Android 12+.
+  device,
+
+  /// Vosk: модель ~44 МБ скачивается один раз.
+  vosk,
+}
+
+/// Что знает распознавание телефона о русском языке.
+enum DeviceVoiceStatus {
+  /// Android ниже 12, распознавания на устройстве нет или нет канала.
+  unavailable,
+
+  /// Русского нет среди языков на устройстве.
+  unsupported,
+
+  /// Русский можно скачать (Android скачает его сам).
+  notInstalled,
+
+  /// Android уже скачивает русский.
+  pending,
+
+  /// Русский установлен.
+  ready,
+
+  /// Узнать нельзя (Android 12): пробуем, сбой при начале уточнит.
+  unknown,
+}
+
+/// Ход системной загрузки русского языка для распознавания телефона.
+sealed class DeviceLanguageDownload {
+  const DeviceLanguageDownload();
+}
+
+final class DeviceDownloadProgress extends DeviceLanguageDownload {
+  const DeviceDownloadProgress(this.percent);
+
+  final int percent;
+}
+
+/// Язык скачан и готов.
+final class DeviceDownloadSuccess extends DeviceLanguageDownload {
+  const DeviceDownloadSuccess();
+}
+
+/// Android скачает язык позже (например, по Wi-Fi); новостей больше не
+/// будет.
+final class DeviceDownloadScheduled extends DeviceLanguageDownload {
+  const DeviceDownloadScheduled();
+}
+
+/// Загрузку начать не удалось.
+final class DeviceDownloadError extends DeviceLanguageDownload {
+  const DeviceDownloadError();
+}
+
+/// Распознавание телефона: модели не грузит, умеет сказать о языке и
+/// попросить систему скачать его.
+abstract interface class OnDeviceRecognizer implements VoiceRecognizer {
+  /// Что телефон знает о русском. Ошибок не бросает.
+  Future<DeviceVoiceStatus> checkStatus();
+
+  /// Просит Android скачать русский язык. Поток кончается успехом,
+  /// «скачает позже» или ошибкой.
+  Stream<DeviceLanguageDownload> downloadLanguage();
+}
+
+/// Распознанный текст для поля ввода: без обрывков вроде «зэд» и «ээ»,
+/// с временем цифрами («в девять» → «в 9», [VoiceText]), без пробелов по
+/// краям и двойных пробелов, с заглавной первой буквой. Одинаково для
+/// любого распознавателя.
 String normalizeRecognized(String text) {
-  final collapsed = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+  final collapsed =
+      VoiceText.clean(text.trim()).trim().replaceAll(RegExp(r'\s+'), ' ');
   if (collapsed.isEmpty) return '';
   final first = collapsed.runes.first;
   final head = String.fromCharCode(first);

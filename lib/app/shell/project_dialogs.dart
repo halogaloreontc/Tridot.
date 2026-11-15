@@ -251,7 +251,7 @@ Future<ProjectDeleteChoice?> showDeleteProjectDialog(
     builder: (BuildContext context) => AlertDialog(
       scrollable: true,
       title: const WholeWordText('Удалить проект?'),
-      content: Text(
+      content: WholeWordText(
         sessions == 0
             ? 'Удалить проект «$name»? В нём нет сессий.'
             : 'В проекте «$name» — $count. Их можно вынести из проекта '

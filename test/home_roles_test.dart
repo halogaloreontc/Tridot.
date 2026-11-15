@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
+import 'package:local_assistant/app/widgets/whole_word_text.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/http_transport.dart';
 import 'package:local_assistant/core/connectors/secret_store.dart';
@@ -171,22 +172,31 @@ void main() {
     ]) {
       expect(find.byKey(Key('quick-$label')), findsOneWidget, reason: label);
     }
+    // Шаблон вставляется в поле ввода, ничего не отправлено.
+    await tester.tap(find.byKey(const Key('quick-Где лежит…')));
+    await tester.pumpAndSettle();
+    expect(_input(tester), 'Где лежит ');
+    await tester.enterText(find.byKey(const Key('assistant-input')), '');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('quick-Без фото')));
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
+    // В ленте тире привязано к слову перед ним (bindDashes).
     expect(
       outsideDrawer(
         find.text(
-          'Склад ещё не подключён — Мой Связной → Помощники → Роли → Кладовщик → '
-          'Подключить склад.',
+          bindDashes(
+            'Склад ещё не подключён — Мой Связной → Помощники → Роли → '
+            'Кладовщик → Подключить склад.',
+          ),
         ),
       ),
       findsOneWidget,
     );
-    await tester.tap(find.byKey(const Key('quick-Где лежит…')));
-    await tester.pumpAndSettle();
-    expect(_input(tester), 'Где лежит ');
+    // Переписка начата: кнопок роли над полем ввода больше нет (ADR-027).
+    expect(find.byKey(const Key('quick-Где лежит…')), findsNothing);
+    expect(find.byKey(const Key('quick-rows')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -212,7 +222,12 @@ void main() {
     expect(find.text('Добавь задачу купить хлеб'), findsWidgets);
     expect(assistant.selectedTaskId, selected, reason: 'выбор');
     expect(_input(tester), 'черновик', reason: 'черновик');
-    expect(find.byKey(const Key('quick-Без фото')), findsOneWidget);
+    // Кнопки роли — только в новой сессии; здесь переписка уже идёт.
+    expect(
+      assistant.extensions.activeChips.map((RoleChip c) => c.label),
+      contains('Без фото'),
+    );
+    expect(find.byKey(const Key('quick-Без фото')), findsNothing);
 
     await _say(tester, 'где лежит 64115');
     expect(

@@ -20,6 +20,7 @@ import 'app/passwords/device_keys.dart';
 import 'app/passwords/passwords_kit.dart';
 import 'app/security/app_lock.dart';
 import 'app/security/device_auth.dart';
+import 'app/voice/device_voice_recognizer.dart';
 import 'app/voice/voice_kit.dart';
 import 'app/voice/vosk_voice_recognizer.dart';
 import 'core/app_info.dart';
@@ -50,6 +51,7 @@ import 'core/skills/calculator/calculator_connector.dart';
 import 'core/skills/converter/converter_connector.dart';
 import 'core/skills/converter/platform_media_job.dart';
 import 'core/skills/data/data_connector.dart';
+import 'core/skills/files/files_connector.dart';
 import 'core/skills/passwords/passwords_connector.dart';
 import 'core/skills/talk/talk_connector.dart';
 import 'core/skills/weather/weather_connector.dart';
@@ -261,6 +263,9 @@ Future<void> main() async {
       // Будильник и таймер (ADR-029): открывает «Часы» с заполненным
       // будильником, человек подтверждает там. Ведёт Нода (оповещения).
       AlarmConnector(setter: NotifyAlarmSetter(notify)),
+      // «Удали этот файл» (ADR-028): результат карточки или вложение из
+      // «Файлов сессии», только после подтверждения. Ведёт Лиорио.
+      FilesConnector(),
       // Загрузчик видео: ссылка уходит только в yt-dlp. Где его нет
       // (Android, macOS, сборка для Google Play), на те же фразы Лиорио
       // честно отвечает, почему, — без карточки и без ссылки в ответе.
@@ -277,15 +282,19 @@ Future<void> main() async {
   // Голосовой ввод (ADR-023): пока только Android — libvosk приходит из
   // AAR только для arm64-v8a. Модель скачивается по требованию в
   // <поддержка>/assistant/voice (исключена из резервной копии Android).
+  // Где телефон сам распознаёт русский без интернета (Android 12+,
+  // createOnDeviceSpeechRecognizer), модель не нужна.
   final voice = Platform.isAndroid
       ? VoiceKit(
           recognizer: VoskVoiceRecognizer(),
+          device: DeviceVoiceRecognizer(),
           downloader: IoFileDownloader(),
           spec: VoiceModelSpec.ruSmall,
           dir: p.join(support.path, 'assistant', 'voice'),
         )
       : null;
   await voice?.refresh();
+  await voice?.refreshDevice();
   // SecretGuard: при открытом хранилище пароль в чате узнаётся и по
   // отпечатку, без слова «пароль».
   // «Открыть» у результата архиватора на Android — только файлы из папок

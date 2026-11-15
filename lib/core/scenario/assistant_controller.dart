@@ -463,6 +463,8 @@ final class AssistantController {
     bool secretRedacted = false,
     List<JobFile> attachments = const <JobFile>[],
     List<JobFile> recentAttachments = const <JobFile>[],
+    List<SessionFileRef> recentFiles = const <SessionFileRef>[],
+    bool fromVoice = false,
   }) async {
     // Кто ответит и обратились ли по имени — по настройкам на начало
     // сообщения.
@@ -494,7 +496,9 @@ final class AssistantController {
     session
       ..attachments = secretRedacted ? const <JobFile>[] : attachments
       ..recentAttachments =
-          secretRedacted ? const <JobFile>[] : recentAttachments;
+          secretRedacted ? const <JobFile>[] : recentAttachments
+      ..recentFiles = secretRedacted ? const <SessionFileRef>[] : recentFiles
+      ..fromVoice = fromVoice;
     if (chatTaskId != null) selectTask(chatTaskId);
     final before = session.pendingConfirmation;
     _answered = null;
@@ -510,7 +514,9 @@ final class AssistantController {
     } finally {
       session
         ..attachments = const <JobFile>[]
-        ..recentAttachments = const <JobFile>[];
+        ..recentAttachments = const <JobFile>[]
+        ..recentFiles = const <SessionFileRef>[]
+        ..fromVoice = false;
       _inFlight--;
       if (_inFlight == 0 && !_chatChangePending) {
         session.projectTag = _viewProjectTag;

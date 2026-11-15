@@ -20,6 +20,7 @@ import 'package:local_assistant/core/skills/archiver/archiver_connector.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
 import 'package:local_assistant/core/skills/converter/converter_connector.dart';
 import 'package:local_assistant/core/skills/data/data_connector.dart';
+import 'package:local_assistant/core/skills/files/files_connector.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/skills/weather/weather_connector.dart';
@@ -228,6 +229,9 @@ final Map<String, Connector Function(DateTime now, bool connected)>
   // задача, а «купить будильник» и «напомни поставить будильник» — задачи.
   AlarmConnector.id: (DateTime now, bool connected) =>
       AlarmConnector(clock: FixedClock(now)),
+  // «Удали этот файл» (ADR-028): «удали запись почта из паролей» и «удали
+  // её» о задаче остаются не его.
+  FilesConnector.id: (DateTime now, bool connected) => FilesConnector(),
   // Погода (ADR-030) выключена по умолчанию, но в корпусе включена: «будет
   // дождь?» — её, а «напомни взять зонт» и «купить зонт» — задачи. `match`
   // в сеть не ходит; подделка сервиса без транспорта.

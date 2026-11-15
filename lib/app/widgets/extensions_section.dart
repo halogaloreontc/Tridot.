@@ -669,7 +669,7 @@ class _ExtensionTile extends StatelessWidget {
           if (info.description.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text(info.description),
+              child: WholeWordText(info.description),
             ),
           if (status case final String text)
             Padding(

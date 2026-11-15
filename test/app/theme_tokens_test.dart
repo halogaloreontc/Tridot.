@@ -210,6 +210,34 @@ void main() {
       }
     });
 
+    test('выбранная строка и сегмент: мягко, но видно; текст читается', () {
+      for (final MapEntry(key: name, value: p) in _themes.entries) {
+        // Строка навигации: на группе и на фоне панели.
+        for (final under in <Color>[p.workspace, p.sidebar]) {
+          expect(contrast(p.selection, under), greaterThan(1.1), reason: name);
+          expect(contrast(p.selection, under), lessThan(1.6), reason: name);
+        }
+        expect(
+          contrast(p.textStrong, p.selection),
+          greaterThanOrEqualTo(7),
+          reason: name,
+        );
+        expect(contrast(p.muted, p.selection), greaterThanOrEqualTo(4.5));
+        // Бегунок сегмента — на дорожке вкладок и на панели поля.
+        final track = p.isLight ? p.bubble : p.raised;
+        expect(
+          contrast(p.segmentSelected, track),
+          greaterThan(1.1),
+          reason: name,
+        );
+        expect(
+          contrast(p.textStrong, p.segmentSelected),
+          greaterThanOrEqualTo(4.5),
+          reason: name,
+        );
+      }
+    });
+
     test('lerp: края — сами палитры, середина — между ними', () {
       const dark = AppPalette.dark;
       const light = AppPalette.light;

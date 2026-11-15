@@ -613,7 +613,7 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
         const SizedBox(height: 16),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpace.rowH),
-          child: Text(
+          child: WholeWordText(
             'Журнал помощников — в планах',
             key: const Key('assistants-journal-planned'),
             style: metaStyle(context),

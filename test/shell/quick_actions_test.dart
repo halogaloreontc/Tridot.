@@ -1,7 +1,7 @@
 // Быстрые действия над полем ввода (макет «Д»): «Задача», «Напомнить»,
 // «Пароль» — только крупными в пустой сессии, «Пароль» — только с
-// навыком; после первой команды остаются лишь кнопки ролей и выбранной
-// задачи.
+// навыком. В начатой переписке — одна строка поверх ленты
+// (QuickActionsRow): без фона, прокрутка вбок, пусто — ничего.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
@@ -46,6 +46,72 @@ Future<List<String>> _pump(
 }
 
 void main() {
+  group('строка начатой переписки (QuickActionsRow)', () {
+    Future<void> pumpRow(WidgetTester tester, List<QuickRowItem> items) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      for (final theme in <ThemeData>[
+        AssistantTheme.light(),
+        AssistantTheme.dark(),
+      ]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.bottomCenter,
+                child: QuickActionsRow(items: items),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    testWidgets('пусто — ничего и без места', (tester) async {
+      await pumpRow(tester, const <QuickRowItem>[]);
+      expect(find.byKey(const Key('quick-float-row')), findsNothing);
+    });
+
+    testWidgets('одна строка 44, без фона, лишнее — прокруткой',
+        (tester) async {
+      var taps = 0;
+      await pumpRow(tester, <QuickRowItem>[
+        for (var i = 0; i < 8; i++)
+          (Key('row-$i'), ('Действие номер $i', Icons.check, () => taps++)),
+      ]);
+      final row = find.byKey(const Key('quick-float-row'));
+      expect(tester.getSize(row).height, QuickActionsRow.height);
+      // Все кнопки — на одной линии.
+      final tops = <double>{
+        for (var i = 0; i < 8; i++)
+          tester.getRect(find.byKey(Key('row-$i'))).top,
+      };
+      expect(tops, hasLength(1));
+      // Фона у строки нет: ни одного DecoratedBox шире кнопки.
+      final wide = tester
+          .widgetList<Container>(
+            find.descendant(of: row, matching: find.byType(Container)),
+          )
+          .where((Container c) => c.decoration != null)
+          .map((Container c) => c.constraints?.maxWidth ?? 0)
+          .where((double w) => w.isFinite && w >= 390);
+      expect(wide, isEmpty);
+      expect(find.byType(Scrollbar), findsNothing);
+      await tester.tap(find.byKey(const Key('row-0')));
+      expect(taps, 1);
+      await tester.dragUntilVisible(
+        find.byKey(const Key('row-7')),
+        row,
+        const Offset(-200, 0),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('row-7')));
+      expect(taps, 2);
+    });
+  });
+
   testWidgets('пустая сессия: плитки не ниже 72 с подписями, без рамок',
       (tester) async {
     final calls = await _pump(tester, big: true, onPassword: () {});

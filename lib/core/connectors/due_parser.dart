@@ -1,4 +1,6 @@
 import '../models/task.dart';
+import 'speech_noise.dart';
+import 'spoken_time.dart';
 import 'verb_forms.dart';
 
 /// Почему срок не удалось однозначно разобрать. Коннектор превращает это
@@ -245,6 +247,45 @@ final class DueParser {
 
   /// Посимвольная нормализация: нижний регистр и «ё» → «е» без изменения
   /// длины строки. Символ, у которого нижний регистр другой длины, остаётся.
+  /// [text] с временем словами, заменённым цифрами той же длины:
+  /// «в восемь тридцать утра» → «в 8:30           утра».
+  static String _spellDigits(String text, List<SpokenTimeMatch> spoken) {
+    if (spoken.isEmpty) return text;
+    final buffer = StringBuffer();
+    var position = 0;
+    for (final match in spoken) {
+      buffer
+        ..write(text.substring(position, match.start))
+        ..write(match.digits.padRight(match.end - match.start));
+      position = match.end;
+    }
+    buffer.write(text.substring(position));
+    return buffer.toString();
+  }
+
+  /// Фрагменты срока, расширенные на время словами целиком: цифры «9»
+  /// заняли только начало слова «девять».
+  static List<CharSpan> _spoken(
+    List<CharSpan> spans,
+    List<SpokenTimeMatch> spoken,
+  ) {
+    if (spoken.isEmpty) return spans;
+    return <CharSpan>[
+      for (final span in spans)
+        () {
+          var start = span.start;
+          var end = span.end;
+          for (final match in spoken) {
+            if (match.start < end && span.start < match.end) {
+              if (match.start < start) start = match.start;
+              if (match.end > end) end = match.end;
+            }
+          }
+          return CharSpan(start, end);
+        }(),
+    ];
+  }
+
   static String normalizeChars(String text) {
     final buffer = StringBuffer();
     for (var i = 0; i < text.length; i++) {
@@ -257,7 +298,11 @@ final class DueParser {
   }
 
   DueParseResult parse(String text, DateTime now) {
-    final normalized = normalizeChars(text);
+    // Время словами («в девять», «полдевятого») разбирается как цифры той
+    // же длины: фрагменты срока по-прежнему указывают в исходную строку,
+    // а в конце расширяются на всё слово ([_spoken]).
+    final spoken = SpokenTime.find(normalizeChars(text));
+    final normalized = _spellDigits(normalizeChars(text), spoken);
     final today = DateTime(now.year, now.month, now.day);
     final words = _word.allMatches(normalized).toList(growable: false);
 
@@ -420,7 +465,7 @@ final class DueParser {
           dueAt: dueAt,
           precision: precision,
           issue: issue,
-          spans: spans,
+          spans: _spoken(spans, spoken),
           hasSource: dates.any((_Mention<DateTime> m) => m.isSource) ||
               times.any((_Mention<(int, int)> m) => m.isSource),
           recurring: recurring,
@@ -615,7 +660,14 @@ final class DueParser {
                 value,
                 suffix,
                 postpone: postpone,
-              )) &&
+              ) ||
+              // «завтра на 10 позвонить»: «на» с часом сразу после дня —
+              // время, а не «на 10 минут».
+              (masked[i - 1].group(0) == 'на' &&
+                  suffix.isEmpty &&
+                  !postpone &&
+                  afterDay(masked[i - 1]) &&
+                  !_naCounted(masked, i))) &&
           _onlySpaces(dateText, masked[i - 1].end, token.start);
       // «на завтра 9 утра», «в пятницу 7 вечера»: час без предлога сразу
       // после дня — только с «утра», «вечера», «ночи».
@@ -754,6 +806,20 @@ final class DueParser {
           return done(issue: DueIssue.inPast, spans: merged);
         }
         day = DateTime(day.year, day.month, day.day + 1);
+      } else if (explicitDay == null &&
+          part == PartOfDay.evening &&
+          !end.subtract(const Duration(hours: 1)).isAfter(now)) {
+        // Последний час вечера без дня — уже следующий вечер: «вечером»
+        // в 23:30 — завтра, а не «сегодня в 19:00», которое через
+        // полчаса станет просроченным. «Днём» в 16:30 — ещё сегодня.
+        day = DateTime(day.year, day.month, day.day + 1);
+      } else if (explicitDay == null &&
+          part == PartOfDay.morning &&
+          !DateTime(day.year, day.month, day.day, part.hour).isAfter(now)) {
+        // «С утра» без дня, когда условный час утра уже прошёл (в 9:31) —
+        // следующее утро: «сегодня в 9:00» родилось бы просроченным, и
+        // напоминание не пришло бы вовсе.
+        day = DateTime(day.year, day.month, day.day + 1);
       }
       return done(
         dueAt: DateTime(day.year, day.month, day.day, part.hour),
@@ -878,6 +944,14 @@ final class DueParser {
   /// фразы, день («на вечер завтра»), предлог или союз. Иначе это событие:
   /// «билеты на вечер встречи выпускников».
   static const Set<String> _partNounFollowers = <String>{
+    'чтобы',
+    'что',
+    'напомни',
+    'напомнить',
+    'напоминание',
+    'напоминалку',
+    'мне',
+    'нам',
     'в',
     'во',
     'на',
@@ -924,6 +998,29 @@ final class DueParser {
       word == 'вчера' ||
       word == 'позавчера' ||
       _monthStems.any(word.startsWith);
+
+  /// После «с утра» — конец диапазона: «с утра на вечер», «с утра до
+  /// обеда», «с утра и до ночи».
+  static const Set<String> _morningRangeAfter = <String>{
+    'на',
+    'до',
+    'и',
+    'по',
+  };
+
+  /// Перед «с утра» — не срок: «весь день с утра», «целый день с утра»,
+  /// «болит с утра».
+  static const Set<String> _morningRangeBefore = <String>{
+    'весь',
+    'целый',
+    'день',
+    'еще',
+    'уже',
+    'самого',
+  };
+
+  /// «С утра пораньше» — то же утро.
+  static const Set<String> _earlyWords = <String>{'пораньше', 'пораньку'};
 
   /// Слова после части суток, с которыми она не срок: «днём рождения»,
   /// «днём раньше».
@@ -1004,6 +1101,10 @@ final class DueParser {
           (i + 1 >= words.length ||
               !_onlySpaces(text, words[i].end, words[i + 1].start) ||
               _partNounFollowers.contains(word(i + 1)) ||
+              // «напоминание на утро написать Андрею», «на вечер чтобы я
+              // купил хлеб»: дальше само дело.
+              isInfinitive(word(i + 1)) ||
+              SpeechNoise.isJunk(word(i + 1)) ||
               _dayWords.containsKey(word(i + 1)) ||
               _weekdayForms[word(i + 1)]?.$2 == _genitivePrepositions);
       // «на завтрашнее утро», «на завтрашний вечер»: день — в прилагательном.
@@ -1041,6 +1142,28 @@ final class DueParser {
           start -= 2;
         }
         result.add(_PartFound(words[start].start, words[i].end, noun));
+        continue;
+      }
+      // «с утра», «с утра пораньше», «завтра с утра»: утро как срок.
+      // «С утра на вечер» и «с утра до вечера» — откуда и докуда, а «весь
+      // день с утра» — не срок.
+      if ((word(i) == 'утра' || word(i) == 'утречка') &&
+          i > 0 &&
+          adjacent(i - 1, i) &&
+          (word(i - 1) == 'с' || word(i - 1) == 'со') &&
+          !(i + 1 < words.length && _morningRangeAfter.contains(word(i + 1))) &&
+          !(i > 1 && _morningRangeBefore.contains(word(i - 2)))) {
+        var last = i;
+        if (last + 1 < words.length &&
+            adjacent(last, last + 1) &&
+            _earlyWords.contains(word(last + 1))) {
+          last++;
+        }
+        if (nextToUnparsedDay(i - 1, last)) continue;
+        result.add(
+          _PartFound(words[i - 1].start, words[last].end, PartOfDay.morning),
+        );
+        i = last;
         continue;
       }
       var part = _partWords[word(i)];
@@ -1839,6 +1962,19 @@ final class DueParser {
       }
     }
     return result;
+  }
+
+  /// После «на N» — единица или счётное слово: «завтра на 10 минут», «на 2
+  /// дня», «на 3 человек». Тогда «на N» — не час.
+  static bool _naCounted(List<RegExpMatch> words, int index) {
+    if (index + 1 >= words.length) return false;
+    final next = words[index + 1].group(0)!;
+    return _relativeUnits.containsKey(next) ||
+        _singleUnits.containsKey(next) ||
+        _units.contains(next) ||
+        _unitPrefixes.any(next.startsWith) ||
+        next.startsWith('человек') ||
+        next.startsWith('персон');
   }
 
   /// «на 15 часов», «на 7 вечера», «на 2 часа дня» — время на часах, а не

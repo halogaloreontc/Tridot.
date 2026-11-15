@@ -8,6 +8,7 @@ import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import com.example.local_assistant.media.MediaChannel
 import com.example.local_assistant.notify.NotifyChannel
+import com.example.local_assistant.voice.VoiceChannel
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -16,6 +17,7 @@ import java.util.UUID
 
 class MainActivity : FlutterActivity() {
     private var disposeMedia: (() -> Unit)? = null
+    private var disposeVoice: (() -> Unit)? = null
     private var notify: NotifyChannel? = null
     private var links: LinksChannel? = null
 
@@ -35,6 +37,9 @@ class MainActivity : FlutterActivity() {
         // Своя страница и приложение погоды (ADR-030): открывает система,
         // канал в сеть не ходит.
         links = LinksChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        // Голосовой ввод распознаванием телефона (ADR-023): только
+        // createOnDeviceSpeechRecognizer, звук не уходит с устройства.
+        disposeVoice = VoiceChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
         // «Открыть» у результата карточки расширения (ADR-024): копия во
         // временной папке и FileProvider только на чтение. Путь вне папок
         // приложения не открывается.
@@ -72,6 +77,8 @@ class MainActivity : FlutterActivity() {
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         disposeMedia?.invoke()
         disposeMedia = null
+        disposeVoice?.invoke()
+        disposeVoice = null
         notify = null
         links = null
         super.cleanUpFlutterEngine(flutterEngine)

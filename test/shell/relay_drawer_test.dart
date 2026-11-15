@@ -129,6 +129,8 @@ Future<_Calls> _pump(
   SectionCounts counts = const SectionCounts(),
   List<Persona>? assistants,
   List<ProjectEntry> projects = const <ProjectEntry>[],
+  String? activeSection,
+  ThemeData? theme,
 }) async {
   final calls = _Calls();
   tester.view.physicalSize = size;
@@ -136,11 +138,12 @@ Future<_Calls> _pump(
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
-      theme: AssistantTheme.dark(),
+      theme: theme ?? AssistantTheme.dark(),
       home: Scaffold(
         // Как выдвижная панель: Scaffold не сжимает её под клавиатуру.
         resizeToAvoidBottomInset: false,
         body: RelayDrawer(
+          activeSection: activeSection,
           wide: wide,
           onCollapse: onCollapse,
           reduceMotion: true,
@@ -651,6 +654,48 @@ void main() {
       greaterThan(row.bottom - 1),
       reason: 'строкой под «Задачами», а не в ряд',
     );
+  });
+
+  testWidgets('выбранный раздел: мягкая заливка с отступом 4 и радиусом 8',
+      (tester) async {
+    for (final (theme, palette) in <(ThemeData, AppPalette)>[
+      (AssistantTheme.light(), AppPalette.light),
+      (AssistantTheme.dark(), AppPalette.dark),
+    ]) {
+      for (final id in <String>['tasks', 'projects']) {
+        await _pump(tester, activeSection: id, theme: theme);
+        // Смена темы — с переходом: дождаться конца.
+        await tester.pumpAndSettle();
+        final ink = find.byKey(Key('nav-$id'));
+        final fill = find.ancestor(of: ink, matching: find.byType(Material));
+        final material = tester.widget<Material>(fill.first);
+        expect(material.color, palette.selection, reason: id);
+        expect(material.borderRadius, BorderRadius.circular(8), reason: id);
+        // Отступ 4 от краёв группы (её край — край «Мой Связной»).
+        final group = tester.getRect(find.byKey(const Key('drawer-my-relay')));
+        final rect = tester.getRect(fill.first);
+        expect(rect.left - group.left, 4, reason: id);
+        expect(group.right - rect.right, 4, reason: id);
+        // У «Проектов» заливка — и под «+».
+        if (id == 'projects') {
+          final plus = tester.getRect(find.byKey(const Key('project-new')));
+          expect(rect.left <= plus.left && rect.right >= plus.right, isTrue);
+          expect(rect.top <= plus.top && rect.bottom >= plus.bottom, isTrue);
+        }
+        // Другие разделы — без заливки.
+        final other = id == 'tasks' ? 'planning' : 'tasks';
+        final rest = tester.widget<Material>(
+          find
+              .ancestor(
+                of: find.byKey(Key('nav-$other')),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+        expect(rest.type, MaterialType.transparency, reason: other);
+      }
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('группы: закреплённые — только если есть; превью и знак',

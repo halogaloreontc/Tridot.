@@ -50,6 +50,10 @@ abstract final class AppSpace {
 
   /// Метка времени группы — сверху и снизу.
   static const double timeLabel = 16;
+
+  /// Поле заливки выбранной строки от краёв группы (ADR-027).
+  static const double selectionInsetH = 4;
+  static const double selectionInsetV = 4;
 }
 
 /// Скругления.
@@ -66,6 +70,10 @@ abstract final class AppRadius {
 
   /// Поле и выпадающий список внутри карточки.
   static const double inner = 10;
+
+  /// Заливка выбранной строки внутри группы: [group] минус поле
+  /// [AppSpace.selectionInsetH] — скругления концентричны.
+  static const double selection = 8;
 }
 
 /// Размеры.

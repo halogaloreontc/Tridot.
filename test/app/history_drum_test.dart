@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/widgets/history_rail.dart';
 import 'package:local_assistant/app/widgets/history_drum.dart';
+import 'package:local_assistant/app/widgets/whole_word_text.dart';
 
 import '../support/app_fonts.dart';
 import '../support/word_wrap_guard.dart';
@@ -303,6 +304,75 @@ void main() {
       whole: const <String>{'История команд', 'Нажмите, чтобы перейти'},
       label: 'барабан 320 ×2',
     );
+  });
+
+  testWidgets('тире не начинает строку ответа (280–390 px)', (tester) async {
+    await loadAppFonts();
+    const results = <String>[
+      'Запустить таймер на 3 минуты — откроются «Часы» на телефоне.',
+      'Таймер на 3 минуты — откроются «Часы».',
+      'Поставлю таймер на 3 минуты — откроются «Часы».',
+      'Будильник на 7:00 — откроются «Часы», там его и подтвердите.',
+    ];
+    final entries = <HistoryEntry>[
+      for (final (i, result) in results.indexed)
+        HistoryEntry(
+          command: 'Поставь таймер на 3 минуты',
+          timestamp: '09:3$i',
+          result: result,
+        ),
+    ];
+    final found = <String>[];
+    for (var width = 280.0; width <= 390; width += 2) {
+      setPhone(tester, width: width, height: 760);
+      await tester.pumpWidget(
+        MaterialApp(
+          key: ValueKey<double>(width),
+          theme: AssistantTheme.dark(),
+          home: Scaffold(
+            body: Padding(
+              padding: const EdgeInsets.only(top: 60),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: HistoryRailPill(
+                  entries: entries,
+                  compact: true,
+                  reduceMotion: true,
+                  onSelect: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await _openDrum(tester);
+      // Каждую карточку — по центру: в центре она шире всего.
+      for (var page = 0; page < results.length; page++) {
+        _controller(tester).jumpToPage(page);
+        await tester.pumpAndSettle();
+        found.addAll(
+          midWordBreaks(
+            tester,
+            whole: const <String>{'История команд', 'Нажмите, чтобы перейти'},
+          ).where((String s) => s.startsWith('DASH')).map(
+                (String s) => '$width: $s',
+              ),
+        );
+      }
+    }
+    expect(found, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('обрезка не кончается тире', () async {
+    await loadAppFonts();
+    const style = TextStyle(fontFamily: AppFonts.text, fontSize: 17);
+    final text = bindDashes('3 минуты — откроются «Часы» на телефоне');
+    for (var width = 60.0; width <= 200; width += 4) {
+      final shown = fitWords(text, style: style, maxWidth: width, maxLines: 1);
+      expect(shown, isNot(matches(RegExp(r'[ \u00a0—–-]…$'))), reason: shown);
+      expect(shown, isNot(contains('—…')), reason: shown);
+    }
   });
 
   test('обрезка по границе слова, а не внутри', () async {

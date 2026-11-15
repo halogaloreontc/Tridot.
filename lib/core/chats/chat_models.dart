@@ -217,6 +217,27 @@ final class ChatMessage {
         weather: weather,
       );
 
+  /// То же сообщение с другими вложениями: одно удалили из «Файлов
+  /// сессии» (ADR-028).
+  ChatMessage withAttachments(List<ChatAttachment> attachments) => ChatMessage(
+        id: id,
+        author: author,
+        text: text,
+        timestamp: timestamp,
+        personaId: personaId,
+        status: status,
+        taskId: taskId,
+        checklist: checklist,
+        card: card,
+        link: link,
+        secureCard: secureCard,
+        clarification: clarification,
+        suggestions: suggestions,
+        attachments: attachments,
+        job: job,
+        weather: weather,
+      );
+
   /// То же сообщение с карточкой погоды [weather] («Обновить»).
   ChatMessage withWeather(WeatherCard weather) => ChatMessage(
         id: id,

@@ -6,6 +6,7 @@ import '../assistant_theme.dart';
 import '../layout.dart';
 import '../shell/relay_drawer.dart';
 import '../shell/session_files_panel.dart' show metaLines;
+import '../widgets/grouped.dart' show segmentThumbShadow;
 
 /// Вкладки «Мой Связной».
 enum MyRelayTab { summary, assistants, settings }
@@ -411,7 +412,12 @@ final class _Segments extends StatelessWidget {
         // конце прокрутки поле пустое и гаснуть нечему.
         return ShaderMask(
           shaderCallback: (Rect bounds) {
-            final edge = bounds.width <= 0 ? 0.0 : _outer.left / bounds.width;
+            // Крупным шрифтом сегмент выше, и узкий край читается как
+            // обрез: тогда край гаснет шире.
+            final fade = MediaQuery.textScalerOf(context).scale(10) > 15
+                ? _outer.left * 2
+                : _outer.left;
+            final edge = bounds.width <= 0 ? 0.0 : fade / bounds.width;
             return LinearGradient(
               // Маска, а не цвет: важна только непрозрачность.
               colors: const <Color>[
@@ -494,13 +500,11 @@ final class _Segments extends StatelessWidget {
           alignment: Alignment.center,
           padding: EdgeInsets.symmetric(horizontal: pad),
           decoration: BoxDecoration(
-            // Выбранный — на уровень светлее дорожки в обеих темах.
-            color: active
-                ? (Theme.of(context).brightness == Brightness.dark
-                    ? context.colors.bubble
-                    : context.colors.workspace)
-                : null,
+            // Выбранный — «бегунок»: заметно светлее дорожки в тёмной теме,
+            // белый с лёгкой тенью в светлой (ADR-027).
+            color: active ? context.colors.segmentSelected : null,
             borderRadius: BorderRadius.circular(10),
+            boxShadow: active ? segmentThumbShadow(context) : null,
           ),
           child: Text(
             tab.title,
