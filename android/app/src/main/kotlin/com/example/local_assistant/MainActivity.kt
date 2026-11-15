@@ -20,6 +20,7 @@ class MainActivity : FlutterActivity() {
     private var disposeVoice: (() -> Unit)? = null
     private var notify: NotifyChannel? = null
     private var links: LinksChannel? = null
+    private var incoming: IncomingLinkChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -37,6 +38,11 @@ class MainActivity : FlutterActivity() {
         // Своя страница и приложение погоды (ADR-030): открывает система,
         // канал в сеть не ходит.
         links = LinksChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        // Склад (ADR-031): секреты подключений — AES-GCM ключом Keystore;
+        // «Открыть в Tridot» и «Поделиться» ссылкой или QR — в окно
+        // подтверждения.
+        SecretsChannel(flutterEngine.dartExecutor.binaryMessenger)
+        incoming = IncomingLinkChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         // Голосовой ввод распознаванием телефона (ADR-023): только
         // createOnDeviceSpeechRecognizer, звук не уходит с устройства.
         disposeVoice = VoiceChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
@@ -81,6 +87,7 @@ class MainActivity : FlutterActivity() {
         disposeVoice = null
         notify = null
         links = null
+        incoming = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
@@ -104,6 +111,7 @@ class MainActivity : FlutterActivity() {
     /** Нажато уведомление, пока приложение открыто: чат задачи. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (incoming?.onNewIntent(intent) == true) return
         notify?.onNewIntent(intent)
     }
 

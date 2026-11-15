@@ -68,6 +68,7 @@ const Map<String, String> facts = <String, String>{
   'details': ' по будням с подписью «спортзал»',
   'duration': '5 минут',
   'when': 'завтра в 7:00',
+  'what': 'цены товара',
   // Погода (ADR-030).
   'temp': '+2°',
   'feels': '−1°',

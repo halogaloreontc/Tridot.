@@ -195,9 +195,12 @@ void main() {
     await tester.pumpWidget(h.build());
     await _tap(tester, 'extension-configure-warehouse');
     expect(find.textContaining('Скопировать ссылку'), findsOneWidget);
-    expect(find.textContaining('Не сканируйте QR камерой'), findsOneWidget);
+    expect(
+      find.textContaining('не открывайте ссылку «#qr=»'),
+      findsOneWidget,
+    );
     // В складе до 1.4.56 кнопки нет: экран так и говорит.
-    expect(find.textContaining('с версии 1.4.56'), findsOneWidget);
+    expect(find.textContaining('старше 1.4.56'), findsOneWidget);
     expect(find.textContaining('подключите его вручную'), findsOneWidget);
 
     await _enter(
@@ -241,11 +244,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(_switch(tester).value, isTrue);
     expect(_switch(tester).onChanged, isNotNull);
-    // Статус — и в строке расширения, и в карточке роли.
+    // Статус — в строке расширения, а в карточке роли — карточка
+    // подключения (ADR-031).
     expect(
       find.text('Подключён: ivanov · под своим логином'),
-      findsNWidgets(2),
+      findsOneWidget,
     );
+    expect(find.text('Вошли: ivanov'), findsOneWidget);
 
     await _tap(tester, 'extension-configure-warehouse');
     await _tap(tester, 'connection-logout');

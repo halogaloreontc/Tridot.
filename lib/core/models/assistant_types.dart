@@ -3,6 +3,7 @@ import '../jobs/extension_card.dart';
 import '../personas/persona.dart';
 import 'action_card.dart';
 import 'launch_request.dart';
+import 'warehouse_card.dart';
 import 'weather_card.dart';
 import 'bulk.dart';
 import 'clarification.dart';
@@ -29,6 +30,7 @@ final class AssistantResponse {
     this.suggestions,
     this.job,
     this.weather,
+    this.warehouse,
     this.launch,
     this.draft,
   });
@@ -95,6 +97,10 @@ final class AssistantResponse {
   /// историю чата. `null` — без карточки.
   final WeatherCard? weather;
 
+  /// Карточка ответа склада (ADR-031): строки ответа сервера. Пишется в
+  /// историю чата. `null` — без карточки.
+  final WarehouseCard? warehouse;
+
   /// Открыть страницу или приложение погоды сразу после ответа. Только в
   /// памяти и только у живого ответа: в историю не попадает.
   final LaunchRequest? launch;
@@ -123,6 +129,7 @@ final class AssistantResponse {
         suggestions: suggestions,
         job: job,
         weather: weather,
+        warehouse: warehouse,
         launch: launch,
         draft: draft,
       );
@@ -145,6 +152,7 @@ final class AssistantResponse {
         suggestions: suggestions,
         job: job,
         weather: weather,
+        warehouse: warehouse,
         launch: launch,
         draft: draft,
       );
@@ -167,6 +175,7 @@ final class AssistantResponse {
         suggestions: suggestions,
         job: job,
         weather: weather,
+        warehouse: warehouse,
         launch: launch,
         draft: draft,
       );
@@ -190,6 +199,7 @@ final class AssistantResponse {
         suggestions: suggestions,
         job: job,
         weather: weather,
+        warehouse: warehouse,
         launch: launch,
         draft: draft,
       );

@@ -26,6 +26,7 @@ import '../core/connectors/connector.dart';
 import '../core/connectors/login_link.dart';
 import '../core/connectors/manifest/connection_service.dart';
 import '../core/connectors/manifest/connection.dart';
+import '../core/connectors/manifest/manifest_text.dart';
 import '../core/formatting/due_format.dart';
 import '../core/jobs/extension_card.dart';
 import '../core/jobs/job_runner.dart';
@@ -110,6 +111,12 @@ import 'widgets/task_chat_header.dart';
 import 'widgets/grouped.dart';
 import 'widgets/task_tile.dart';
 import 'widgets/weather_card_view.dart';
+import 'widgets/warehouse_card_view.dart';
+import 'widgets/warehouse_connection_card.dart';
+import 'widgets/qr_scan_sheet.dart';
+import 'links/incoming_links.dart';
+import 'links/link_opener.dart';
+import '../core/connectors/manifest/warehouse_signals.dart';
 import 'widgets/whole_word_text.dart';
 
 /// Разделы оболочки «Д»: сессия (главный экран), задачи, проекты,
@@ -182,6 +189,8 @@ final class HomePage extends StatefulWidget {
     this.weather,
     this.notify,
     this.appLock,
+    this.incoming,
+    this.signals = const <WarehouseSignals>[],
     this.onAppearanceChanged,
     this.onReduceMotionChanged,
   });
@@ -247,6 +256,13 @@ final class HomePage extends StatefulWidget {
 
   /// Вход в приложение по отпечатку / Face ID (ADR-025); `null` — нет.
   final AppLockController? appLock;
+
+  /// «Открыть в Tridot» и «Поделиться» ссылкой или QR склада (ADR-031);
+  /// `null` — нет (тесты, Windows, Linux).
+  final IncomingLinks? incoming;
+
+  /// Сигналы склада, только пока приложение на экране (ADR-031).
+  final List<WarehouseSignals> signals;
 
   /// Системные уведомления о задачах и будильник (ADR-029); `null` — их
   /// нет (тесты, Windows, Linux).
@@ -583,6 +599,20 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       (String taskId) => unawaited(_openNotifiedTask(taskId)),
     );
     unawaited(_openLaunchTask());
+    // Склад (ADR-031): ссылка «Открыть в Tridot» — окно подтверждения;
+    // сигналы — только пока приложение на экране.
+    final incoming = widget.incoming;
+    if (incoming != null) {
+      _incoming = incoming.items.listen(
+        (IncomingItem item) => unawaited(_onIncoming(item)),
+      );
+      unawaited(_openLaunchLink(incoming));
+    }
+    for (final signals in widget.signals) {
+      signals
+        ..onNews = _onWarehouseNews
+        ..resume();
+    }
     // Хранилище запирается, как только навык выключили (D18).
     final passwords = widget.passwords;
     if (passwords != null) {
@@ -691,6 +721,87 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   NotifyPlatform get _notify => widget.notify ?? const UnsupportedNotify();
 
   StreamSubscription<String>? _openedTask;
+
+  StreamSubscription<IncomingItem>? _incoming;
+
+  /// Открывает страницу склада: у погоды — свой, иначе — системный.
+  late final LinkOpener _links =
+      widget.weather?.links ?? LinkOpener(platform: currentJobPlatform());
+
+  ConnectionService? _connectionOf(String id) => widget.connections
+      .where((ConnectionService c) => c.slot.id == id)
+      .firstOrNull;
+
+  void _quietNote(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text(text), duration: const Duration(seconds: 5)),
+    );
+  }
+
+  Future<void> _openLaunchLink(IncomingLinks incoming) async {
+    await _settingsReady;
+    final item = await incoming.initial();
+    if (item != null) await _onIncoming(item);
+  }
+
+  /// Ссылка или QR склада извне: строгий разбор, окно подтверждения с
+  /// хостом и только потом вход. Картинка — разбор QR на устройстве, копия
+  /// удаляется.
+  Future<void> _onIncoming(IncomingItem item) async {
+    var text = item.text;
+    if (item.kind == IncomingKind.image) {
+      text = await decodeQrImage(item.path!);
+      await IncomingLinks.forget(item);
+    }
+    if (!mounted) return;
+    final service = _connectionOf('warehouse');
+    if (service == null || text == null || !looksLikeLoginLink(text)) {
+      _quietNote(
+        item.kind == IncomingKind.image
+            ? 'На картинке нет QR склада.'
+            : 'Через «Поделиться» Tridot принимает только ссылку склада.',
+      );
+      return;
+    }
+    await _settingsReady;
+    if (!mounted) return;
+    final result = await connectWarehouseLink(
+      context,
+      service,
+      text,
+      onEnabledChanged: (bool value) {
+        if (!mounted) return;
+        _changeSettings(
+          connectionChanged(
+            widget.assistant.extensions,
+            _settings,
+            service.slot.id,
+            connected: value,
+          ),
+        );
+      },
+    );
+    if (result != null) _quietNote(result.message);
+  }
+
+  /// Новые приходы, пока приложение открыто: тихая строка, без
+  /// уведомлений системы.
+  void _onWarehouseNews(WarehouseSignal signal) {
+    if (!mounted) return;
+    final n = signal.newArrivals;
+    _quietNote(
+      widget.assistant.session.say(
+        'warehouse.signal.arrivals',
+        <String, String>{
+          // «3 новых прихода», «5 новых приходов»: «На складе новое: …».
+          'list': n == 1
+              ? 'новый приход'
+              : askPlural(n, 'новый приход,новых прихода,новых приходов'),
+        },
+      ),
+    );
+  }
 
   /// Расписание, отданное системе последним: тот же план не шлётся
   /// повторно.
@@ -820,6 +931,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       widget.assistant.session.fileRemover = null;
     }
     unawaited(_openedTask?.cancel());
+    unawaited(_incoming?.cancel());
+    for (final signals in widget.signals) {
+      signals.pause();
+      if (signals.onNews == _onWarehouseNews) signals.onNews = null;
+    }
     widget.ffmpeg?.removeListener(_onJobsChanged);
     widget.ytdl?.tool.removeListener(_onJobsChanged);
     _jobHub
@@ -882,6 +998,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // Хранилище паролей: фон и «спрятано» запирают, потеря фокуса прячет
     // показанное (3.6).
     widget.passwords?.lifecycle.onAppState(state);
+    // Сигналы склада — только пока приложение на экране (ADR-031).
+    for (final signals in widget.signals) {
+      if (state == AppLifecycleState.resumed) {
+        signals.resume();
+      } else if (state == AppLifecycleState.paused ||
+          state == AppLifecycleState.hidden ||
+          state == AppLifecycleState.detached) {
+        signals.pause();
+      }
+    }
     if (state == AppLifecycleState.resumed) {
       _refresh();
       _preloadVoice();
@@ -940,7 +1066,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ChatMessage(
         id: _book.newMessageId(),
         author: ChatAuthor.persona,
-        text: response.message,
+        // Ответ склада с карточкой (ADR-031): строки — в карточке, в
+        // пузыре только итог.
+        text: response.warehouse == null
+            ? response.message
+            : response.message.split('\n').first,
         timestamp: _now,
         status: withStatus ? response.status : null,
         taskId: response.task?.id,
@@ -952,6 +1082,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         suggestions: response.suggestions,
         job: response.job,
         weather: response.weather,
+        warehouse: response.warehouse,
       );
 
   // --------------------------------------------------------------- погода
@@ -1021,6 +1152,23 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         weatherErrorText(result.error ?? WeatherError.failed),
       );
     }
+  }
+
+  /// Карточка ответа склада (ADR-031): «Открыть склад» — страница
+  /// склада из подключения, только https.
+  Widget? _warehouseCard(ChatMessage message) {
+    final card = message.warehouse;
+    if (card == null) return null;
+    final base = _connectionOf(card.connector)?.record.baseUri;
+    return WarehouseCardView(
+      key: ValueKey<String>('warehouse-${message.id}'),
+      card: card,
+      // Итог уже в пузыре над карточкой — второй раз его не пишем.
+      showSay: card.say.trim() != message.text.trim(),
+      onOpen: base == null || base.scheme != 'https'
+          ? null
+          : () => unawaited(_links.openUrl(base.toString())),
+    );
   }
 
   Widget? _weatherCard(ChatMessage message) {
@@ -4710,6 +4858,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           _secureCard(message) ??
           _jobCard(message) ??
           _weatherCard(message) ??
+          _warehouseCard(message) ??
           _clarifyOptions(message);
       final row = _MessageRow(
         cast: _settings.personas.cast,

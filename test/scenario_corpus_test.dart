@@ -176,7 +176,7 @@ final List<String> _defaultRoles = <String>[
 final DateTime _defaultNow = DateTime(2026, 11, 2, 16, 30);
 
 /// Встроенная копия описания склада с действиями — разбирается один раз.
-final ManifestDescription _builtIn = builtInManifest();
+final ManifestDescription _builtIn = builtInManifest(builtInManifestPath);
 
 /// Коннекторы, чьи фразы живут в корпусе. Новый коннектор добавляется сюда
 /// фабрикой с подделками вместо сети и хранилищ (docs/CONNECTORS.md):
@@ -198,6 +198,7 @@ final Map<String, Connector Function(DateTime now, bool connected)>
   // тоже спорят за каждую строку корпуса.
   ConnectionSlots.warehouse.id: (DateTime now, bool connected) =>
       warehouseConnector(
+        path: builtInManifestPath,
         record: connected ? connectedRecord() : null,
         builtIn: _builtIn,
       ),

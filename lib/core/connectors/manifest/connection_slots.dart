@@ -4,12 +4,19 @@ import 'manifest_format.dart';
 /// Подключения, которые знает «Tridot». Новое приложение — новый слот
 /// со своими текстами (expeora — позже, docs/PLANS.md).
 abstract final class ConnectionSlots {
-  /// Склад halowarekeep.
+  /// Путь к подключению склада в приложении.
+  static const String warehousePath =
+      'Мой Связной → Помощники → Роли → Кладовщик';
+
+  /// Склад DepotDesk (и его предшественник halowarekeep — то же описание,
+  /// другой `app.id`; ADR-031). Файлы подключения — под прежним
+  /// `halowarekeep`: старые подключения работают без нового входа.
   static const ConnectionSlot warehouse = ConnectionSlot(
     id: 'warehouse',
     title: 'Склад',
     appId: 'halowarekeep',
-    description: 'Остатки, ячейки и приходы склада halowarekeep. Чтение; '
+    alsoAccepts: <String>{'depotdesk'},
+    description: 'Остатки, ячейки, цены и приходы склада DepotDesk. Чтение; '
         'перемещение и отметка проведения — только если разрешить действия '
         'в роли «Кладовщик».',
     aliases: <String>['на складе', 'в складе', 'склад'],
@@ -23,17 +30,21 @@ abstract final class ConnectionSlots {
       'что спросить у склада',
     ],
     // Описание до 1.4.56 не знает входа по ссылке: действие и поля —
-    // из кода склада (api.php, qr_take).
+    // из кода склада (api.php, qr_take). `scope: assist` — ключ только для
+    // вопросов помощнику (склад 1.4.62); старый склад поле не знает.
     builtInQr: ManifestQr(
       action: 'qr_take',
+      body: <String, String>{'scope': 'assist'},
+      device: 'device',
+      ttl: 600,
       errors: <String, String>{
         '400': 'Ссылка обрезана или испорчена — скопируйте её заново.',
-        '410': 'Код устарел или уже использован — сделайте новый в окне '
-            '«Войти на телефоне».',
+        '410': 'Код устарел или уже использован — сделайте новый на складе: '
+            '«Складской помощник» → «Показать QR».',
         '429': 'Слишком много попыток — подождите десять минут.',
       },
     ),
-    builtInAsset: 'assets/connectors/halowarekeep.assistant.json',
+    builtInAsset: 'assets/connectors/depotdesk.assistant.json',
     commandReplies: <String, String>{'price': 'price'},
     // Описание даёт нейтральный факт ({text}), каталог — голос помощника.
     replies: <String, String>{
@@ -50,15 +61,16 @@ abstract final class ConnectionSlots {
           'Например: «{example}».',
       'warehouse.serverSaid': 'Склад ответил: {error}',
       'warehouse.notConnected': 'Склад не подключён. {вы:Подключите|ты:'
-          'Подключи} его: Настройки → Подключения → Склад.',
+          'Подключи} его: $warehousePath.',
       'warehouse.auth.token': 'Склад не принял пароль — {вы:подключитесь|ты:'
-          'подключись} заново: Настройки → Подключения → Склад.',
+          'подключись} заново: $warehousePath.',
       'warehouse.auth.expired': 'Личный ключ склада устарел: остатки видны, '
-          'а приходы — после нового входа. {вы:Войдите|ты:Войди} по ссылке '
-          'или логином: Настройки → Подключения → Склад.',
+          'а приходы — после нового входа. {вы:Отсканируйте|ты:Отсканируй} '
+          'новый QR со склада («Складской помощник» → «Показать QR»): '
+          '$warehousePath.',
       'warehouse.auth.staff': 'Это видно только под своим логином. '
-          '{вы:Войдите|ты:Войди} по ссылке из склада или логином: '
-          'Настройки → Подключения → Склад.',
+          '{вы:Подключитесь|ты:Подключись} по QR со склада '
+          '(«Складской помощник» → «Показать QR»): $warehousePath.',
       'warehouse.auth.role': 'Учётная запись на складе ждёт роли — '
           '{вы:попросите|ты:попроси} администратора её назначить.',
       'warehouse.offline': 'Нет связи со складом. {вы:Проверьте|ты:Проверь} '

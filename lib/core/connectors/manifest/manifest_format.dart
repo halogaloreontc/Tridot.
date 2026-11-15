@@ -139,6 +139,8 @@ final class ManifestQr {
     },
     this.ttl = 120,
     this.errors = const <String, String>{},
+    this.body = const <String, String>{},
+    this.device,
   });
 
   final String link;
@@ -154,6 +156,15 @@ final class ManifestQr {
 
   /// Код ответа → текст: `410` → «Код устарел…».
   final Map<String, String> errors;
+
+  /// Постоянные поля тела запроса: `{"scope": "assist"}` — ключ только
+  /// для вопросов помощнику (склад 1.4.62, ADR-031). Только из
+  /// [ManifestDescription.constantFields].
+  final Map<String, String> body;
+
+  /// Поле тела с названием устройства («Связной · Android») — его видно
+  /// на складе в списке подключённых; `null` — не слать.
+  final String? device;
 
   /// Имя параметра ссылки: `#qr=` → `qr`.
   String get linkParam {
@@ -186,12 +197,35 @@ final class ManifestCredentialGet {
   final String take;
 }
 
+/// Как снять личный ключ на сервере (`credentials.sid.drop`, склад
+/// 1.4.63): действие выхода с ключом в заголовке.
+final class ManifestCredentialDrop {
+  const ManifestCredentialDrop({required this.action});
+
+  final String action;
+}
+
 /// Ключ входа: `token` («Пароль склада»), `sid` («Личный ключ»).
 final class ManifestCredential {
-  const ManifestCredential({required this.label, this.get});
+  const ManifestCredential({required this.label, this.get, this.drop});
 
   final String label;
   final ManifestCredentialGet? get;
+  final ManifestCredentialDrop? drop;
+}
+
+/// Кто я и что мне можно (`auth.me`, склад `ask_me`): читающее действие
+/// из `api.only` и поля ответа.
+final class ManifestMe {
+  const ManifestMe({
+    required this.action,
+    this.all = 'all',
+    this.perms = 'perms',
+  });
+
+  final String action;
+  final String all;
+  final String perms;
 }
 
 /// Описание приложения в формате `assistant/1` (`assistant.json`).
@@ -220,6 +254,7 @@ final class ManifestDescription {
     required this.access,
     required this.qr,
     required this.logout,
+    required this.me,
     required this.fallback,
     required this.filler,
     required this.commands,
@@ -275,6 +310,18 @@ final class ManifestDescription {
 
   /// `auth.logout`; `null` — выход только на устройстве.
   final ManifestLogout? logout;
+
+  /// `auth.me`; `null` — сервер не говорит, кто вошёл и что ему можно.
+  final ManifestMe? me;
+
+  /// Как выходить: `credentials.sid.drop` (склад 1.4.63), иначе
+  /// `auth.logout`; `null` — выход только на устройстве.
+  ManifestLogout? get signOut {
+    final drop = credentials['sid']?.drop;
+    if (drop != null) return ManifestLogout(action: drop.action);
+    return logout;
+  }
+
   final String? fallback;
   final List<String> filler;
   final List<ManifestCommand> commands;
@@ -341,6 +388,7 @@ final class ManifestDescription {
   static ManifestDescription parse(
     String source, {
     String? appId,
+    Set<String>? appIds,
     Uri? manifestUri,
     bool builtIn = false,
   }) {
@@ -356,7 +404,12 @@ final class ManifestDescription {
     if (decoded is! Map<String, Object?>) {
       throw const ManifestException(<String>['описание — не объект']);
     }
-    final errors = check(decoded, appId: appId, manifestUri: manifestUri);
+    final errors = check(
+      decoded,
+      appId: appId,
+      appIds: appIds,
+      manifestUri: manifestUri,
+    );
     if (errors.isNotEmpty) throw ManifestException(errors);
     return _build(decoded, source, builtIn: builtIn);
   }
@@ -366,6 +419,7 @@ final class ManifestDescription {
   static List<String> check(
     Object? desc, {
     String? appId,
+    Set<String>? appIds,
     Uri? manifestUri,
   }) {
     if (desc is! Map) return const <String>['описание — не объект'];
@@ -494,8 +548,10 @@ final class ManifestDescription {
     // Пределы и правила «Tridot».
     if (cmds.length > maxCommands) bad('commands: команд больше $maxCommands');
     final app = _map(desc['app']);
-    if (appId != null && app['id'] != appId) {
-      bad('app.id: ждём «$appId», а не «${jsString(app['id'] ?? absent)}»');
+    final accepted = <String>{if (appId != null) appId, ...?appIds};
+    if (accepted.isNotEmpty && !accepted.contains(app['id'])) {
+      bad('app.id: ждём «${accepted.join('» или «')}», а не '
+          '«${jsString(app['id'] ?? absent)}»');
     }
     final method = (api['method'] ?? 'POST').toString().toUpperCase();
     if (method != 'POST' && method != 'GET') {
@@ -531,9 +587,38 @@ final class ManifestDescription {
         bad('auth.qr.shape — не регулярное выражение');
       }
     }
+    final qrBody = qr['body'];
+    if (qrBody != null && qrBody is! Map) bad('auth.qr.body: не объект');
+    _constants('auth.qr.body', qrBody, bad);
+    final qrDevice = qr['device'];
+    if (qrDevice != null &&
+        (qrDevice is! String ||
+            !_fieldName.hasMatch(qrDevice) ||
+            _map(qrBody).containsKey(qrDevice) ||
+            qrDevice == qr['param'])) {
+      bad('auth.qr.device — имя поля: строчная латиница, цифры и «_»');
+    }
     final logout = _map(auth['logout']);
     if (logout.isNotEmpty && !_truthyString(logout['action'])) {
       bad('auth.logout.action: каким действием выходить');
+    }
+    final me = _map(auth['me']);
+    if (me.isNotEmpty) {
+      final name = me['action'];
+      if (!_truthyString(name)) {
+        bad('auth.me.action: каким действием спросить «кто я»');
+      } else if (only is! List || !only.contains(name)) {
+        bad('auth.me.action: «$name» не входит в api.only');
+      } else if (!(name as String).startsWith('ask_')) {
+        bad('auth.me.action: только читающее действие ask_*');
+      }
+      for (final field in <String>['all', 'perms']) {
+        final value = me[field];
+        if (value != null &&
+            (value is! String || !_fieldName.hasMatch(value))) {
+          bad('auth.me.$field — строчная латиница, цифры и «_»');
+        }
+      }
     }
     // Действия входа и выхода зовутся с паролем и ключом: только известные
     // безвредные (authActions) и не из команд — иначе описание с сервера
@@ -583,6 +668,16 @@ final class ManifestDescription {
     }
     for (final MapEntry(key: name, value: credential)
         in _map(auth['credentials']).entries) {
+      final drop = _map(_map(credential)['drop']);
+      if (drop.isNotEmpty) {
+        final at = 'auth.credentials.$name.drop';
+        if (name != 'sid') {
+          bad('$at: снимать на сервере можно только личный ключ (sid)');
+        } else if (!_truthyString(drop['action'])) {
+          bad('$at.action: каким действием снимать ключ');
+        }
+        authAction('$at.action', 'logout', drop['action']);
+      }
       final get = _map(_map(credential)['get']);
       if (get.isEmpty) continue;
       final at = 'auth.credentials.$name.get';
@@ -606,7 +701,10 @@ final class ManifestDescription {
           bad('$at.body: имя поля «$key» — строчная латиница, цифры и «_»');
         }
         if (value != '{login}' && value != '{pass}') {
-          bad('$at.body.$key: только «{login}» или «{pass}»');
+          // Постоянное поле — только знакомое: `scope: assist`.
+          if (constantFields[key]?.contains(value) ?? false) continue;
+          bad('$at.body.$key: только «{login}», «{pass}» или '
+              'scope «assist»');
         }
         used.add(value);
       }
@@ -624,8 +722,10 @@ final class ManifestDescription {
       authNames: <Object?>[
         qr['action'],
         logout['action'],
-        for (final credential in _map(auth['credentials']).values)
+        for (final credential in _map(auth['credentials']).values) ...<Object?>[
           _map(_map(credential)['get'])['action'],
+          _map(_map(credential)['drop'])['action'],
+        ],
       ],
     );
     return errs;
@@ -801,8 +901,33 @@ final class ManifestDescription {
   static const Map<String, Set<String>> authActions = <String, Set<String>>{
     'qr': <String>{'qr_take'},
     'login': <String>{'auth_check'},
-    'logout': <String>{'sess_end'},
+    // `auth_out` — выход склада 1.4.63 (`credentials.sid.drop`), `sess_end`
+    // — его второе имя с 1.4.62.
+    'logout': <String>{'sess_end', 'auth_out'},
   };
+
+  /// Постоянные поля тела входа, которые помощник шлёт: `scope: assist` —
+  /// ключ только для вопросов помощнику (ADR-031). Другие значения —
+  /// шире по правам, описание их не задаёт.
+  static const Map<String, Set<String>> constantFields = <String, Set<String>>{
+    'scope': <String>{'assist'},
+  };
+
+  static void _constants(
+    String at,
+    Object? body,
+    void Function(String) bad,
+  ) {
+    for (final MapEntry(:key, :value) in _map(body).entries) {
+      if (key is! String || !_fieldName.hasMatch(key)) {
+        bad('$at: имя поля «$key» — строчная латиница, цифры и «_»');
+        continue;
+      }
+      if (!(constantFields[key]?.contains(value) ?? false)) {
+        bad('$at.$key: помощник шлёт только scope «assist»');
+      }
+    }
+  }
 
   static final RegExp _fieldName = RegExp(r'^[a-z][a-z0-9_]*$');
 
@@ -942,6 +1067,11 @@ final class ManifestDescription {
                 for (final MapEntry(:key, :value) in _map(qr['errors']).entries)
                   if (key is String && value is String) key: value,
               },
+              body: <String, String>{
+                for (final MapEntry(:key, :value) in _map(qr['body']).entries)
+                  if (key is String && value is String) key: value,
+              },
+              device: qr['device'] is String ? qr['device'] as String : null,
             ),
       logout: logout.isEmpty
           ? null
@@ -950,6 +1080,13 @@ final class ManifestDescription {
               needs: _map(logout).containsKey('needs')
                   ? _strings(logout['needs'])
                   : const <String>['token', 'sid'],
+            ),
+      me: _map(auth['me']).isEmpty
+          ? null
+          : ManifestMe(
+              action: _map(auth['me'])['action'] as String,
+              all: _string(_map(auth['me'])['all'], 'all'),
+              perms: _string(_map(auth['me'])['perms'], 'perms'),
             ),
       fallback: _truthyString(d['fallback']) ? d['fallback'] as String : null,
       filler: _strings(d['filler']),
@@ -974,8 +1111,12 @@ final class ManifestDescription {
 
   static ManifestCredential _credential(Map<Object?, Object?> c) {
     final get = _map(c['get']);
+    final drop = _map(c['drop']);
     return ManifestCredential(
       label: _string(c['label']),
+      drop: drop['action'] is String
+          ? ManifestCredentialDrop(action: drop['action'] as String)
+          : null,
       get: get['action'] is String
           ? ManifestCredentialGet(
               action: get['action'] as String,

@@ -84,10 +84,10 @@ void main() {
       }
     });
 
-    test('встроенная копия в assets — описание 1.4.57 (ADR-012, ADR-013)', () {
+    test('встроенная копия в assets — описание DepotDesk 1.4.62 (ADR-031)', () {
       expect(
         File(ConnectionSlots.warehouse.builtInAsset!).readAsStringSync(),
-        manifestSource(actionsManifestPath),
+        manifestSource(builtInManifestPath),
       );
     });
   });
@@ -149,7 +149,11 @@ void main() {
         }),
         allOf(
           contains(contains('действие «user_set_role»')),
-          contains(contains('body.role: только «{login}» или «{pass}»')),
+          contains(
+            contains(
+              'body.role: только «{login}», «{pass}» или scope «assist»',
+            ),
+          ),
         ),
       );
       // Действие из api.only — команда, а не вход (и не известное).

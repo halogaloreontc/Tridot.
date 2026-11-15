@@ -209,7 +209,7 @@ void main() {
         );
         final reply = await assistant.handle(link);
         expect(reply.replyId, 'common.loginLink');
-        expect(reply.message, contains('Настройки → Подключения'));
+        expect(reply.message, contains('Помощники → Роли → Кладовщик'));
         expect(reply.message, isNot(contains(code)));
       });
     }

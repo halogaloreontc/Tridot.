@@ -633,7 +633,7 @@ void main() {
       ),
       (moveText, 422, <String, Object?>{'code': 'same_cell'}, 'act.sameCell'),
       (
-        'перемести 1 пуф в 215-3-2-1',
+        'перемести 1 пуф из 215-1-1-1 в 215-3-2-1',
         422,
         <String, Object?>{'code': 'only_there', 'to': '215-3-2-1'},
         'act.onlyThere',

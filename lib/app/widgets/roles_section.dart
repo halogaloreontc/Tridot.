@@ -5,11 +5,11 @@ import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
-import 'connection_screen.dart';
 import 'extensions_section.dart' show connectionChanged;
 import 'grouped.dart';
 import 'whole_word_text.dart';
 import 'app_dialog.dart';
+import 'warehouse_connection_card.dart';
 
 /// Раздел «Роли» во вкладке «Мой Связной → Помощники», под настройками
 /// помощников (ADR-012, ADR-027): карточка на
@@ -86,25 +86,17 @@ class _RolesSectionState extends State<RolesSection> {
       .where((ConnectionService c) => c.slot.id == id)
       .firstOrNull;
 
-  Future<void> _connect(ConnectionService service) =>
-      Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (BuildContext context) => ConnectionScreen(
-            service: service,
-            onEnabledChanged: (bool value) {
-              if (!mounted) return;
-              widget.onChanged(
-                connectionChanged(
-                  widget.registry,
-                  widget.settings,
-                  service.slot.id,
-                  connected: value,
-                ),
-              );
-            },
-          ),
-        ),
-      );
+  void _enabledChanged(ConnectionService service, bool value) {
+    if (!mounted) return;
+    widget.onChanged(
+      connectionChanged(
+        widget.registry,
+        widget.settings,
+        service.slot.id,
+        connected: value,
+      ),
+    );
+  }
 
   /// «Задачи, Калькулятор, Беседа»: только расширения этой сборки, под
   /// теми же названиями, что в «Расширениях» и в «что умеешь».
@@ -152,8 +144,10 @@ class _RolesSectionState extends State<RolesSection> {
     } else if (!on) {
       subtitle = 'Сначала включите роль.';
     } else if (!staff) {
-      subtitle = 'Нужен вход под своим логином: «Настроить» → войти по '
-          'ссылке или логином.';
+      subtitle = 'Нужен вход под своим логином: «Сканировать QR» со '
+          'страницы склада «Подключить Связного».';
+    } else if (record.me.actions == false) {
+      subtitle = 'Изменения через помощника выключены на складе.';
     } else {
       subtitle = 'Перемещать товар между ячейками и отмечать проведение '
           'прихода — после «Подтвердить» на каждой карточке.';
@@ -283,32 +277,15 @@ class _RolesSectionState extends State<RolesSection> {
                       ),
                     ),
                 if (link != null && service != null) ...<Widget>[
-                  const SizedBox(height: 4),
-                  Text(
-                    service.connected
-                        ? connectionStatus(service)
-                        : link.notConnectedLabel,
-                    key: ValueKey<String>('role-status-${role.id}'),
-                    style: TextStyle(
-                      color: service.connected
-                          ? context.colors.text
-                          : context.colors.warning,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  OutlinedButton.icon(
+                  // Карточка подключения (ADR-031): состояние, кто вошёл,
+                  // права, сигналы, QR и «Выйти».
+                  WarehouseConnectionCard(
                     key: ValueKey<String>('role-connect-${role.id}'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(40, 44),
-                    ),
-                    onPressed: () => _connect(service),
-                    icon: Icon(
-                      service.connected ? Icons.tune : Icons.link,
-                      size: 18,
-                    ),
-                    label: Text(
-                      service.connected ? 'Настроить' : link.connectLabel,
-                    ),
+                    service: service,
+                    signal: service.signal,
+                    showActionsOff: role.actionHint == null,
+                    onEnabledChanged: (bool value) =>
+                        _enabledChanged(service, value),
                   ),
                   if (role.actionHint != null)
                     _actionsSwitch(role, service, on: on),

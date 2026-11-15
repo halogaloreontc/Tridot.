@@ -9,6 +9,8 @@
     <cloud-backup>
         <exclude domain="file" path="assistant/vault/" />
         <exclude domain="file" path="assistant/secrets.json" />
+        <exclude domain="file" path="assistant/secrets.sealed" />
+        <exclude domain="file" path="assistant/secrets.sealed.bad" />
         <!-- Модель голосового ввода (ADR-023): скачивается заново. -->
         <exclude domain="file" path="assistant/voice/" />
         <!-- Файлы, прикреплённые к сессиям (ADR-019), — только на устройстве. -->
@@ -21,6 +23,8 @@
     <device-transfer>
         <exclude domain="file" path="assistant/vault/" />
         <exclude domain="file" path="assistant/secrets.json" />
+        <exclude domain="file" path="assistant/secrets.sealed" />
+        <exclude domain="file" path="assistant/secrets.sealed.bad" />
         <!-- Модель голосового ввода (ADR-023): скачивается заново. -->
         <exclude domain="file" path="assistant/voice/" />
         <!-- Расписание напоминаний (ADR-029): строится заново из задач. -->

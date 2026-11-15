@@ -180,7 +180,14 @@ void main() {
   group('вход по ссылке', () {
     void qrOk() {
       server.actions['qr_take'] = (Map<String, Object?> body) {
-        expect(body, <String, Object?>{'code': code});
+        // Описание без `auth.qr` — встроенный профиль слота: код помощника
+        // (`scope: assist`) и название устройства (ADR-031).
+        expect(body['code'], code);
+        expect(
+          body.keys.toSet().difference(<String>{'code', 'scope', 'device'}),
+          isEmpty,
+        );
+        if (body.containsKey('scope')) expect(body['scope'], 'assist');
         return json(200, <String, Object?>{
           'ok': true,
           'token': fakeToken,

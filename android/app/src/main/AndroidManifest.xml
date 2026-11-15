@@ -27,6 +27,13 @@
          с заполненным будильником, человек подтверждает там. Обычное
          разрешение, без вопроса. -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM"/>
+    <!-- Сканер QR склада (ADR-031): камера — только пока открыта шторка
+         «Сканировать QR»; код распознаётся на телефоне встроенной моделью,
+         кадры не сохраняются и никуда не отправляются. Разрешение
+         спрашивается при первом открытии сканера. Камера необязательна:
+         без неё ссылку можно вставить. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <!-- Копия Android: задачи и чаты копируются, хранилище паролей и
          secrets.json — нет (res/xml/data_extraction_rules.xml, backup_rules.xml). -->
     <application
@@ -57,6 +64,27 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- «Открыть в Tridot» со страницы склада (ADR-031):
+                 tridot://connect?u=<адрес склада>&qr=<код>. Ссылка только
+                 открывает окно подтверждения; разбор строгий
+                 (IncomingLinkChannel.kt и ConnectionService.parseConnectLink). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="tridot" android:host="connect"/>
+            </intent-filter>
+            <!-- «Поделиться» ссылкой или снимком экрана с QR склада. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/*"/>
             </intent-filter>
         </activity>
         <!-- Напоминания о задачах (ADR-029): показ уведомления и «Через 10

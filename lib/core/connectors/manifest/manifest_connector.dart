@@ -4,6 +4,7 @@ import 'dart:math';
 
 import '../../extensions/role.dart';
 import '../../models/action_card.dart';
+import '../../models/warehouse_card.dart';
 import '../connector.dart';
 import '../http_transport.dart';
 import '../secret_store.dart';
@@ -960,8 +961,8 @@ final class ManifestConnector
     }
     final call = command.call;
     final base = record.manifestUri;
-    final token = await _secrets.read(slot.tokenKey);
-    if (call == null || base == null || token == null || token.isEmpty) {
+    final keys = await readConnectionKeys(_secrets, slot, record);
+    if (call == null || base == null || keys == null) {
       return _notConnected(session, intent);
     }
     if (payload.how == 'ask') {
@@ -975,9 +976,14 @@ final class ManifestConnector
     }
     final needs =
         description.access[command.access]?.needs ?? const <String>['token'];
-    final credentials = <String, String>{'token': token};
+    // Пароля склада нет только у ключа помощника без пароля (tokenless):
+    // склад пускает его действия по одному личному ключу — он идёт всегда.
+    final credentials = <String, String>{
+      if (keys['token'] case final String token) 'token': token,
+      if (record.tokenless) 'sid': keys['sid']!,
+    };
     for (final name in needs) {
-      if (name == 'token') continue;
+      if (name == 'token' || credentials.containsKey(name)) continue;
       final value = await _secrets.read(slot.secretKey(name));
       if (value == null || value.isEmpty) {
         // Без личного ключа команду `staff` не зовём (README формата).
@@ -1017,6 +1023,11 @@ final class ManifestConnector
     final error = _errorText(json?[description.errorField]);
     switch (status) {
       case 401:
+        if (record.tokenless) {
+          // Без пароля склада 401 — ключ помощника не принят: войти заново.
+          _fail(ConnectionFailure.expired, now);
+          return say('auth.expired', AssistantStatus.failed);
+        }
         _fail(ConnectionFailure.token, now);
         return say('auth.token', AssistantStatus.failed);
       case 403:
@@ -1029,8 +1040,24 @@ final class ManifestConnector
           return say('auth.staff', AssistantStatus.noAction);
         }
         if (need == 'role') return say('auth.role', AssistantStatus.noAction);
+        // Склад 1.4.61+: у роли нет права (`perm`), помощник выключен
+        // администратором (`off`).
+        if (need == 'perm') return say('auth.perm', AssistantStatus.noAction);
+        if (need == 'off') return say('auth.off', AssistantStatus.noAction);
+        // Ключ помощника на действие приложения (склад 1.4.62).
+        if (need == 'scope') return say('auth.scope', AssistantStatus.noAction);
       case 429:
         return say('busy', AssistantStatus.noAction);
+    }
+    if (unknownAction(status, json, description)) {
+      // Склад этой команды не знает (старше или другой ветки): у команды
+      // со своей записью каталога — она («цены пока не называю»), иначе —
+      // «склад этого пока не умеет».
+      final own = slot.commandReplies[command.id];
+      if (own != null) return say(own, AssistantStatus.completed);
+      return say('unsupported', AssistantStatus.noAction, <String, String>{
+        'what': _lowerFirst(command.title),
+      });
     }
     if (status >= 400 && status < 500 && error.isNotEmpty) {
       // Сервер работает и объяснил, что не так: «Нужен код ячейки».
@@ -1040,6 +1067,21 @@ final class ManifestConnector
     }
     _fail(ConnectionFailure.server, now);
     return say('serverError', AssistantStatus.failed);
+  }
+
+  /// Сервер ответил «не знаю такого действия»: 400 без кода отказа с
+  /// текстом «Неизвестное действие» (склад halowarekeep и DepotDesk).
+  static bool unknownAction(
+    int status,
+    Map<String, Object?>? json,
+    ManifestDescription d,
+  ) {
+    if (status != 400 && status != 404) return false;
+    if (json == null) return status == 404;
+    if (json[d.codeField] != null) return false;
+    final error = json[d.errorField];
+    return error is String &&
+        RegExp('неизвестн[а-яё]* действ', caseSensitive: false).hasMatch(error);
   }
 
   /// Подключение включила роль, а входа ещё нет: подсказать путь через
@@ -1112,6 +1154,7 @@ final class ManifestConnector
     final id = '${slot.id}.answer';
     final values = <String, String>{'text': view.say};
     final message = StringBuffer(session.say(id, values));
+    final card = cardOf(command, view);
     for (final line in view.lines()) {
       message
         ..write('\n')
@@ -1128,6 +1171,44 @@ final class ManifestConnector
       status: AssistantStatus.completed,
       replyId: id,
       values: values,
+      warehouse: card,
+    );
+  }
+
+  /// Карточка ответа (ADR-031): те же строки, что в тексте, но данными —
+  /// ячейка, количество, класс; вложенные — до [WarehouseCard.maxNested].
+  WarehouseCard? cardOf(ManifestCommand command, ManifestView view) {
+    if (view.rows.isEmpty) return null;
+    WarehouseRow row(ManifestRow r, {bool nested = false}) => WarehouseRow(
+          title: WarehouseCard.clean(r.title),
+          text: WarehouseCard.clean(r.text),
+          note: WarehouseCard.clean(r.note),
+          badge: WarehouseCard.clean(r.badge),
+          linkKind: WarehouseCard.kind(r.link?.kind),
+          linkId: WarehouseCard.clean(r.link?.id),
+          rows: nested
+              ? const <WarehouseRow>[]
+              : <WarehouseRow>[
+                  for (final child
+                      in r.rows.where((ManifestRow c) => !c.rest).take(
+                            WarehouseCard.maxNested,
+                          ))
+                    row(child, nested: true),
+                ],
+        );
+    final top = view.rows.where((ManifestRow r) => !r.rest).toList();
+    return WarehouseCard(
+      connector: slot.id,
+      command: command.id,
+      title: WarehouseCard.clean(command.title),
+      say: WarehouseCard.clean(view.say),
+      rows: <WarehouseRow>[
+        for (final r in top.take(WarehouseCard.maxRows)) row(r),
+      ],
+      hidden: top.length > WarehouseCard.maxRows
+          ? top.length - WarehouseCard.maxRows
+          : 0,
+      more: view.more.isNotEmpty,
     );
   }
 
@@ -1222,6 +1303,10 @@ final class ManifestConnector
     }
   }
 
+  /// Личный ключ не принят сервером: «ключ устарел» (вход по ссылке
+  /// заново).
+  void markExpired(DateTime now) => _fail(ConnectionFailure.expired, now);
+
   void _fail(ConnectionFailure failure, DateTime now) {
     final since = record.failure == failure ? record.failureSince ?? now : now;
     _update(record.copyWith(failure: failure, failureSince: since));
@@ -1237,8 +1322,8 @@ final class ManifestConnector
   /// Из запомненного состояния, без сети: отвечает мгновенно.
   @override
   Future<HealthReport> health() async {
-    final token = await _secrets.read(slot.tokenKey);
-    if (token == null || token.isEmpty || !record.connected) {
+    final keys = await readConnectionKeys(_secrets, slot, record);
+    if (keys == null || !record.connected) {
       // Роль включена, а входа ещё нет (или из склада вышли) — задуманное
       // состояние, а не сбой (ADR-012).
       return const HealthReport(

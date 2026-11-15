@@ -34,6 +34,8 @@ import 'package:local_assistant/app/shell/session_files_panel.dart';
 import 'package:local_assistant/app/voice/voice_kit.dart';
 import 'package:local_assistant/app/widgets/action_card_view.dart';
 import 'package:local_assistant/app/widgets/extension_card_view.dart';
+import 'package:local_assistant/app/widgets/warehouse_card_view.dart';
+import 'package:local_assistant/app/widgets/warehouse_connection_card.dart';
 import 'package:local_assistant/app/widgets/whole_word_text.dart';
 import 'package:local_assistant/core/chats/attachments.dart';
 import 'package:local_assistant/core/chats/chat_projects.dart';
@@ -44,6 +46,13 @@ import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/extensions/extension_registry.dart';
 import 'package:local_assistant/core/jobs/extension_card.dart';
 import 'package:local_assistant/core/models/action_card.dart';
+import 'package:local_assistant/core/models/warehouse_card.dart';
+import 'package:local_assistant/core/connectors/manifest/connection.dart';
+import 'package:local_assistant/core/connectors/manifest/connection_service.dart';
+import 'package:local_assistant/core/connectors/manifest/connection_slots.dart';
+import 'package:local_assistant/core/connectors/manifest/manifest_connector.dart';
+import 'package:local_assistant/core/connectors/secret_store.dart';
+import 'package:local_assistant/core/connectors/http_transport.dart';
 import 'package:local_assistant/core/passwords/vault.dart';
 import 'package:local_assistant/core/passwords/vault_crypto.dart';
 import 'package:local_assistant/core/passwords/vault_store.dart';
@@ -835,6 +844,98 @@ void main() {
       }
     });
 
+    _phones('карточка склада', (tester, label) async {
+      await tester.pumpWidget(
+        phoneCard(
+          WarehouseCardView(
+            onOpen: () {},
+            card: const WarehouseCard(
+              connector: 'warehouse',
+              command: 'where',
+              title: 'Где лежит товар',
+              say: '«стул венский»: 2 позиции, всего 1 214 шт.',
+              more: true,
+              rows: <WarehouseRow>[
+                WarehouseRow(
+                  title: '64115',
+                  text: 'Стул венский белый с подлокотниками',
+                  badge: '1 200 шт.',
+                  linkKind: 'sku',
+                  linkId: '64115',
+                  rows: <WarehouseRow>[
+                    WarehouseRow(
+                      title: '215-1-1-1',
+                      text: 'годен к продаже',
+                      badge: '1 150 шт.',
+                      linkKind: 'cell',
+                      linkId: '215-1-1-1',
+                    ),
+                    WarehouseRow(
+                      title: '303-зона приёмки',
+                      badge: '50 шт.',
+                      linkKind: 'cell',
+                    ),
+                  ],
+                ),
+                WarehouseRow(
+                  title: 'без артикула',
+                  text: 'Стул венский (без бирки)',
+                  note: 'ПРИХ-00318 · ООО «Ромашка и партнёры»',
+                  badge: '14 шт.',
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await _checkScrolling(tester, label);
+    });
+
+    _phones('карточка подключения склада', (tester, label) async {
+      final secrets = InMemorySecretStore(<String, String>{
+        'warehouse.token': 'fake-token-not-real',
+        'warehouse.sid': 'fake-sid-not-real',
+      });
+      final service = ConnectionService(
+        connector: ManifestConnector(
+          slot: ConnectionSlots.warehouse,
+          transport: const _NoNetwork(),
+          secrets: secrets,
+          record: ConnectionRecord(
+            appId: 'halowarekeep',
+            baseUri: Uri.parse('https://sklad-vozvratov.example/'),
+            login: 'ivanov-petr',
+            level: ConnectionLevel.staff,
+            scope: 'assist',
+            me: const ConnectionMe(
+              name: 'Пётр Иванов-Сидоровский',
+              role: 'Старший кладовщик',
+              perms: <String>['moves', 'post'],
+              can: <String>[
+                'Отмечать проведение прихода',
+                'Переносить товар между ячейками',
+              ],
+            ),
+          ),
+        ),
+        transport: const _NoNetwork(),
+        secrets: secrets,
+        store: InMemoryConnectionStore(),
+      )..signal = 'Сегодня 3 прихода · не проведено 2 · проверено в 14:05';
+      await tester.pumpWidget(
+        phoneCard(
+          WarehouseConnectionCard(
+            service: service,
+            onEnabledChanged: (_) {},
+            signal: service.signal,
+          ),
+        ),
+      );
+      await tester.pump();
+      await _checkScrolling(tester, label);
+    });
+
     _phones('карточки расширений', (tester, label) async {
       final progress = ValueNotifier<JobTick?>(null);
       addTearDown(progress.dispose);
@@ -1404,4 +1505,13 @@ void _expectSizesWhole(WidgetTester tester, String label) {
     }
   }
   expect(checked, greaterThan(0), reason: label);
+}
+
+/// Сеть в проверке подписей не нужна.
+final class _NoNetwork implements HttpTransport {
+  const _NoNetwork();
+
+  @override
+  Future<HttpResponseData> send(HttpRequestData request) =>
+      throw StateError('сеть не нужна');
 }

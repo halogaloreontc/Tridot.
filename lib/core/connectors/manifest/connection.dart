@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../secret_store.dart';
 import 'manifest_format.dart';
 
 /// Подключение к приложению с описанием `assistant/1`: склад halowarekeep,
@@ -21,6 +22,7 @@ final class ConnectionSlot {
     this.builtInQr,
     this.builtInAsset,
     this.commandReplies = const <String, String>{},
+    this.alsoAccepts = const <String>{},
   });
 
   /// Id коннектора: `warehouse`. Ключи секретов — `<id>.token`, `<id>.sid`;
@@ -31,8 +33,20 @@ final class ConnectionSlot {
   final String title;
 
   /// `app.id` описания: чужое описание слот не примет. По нему же
-  /// называются файлы подключения (`connections/<appId>.json`).
+  /// называются файлы подключения (`connections/<appId>.json`) — и тогда,
+  /// когда сервер называет себя одним из [alsoAccepts].
   final String appId;
+
+  /// Другие `app.id` того же приложения: склад DepotDesk — продолжение
+  /// halowarekeep, описание у него то же, а `app.id` — `depotdesk`
+  /// (ADR-031). Файлы подключения остаются под [appId]: прежние
+  /// подключения не теряются.
+  final Set<String> alsoAccepts;
+
+  /// Все `app.id`, которые слот принимает.
+  Set<String> get appIds => <String>{appId, ...alsoAccepts};
+
+  bool acceptsApp(Object? id) => id is String && appIds.contains(id);
 
   /// Одно предложение для «Настройки → Подключения».
   final String description;
@@ -67,6 +81,26 @@ final class ConnectionSlot {
 
   /// Ключ секрета `{$name}` из `auth.headers`.
   String secretKey(String name) => '$id.$name';
+}
+
+/// Ключи входа для запроса: `token` (пароль склада) и `sid` (личный
+/// ключ), только непустые. `null` — входа нет: нет пароля склада, а ключ
+/// помощника без пароля ([ConnectionRecord.tokenless]) не выдан или
+/// потерян.
+Future<Map<String, String>?> readConnectionKeys(
+  SecretStore secrets,
+  ConnectionSlot slot,
+  ConnectionRecord record,
+) async {
+  final token = await secrets.read(slot.tokenKey);
+  final sid = await secrets.read(slot.sidKey);
+  final hasToken = token != null && token.isNotEmpty;
+  final hasSid = sid != null && sid.isNotEmpty;
+  if (!hasToken && !(record.tokenless && hasSid)) return null;
+  return <String, String>{
+    if (hasToken) 'token': token,
+    if (hasSid) 'sid': sid,
+  };
 }
 
 /// Уровень входа.
@@ -191,6 +225,143 @@ final class ManifestMeta {
       };
 }
 
+/// Кто вошёл и что ему можно на сервере (`auth.me`, склад `ask_me`;
+/// ADR-031). Не секрет: имя, роль, права. Хранится в записи подключения.
+final class ConnectionMe {
+  const ConnectionMe({
+    this.name = '',
+    this.role = '',
+    this.perms,
+    this.all = false,
+    this.can = const <String>[],
+    this.actions,
+    this.at,
+  });
+
+  factory ConnectionMe.fromJson(Object? json) {
+    final map = json is Map ? json : const <Object?, Object?>{};
+    final perms = map['perms'];
+    final actions = map['actions'];
+    return ConnectionMe(
+      name: _clean(map['name']),
+      role: _clean(map['role']),
+      perms: perms is List
+          ? <String>[
+              for (final p in perms.take(maxItems))
+                if (p is String && _perm.hasMatch(p)) p,
+            ]
+          : null,
+      all: map['all'] == true,
+      can: <String>[
+        if (map['can'] case final List<Object?> list)
+          for (final item in list.take(maxItems))
+            if (_clean(item) case final String t when t.isNotEmpty) t,
+      ],
+      actions: actions is bool ? actions : null,
+      at: DateTime.tryParse(map['at'] is String ? map['at'] as String : ''),
+    );
+  }
+
+  /// Ответ сервера `ask_me` (`{login, name, role, roleLabel, all, perms,
+  /// can[{id,title}], actions}`) или вход по ссылке (`name`, `role`,
+  /// `perms`). Поля [allField] и [permsField] — из `auth.me` описания.
+  factory ConnectionMe.fromServer(
+    Map<String, Object?> json, {
+    String allField = 'all',
+    String permsField = 'perms',
+    DateTime? at,
+  }) {
+    final role = _clean(json['roleLabel']);
+    final perms = json[permsField];
+    final can = json['can'];
+    final actions = json['actions'];
+    return ConnectionMe(
+      name: _clean(json['name']),
+      role: role.isNotEmpty ? role : _clean(json['role']),
+      perms: perms is List
+          ? <String>[
+              for (final p in perms.take(maxItems))
+                if (p is String && _perm.hasMatch(p)) p,
+            ]
+          : null,
+      all: json[allField] == true,
+      can: <String>[
+        if (can is List)
+          for (final item in can.take(maxItems))
+            if (item is Map && _clean(item['title']).isNotEmpty)
+              _clean(item['title'])
+            else if (item is String && _clean(item).isNotEmpty)
+              _clean(item),
+      ],
+      actions: actions is bool ? actions : null,
+      at: at,
+    );
+  }
+
+  static const int maxItems = 40;
+
+  static final RegExp _perm = RegExp(r'^[*a-z][a-z0-9_]{0,31}$');
+
+  static final RegExp _controls = RegExp(
+    '[\\u0000-\\u001f\\u007f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]',
+  );
+
+  /// Строка сервера: одна строка без управляющих знаков, не длиннее 60.
+  static String _clean(Object? value) {
+    if (value is! String) return '';
+    final text =
+        value.replaceAll(_controls, ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    return text.length > 60 ? '${text.substring(0, 59)}…' : text;
+  }
+
+  /// «Иван Петров».
+  final String name;
+
+  /// «Кладовщик» (`roleLabel`).
+  final String role;
+
+  /// Права роли на сервере: `moves`, `post`, `price`; `null` — сервер их
+  /// не назвал (склад без `ask_me`).
+  final List<String>? perms;
+
+  /// Роли можно всё (администратор).
+  final bool all;
+
+  /// Что роли можно менять через помощника — заголовки сервера.
+  final List<String> can;
+
+  /// Действия через помощника включены на сервере (`ASSIST_ACTIONS`);
+  /// `null` — сервер не сказал.
+  final bool? actions;
+
+  /// Когда спросили сервер.
+  final DateTime? at;
+
+  /// Права известны: сервер их назвал.
+  bool get known => all || perms != null;
+
+  /// Есть ли право [right]; `null` — неизвестно.
+  bool? has(String right) {
+    if (all) return true;
+    final list = perms;
+    if (list == null) return null;
+    return list.contains(right) || list.contains('*');
+  }
+
+  bool get isEmpty =>
+      name.isEmpty && role.isEmpty && perms == null && !all && can.isEmpty;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        if (name.isNotEmpty) 'name': name,
+        if (role.isNotEmpty) 'role': role,
+        if (perms != null) 'perms': perms,
+        if (all) 'all': true,
+        if (can.isNotEmpty) 'can': can,
+        if (actions != null) 'actions': actions,
+        if (at != null) 'at': at!.toIso8601String(),
+      };
+}
+
 /// Состояние подключения без секретов: адрес, логин, уровень, описание,
 /// здоровье. Хранится в `connections/<appId>.json`; пароль и ключ — только
 /// в [SecretStore].
@@ -204,6 +375,9 @@ final class ConnectionRecord {
     this.lastOk,
     this.failure,
     this.failureSince,
+    this.me = const ConnectionMe(),
+    this.scope = '',
+    this.tokenless = false,
   });
 
   factory ConnectionRecord.fromJson(String appId, Object? json) {
@@ -223,6 +397,9 @@ final class ConnectionRecord {
       lastOk: DateTime.tryParse(health['last_ok'] as String? ?? ''),
       failure: ConnectionFailure.parse(health['failure']),
       failureSince: DateTime.tryParse(health['since'] as String? ?? ''),
+      me: ConnectionMe.fromJson(map['me']),
+      scope: map['scope'] == 'assist' ? 'assist' : '',
+      tokenless: map['scope'] == 'assist' && map['tokenless'] == true,
     );
   }
 
@@ -243,6 +420,20 @@ final class ConnectionRecord {
   final ConnectionFailure? failure;
   final DateTime? failureSince;
 
+  /// Кто вошёл и его права (`ask_me`); пусто — сервер не сказал.
+  final ConnectionMe me;
+
+  /// `assist` — ключ только для вопросов помощнику (склад 1.4.62);
+  /// пусто — полный ключ приложения (склад старше) или ключа нет.
+  final String scope;
+
+  bool get assistKey => scope == 'assist';
+
+  /// Ключ помощника ходит без пароля склада: склад его не выдал
+  /// (`tokenless`, DepotDesk 1.4.62 / halowarekeep 1.4.66) — на устройстве
+  /// хранится только личный ключ.
+  final bool tokenless;
+
   bool get connected => level != ConnectionLevel.none;
 
   /// Адрес описания: `<адрес>/assistant.json`.
@@ -259,9 +450,16 @@ final class ConnectionRecord {
     DateTime? failureSince,
     bool clearFailure = false,
     bool clearHealth = false,
+    ConnectionMe? me,
+    String? scope,
+    bool? tokenless,
   }) =>
       ConnectionRecord(
         appId: appId,
+        me: clearLogin ? me ?? const ConnectionMe() : me ?? this.me,
+        scope: clearLogin ? scope ?? '' : scope ?? this.scope,
+        tokenless:
+            clearLogin ? tokenless ?? false : tokenless ?? this.tokenless,
         baseUri: baseUri ?? this.baseUri,
         login: clearLogin ? null : login ?? this.login,
         level: level ?? this.level,
@@ -279,6 +477,9 @@ final class ConnectionRecord {
         if (login != null) 'login': login,
         'level': level.name,
         'manifest': manifest.toJson(),
+        if (!me.isEmpty) 'me': me.toJson(),
+        if (scope.isNotEmpty) 'scope': scope,
+        if (tokenless) 'tokenless': true,
         'health': <String, Object?>{
           if (lastOk != null) 'last_ok': lastOk!.toIso8601String(),
           if (failure != null) 'failure': failure!.name,

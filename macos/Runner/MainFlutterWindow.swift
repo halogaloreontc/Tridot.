@@ -15,6 +15,9 @@ class MainFlutterWindow: NSWindow {
     NotifyChannel.register(with: flutterViewController.engine.binaryMessenger)
     // Своя страница и приложение «Погода» (ADR-030): открывает система.
     LinksChannel.register(with: flutterViewController.engine.binaryMessenger)
+    // Склад (ADR-031): ключи подключений в связке ключей, «Открыть в Tridot».
+    KeychainChannel.register(with: flutterViewController.engine.binaryMessenger)
+    IncomingLinks.register(with: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }

@@ -6,6 +6,7 @@ import '../models/assistant_types.dart';
 import '../models/bulk.dart';
 import '../models/clarification.dart';
 import '../models/launch_request.dart';
+import '../models/warehouse_card.dart';
 import '../models/weather_card.dart';
 import '../models/secure_card.dart';
 import '../models/task.dart';
@@ -569,6 +570,7 @@ final class AssistantSession {
     Clarification? clarification,
     ExtensionCard? job,
     WeatherCard? weather,
+    WarehouseCard? warehouse,
     LaunchRequest? launch,
     String? draft,
     String? prefix,
@@ -588,6 +590,7 @@ final class AssistantSession {
         clarification: clarification,
         job: job,
         weather: weather,
+        warehouse: warehouse,
         launch: launch,
         draft: draft,
       );

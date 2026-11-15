@@ -21,8 +21,8 @@ final class ConnectionResult {
   final String message;
 }
 
-/// Ссылка входа из окна «Войти на телефоне»: адрес приложения и
-/// одноразовый код.
+/// Ссылка входа из окна «Войти на телефоне» или «Подключить Связного»:
+/// адрес приложения и одноразовый код.
 final class QrLink {
   const QrLink(this.base, this.code);
 
@@ -69,6 +69,7 @@ final class ConnectionService {
     Clock clock = const SystemClock(),
     this.builtIn,
     DescriptionPick? pick,
+    this.device = defaultDevice,
   })  : _transport = transport,
         _secrets = secrets,
         _store = store,
@@ -113,6 +114,7 @@ final class ConnectionService {
     required ConnectionStore store,
     String? builtIn,
     Clock clock = const SystemClock(),
+    String device = defaultDevice,
   }) async {
     ConnectionRecord? record;
     String? cached;
@@ -132,7 +134,7 @@ final class ConnectionService {
       try {
         return ManifestDescription.parse(
           source,
-          appId: slot.appId,
+          appIds: slot.appIds,
           manifestUri: origin,
           builtIn: builtIn,
         );
@@ -183,8 +185,16 @@ final class ConnectionService {
       clock: clock,
       builtIn: ours,
       pick: pick,
+      device: device,
     );
   }
+
+  /// Как устройство называется на складе в списке подключённых Связных.
+  static const String defaultDevice = 'Связной';
+
+  /// Название этого устройства для сервера ([ManifestQr.device]): не
+  /// длиннее 40 знаков, без управляющих.
+  final String device;
 
   final ManifestConnector connector;
   final HttpTransport _transport;
@@ -320,6 +330,19 @@ final class ConnectionService {
 
   final List<void Function()> _listeners = <void Function()>[];
 
+  String? _signal;
+
+  /// Строка сигналов склада для карточки подключения («Сегодня 3 прихода ·
+  /// проверено в 14:05»): пишет [WarehouseSignals], пока приложение
+  /// открыто; `null` — сигналов нет.
+  String? get signal => _signal;
+
+  set signal(String? value) {
+    if (value == _signal) return;
+    _signal = value;
+    _notify();
+  }
+
   void addListener(void Function() listener) => _listeners.add(listener);
 
   void removeListener(void Function() listener) => _listeners.remove(listener);
@@ -413,14 +436,16 @@ final class ConnectionService {
     final text = input.trim();
     if (text.isEmpty) {
       throw const ConnectionAddressException(
-        'Вставьте ссылку из окна «Войти на телефоне».',
+        'Вставьте ссылку со склада: «Подключить Связного» → «Скопировать '
+        'ссылку».',
       );
     }
+    if (isConnectLink(text)) return parseConnectLink(text);
     final uri = Uri.tryParse(text);
     if (uri == null || !uri.hasScheme) {
       throw const ConnectionAddressException(
-        'Это не ссылка. Скопируйте её кнопкой «Скопировать ссылку» в окне '
-        '«Войти на телефоне».',
+        'Это не ссылка. Скопируйте её на складе: «Подключить Связного» → '
+        '«Показать QR» → «Скопировать ссылку».',
       );
     }
     String? code;
@@ -436,8 +461,8 @@ final class ConnectionService {
     }
     if (code == null) {
       throw const ConnectionAddressException(
-        'В ссылке нет кода входа. Скопируйте её заново в окне «Войти на '
-        'телефоне».',
+        'В ссылке нет кода входа. Скопируйте её заново на складе: '
+        '«Подключить Связного» → «Показать QR» → «Скопировать ссылку».',
       );
     }
     final normalized = code.trim().toLowerCase();
@@ -453,6 +478,78 @@ final class ConnectionService {
           ),
     );
     return QrLink(base, normalized);
+  }
+
+  /// Схема ссылки «Открыть в Tridot» (ADR-031).
+  static const String linkScheme = 'tridot';
+
+  /// Похоже на `tridot://…`: такую ссылку разбирает только
+  /// [parseConnectLink].
+  static bool isConnectLink(String input) =>
+      input.trim().toLowerCase().startsWith('$linkScheme:');
+
+  static const int _maxLinkLength = 2048;
+
+  /// Разбирает ссылку со страницы склада «Подключить Связного»:
+  /// `tridot://connect?u=<адрес склада https://…/>&qr=<32 hex>[&for=assist]`.
+  ///
+  /// Строго: схема `tridot`, хост `connect`, без пути, логина, порта и
+  /// «#»; только поля `u`, `qr` и `for`, каждое один раз; `u` — полный
+  /// адрес `https://…` (или `http://` своей сети, [baseOf]) без
+  /// параметров и «#»; код — ровно 32 знака hex строчными. Иначе —
+  /// [ConnectionAddressException] с текстом для экрана, без кода.
+  static QrLink parseConnectLink(String input) {
+    const broken = ConnectionAddressException(
+      'Ссылка «Открыть в Tridot» испорчена — сделайте новый код на складе: '
+      '«Подключить Связного».',
+    );
+    final text = input.trim();
+    if (text.length > _maxLinkLength || text.contains(RegExp(r'\s'))) {
+      throw broken;
+    }
+    final Uri uri;
+    try {
+      uri = Uri.parse(text);
+    } on FormatException {
+      throw broken;
+    }
+    if (uri.scheme.toLowerCase() != linkScheme ||
+        uri.host.toLowerCase() != 'connect' ||
+        (uri.path.isNotEmpty && uri.path != '/') ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasPort ||
+        uri.hasFragment ||
+        !uri.hasQuery) {
+      throw broken;
+    }
+    final Map<String, List<String>> fields;
+    try {
+      fields = uri.queryParametersAll;
+    } on Object {
+      throw broken;
+    }
+    const known = <String>{'u', 'qr', 'for'};
+    if (fields.keys.any((String k) => !known.contains(k)) ||
+        fields.values.any((List<String> v) => v.length != 1)) {
+      throw broken;
+    }
+    final purpose = fields['for']?.single;
+    if (purpose != null && purpose != 'assist') throw broken;
+    final code = fields['qr']?.single ?? '';
+    if (!_qrCode.hasMatch(code)) {
+      throw const ConnectionAddressException(
+        'Код в ссылке обрезан или испорчен — сделайте новый на складе.',
+      );
+    }
+    final address = fields['u']?.single ?? '';
+    final target = Uri.tryParse(address);
+    if (target == null ||
+        !RegExp(r'^https?://', caseSensitive: false).hasMatch(address) ||
+        target.hasQuery ||
+        target.hasFragment) {
+      throw broken;
+    }
+    return QrLink(baseOf(address), code);
   }
 
   // -------------------------------------------------------- описание
@@ -495,7 +592,7 @@ final class ConnectionService {
     try {
       final description = ManifestDescription.parse(
         response.body,
-        appId: slot.appId,
+        appIds: slot.appIds,
         manifestUri: uri,
       );
       return _Fetched(
@@ -521,7 +618,7 @@ final class ConnectionService {
       return false;
     }
     final app = json['app'];
-    return app is Map && app['id'] == slot.appId;
+    return app is Map && slot.acceptsApp(app['id']);
   }
 
   /// Проверяет описание на сервере заново: «Обновить описание» и раз в
@@ -593,7 +690,7 @@ final class ConnectionService {
     if (description == null) {
       return const ConnectionResult.failed('Описание не получено.');
     }
-    final qr = description.qr ?? slot.builtInQr;
+    final qr = description.qr ?? builtIn?.qr ?? slot.builtInQr;
     if (qr == null) {
       return const ConnectionResult.failed(
         'Это приложение не умеет вход по ссылке. Подключите его вручную.',
@@ -613,7 +710,14 @@ final class ConnectionService {
       description,
       ManifestConnector.actionUri(description, manifestUri, qr.action),
       const <String, String>{},
-      <String, Object?>{qr.param: parsed.code},
+      <String, Object?>{
+        // Постоянные поля — только знакомые (`scope: assist`), код — свой.
+        for (final MapEntry(:key, :value) in qr.body.entries)
+          if (ManifestDescription.constantFields[key]?.contains(value) ?? false)
+            key: value,
+        if (qr.device case final String field) field: _deviceLabel,
+        qr.param: parsed.code,
+      },
     );
     if (response == null) {
       return const ConnectionResult.failed(
@@ -635,11 +739,17 @@ final class ConnectionService {
     final token = _text(json[qr.take['token'] ?? 'token']);
     final sid = _text(json[qr.take['sid'] ?? 'sid']);
     final login = _text(json[qr.take['login'] ?? 'login']);
-    if (token.isEmpty) {
+    // Склад 1.4.62 отвечает `scope`; старый его не знает — ключ полный.
+    final scope = json['scope'] == 'assist' ? 'assist' : '';
+    // Ключу помощника новый склад пароль склада не отдаёт (tokenless):
+    // хватает личного ключа. Старый склад пароль присылает — храним, как
+    // прежде.
+    if (token.isEmpty && (scope != 'assist' || sid.isEmpty)) {
       return const ConnectionResult.failed(
         'Склад не прислал пароль — сделайте новую ссылку.',
       );
     }
+    final previous = await _previousKey();
     try {
       await _saveConnection(
         base: parsed.base,
@@ -647,14 +757,107 @@ final class ConnectionService {
         token: token,
         sid: sid,
         login: login,
+        scope: scope,
+        me: ConnectionMe.fromServer(json, at: _clock.now()),
       );
     } on Object {
       await _forgetSecrets();
       return const ConnectionResult.failed(_notSaved);
     }
-    return ConnectionResult.ok(
-      login.isEmpty ? 'Склад подключён.' : 'Склад подключён: $login.',
+    // Прежний вход заменён: его ключ гасим на складе, а не оставляем
+    // живым на 30 дней.
+    await _dropKey(previous, except: sid);
+    if (sid.isNotEmpty) await refreshMe();
+    return ConnectionResult.ok(_connectedText(login));
+  }
+
+  /// «Склад подключён: ivanov (Иван Петров, Кладовщик).»
+  String _connectedText(String login) {
+    final me = record.me;
+    final who = <String>[
+      if (me.name.isNotEmpty) me.name,
+      if (me.role.isNotEmpty) me.role,
+    ].join(', ');
+    if (login.isEmpty) return 'Склад подключён.';
+    return who.isEmpty
+        ? 'Склад подключён: $login.'
+        : 'Склад подключён: $login ($who).';
+  }
+
+  static final RegExp _deviceControls = RegExp(
+    '[\\u0000-\\u001f\\u007f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]',
+  );
+
+  /// [device] для сервера: одна строка, не длиннее 40 знаков.
+  String get _deviceLabel {
+    final text = device
+        .replaceAll(_deviceControls, ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (text.isEmpty) return defaultDevice;
+    return text.length > 40 ? text.substring(0, 40) : text;
+  }
+
+  /// «Кто я и что мне можно» (`auth.me`, склад `ask_me`): имя, роль и
+  /// права входа — в запись подключения, для карточки и проверки прав
+  /// перед действием. Склад без `ask_me` (400) — прежние сведения
+  /// остаются. Без личного ключа — ничего не спрашивает.
+  Future<ConnectionResult> refreshMe() async {
+    final description = this.description;
+    final me = description?.me ?? builtIn?.me;
+    final base = record.manifestUri;
+    if (description == null || me == null || base == null) {
+      return const ConnectionResult.failed('Склад не говорит, кто вошёл.');
+    }
+    final keys = await readConnectionKeys(_secrets, slot, record);
+    if (keys == null || keys['sid'] == null) {
+      return const ConnectionResult.failed('Нужен вход под своим логином.');
+    }
+    // Только читающее действие из api.only (проверено при разборе) и не
+    // запись ни при каком описании.
+    if (!description.only.contains(me.action) ||
+        ManifestDescription.writeNames.contains(me.action) ||
+        ManifestDescription.checkNames.contains(me.action)) {
+      return const ConnectionResult.failed('Склад не говорит, кто вошёл.');
+    }
+    final response = await _post(
+      description,
+      ManifestConnector.actionUri(description, base, me.action),
+      keys,
+      const <String, Object?>{},
     );
+    if (response == null) {
+      return const ConnectionResult.failed('Нет связи со складом.');
+    }
+    final json = _object(response.body);
+    if ((response.statusCode == 403 &&
+            json?[description.needField] == 'login') ||
+        (response.statusCode == 401 && record.tokenless)) {
+      connector.markExpired(_clock.now());
+      return const ConnectionResult.failed(
+        'Личный ключ устарел — подключитесь заново.',
+      );
+    }
+    if (!response.isSuccess || json == null || json['ok'] != true) {
+      return const ConnectionResult.failed('Склад не говорит, кто вошёл.');
+    }
+    final got = ConnectionMe.fromServer(
+      json,
+      allField: me.all,
+      permsField: me.perms,
+      at: _clock.now(),
+    );
+    final login = _text(json['login']);
+    await _save(
+      record.copyWith(
+        me: got,
+        login: login.isEmpty ? null : login.toLowerCase(),
+        lastOk: _clock.now(),
+        clearFailure: true,
+      ),
+    );
+    _notify();
+    return const ConnectionResult.ok('Права обновлены.');
   }
 
   /// Вход вручную: адрес и «Пароль склада», по желанию — логин и пароль
@@ -685,24 +888,34 @@ final class ConnectionService {
     final checked = await _checkToken(description, base, password);
     if (checked != null) return ConnectionResult.failed(checked);
     var sid = '';
+    var scope = '';
+    var tokenless = false;
     final user = login.trim();
     if (user.isNotEmpty) {
       final got = await _staffKey(description, base, password, user, pass);
       if (!got.ok) return got;
       sid = got.message;
+      scope = _lastScope;
+      tokenless = _lastTokenless;
     }
+    final previous = await _previousKey();
     try {
       await _saveConnection(
         base: base,
         decision: decision,
-        token: password,
+        // Склад сказал «tokenless»: ключу помощника пароль склада не нужен —
+        // на устройстве его не храним.
+        token: tokenless ? '' : password,
         sid: sid,
         login: sid.isEmpty ? '' : user.toLowerCase(),
+        scope: scope,
       );
     } on Object {
       await _forgetSecrets();
       return const ConnectionResult.failed(_notSaved);
     }
+    await _dropKey(previous, except: sid);
+    if (sid.isNotEmpty) await refreshMe();
     return ConnectionResult.ok(
       sid.isEmpty
           ? 'Склад подключён по паролю склада.'
@@ -725,20 +938,32 @@ final class ConnectionService {
     if (user.isEmpty) return const ConnectionResult.failed('Введите логин.');
     final got = await _staffKey(description, base, token, user, pass);
     if (!got.ok) return got;
+    final tokenless = _lastTokenless;
     try {
       await _secrets.write(slot.sidKey, got.message);
     } on Object {
       return const ConnectionResult.failed(_notSaved);
+    }
+    if (tokenless) {
+      try {
+        await _secrets.delete(slot.tokenKey);
+      } on Object {
+        // Не удалился — пароль склада остаётся, как у старого склада.
+      }
     }
     await _save(
       record.copyWith(
         login: user.toLowerCase(),
         level: ConnectionLevel.staff,
         clearFailure: true,
+        me: const ConnectionMe(),
+        scope: _lastScope,
+        tokenless: tokenless,
       ),
     );
     _sessionChanged();
     _notify();
+    await refreshMe();
     return ConnectionResult.ok('Вход выполнен: ${user.toLowerCase()}.');
   }
 
@@ -747,34 +972,10 @@ final class ConnectionService {
   /// пароль и ключ удаляются с устройства всегда. Адрес и кэш описания
   /// остаются.
   Future<void> logout() async {
-    final description = this.description;
-    final logout = description?.logout;
-    final base = record.manifestUri;
-    try {
-      if (description != null && logout != null && base != null) {
-        final credentials = <String, String>{};
-        var complete = true;
-        for (final name in logout.needs) {
-          final value = await _secrets.read(slot.secretKey(name));
-          if (value == null || value.isEmpty) {
-            complete = false;
-          } else {
-            credentials[name] = value;
-          }
-        }
-        if (complete && _authAllowed(description, 'logout', logout.action)) {
-          await _post(
-            description,
-            ManifestConnector.actionUri(description, base, logout.action),
-            credentials,
-            const <String, Object?>{},
-            wait: logoutTimeout,
-          );
-        }
-      }
-    } on Object {
-      // Сервер недоступен — ключ истечёт сам; на устройстве удаляем всё.
-    }
+    // `credentials.sid.drop` (склад 1.4.63, `auth_out`), иначе
+    // `auth.logout` (`sess_end`). Ответ не важен: 400/403 — ключ уже снят
+    // или сервер старше, на устройстве удаляем всё равно.
+    await _dropKey(await _previousKey());
     // Каждый ключ удаляем отдельно: сбой одного не оставляет другой.
     Object? failed;
     for (final key in <String>[slot.tokenKey, slot.sidKey]) {
@@ -872,6 +1073,66 @@ final class ConnectionService {
     return null;
   }
 
+  /// `scope` последнего ответа [_staffKey]: `assist` — склад подтвердил
+  /// ключ только для помощника.
+  String _lastScope = '';
+
+  /// Склад ответил `tokenless`: ключу помощника пароль склада не нужен.
+  bool _lastTokenless = false;
+
+  /// Ключ нынешнего входа и как его снять на складе (`credentials.sid.drop`
+  /// или `auth.logout`) — до того, как новый вход перепишет ключи.
+  /// `null` — входа нет или описание выхода не умеет.
+  Future<_DropKey?> _previousKey() async {
+    final description = this.description;
+    final logout = description?.signOut ?? builtIn?.signOut;
+    final base = record.manifestUri;
+    if (!record.connected ||
+        description == null ||
+        logout == null ||
+        base == null ||
+        !_authAllowed(description, 'logout', logout.action)) {
+      return null;
+    }
+    try {
+      final credentials = <String, String>{};
+      for (final name in logout.needs) {
+        final value = await _secrets.read(slot.secretKey(name));
+        if (value != null && value.isNotEmpty) {
+          credentials[name] = value;
+        } else if (!(name == 'token' && record.tokenless)) {
+          return null;
+        }
+      }
+      return _DropKey(
+        description,
+        ManifestConnector.actionUri(description, base, logout.action),
+        credentials,
+      );
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Гасит ключ [key] на складе. Ответ не важен: 400/403 — ключ уже снят
+  /// или склад старше; нет связи — ключ истечёт сам. [except] — новый
+  /// ключ: тот же самый не гасим.
+  Future<void> _dropKey(_DropKey? key, {String? except}) async {
+    if (key == null) return;
+    if (except != null && key.credentials['sid'] == except) return;
+    try {
+      await _post(
+        key.description,
+        key.uri,
+        key.credentials,
+        const <String, Object?>{},
+        wait: logoutTimeout,
+      );
+    } on Object {
+      // Сервер недоступен — ключ истечёт сам.
+    }
+  }
+
   /// Личный ключ по логину и паролю (`credentials.sid.get`): в
   /// [ConnectionResult.message] успешного итога — сам ключ (не показывать).
   Future<ConnectionResult> _staffKey(
@@ -923,6 +1184,8 @@ final class ConnectionService {
       );
     }
     final sid = _text(json[get.take]);
+    _lastScope = json['scope'] == 'assist' ? 'assist' : '';
+    _lastTokenless = _lastScope == 'assist' && json['tokenless'] == true;
     if (json['ok'] != true || sid.isEmpty) {
       final left = json['left'];
       return ConnectionResult.failed(
@@ -976,8 +1239,16 @@ final class ConnectionService {
     required String token,
     required String sid,
     required String login,
+    String scope = '',
+    ConnectionMe me = const ConnectionMe(),
   }) async {
-    await _secrets.write(slot.tokenKey, token);
+    if (token.isEmpty) {
+      // Ключ помощника без пароля склада (tokenless): прежний пароль —
+      // тоже долой.
+      await _secrets.delete(slot.tokenKey);
+    } else {
+      await _secrets.write(slot.tokenKey, token);
+    }
     if (sid.isEmpty) {
       await _secrets.delete(slot.sidKey);
     } else {
@@ -992,6 +1263,9 @@ final class ConnectionService {
         level: sid.isEmpty ? ConnectionLevel.shared : ConnectionLevel.staff,
         manifest: decision.meta,
         lastOk: _clock.now(),
+        me: sid.isEmpty ? const ConnectionMe() : me,
+        scope: sid.isEmpty ? '' : scope,
+        tokenless: token.isEmpty && sid.isNotEmpty && scope == 'assist',
       ),
     );
     _sessionChanged();
@@ -1089,4 +1363,13 @@ final class _Decision {
 
   /// Прежнее описание осталось как было.
   final bool kept;
+}
+
+/// Ключ входа и действие выхода для него.
+final class _DropKey {
+  const _DropKey(this.description, this.uri, this.credentials);
+
+  final ManifestDescription description;
+  final Uri uri;
+  final Map<String, String> credentials;
 }

@@ -35,6 +35,11 @@ dependencies:
   # build-хук пакета для Android, macOS и Linux (тесты).
   tridot_lame:
     path: packages/tridot_lame
+  # Сканер QR склада (ADR-031): камера и распознавание на устройстве —
+  # Android CameraX и встроенная в APK модель ML Kit (не скачивается из
+  # Google Play Services: свойство useUnbundled не включено), macOS
+  # AVFoundation и Vision. BSD-3; версия закреплена (7.4.2, 2026-09-14).
+  mobile_scanner: 7.4.2
 
 dev_dependencies:
   flutter_test:

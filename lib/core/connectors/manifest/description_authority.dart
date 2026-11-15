@@ -148,9 +148,12 @@ abstract final class DescriptionAuthority {
         if (!_auth('qr', qr.action)) qr.action,
       if (server.logout case final ManifestLogout logout)
         if (!_auth('logout', logout.action)) logout.action,
-      for (final credential in server.credentials.values)
+      for (final credential in server.credentials.values) ...<String>[
         if (credential.get case final ManifestCredentialGet get)
           if (!_auth('login', get.action)) get.action,
+        if (credential.drop case final ManifestCredentialDrop drop)
+          if (!_auth('logout', drop.action)) drop.action,
+      ],
     ]..sort();
     if (auth.isNotEmpty) {
       found.add('незнакомые действия входа: ${auth.join(', ')}');
@@ -231,8 +234,27 @@ abstract final class DescriptionAuthority {
       if (theirs != null &&
           (theirs.action != ours.action ||
               theirs.param != ours.param ||
-              !_sameMap(theirs.take, ours.take))) {
+              !_sameMap(theirs.take, ours.take) ||
+              !_sameMap(theirs.body, ours.body) ||
+              (theirs.device != null && theirs.device != ours.device))) {
         found.add('другой вход по ссылке auth.qr');
+      }
+    }
+    // Ключ только для помощника (ADR-031): тело `auth.qr` и входа по
+    // логину сравнивается целиком — `scope: assist` описание сервера не
+    // убирает.
+    final ourDrop = builtIn.credentials['sid']?.drop?.action;
+    final theirDrop = server.credentials['sid']?.drop?.action;
+    if (theirDrop != null && theirDrop != ourDrop) {
+      found.add('другой выход credentials.sid.drop');
+    }
+    if (server.me case final ManifestMe theirs) {
+      final ours = builtIn.me;
+      if (ours == null ||
+          theirs.action != ours.action ||
+          theirs.all != ours.all ||
+          theirs.perms != ours.perms) {
+        found.add('другое «кто я» auth.me');
       }
     }
     if (builtIn.logout case final ManifestLogout ours) {

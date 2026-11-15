@@ -41,6 +41,11 @@ final class FileSecretStore implements SecretStore {
   @override
   Future<String?> read(String key) async => (await _values())[key];
 
+  /// Все ключи и значения — для переноса в защищённое хранилище
+  /// (ADR-031). Не печатать.
+  Future<Map<String, String>> all() async =>
+      Map<String, String>.unmodifiable(await _values());
+
   @override
   Future<void> write(String key, String value) async {
     final values = await _values();

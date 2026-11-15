@@ -10,7 +10,9 @@ import 'app/assistant_theme.dart';
 import 'app/extensions/tool_kit.dart';
 import 'app/extensions/weather_kit.dart';
 import 'app/extensions/ytdl_kit.dart';
+import 'app/links/incoming_links.dart';
 import 'app/links/link_opener.dart';
+import 'app/security/sealed_secret_store.dart';
 import 'app/files/file_opener.dart';
 import 'app/jobs/job_picker.dart';
 import 'app/jobs/media_channel_bridge.dart';
@@ -27,7 +29,7 @@ import 'core/app_info.dart';
 import 'core/build_flags.dart';
 import 'core/chats/chat_store.dart';
 import 'core/connectors/connector.dart';
-import 'core/connectors/file_secret_store.dart';
+import 'core/connectors/manifest/warehouse_signals.dart';
 import 'core/connectors/io_http_transport.dart';
 import 'core/connectors/manifest/connection.dart';
 import 'core/connectors/manifest/connection_service.dart';
@@ -127,9 +129,32 @@ Future<void> main() async {
   // описаний — в <документы>/assistant/connections. Выключены, пока их не
   // подключат в «Настройки → Подключения».
   final support = await getApplicationSupportDirectory();
-  final secrets = FileSecretStore(
-    p.join(support.path, 'assistant', 'secrets.json'),
+  // Секреты подключений (ADR-031): Android Keystore (AES-GCM, файл
+  // secrets.sealed), связка ключей Mac, DPAPI на Windows; Linux — файл
+  // 600. Прежний открытый secrets.json переносится и стирается; не
+  // вышло — остаётся в работе он.
+  final secretsChoice = await openSecretStore(
+    plainPath: p.join(support.path, 'assistant', 'secrets.json'),
+    secure: switch (currentJobPlatform()) {
+      JobPlatform.android => SealedSecretStore(
+          p.join(support.path, 'assistant', 'secrets.sealed'),
+          const AndroidKeystoreSealer(),
+        ),
+      JobPlatform.windows => SealedSecretStore(
+          p.join(support.path, 'assistant', 'secrets.sealed'),
+          const DpapiSealer(),
+        ),
+      JobPlatform.macos => const KeychainSecretStore(),
+      _ => null,
+    },
+    backend: switch (currentJobPlatform()) {
+      JobPlatform.android => SecretBackend.keystore,
+      JobPlatform.windows => SecretBackend.dpapi,
+      JobPlatform.macos => SecretBackend.keychain,
+      _ => SecretBackend.file,
+    },
   );
+  final secrets = secretsChoice.store;
   final transport = IoHttpTransport();
   final connectionStore = JsonConnectionStore(p.join(folder, 'connections'));
   final connections = <ConnectionService>[
@@ -141,8 +166,32 @@ Future<void> main() async {
         store: connectionStore,
         builtIn: await _builtInManifest(slot.builtInAsset),
         clock: clock,
+        device: switch (currentJobPlatform()) {
+          JobPlatform.android => 'Связной · Android',
+          JobPlatform.macos => 'Связной · Mac',
+          JobPlatform.windows => 'Связной · Windows',
+          _ => 'Связной · Linux',
+        },
       ),
   ];
+  // Сигналы склада (ADR-031): только пока приложение открыто — паузу и
+  // продолжение даёт HomePage по жизненному циклу.
+  final signals = <WarehouseSignals>[
+    for (final connection in connections)
+      if (connection.slot.id == ConnectionSlots.warehouse.id)
+        WarehouseSignals(
+          service: connection,
+          transport: transport,
+          secrets: secrets,
+          clock: clock,
+        ),
+  ];
+  // «Открыть в Tridot» и «Поделиться» ссылкой склада: Android и Mac.
+  final platformNow = currentJobPlatform();
+  final incoming =
+      platformNow == JobPlatform.android || platformNow == JobPlatform.macos
+          ? IncomingLinks()
+          : null;
   // Хранилище паролей (ADR-014): <поддержка>/assistant/vault, отдельно от
   // secrets.json склада (D19) и исключено из облачной копии Android
   // (D20). Транспорт ему не передаётся. Навык видит только VaultFacade;
@@ -340,6 +389,8 @@ Future<void> main() async {
       ytdl: ytdl,
       weather: weather,
       notify: notify,
+      incoming: incoming,
+      signals: signals,
       initialAppearance: early.appearance,
       initialReduceMotion: early.reduceMotion,
     ),
@@ -458,6 +509,8 @@ final class AssistantApp extends StatefulWidget {
     this.weather,
     this.notify,
     this.appLock,
+    this.incoming,
+    this.signals = const <WarehouseSignals>[],
     this.initialAppearance = AppAppearance.system,
     this.initialReduceMotion = false,
   });
@@ -506,6 +559,12 @@ final class AssistantApp extends StatefulWidget {
   /// Уведомления и будильник (ADR-029); `null` — их нет.
   final NotifyPlatform? notify;
 
+  /// «Открыть в Tridot» и «Поделиться» (ADR-031); `null` — нет.
+  final IncomingLinks? incoming;
+
+  /// Сигналы склада, пока приложение открыто (ADR-031).
+  final List<WarehouseSignals> signals;
+
   @override
   State<AssistantApp> createState() => _AssistantAppState();
 }
@@ -551,6 +610,8 @@ final class _AssistantAppState extends State<AssistantApp> {
       nativeMedia: widget.nativeMedia,
       ytdl: widget.ytdl,
       weather: widget.weather,
+      incoming: widget.incoming,
+      signals: widget.signals,
       notify: widget.notify,
       appLock: widget.appLock,
       onAppearanceChanged: (AppAppearance appearance) =>

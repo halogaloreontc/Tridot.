@@ -231,12 +231,15 @@ final class ActDraft {
 
 /// Ответ на вопрос черновика: какой вариант, сколько или куда.
 final class ActFollow {
-  const ActFollow(this.draft, {this.option, this.qty, this.to});
+  const ActFollow(this.draft, {this.option, this.qty, this.to, this.from});
 
   final ActDraft draft;
   final int? option;
   final Object? qty;
   final String? to;
+
+  /// Ответ на «Из какой ячейки?» (склад требует `from`, ADR-031).
+  final String? from;
 }
 
 /// Правило фразы действия: одна фраза `say` встроенной копии.
@@ -475,6 +478,17 @@ extension _Actions on ManifestConnector {
                 : text;
         final cell = def == null ? '' : _cellValue(def, raw);
         if (cell.isNotEmpty) follow = ActFollow(draft, to: cell);
+      case 'from':
+        final def = draft.action.slots['from'];
+        final words = text.split(' ');
+        final raw =
+            words.length > 1 && (words.first == 'из' || words.first == 'с')
+                ? words
+                    .sublist(words[1] == 'ячейки' && words.length > 2 ? 2 : 1)
+                    .join(' ')
+                : text;
+        final cell = def == null ? '' : _cellValue(def, raw);
+        if (cell.isNotEmpty) follow = ActFollow(draft, from: cell);
     }
     if (follow == null) return null;
     return ConnectorMatch(
@@ -558,17 +572,13 @@ extension _Actions on ManifestConnector {
     ActionCard? card,
     bool settle = false,
   }) async {
-    final token = await _secrets.read(slot.tokenKey);
-    if (record.manifestUri == null ||
-        token == null ||
-        token.isEmpty ||
-        !record.connected) {
+    final keys = await readConnectionKeys(_secrets, slot, record);
+    if (record.manifestUri == null || keys == null || !record.connected) {
       return (null, _notConnected(session, intent));
     }
-    final sid = await _secrets.read(slot.sidKey);
+    final sid = keys['sid'];
     if (record.level != ConnectionLevel.staff ||
         sid == null ||
-        sid.isEmpty ||
         record.login == null) {
       return (
         null,
@@ -615,7 +625,7 @@ extension _Actions on ManifestConnector {
         _actSay(session, 'act.unsupported', intent, AssistantStatus.noAction),
       );
     }
-    return (<String, String>{'token': token, 'sid': sid}, null);
+    return (keys, null);
   }
 
   /// Запрос действия: только заголовки ключей (не адрес), без
@@ -694,8 +704,45 @@ extension _Actions on ManifestConnector {
     }
     final (credentials, refused) = await _actGate(session, intent);
     if (refused != null) return refused;
+    // Права входа известны и свежи (`ask_me`, ADR-031): без права — сразу
+    // «нет права», без расчёта на сервере. Неизвестны или старше
+    // [meFresh] — решает сервер: действия включают и права выдают на
+    // складе уже после входа.
+    final me = record.me;
+    final meAt = me.at;
+    final fresh =
+        meAt != null && session.clock.now().difference(meAt) < meFresh;
+    if (!fresh) return _check(draft, credentials!, session, intent);
+    if (me.actions == false) {
+      return _actSay(
+        session,
+        'act.serverOff',
+        intent,
+        AssistantStatus.noAction,
+      );
+    }
+    if (action.right.isNotEmpty && me.has(action.right) == false) {
+      return _actSay(
+        session,
+        'act.denied',
+        intent,
+        AssistantStatus.noAction,
+        values: <String, String>{'right': rightTitle(action.right)},
+      );
+    }
     return _check(draft, credentials!, session, intent);
   }
+
+  /// Сколько верить запомненным правам (`ask_me`) для отказа без запроса.
+  static const Duration meFresh = Duration(minutes: 10);
+
+  /// Право склада по-человечески: «перемещать товар».
+  static String rightTitle(String right) => switch (right) {
+        'post' => 'отмечать проведение',
+        'moves' => 'перемещать товар',
+        'price' => 'ставить цены',
+        _ => right,
+      };
 
   /// Ответ на вопрос черновика: уточнить и посчитать снова.
   Future<AssistantResponse> followAction(
@@ -720,6 +767,25 @@ extension _Actions on ManifestConnector {
       }
     }
     if (follow.qty != null) draft.qty = follow.qty;
+    if (follow.from case final String from) {
+      if (from == 'БЕЗ МЕСТА') {
+        return _actSay(
+          session,
+          'act.noPlace',
+          intent,
+          AssistantStatus.noAction,
+        );
+      }
+      if (draft.to.isNotEmpty && _cellKey(draft.to) == _cellKey(from)) {
+        return _actSay(
+          session,
+          'act.sameCell',
+          intent,
+          AssistantStatus.noAction,
+        );
+      }
+      draft.from = from;
+    }
     if (follow.to case final String to) {
       if (to == 'БЕЗ МЕСТА') {
         return _actSay(
@@ -773,6 +839,11 @@ extension _Actions on ManifestConnector {
     String intent, {
     String? prefix,
   }) async {
+    if (draft.isMove && draft.from.isEmpty) {
+      // Склад требует «откуда» (DepotDesk `act_move_check`): спросить
+      // самим, не ходя на сервер.
+      return _askFrom(draft, session, intent, prefix: prefix);
+    }
     final vars = ManifestVars(session.clock.now());
     final reply = await _actPost(
       draft.action.check,
@@ -1035,6 +1106,42 @@ extension _Actions on ManifestConnector {
       intent,
       AssistantStatus.needsClarification,
       values: values,
+      prefix: prefix,
+    );
+  }
+
+  /// «Из какой ячейки переместить?» — вопрос без сервера.
+  AssistantResponse _askFrom(
+    ActDraft draft,
+    AssistantSession session,
+    String intent, {
+    String? prefix,
+  }) {
+    if (++draft.questions > ActDraft.maxQuestions) {
+      return _actSay(
+        session,
+        'act.tooMany',
+        intent,
+        AssistantStatus.noAction,
+        prefix: prefix,
+      );
+    }
+    draft
+      ..asked = 'from'
+      ..questionId = '${slot.id}.act.ask.from'
+      ..questionValues = const <String, String>{};
+    session.requestConfirmation(
+      PendingConfirmation(
+        connectorId: slot.id,
+        commandId: intent,
+        payload: draft,
+      ),
+    );
+    return _actSay(
+      session,
+      'act.ask.from',
+      intent,
+      AssistantStatus.needsClarification,
       prefix: prefix,
     );
   }
@@ -1649,6 +1756,11 @@ extension _Actions on ManifestConnector {
           prefix: prefix,
         );
     if (status == 401) {
+      // Без пароля склада (tokenless) 401 — не принят ключ помощника.
+      if (record.tokenless) {
+        _fail(ConnectionFailure.expired, now);
+        return out('auth.expired', AssistantStatus.failed);
+      }
       _fail(ConnectionFailure.token, now);
       return out('auth.token', AssistantStatus.failed);
     }
@@ -1684,8 +1796,8 @@ extension _Actions on ManifestConnector {
       case 'no_right' || 'rights_unknown':
         return out('act.denied', AssistantStatus.noAction, <String, String>{
           'right': switch (json?['right']) {
-            'post' => 'отмечать проведение',
-            'moves' => 'перемещать товар',
+            final String right when right == 'post' || right == 'moves' =>
+              rightTitle(right),
             final Object? other => _clean(other, fallback: 'это действие'),
           },
         });

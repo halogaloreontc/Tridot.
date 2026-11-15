@@ -15,9 +15,13 @@ const String patchedManifestPath =
     'test/fixtures/assistant/halowarekeep-1.4.56.json';
 
 /// Описание склада 1.4.57: действия с записью (`actions[]`, ADR-013).
-/// Встроенная копия `assets/connectors/halowarekeep.assistant.json`.
 const String actionsManifestPath =
     'test/fixtures/assistant/halowarekeep-1.4.57.json';
+
+/// Встроенная копия `assets/connectors/depotdesk.assistant.json` (склад
+/// DepotDesk 1.4.62, ADR-031): ключ помощника, «кто я», цены, выход.
+const String builtInManifestPath =
+    'test/fixtures/assistant/depotdesk-1.4.62.json';
 
 String manifestSource([String path = currentManifestPath]) =>
     File(path).readAsStringSync();
@@ -25,14 +29,14 @@ String manifestSource([String path = currentManifestPath]) =>
 ManifestDescription manifest([String path = currentManifestPath]) =>
     ManifestDescription.parse(
       manifestSource(path),
-      appId: ConnectionSlots.warehouse.appId,
+      appIds: ConnectionSlots.warehouse.appIds,
     );
 
 /// Встроенная копия 1.4.57 с действиями.
 ManifestDescription builtInManifest([String path = actionsManifestPath]) =>
     ManifestDescription.parse(
       manifestSource(path),
-      appId: ConnectionSlots.warehouse.appId,
+      appIds: ConnectionSlots.warehouse.appIds,
       builtIn: true,
     );
 

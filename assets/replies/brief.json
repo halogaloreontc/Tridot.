@@ -53,6 +53,12 @@
     "warehouse.act.voided": "Склад операцию не получил. {вы:Повторите|ты:Повтори} команду.",
     "warehouse.act.failed": "Склад отказал: {error}",
     "warehouse.act.settled": "Выполнено: {result}.",
+    "warehouse.auth.perm": "Нет права на это на складе — его даёт администратор.",
+    "warehouse.auth.off": "Выключено администратором склада.",
+    "warehouse.auth.scope": "Ключ помощника — только для вопросов складу.",
+    "warehouse.unsupported": "Склад не умеет: {what}. Нужно обновление сервера.",
+    "warehouse.act.ask.from": "Из какой ячейки?",
+    "warehouse.signal.arrivals": "Склад: {list}.",
 
     "task.created": ["Создано: «{title}».", "Добавлено: «{title}»."],
     "task.created.withDue": ["Создано: «{title}», {due}.", "Добавлено: «{title}» — {due}."],

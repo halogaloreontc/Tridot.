@@ -100,3 +100,18 @@
 {"id":"wh-101","text":"перемести коробки из 303-брак сегодня в 101-1-1","intent":"createTask","title":"Перемести коробки из 303-брак в 101-1-1","due":"2026-11-02","precision":"date","note":"слово срока после зоны «откуда» — не часть ячейки (ревью 1.4.57)","source":"manual"}
 {"id":"wh-102","text":"перемести коробки из 101-1-1 в 101-ок срочно","intent":"createTask","title":"Перемести коробки из 101-1-1 в 101-ок срочно","note":"«срочно» после зоны — не часть ячейки (ревью 1.4.57)","source":"manual"}
 {"id":"wh-103","text":"перемести 3 пуфа из 303-1-1 в 303-зона приёмки","connector":"warehouse","intent":"warehouse.act.move","note":"зона из двух слов — по-прежнему ячейка (ревью 1.4.57)","source":"manual"}
+{"id":"wh-104","text":"кто я","connector":"warehouse","intent":"warehouse.me","note":"«кто я» с ролью «Кладовщик» — вход и права на складе (ADR-031)","source":"manual"}
+{"id":"wh-105","text":"какие у меня права","connector":"warehouse","intent":"warehouse.me","note":"права роли на складе (ask_me)","source":"manual"}
+{"id":"wh-106","text":"моя роль на складе","connector":"warehouse","intent":"warehouse.me","note":"роль на складе","source":"manual"}
+{"id":"wh-107","text":"под кем я вошёл","connector":"warehouse","intent":"warehouse.me","note":"кто вошёл на склад","source":"manual"}
+{"id":"wh-108","text":"что мне можно на складе","connector":"warehouse","intent":"warehouse.me","note":"что можно через помощника","source":"manual"}
+{"id":"wh-109","text":"почём 64115","connector":"warehouse","intent":"warehouse.price","note":"цена через ask_price (DepotDesk без него — запись «price»)","source":"manual"}
+{"id":"wh-110","text":"какая цена у стула венского","connector":"warehouse","intent":"warehouse.price","note":"цена по названию","source":"manual"}
+{"id":"wh-111","text":"цена 64115","connector":"warehouse","intent":"warehouse.price","note":"цена коротко","source":"manual"}
+{"id":"wh-112","text":"что не проведено в 1с","connector":"warehouse","intent":"warehouse.unposted","note":"не проведено в 1С (ask_unposted DepotDesk)","source":"manual"}
+{"id":"wh-113","text":"непроведённые приходы","connector":"warehouse","intent":"warehouse.unposted","note":"с «ё»","source":"manual"}
+{"id":"wh-114","text":"что лежит в ячейке 215-1-1-2","connector":"warehouse","intent":"warehouse.cell","note":"ячейка","source":"manual"}
+{"id":"wh-115","text":"стеллаж 303-2","connector":"warehouse","intent":"warehouse.cell","note":"стеллаж","source":"manual"}
+{"id":"wh-116","text":"перемести 2 стула в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","note":"без «откуда» — помощник спросит ячейку сам (DepotDesk требует from)","source":"manual"}
+{"id":"wh-117","text":"переложи 64115 из 215-1-1-1 в 215-1-1-2","connector":"warehouse","intent":"warehouse.act.move","note":"перемещение под своим логином; право moves проверяется по ask_me","source":"manual"}
+{"id":"wh-118","text":"кто я","connector":"warehouse","intent":"unknown","roles":["personal"],"note":"без роли «Кладовщик» склад не отвечает на «кто я»","source":"manual"}

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/widgets/extensions_section.dart';
 import 'package:local_assistant/app/widgets/roles_section.dart';
+import 'package:local_assistant/app/widgets/whole_word_text.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/http_transport.dart';
 import 'package:local_assistant/core/connectors/manifest/connection.dart';
@@ -168,8 +169,13 @@ void main() {
       find.text('Кнопки: «Где лежит…», «Что пришло сегодня», «Без фото»'),
       findsOneWidget,
     );
-    expect(find.text('Склад не подключён'), findsOneWidget);
-    expect(find.text('Подключить склад'), findsOneWidget);
+    // Карточка подключения (ADR-031): состояние и вход по QR или ссылке.
+    expect(
+      tester.widget<WholeWordText>(_key('warehouse-card-state')).data,
+      'Не подключён',
+    );
+    expect(_key('warehouse-paste'), findsOneWidget);
+    expect(_key('warehouse-logout'), findsNothing);
     // Склад вне роли неактивен и в «Расширениях».
     await tester.ensureVisible(_key('extension-warehouse'));
     expect(_switch(tester, 'extension-warehouse').onChanged, isNull);
@@ -214,26 +220,85 @@ void main() {
     );
   });
 
-  testWidgets('«Подключить склад» → экран подключения, вход включает роль',
+  testWidgets('«Вставить ссылку» → подтверждение с хостом, вход включает роль',
       (tester) async {
     final h = _Harness();
     await tester.pumpWidget(h.build());
     await tester.pumpAndSettle();
-    await _tap(tester, 'role-connect-${Roles.storekeeperId}');
-    expect(_key('connection-link'), findsOneWidget);
-    expect(_key('connection-manifest-origin'), findsOneWidget);
+    await _tap(tester, 'warehouse-paste');
+    expect(_key('warehouse-paste-dialog'), findsOneWidget);
     await tester.enterText(
-      _key('connection-link'),
-      'https://warehouse.example/#qr=$code',
+      _key('warehouse-paste-field'),
+      'tridot://connect?u=${Uri.encodeComponent('https://warehouse.example/')}'
+      '&qr=$code',
     );
-    await _tap(tester, 'connection-link-connect');
+    await _tap(tester, 'warehouse-paste-ok');
+    // Сначала — окно с хостом склада, без кода.
+    expect(_key('warehouse-link-confirm'), findsOneWidget);
+    expect(find.textContaining('warehouse.example'), findsWidgets);
+    expect(find.textContaining(code), findsNothing);
+    await _tap(tester, 'warehouse-link-yes');
     expect(h.service.connected, isTrue);
     expect(h.settings.enabledRoles, <String>{Roles.storekeeperId});
-    await tester.pageBack();
-    await tester.pumpAndSettle();
     expect(_switch(tester, 'role-storekeeper').value, isTrue);
-    expect(find.text('Склад не подключён'), findsNothing);
-    expect(find.text('Настроить'), findsWidgets);
+    expect(
+      tester.widget<WholeWordText>(_key('warehouse-card-state')).data,
+      'Подключён · warehouse.example',
+    );
+    expect(_key('warehouse-logout'), findsOneWidget);
+    // «Выйти» — диалог, потом ключ снят.
+    await _tap(tester, 'warehouse-logout');
+    expect(_key('warehouse-logout-dialog'), findsOneWidget);
+    await _tap(tester, 'warehouse-logout-yes');
+    expect(h.service.connected, isFalse);
+  });
+
+  testWidgets('подключён: «⋯» → «Вставить ссылку»; другой склад — замена видна',
+      (tester) async {
+    final h = _Harness();
+    await h.secrets.write('warehouse.token', fakeToken);
+    h.service.connector.record = connectedRecord();
+    await tester.pumpWidget(h.build());
+    await tester.pumpAndSettle();
+    // Одной строкой: «Выйти» и «⋯», остальное — в меню.
+    expect(_key('warehouse-logout'), findsOneWidget);
+    expect(_key('warehouse-paste'), findsNothing);
+    await _tap(tester, 'warehouse-more');
+    await _tap(tester, 'warehouse-paste');
+    await tester.enterText(
+      _key('warehouse-paste-field'),
+      'tridot://connect?u=${Uri.encodeComponent('https://sklad-two.example/')}'
+      '&qr=$code',
+    );
+    await _tap(tester, 'warehouse-paste-ok');
+    expect(_key('warehouse-link-confirm'), findsOneWidget);
+    // Хост — с неразрывным дефисом, отдельной строкой.
+    expect(
+      tester.widget<Text>(_key('warehouse-link-host')).data,
+      'sklad\u2011two.example',
+    );
+    final replace =
+        tester.widget<WholeWordText>(_key('warehouse-link-replace')).data;
+    expect(replace, contains('другой склад'));
+    expect(replace, contains('warehouse.example'));
+    await tester.tap(find.text('Отмена').last);
+    await tester.pumpAndSettle();
+    expect(h.service.record.baseUri!.host, 'warehouse.example');
+  });
+
+  testWidgets('подтверждение «Отмена» — ничего не подключено', (tester) async {
+    final h = _Harness();
+    await tester.pumpWidget(h.build());
+    await tester.pumpAndSettle();
+    await _tap(tester, 'warehouse-paste');
+    await tester.enterText(
+      _key('warehouse-paste-field'),
+      'https://warehouse.example/#qr=$code',
+    );
+    await _tap(tester, 'warehouse-paste-ok');
+    await tester.tap(find.text('Отмена').last);
+    await tester.pumpAndSettle();
+    expect(h.service.connected, isFalse);
   });
 
   testWidgets('навык выключен в «Расширениях»: карточка роли говорит прямо',
