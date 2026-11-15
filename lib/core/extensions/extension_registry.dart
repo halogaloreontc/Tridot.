@@ -29,6 +29,7 @@ final class ExtensionRegistry {
     PackStore? packs,
     ExtensionChoice choice = const ExtensionChoice(),
     List<RoleInfo> roles = Roles.all,
+    Map<String, String> replyOverrides = const <String, String>{},
   })  : _connectors = List<Connector>.unmodifiable(connectors),
         packs = packs ?? PackStore.memory(),
         _choice = choice {
@@ -56,10 +57,10 @@ final class ExtensionRegistry {
       protectedReplies.addAll(connector.info.protectedReplies);
     }
     this.packs.reservedIds = ids;
-    this.replies = ReplyLibrary.builtIn.withEntries(
-      replies,
-      protectedIds: protectedReplies,
-    );
+    // [replyOverrides] — тексты другой оболочки (веб-помощник, ADR-032).
+    this.replies = ReplyLibrary.builtIn
+        .withEntries(replies, protectedIds: protectedReplies)
+        .withOverrides(replyOverrides);
     // Паки ответов проверяются и против записей коннекторов.
     this.packs.replySchema = this.replies.schema;
     // Роль без своих расширений в этой сборке не показывается; роль с

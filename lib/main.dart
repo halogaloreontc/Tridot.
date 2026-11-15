@@ -31,7 +31,7 @@ import 'core/chats/chat_store.dart';
 import 'core/connectors/connector.dart';
 import 'core/connectors/manifest/warehouse_signals.dart';
 import 'core/connectors/io_http_transport.dart';
-import 'core/connectors/manifest/connection.dart';
+import 'core/connectors/manifest/connection_store_io.dart';
 import 'core/connectors/manifest/connection_service.dart';
 import 'core/connectors/manifest/connection_slots.dart';
 import 'core/connectors/tasks_connector.dart';

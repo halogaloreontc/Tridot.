@@ -18,6 +18,8 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed .
       - run: flutter analyze
       - run: flutter test
+      # Веб-помощник склада (ADR-032): собирается из того же кода.
+      - run: flutter build web --release -t lib/web_widget/main.dart --no-web-resources-cdn --no-source-maps
 
   android:
     needs: verify

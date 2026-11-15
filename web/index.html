@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<!--
+  Веб-помощник «Связной» на складе (ADR-032). Открывается фреймом
+  страницы склада с того же адреса: assistant/v/<версия>/index.html.
+
+  Тега <base> нет намеренно: папка версии заранее неизвестна, а без него
+  относительные пути (flutter_bootstrap.js, main.dart.js, assets/,
+  canvaskit/) считаются от адреса этой страницы — то есть от своей папки.
+-->
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <!-- Только свой адрес: CanvasKit и шрифты — из архива, запросы — к складу. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Связной</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #f2f2f7; }
+    @media (prefers-color-scheme: dark) { html, body { background: #000000; } }
+  </style>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

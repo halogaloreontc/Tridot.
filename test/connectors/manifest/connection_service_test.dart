@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/http_transport.dart';
 import 'package:local_assistant/core/connectors/manifest/connection.dart';
+import 'package:local_assistant/core/connectors/manifest/connection_store_io.dart';
 import 'package:local_assistant/core/connectors/manifest/connection_service.dart';
 import 'package:local_assistant/core/connectors/manifest/connection_slots.dart';
 import 'package:local_assistant/core/connectors/manifest/manifest_connector.dart';

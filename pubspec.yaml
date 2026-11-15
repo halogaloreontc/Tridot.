@@ -40,6 +40,10 @@ dependencies:
   # Google Play Services: свойство useUnbundled не включено), macOS
   # AVFoundation и Vision. BSD-3; версия закреплена (7.4.2, 2026-09-14).
   mobile_scanner: 7.4.2
+  # Веб-помощник склада (ADR-032): fetch, localStorage и postMessage из
+  # lib/web_widget/ — только там. Уже была транзитивно (у Flutter web и
+  # плагинов); версия закреплена по pubspec.lock.
+  web: 1.1.2
 
 dev_dependencies:
   flutter_test:

@@ -128,6 +128,45 @@ final class ReplyLibrary {
     );
   }
 
+  /// Библиотека, где записи [texts] заменены во всех стилях одним
+  /// нейтральным текстом: другая оболочка с теми же навыками — веб-помощник
+  /// склада (ADR-032) не говорит «Мой Связной → Помощники → …», его вход —
+  /// страница склада. Подстановки — те же, что у записи (проверка схемой);
+  /// неизвестный id или ошибка разметки — [FormatException].
+  ReplyLibrary withOverrides(Map<String, String> texts) {
+    if (texts.isEmpty) return this;
+    final errors = <String>[];
+    final parsed = ReplyFormat.parseEntries(
+      <String, Object?>{...texts},
+      errors,
+      schema: schema,
+      where: 'overrides',
+    );
+    if (parsed == null || errors.isNotEmpty) {
+      throw FormatException(errors.join(' '));
+    }
+    ReplyCatalog patch(ReplyCatalog catalog) => ReplyCatalog(
+          style: catalog.style,
+          title: catalog.title,
+          description: catalog.description,
+          builtIn: catalog.builtIn,
+          protectedIds: catalog.protectedIds,
+          entries: <String, List<ReplyTemplate>>{
+            ...catalog.entries,
+            ...parsed,
+          },
+        );
+    final merged = patch(neutral);
+    return ReplyLibrary._(
+      neutral: merged,
+      styles: <String, ReplyCatalog>{
+        for (final MapEntry(:key, :value) in _styles.entries)
+          key: key == merged.style ? merged : patch(value),
+      },
+      schema: schema,
+    );
+  }
+
   /// Библиотека с дополнительными стилями (включённые паки ответов).
   /// Стиль, чей id уже занят, пропускается.
   ReplyLibrary withStyles(Iterable<ReplyCatalog> extra) {

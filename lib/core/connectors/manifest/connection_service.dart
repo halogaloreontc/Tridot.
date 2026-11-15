@@ -771,6 +771,71 @@ final class ConnectionService {
     return ConnectionResult.ok(_connectedText(login));
   }
 
+  /// Ключ помощника, уже полученный страницей склада (веб-помощник,
+  /// ADR-032): страница того же адреса сама вызывает `assist_web_key`
+  /// своим входом и передаёт ключ во фрейм. Пароль склада не нужен и не
+  /// хранится (`tokenless`), прежний ключ на складе не гасится — его
+  /// заменяет сам склад (один веб-ключ на вкладку). Описание — с сервера
+  /// по [address]; не получилось — в работе встроенное. Затем «кто я»
+  /// (`ask_me`): права и логин называет склад, [name] и [role] страницы —
+  /// только до его ответа.
+  Future<ConnectionResult> connectWithKey({
+    required String address,
+    required String sid,
+    String login = '',
+    String name = '',
+    String role = '',
+  }) async {
+    final Uri base;
+    try {
+      base = baseOf(address);
+    } on ConnectionAddressException catch (error) {
+      return ConnectionResult.failed(error.message);
+    }
+    final key = sid.trim();
+    if (!_assistKey.hasMatch(key)) {
+      return const ConnectionResult.failed(
+        'Склад передал ключ не того вида — обновите страницу склада.',
+      );
+    }
+    final manifestUri = base.resolve('assistant.json');
+    final fetched = await _fetchManifest(base);
+    final decision = _decide(manifestUri, fetched);
+    if (decision.pick.description == null) {
+      return ConnectionResult.failed(fetched.error ?? 'Описание не получено.');
+    }
+    final user = login.trim().toLowerCase();
+    try {
+      await _saveConnection(
+        base: base,
+        decision: decision,
+        token: '',
+        sid: key,
+        login: _loginShape.hasMatch(user) ? user : '',
+        scope: 'assist',
+        me: ConnectionMe.fromServer(
+          <String, Object?>{'name': name, 'roleLabel': role},
+          at: _clock.now(),
+        ),
+      );
+    } on Object {
+      await _forgetSecrets();
+      return const ConnectionResult.failed(_notSaved);
+    }
+    final me = await refreshMe();
+    if (!me.ok && record.failure == ConnectionFailure.expired) {
+      return ConnectionResult.failed(me.message);
+    }
+    return ConnectionResult.ok(_connectedText(record.login ?? ''));
+  }
+
+  /// Ключ помощника от страницы склада: печатные знаки без пробелов.
+  static final RegExp _assistKey = RegExp(r'^[A-Za-z0-9._~+/=-]{16,200}$');
+
+  /// Логин сотрудника от страницы склада — только для записи до ответа
+  /// `ask_me`.
+  static final RegExp _loginShape = RegExp(r'^[a-z0-9._@-]{1,64}$');
+
   /// «Склад подключён: ivanov (Иван Петров, Кладовщик).»
   String _connectedText(String login) {
     final me = record.me;
@@ -971,11 +1036,14 @@ final class ConnectionService {
   /// (`auth.logout`, склад 1.4.56); ответ и ошибки сервера не важны —
   /// пароль и ключ удаляются с устройства всегда. Адрес и кэш описания
   /// остаются.
-  Future<void> logout() async {
+  ///
+  /// [remote] `false` — ключ на складе уже погашен (веб-помощник: вышли
+  /// из склада, ключ гаснет вместе со входом страницы) — запроса нет.
+  Future<void> logout({bool remote = true}) async {
     // `credentials.sid.drop` (склад 1.4.63, `auth_out`), иначе
     // `auth.logout` (`sess_end`). Ответ не важен: 400/403 — ключ уже снят
     // или сервер старше, на устройстве удаляем всё равно.
-    await _dropKey(await _previousKey());
+    if (remote) await _dropKey(await _previousKey());
     // Каждый ключ удаляем отдельно: сбой одного не оставляет другой.
     Object? failed;
     for (final key in <String>[slot.tokenKey, slot.sidKey]) {
