@@ -89,7 +89,7 @@ final class _WeatherCardViewState extends State<WeatherCardView> {
               borderRadius: BorderRadius.circular(14),
             ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: body,
             ),
           ),
@@ -197,7 +197,7 @@ final class _WeatherCardViewState extends State<WeatherCardView> {
             ],
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Row(
           children: <Widget>[
             Icon(
@@ -205,13 +205,13 @@ final class _WeatherCardViewState extends State<WeatherCardView> {
               size: 28,
               color: colors.icon,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Text(
               WeatherFormat.temp(current.temperature),
               key: const ValueKey<String>('weather-card-temp'),
               style: TextStyle(
                 fontFamily: AppFonts.text,
-                fontSize: 34,
+                fontSize: 30,
                 height: 1.1,
                 fontWeight: FontWeight.w300,
                 color: colors.textStrong,
@@ -334,7 +334,7 @@ final class _WeatherCardViewState extends State<WeatherCardView> {
               size: 20,
               color: colors.icon,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             // Диапазон — постоянной ширины: значки дней стоят столбцом.
             SizedBox(
               width: _rangeWidth(context, value),
@@ -408,7 +408,7 @@ final class _WeatherCardViewState extends State<WeatherCardView> {
               size: 22,
               color: colors.icon,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: WholeWordText(
                 card.label ?? 'Страница погоды',
@@ -437,7 +437,7 @@ final class _WeatherCardViewState extends State<WeatherCardView> {
         Row(
           children: <Widget>[
             Icon(Icons.cloud_outlined, size: 22, color: colors.icon),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: WholeWordText(
                 'Источник погоды не выбран',

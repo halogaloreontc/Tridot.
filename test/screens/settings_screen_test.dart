@@ -431,7 +431,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('pack-errors')), findsOneWidget);
       expect(find.textContaining('Не удалось сохранить пак'), findsOneWidget);
-      final button = tester.widget<TextButton>(
+      final button = tester.widget<ButtonStyleButton>(
         find.byKey(const ValueKey('pack-import')),
       );
       expect(button.onPressed, isNotNull);

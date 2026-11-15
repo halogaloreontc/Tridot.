@@ -174,7 +174,7 @@ final class TodayPanel extends StatelessWidget {
             children: <Widget>[
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 4, top: 6, bottom: 6),
+                  padding: const EdgeInsets.only(left: 4, top: 8, bottom: 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -183,14 +183,14 @@ final class TodayPanel extends StatelessWidget {
                         child: Text(
                           'Сегодня',
                           style: TextStyle(
-                            fontSize: 22,
+                            fontSize: 20,
                             height: 1.2,
                             fontWeight: FontWeight.w600,
                             color: context.colors.textStrong,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Wrap(
                         spacing: 8,
                         children: <Widget>[
@@ -236,7 +236,7 @@ final class TodayPanel extends StatelessWidget {
                       'Дела',
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 17,
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: context.colors.textStrong,
                       ),
@@ -259,7 +259,7 @@ final class TodayPanel extends StatelessWidget {
                         child: Text(
                           'Все задачи',
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 15),
+                          style: TextStyle(fontSize: 14),
                         ),
                       ),
                       Icon(Icons.chevron_right, size: 16),
@@ -284,7 +284,7 @@ final class TodayPanel extends StatelessWidget {
                 child: Text(
                   'Разделы',
                   style: TextStyle(
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
                     color: context.colors.textStrong,
                   ),
@@ -293,8 +293,8 @@ final class TodayPanel extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Wrap(
-              spacing: 6,
-              runSpacing: 6,
+              spacing: AppSpace.xs,
+              runSpacing: AppSpace.xs,
               children: <Widget>[
                 for (final section in sections) _SectionPill(section: section),
               ],
@@ -462,7 +462,7 @@ final class _TaskRow extends StatelessWidget {
                                 color: context.colors.danger,
                               ),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 8),
                           ],
                           Flexible(
                             child: Text(
@@ -545,7 +545,7 @@ final class _PendingRow extends StatelessWidget {
                       Text(
                         item.subtitle,
                         style: TextStyle(
-                          fontSize: 15,
+                          fontSize: 14,
                           height: 1.3,
                           color: context.colors.muted,
                         ),
@@ -597,14 +597,14 @@ final class _SectionPill extends StatelessWidget {
                         color: section.dot,
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                   ],
                   Flexible(
                     child: WholeWordText(
                       section.label,
                       maxLines: 1,
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 14,
                         fontWeight: FontWeight.w500,
                         color: context.colors.textStrong,
                       ),

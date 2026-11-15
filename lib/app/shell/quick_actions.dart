@@ -150,7 +150,7 @@ final class _QuickActionsState extends State<QuickActions> {
                 key: const Key('quick-strip'),
                 controller: _strip,
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
                   children: <Widget>[
                     for (final (index, item) in items.indexed)
@@ -249,7 +249,7 @@ final class _BigRow extends StatelessWidget {
   final List<QuickAction> items;
 
   static TextStyle _labelOf(BuildContext context) => TextStyle(
-        fontSize: 15,
+        fontSize: 14,
         height: 1.3,
         color: context.colors.text,
       );
@@ -278,7 +278,7 @@ final class _BigRow extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
                   Icon(icon, size: 24, color: context.colors.accent),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   fitSingleWord(
                     label,
                     alignment: Alignment.center,
@@ -448,7 +448,7 @@ final class _Pill extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       softWrap: false,
-      style: TextStyle(fontSize: 15, color: color),
+      style: TextStyle(fontSize: 14, color: color),
     );
     return Semantics(
       button: true,
@@ -469,7 +469,7 @@ final class _Pill extends StatelessWidget {
               // Своей ширины на широкой колонке — с полями 16, как в
               // D-Desk; в доле строки и в прокручиваемой строке — 8.
               horizontal: small
-                  ? 14
+                  ? 12
                   : strip
                       ? 8
                       : 16,
@@ -492,7 +492,7 @@ final class _Pill extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 Icon(icon, size: 18, color: color),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 if (strip)
                   Flexible(
                     child: FittedBox(fit: BoxFit.scaleDown, child: text),

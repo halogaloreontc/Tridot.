@@ -1,5 +1,5 @@
 // Сгруппированные списки «как в Заметках» (ADR-027, шаг S3): группа на
-// заливке без рамки, строки не ниже 52, разделители «вставкой», значение
+// заливке без рамки, строки не ниже 48, разделители «вставкой», значение
 // под заголовком при крупном шрифте, выбор галочкой, крупный заголовок и
 // поиск — в обеих темах.
 import 'package:flutter/material.dart';
@@ -75,11 +75,11 @@ void main() {
         );
         expect(material.color, p.workspace);
         expect(material.shape, isNull);
-        // Строки не ниже 52, значение 17 приглушённым — справа.
+        // Строки не ниже 48, значение 16 приглушённым — справа.
         for (final key in <String>['a', 'b']) {
           expect(
             tester.getSize(find.byKey(Key(key))).height,
-            greaterThanOrEqualTo(52),
+            greaterThanOrEqualTo(48),
           );
         }
         final title = tester.getRect(find.text('Оформление'));
@@ -227,7 +227,7 @@ void main() {
         expect(check('b'), findsNothing);
       });
 
-      testWidgets('крупный заголовок 30 w700 и поиск без рамки',
+      testWidgets('крупный заголовок 26 w700 и поиск без рамки',
           (tester) async {
         final controller = TextEditingController();
         addTearDown(controller.dispose);
@@ -250,7 +250,7 @@ void main() {
         final style = DefaultTextStyle.of(
           tester.element(find.text('Настройки')),
         ).style.merge(title.style);
-        expect(style.fontSize, 30);
+        expect(style.fontSize, 26);
         expect(style.fontWeight, FontWeight.w700);
         final field = tester.widget<TextField>(find.byType(TextField));
         final border = field.decoration!.enabledBorder! as OutlineInputBorder;

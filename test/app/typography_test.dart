@@ -1,5 +1,5 @@
-// Шрифты и шкала текста (ADR-021, ADR-027): Golos Text — весь текст, шкала
-// 17/15/13, ничего мельче 13; JetBrains Mono — только пароли и коды
+// Шрифты и шкала текста (ADR-021, ADR-027 и поправка «плотнее»): Golos
+// Text — весь текст, шкала 16/14/13, ничего мельче 13; JetBrains Mono — только пароли и коды
 // восстановления; Cormorant Unicase — «Tridot» и названия проектов. Команды
 // в ленте — обычный текст, в поле ввода выделен только глагол.
 import 'dart:io';
@@ -140,17 +140,22 @@ void main() {
       ('тёмная', AssistantTheme.dark()),
       ('светлая', AssistantTheme.light()),
     ]) {
-      test('шкала 17/15/13 и Golos Text в каждом стиле: $name', () {
+      test('шкала 16/14/13 и Golos Text в каждом стиле: $name', () {
         final t = theme.textTheme;
-        expect(t.bodyLarge!.fontSize, 17);
-        expect(t.bodyLarge!.height, closeTo(1.45, 0.001));
-        expect(t.bodyMedium!.fontSize, 15);
+        expect(t.bodyLarge!.fontSize, 16);
+        expect(t.bodyLarge!.height, closeTo(1.4, 0.001));
+        expect(t.bodyMedium!.fontSize, 14);
         expect(t.bodySmall!.fontSize, 13);
-        expect(t.titleMedium!.fontSize, 17);
+        expect(t.titleMedium!.fontSize, 16);
         expect(t.titleMedium!.fontWeight, FontWeight.w600);
-        expect(t.displaySmall!.fontSize, 30);
-        expect(t.headlineMedium!.fontSize, 28);
-        expect(t.labelLarge!.fontSize, 17);
+        expect(t.displaySmall!.fontSize, 26);
+        expect(t.headlineMedium!.fontSize, 24);
+        // Кнопки — 15/600, на шаг мельче текста ленты.
+        expect(t.labelLarge!.fontSize, 15);
+        expect(t.labelLarge!.fontWeight, FontWeight.w600);
+        // Окна подтверждения: заголовок 18/600, текст 15.
+        expect(theme.dialogTheme.titleTextStyle!.fontSize, 18);
+        expect(theme.dialogTheme.contentTextStyle!.fontSize, 15);
         final p = theme.extension<AppPalette>()!;
         expect(t.bodySmall!.color, p.muted);
         expect(t.bodyLarge!.color, p.text);
@@ -448,7 +453,7 @@ void main() {
     });
 
     testWidgets(
-        'отправленная команда в ленте — обычный текст 17 шрифтом приложения',
+        'отправленная команда в ленте — обычный текст 16 шрифтом приложения',
         (tester) async {
       await _pump(tester);
       await _say(tester, 'Добавь задачу купить хлеб на завтра #дом');
@@ -463,7 +468,7 @@ void main() {
       };
       expect(colors, <Color?>{AppPalette.dark.textStrong});
       for (final (_, style) in _flatten(rich.single.textSpan!)) {
-        expect(style.fontSize, 17);
+        expect(style.fontSize, 16);
       }
       // Время под сообщениями и подписи — не моноширинным.
       for (final text in tester.widgetList<Text>(find.byType(Text))) {

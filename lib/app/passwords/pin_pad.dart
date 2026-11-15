@@ -264,7 +264,7 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
           ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Center(
                 child: error == null
                     ? null

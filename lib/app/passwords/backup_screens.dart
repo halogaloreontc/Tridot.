@@ -16,6 +16,7 @@ import 'recovery_code_view.dart';
 import 'secret_widgets.dart';
 import 'vault_confirm.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
 
 /// «Резервная копия» (5.7): только из открытого хранилища и с мастер-
 /// паролем. Пароль копии — мастер-пароль или отдельный (с теми же
@@ -220,7 +221,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                     key: ValueKey<String>('backup-done'),
                     style: TextStyle(
                       color: context.colors.textStrong,
-                      fontSize: 17,
+                      fontSize: 16,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -250,7 +251,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                   ),
                   if (last != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 6),
+                      padding: const EdgeInsets.only(top: 8),
                       child: Text(
                         'Последняя копия: ${agoText(last, kit.vault.clock.now())}.',
                         style: TextStyle(color: context.colors.muted),
@@ -544,7 +545,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     if (contents == null) return;
     final go = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) => AlertDialog(
+      builder: (BuildContext context) => AppDialog(
         title: const WholeWordText('Заменить всё?'),
         content: Text(
           kit.isProtected
@@ -557,12 +558,12 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
           FilledButton(
             key: const ValueKey<String>('restore-replace-go'),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Заменить'),
+            child: const ActionLabel('Заменить'),
           ),
         ],
       ),

@@ -8,6 +8,8 @@ import '../../core/app_info.dart';
 import '../../core/replies/reply_template.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
+import '../widgets/app_dialog.dart';
 import '../widgets/grouped.dart';
 import '../widgets/whole_word_text.dart';
 import 'notify_channel.dart';
@@ -37,15 +39,8 @@ Future<NotifyOutcome> showNotifyRationale(
   required NotifyPlatform platform,
   required Persona notifier,
 }) async {
-  final outcome = await showModalBottomSheet<NotifyOutcome>(
+  final outcome = await showAppSheet<NotifyOutcome>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: context.colors.raised,
-    // Не во весь экран: видно затемнение за листом, понятно, что это лист.
-    constraints: BoxConstraints(
-      maxWidth: 560,
-      maxHeight: MediaQuery.sizeOf(context).height * 0.9,
-    ),
     builder: (BuildContext context) =>
         NotifySheet(platform: platform, notifier: notifier),
   );
@@ -207,116 +202,74 @@ final class _NotifySheetState extends State<NotifySheet>
           TextButton(
             key: const Key('notify-later'),
             onPressed: () => _close(NotifyOutcome.dismissed),
-            child: const Text('Не сейчас'),
+            child: const ActionLabel('Не сейчас'),
           ),
           FilledButton(
             key: const Key('notify-allow'),
             onPressed: _busy ? null : () => unawaited(_allow()),
-            child: const WholeWordText('Разрешить'),
+            child: const WholeWordText(
+              'Разрешить',
+              textAlign: TextAlign.center,
+            ),
           ),
         ],
       _Step.settings => <Widget>[
           TextButton(
             key: const Key('notify-later'),
             onPressed: () => _close(NotifyOutcome.dismissed),
-            child: const Text('Не сейчас'),
+            child: const ActionLabel('Не сейчас'),
           ),
           FilledButton(
             key: const Key('notify-open-settings'),
             onPressed: () => unawaited(_openSettings()),
-            child: const WholeWordText('Открыть настройки'),
+            child: const WholeWordText(
+              'Открыть настройки',
+              textAlign: TextAlign.center,
+            ),
           ),
         ],
       _Step.exact => <Widget>[
           TextButton(
             key: const Key('notify-exact-skip'),
             onPressed: () => _close(NotifyOutcome.granted),
-            child: const Text('Пусть так'),
+            child: const ActionLabel('Пусть так'),
           ),
           FilledButton(
             key: const Key('notify-exact-allow'),
             onPressed: () => unawaited(_openExact()),
-            child: const WholeWordText('Разрешить точное время'),
+            child: const WholeWordText(
+              'Разрешить точное время',
+              textAlign: TextAlign.center,
+            ),
           ),
         ],
     };
-    // Кнопки — в закреплённом низу: при крупном шрифте текст листается,
-    // а «Разрешить» и «Не сейчас» всегда на виду.
-    return SafeArea(
-      child: Column(
-        key: const Key('notify-sheet'),
+    // Общая шторка разрешения ([AppSheet]): кнопки в закреплённом низу —
+    // при крупном шрифте текст листается, а «Разрешить» и «Не сейчас»
+    // всегда на виду.
+    return AppSheet(
+      key: const Key('notify-sheet'),
+      icon: _step == _Step.exact
+          ? Icons.alarm_on_outlined
+          : Icons.notifications_active_outlined,
+      iconColor: colors.tileAmber,
+      title: WholeWordText(title, key: const Key('notify-title')),
+      body: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      IconTile(
-                        icon: _step == _Step.exact
-                            ? Icons.alarm_on_outlined
-                            : Icons.notifications_active_outlined,
-                        color: colors.tileAmber,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Semantics(
-                          header: true,
-                          child: WholeWordText(
-                            title,
-                            key: const Key('notify-title'),
-                            style: TextStyle(
-                              color: colors.textStrong,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    body,
-                    key: const Key('notify-body'),
-                    style: TextStyle(
-                      color: colors.text,
-                      fontSize: 15,
-                      height: 1.35,
-                    ),
-                  ),
-                  if (hint != null) ...<Widget>[
-                    const SizedBox(height: 10),
-                    Text(
-                      hint,
-                      key: const Key('notify-hint'),
-                      style: TextStyle(
-                        color: colors.muted,
-                        fontSize: 15,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+          Text(body, key: const Key('notify-body')),
+          if (hint != null) ...<Widget>[
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              hint,
+              key: const Key('notify-hint'),
+              style: TextStyle(color: colors.muted),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 8,
-              runSpacing: 8,
-              children: buttons,
-            ),
-          ),
+          ],
         ],
       ),
+      actions: buttons,
     );
   }
 }

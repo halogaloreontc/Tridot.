@@ -104,7 +104,7 @@ final class _HistorySheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpace.m,
-                6,
+                8,
                 AppSpace.m,
                 0,
               ),
@@ -163,7 +163,7 @@ final class _HistoryRow extends StatelessWidget {
                       ),
                       if (result != null)
                         Padding(
-                          padding: const EdgeInsets.only(top: 2),
+                          padding: const EdgeInsets.only(top: 4),
                           child: WholeWordText(
                             result,
                             maxLines: 2,
@@ -668,7 +668,7 @@ final class _MarkState extends State<_Mark> {
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       richMessage: TextSpan(
         children: <InlineSpan>[
           TextSpan(
@@ -679,7 +679,7 @@ final class _MarkState extends State<_Mark> {
             text: _clip(widget.entry.command, 120),
             style: TextStyle(
               fontFamily: AppFonts.text,
-              fontSize: 15,
+              fontSize: 14,
               height: 1.35,
               color: colors.textStrong,
             ),
@@ -689,7 +689,7 @@ final class _MarkState extends State<_Mark> {
               text: '\n${_clip(result, 160)}',
               style: TextStyle(
                 fontFamily: AppFonts.text,
-                fontSize: 15,
+                fontSize: 14,
                 height: 1.35,
                 color: colors.text,
               ),

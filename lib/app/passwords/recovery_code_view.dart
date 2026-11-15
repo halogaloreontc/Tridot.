@@ -116,7 +116,7 @@ class _RecoveryCodeViewState extends State<RecoveryCodeView> {
                     color: context.colors.textStrong,
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 WholeWordText(
                   'Сохраните его: без него при смене телефона или сбросе '
                   'блокировки экрана пароли не восстановить.',
@@ -136,7 +136,7 @@ class _RecoveryCodeViewState extends State<RecoveryCodeView> {
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
-                      vertical: 14,
+                      vertical: 12,
                     ),
                     // Заливкой без рамки: видна и на фоне экрана, и на
                     // листе диалога (ADR-027).
@@ -264,7 +264,7 @@ class _CodeRows extends StatelessWidget {
           children: <Widget>[
             for (final row in rows)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(row, style: style, maxLines: 1, softWrap: false),

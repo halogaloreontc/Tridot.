@@ -4,35 +4,49 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../assistant_theme.dart';
+import '../layout.dart';
 import 'ytdl_kit.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
 
 /// Предупреждение перед включением загрузчика видео (решение владельца):
 /// правила площадок. `true` — «Понятно, включить».
 Future<bool> showYtdlWarning(BuildContext context) async {
   final accepted = await showDialog<bool>(
     context: context,
-    builder: (BuildContext context) => AlertDialog(
+    builder: (BuildContext context) => AppDialog(
       scrollable: true,
+      icon: Icons.download_outlined,
+      iconColor: context.colors.tileRed,
       title: const WholeWordText('Включить загрузчик видео?'),
-      content: const Text(
-        'Правила YouTube и других площадок запрещают скачивание без '
-        'разрешения. Скачивайте только своё или то, на что есть права.\n\n'
-        'Видео скачивает программа yt-dlp: она скачивается отдельно, по '
-        'кнопке. Ссылка уходит только в неё — помощники и подключения её не '
-        'видят.',
-        key: ValueKey<String>('ytdl-warning-text'),
+      // Два абзаца с зазором 8, как в согласии на прогноз.
+      content: const Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text(
+            'Правила YouTube и других площадок запрещают скачивание без '
+            'разрешения. Скачивайте только своё или то, на что есть права.',
+            key: ValueKey<String>('ytdl-warning-text'),
+          ),
+          SizedBox(height: AppSpace.xs),
+          Text(
+            'Видео скачивает программа yt-dlp: она скачивается отдельно, по '
+            'кнопке. Ссылка уходит только в неё — помощники и подключения её '
+            'не видят.',
+          ),
+        ],
       ),
       actions: <Widget>[
         TextButton(
           key: const ValueKey<String>('ytdl-warning-cancel'),
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
-        TextButton(
+        FilledButton(
           key: const ValueKey<String>('ytdl-warning-accept'),
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Понятно, включить'),
+          child: const ActionLabel('Понятно, включить'),
         ),
       ],
     ),

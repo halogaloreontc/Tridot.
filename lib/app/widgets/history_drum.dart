@@ -740,7 +740,7 @@ final class _DrumCard extends StatelessWidget {
                   opacity: words,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
+                      horizontal: 12,
                       vertical: 12,
                     ),
                     child: Column(
@@ -753,7 +753,7 @@ final class _DrumCard extends StatelessWidget {
                             // полоса в хронике (рамок у поверхностей нет, S3).
                             if (newest)
                               Padding(
-                                padding: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.only(right: 8),
                                 child: SizedBox.square(
                                   dimension: 6,
                                   child: DecoratedBox(
@@ -869,7 +869,7 @@ final class _CommandAndResult extends StatelessWidget {
             _WordEllipsis(command, maxLines: commandMax, style: commandStyle),
             if (result != null && lines > 0)
               Padding(
-                padding: const EdgeInsets.only(top: 2),
+                padding: const EdgeInsets.only(top: 4),
                 child: _WordEllipsis(
                   result,
                   maxLines: lines,

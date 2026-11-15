@@ -6,6 +6,7 @@ import '../../core/passwords/vault.dart';
 import '../../core/passwords/vault_errors.dart';
 import '../../core/passwords/vault_prefs.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
 import '../widgets/grouped.dart';
 import 'entry_screens.dart';
 import 'passwords_kit.dart';
@@ -14,6 +15,7 @@ import 'secret_widgets.dart';
 import 'vault_access.dart';
 import 'vault_confirm.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
 
 /// «Пароли → Настройки» (раздел 9). Защитные настройки живут внутри
 /// зашифрованного индекса: меняются только в открытом хранилище, а
@@ -90,8 +92,8 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 8, bottom: 4),
         child: Wrap(
-          spacing: 6,
-          runSpacing: 6,
+          spacing: AppSpace.xs,
+          runSpacing: AppSpace.xs,
           children: <Widget>[
             for (final option in pref.choices)
               ChoiceChip(
@@ -152,7 +154,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
         if (kit.historyCount > 0) {
           purge = await showDialog<bool>(
             context: context,
-            builder: (BuildContext context) => AlertDialog(
+            builder: (BuildContext context) => AppDialog(
               scrollable: true,
               title: const WholeWordText(
                 'Удалить сохранённые прежние пароли всех записей?',
@@ -167,7 +169,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                 TextButton(
                   key: const ValueKey<String>('prefs-history-keep'),
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Оставить'),
+                  child: const ActionLabel('Оставить'),
                 ),
                 TextButton(
                   key: const ValueKey<String>('prefs-history-purge'),
@@ -175,7 +177,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                     foregroundColor: context.colors.danger,
                   ),
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Удалить'),
+                  child: const ActionLabel('Удалить'),
                 ),
               ],
             ),
@@ -413,7 +415,8 @@ class _ChangeMasterDialogState extends State<_ChangeMasterDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return AppDialog(
+      contentWidth: 420,
       scrollable: true,
       title: const WholeWordText('Сменить мастер-пароль'),
       content: SizedBox(
@@ -428,7 +431,7 @@ class _ChangeMasterDialogState extends State<_ChangeMasterDialog> {
               label: 'Текущий мастер-пароль',
               enabled: !_busy,
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             SecretField(
               key: const ValueKey<String>('change-next'),
               controller: _next,
@@ -436,7 +439,7 @@ class _ChangeMasterDialogState extends State<_ChangeMasterDialog> {
               helper: 'Не короче 12 символов.',
               enabled: !_busy,
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             SecretField(
               key: const ValueKey<String>('change-repeat'),
               controller: _repeat,
@@ -455,12 +458,12 @@ class _ChangeMasterDialogState extends State<_ChangeMasterDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
-        TextButton(
+        FilledButton(
           key: const ValueKey<String>('change-submit'),
           onPressed: _busy ? null : () => unawaited(_submit()),
-          child: const Text('Сменить'),
+          child: const ActionLabel('Сменить'),
         ),
       ],
     );

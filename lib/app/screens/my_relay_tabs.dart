@@ -64,7 +64,7 @@ Widget _page({required Key key, required List<Widget> children}) =>
     );
 
 TextStyle _heading(BuildContext context) => TextStyle(
-      fontSize: 17,
+      fontSize: 16,
       height: 1.3,
       fontWeight: FontWeight.w600,
       color: context.colors.textStrong,
@@ -190,7 +190,7 @@ final class _RelaySummaryState extends State<RelaySummary> {
               cell: desk ? 12 : 14,
               gap: desk ? 3 : 4,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Wrap(
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -233,7 +233,7 @@ final class _RelaySummaryState extends State<RelaySummary> {
                       Flexible(
                         child: Text(
                           'Все задачи',
-                          style: TextStyle(fontSize: 15),
+                          style: TextStyle(fontSize: 14),
                         ),
                       ),
                       Icon(Icons.chevron_right, size: 18),
@@ -367,13 +367,13 @@ final class _NextRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        constraints: const BoxConstraints(minHeight: 52),
+        constraints: const BoxConstraints(minHeight: AppSize.rowMin),
         decoration: BoxDecoration(
           border: first
               ? null
               : Border(top: BorderSide(color: context.colors.divider)),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: <Widget>[
             SizedBox(width: 20, child: Center(child: lead)),
@@ -665,7 +665,7 @@ final class _PersonaCard extends StatelessWidget {
     return Container(
       key: Key('persona-card-${persona.id}'),
       decoration: _card(context),
-      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -713,7 +713,7 @@ final class _PersonaCard extends StatelessWidget {
                 ],
               ),
             ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           _Fact(label: 'Стиль', value: style),
           _Fact(label: 'Обращение', value: address),
           if (roles.isNotEmpty)

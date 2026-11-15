@@ -87,7 +87,7 @@ class _RecallFieldState extends State<RecallField> {
           enabled: !_busy,
           onSubmitted: (_) => unawaited(_check()),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Row(
           children: <Widget>[
             FilledButton.tonal(
@@ -95,7 +95,7 @@ class _RecallFieldState extends State<RecallField> {
               onPressed: _busy ? null : () => unawaited(_check()),
               child: const Text('Проверить'),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             if (verdict != null)
               Expanded(
                 child: Text(
@@ -197,14 +197,14 @@ class _HintLadderState extends State<HintLadder> {
           entry.hint.isEmpty ? 'Своей подсказки нет.' : entry.hint,
           key: const ValueKey<String>('secure-card-hint-text'),
           style: TextStyle(
-            fontSize: 17,
+            fontSize: 16,
             color: entry.hint.isEmpty
                 ? context.colors.muted
                 : context.colors.textStrong,
           ),
         ),
         if (_stronger != null) ...<Widget>[
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             'Подсказка посильнее: $_stronger',
             key: const ValueKey<String>('hint-stronger-text'),
@@ -212,7 +212,7 @@ class _HintLadderState extends State<HintLadder> {
           ),
         ],
         if (_first) ...<Widget>[
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           SecretRevealText(
             key: ValueKey<String>('hint-first-${entry.id}'),
             kind: 'Первый символ',
@@ -255,7 +255,7 @@ class _HintLadderState extends State<HintLadder> {
           const SizedBox(height: 8),
           widget.reveal,
         ],
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Wrap(
           spacing: 4,
           runSpacing: 4,
@@ -404,7 +404,7 @@ class _TrainingViewState extends State<TrainingView> {
           ),
           if (_hint)
             Padding(
-              padding: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.only(top: 8),
               child: Text(
                 entry.hint.isEmpty ? 'Своей подсказки нет.' : entry.hint,
                 key: const ValueKey<String>('training-hint-text'),
@@ -419,7 +419,7 @@ class _TrainingViewState extends State<TrainingView> {
                 style: TextStyle(color: context.colors.text),
               ),
             ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Wrap(
             spacing: 4,
             runSpacing: 4,
@@ -566,7 +566,7 @@ class CheckView extends StatelessWidget {
             ),
           ),
         for (final (key, title, lists) in visible) ...<Widget>[
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             title,
             key: ValueKey<String>(key),
@@ -797,7 +797,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
               ] else if (queue.isEmpty)
                 Text(
                   'Тренировать пока нечего. Отметьте важные записи — почту, '
-                  'банк, Госуслуги — переключателем «Важный» в редакторе.',
+                  'банк, Госуслуги\u00A0— переключателем «Важный» в редакторе.',
                   key: ValueKey<String>('training-empty'),
                   style: TextStyle(color: context.colors.text),
                 )

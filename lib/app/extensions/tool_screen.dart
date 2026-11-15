@@ -6,6 +6,7 @@ import '../../core/extensions/tools/tool_spec.dart';
 import '../assistant_theme.dart';
 import 'tool_kit.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
 
 /// Мегабайты для подписей: «12 из 161 МБ».
 String toolMegabytes(int bytes) => (bytes / (1024 * 1024)).round().toString();
@@ -105,8 +106,10 @@ Future<bool> showToolOffer(
   final spec = kit.spec;
   final download = await showDialog<bool>(
     context: context,
-    builder: (BuildContext context) => AlertDialog(
+    builder: (BuildContext context) => AppDialog(
       scrollable: true,
+      icon: Icons.download_outlined,
+      iconColor: context.colors.tileBlue,
       title: WholeWordText('Скачать ${copy.name}?'),
       content: Text(
         '${copy.offerBody} Загрузка ~${toolMegabytes(spec.bytes)} МБ, после '
@@ -118,12 +121,12 @@ Future<bool> showToolOffer(
         TextButton(
           key: const ValueKey<String>('tool-offer-later'),
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Позже'),
+          child: const ActionLabel('Позже'),
         ),
-        TextButton(
+        FilledButton(
           key: const ValueKey<String>('tool-offer-download'),
           onPressed: () => Navigator.of(context).pop(true),
-          child: Text('Скачать (~${toolMegabytes(spec.bytes)} МБ)'),
+          child: ActionLabel('Скачать (~${toolMegabytes(spec.bytes)}\u00A0МБ)'),
         ),
       ],
     ),
@@ -217,13 +220,13 @@ final class _ToolScreenState extends State<ToolScreen> {
   Future<void> _delete() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) => AlertDialog(
+      builder: (BuildContext context) => AppDialog(
         title: WholeWordText('Удалить ${widget.copy.name}?'),
         content: Text(widget.copy.deleteBody),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
           TextButton(
             key: const ValueKey<String>('tool-delete-confirm'),
@@ -231,7 +234,7 @@ final class _ToolScreenState extends State<ToolScreen> {
               foregroundColor: context.colors.danger,
             ),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Удалить'),
+            child: const ActionLabel('Удалить'),
           ),
         ],
       ),
@@ -261,7 +264,7 @@ final class _ToolScreenState extends State<ToolScreen> {
             key: const ValueKey<String>('tool-size'),
             style: metaStyle(context),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             'Источник: ${copy.source}, ${spec.version}. '
             'Лицензия: ${spec.license}. Исходники и скрипты сборки: '
@@ -311,7 +314,7 @@ final class _ToolScreenState extends State<ToolScreen> {
                   label: Text(
                     kit.hasPartial
                         ? 'Продолжить загрузку'
-                        : 'Скачать (~${toolMegabytes(spec.bytes)} МБ)',
+                        : 'Скачать (~${toolMegabytes(spec.bytes)}\u00A0МБ)',
                   ),
                 ),
               if (copy.updatable &&

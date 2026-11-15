@@ -22,6 +22,7 @@ import '../passwords/passwords_screen.dart';
 import 'connection_screen.dart';
 import 'grouped.dart';
 import 'whole_word_text.dart';
+import 'app_dialog.dart';
 
 /// Раздел «Расширения» в настройках: навыки, подключения и паки.
 ///
@@ -394,7 +395,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
   Future<void> _removePack(ExtensionInfo info) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => AppDialog(
         // Длинное название при крупном шрифте на узком экране не должно
         // уводить кнопки за край.
         scrollable: true,
@@ -406,7 +407,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
           TextButton(
             key: const ValueKey<String>('pack-remove-cancel'),
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
           TextButton(
             key: const ValueKey<String>('pack-remove-confirm'),
@@ -414,7 +415,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
               foregroundColor: context.colors.danger,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Удалить'),
+            child: const ActionLabel('Удалить'),
           ),
         ],
       ),
@@ -449,7 +450,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
         children: <Widget>[
           if (items.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Text(
                 empty,
                 style: Theme.of(context)
@@ -668,12 +669,12 @@ class _ExtensionTile extends StatelessWidget {
         children: <Widget>[
           if (info.description.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 4),
               child: WholeWordText(info.description),
             ),
           if (status case final String text)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 4),
               child: Text(
                 text,
                 key: ValueKey<String>('extension-status-${info.id}'),
@@ -685,7 +686,7 @@ class _ExtensionTile extends StatelessWidget {
           // «всегда включено» — тихой подписью, а не значком.
           if (info.required)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 4),
               child: Text(
                 'Всегда включено',
                 key: ValueKey<String>('extension-required-${info.id}'),
@@ -694,7 +695,7 @@ class _ExtensionTile extends StatelessWidget {
             )
           else if (!info.builtIn)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 4),
               child: Text(
                 'v${info.version} · ${info.author}',
                 style: metaStyle(context),
@@ -777,7 +778,7 @@ class _PackImportDialogState extends State<_PackImportDialog> {
     if (result.needsReplaceConfirmation && mounted) {
       final replace = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => AppDialog(
           scrollable: true,
           title: const WholeWordText('Заменить пак?'),
           content: const Text(
@@ -787,12 +788,12 @@ class _PackImportDialogState extends State<_PackImportDialog> {
             TextButton(
               key: const ValueKey<String>('pack-replace-cancel'),
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Отмена'),
+              child: const ActionLabel('Отмена'),
             ),
-            TextButton(
+            FilledButton(
               key: const ValueKey<String>('pack-replace-confirm'),
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Заменить'),
+              child: const ActionLabel('Заменить'),
             ),
           ],
         ),
@@ -815,7 +816,8 @@ class _PackImportDialogState extends State<_PackImportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return AppDialog(
+      contentWidth: 520,
       title: const WholeWordText('Добавить пак'),
       content: SizedBox(
         width: 520,
@@ -852,7 +854,7 @@ class _PackImportDialogState extends State<_PackImportDialog> {
                   children: <Widget>[
                     for (final error in _errors)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
+                        padding: const EdgeInsets.only(bottom: 4),
                         child: Text(
                           error,
                           style: TextStyle(
@@ -871,12 +873,12 @@ class _PackImportDialogState extends State<_PackImportDialog> {
         TextButton(
           key: const ValueKey<String>('pack-cancel'),
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
-        TextButton(
+        FilledButton(
           key: const ValueKey<String>('pack-import'),
           onPressed: _busy ? null : _import,
-          child: const Text('Добавить'),
+          child: const ActionLabel('Добавить'),
         ),
       ],
     );

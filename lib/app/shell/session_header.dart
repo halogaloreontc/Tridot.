@@ -159,7 +159,7 @@ final class SessionHeader extends StatelessWidget {
     return SizedBox(
       height: 56,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         child: NavigationToolbar(
           leading: leading,
           middle: center,
@@ -383,7 +383,7 @@ final class _TitleBody extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 44),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -405,7 +405,7 @@ final class _TitleBody extends StatelessWidget {
                             ? TextOverflow.ellipsis
                             : null,
                         style: TextStyle(
-                          fontSize: 17,
+                          fontSize: 16,
                           height: 1.2,
                           fontWeight: FontWeight.w600,
                           color: context.colors.textStrong,
@@ -414,7 +414,7 @@ final class _TitleBody extends StatelessWidget {
                     ),
                   ),
                   if (arrow) ...<Widget>[
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 4),
                     Icon(
                       Icons.keyboard_arrow_down,
                       size: 18,
@@ -452,7 +452,7 @@ final class _TitleBody extends StatelessWidget {
                     ],
                     if (persona != null) ...<Widget>[
                       PersonaDot(persona: persona),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8),
                       Flexible(
                         child: Text(
                           persona.russianName,

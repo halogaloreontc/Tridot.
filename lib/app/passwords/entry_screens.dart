@@ -19,6 +19,7 @@ import 'passwords_kit.dart';
 import 'secret_widgets.dart';
 import 'vault_confirm.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
 
 /// Закрывает экран, как только хранилище заперли (3.6: экраны хранилища
 /// закрываются, поля очищаются).
@@ -197,7 +198,7 @@ class _EntryScreenState extends State<EntryScreen>
   Future<void> _delete(VaultEntry entry) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) => AlertDialog(
+      builder: (BuildContext context) => AppDialog(
         scrollable: true,
         title: WholeWordText('Удалить «${entry.service}»?'),
         content: const Text(
@@ -206,13 +207,13 @@ class _EntryScreenState extends State<EntryScreen>
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
           TextButton(
             key: const ValueKey<String>('entry-delete-confirm'),
             style: TextButton.styleFrom(foregroundColor: context.colors.danger),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Удалить'),
+            child: const ActionLabel('Удалить'),
           ),
         ],
       ),
@@ -239,7 +240,7 @@ class _EntryScreenState extends State<EntryScreen>
   Future<void> _dropHistory(VaultEntry entry, HistoryMeta? meta) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) => AlertDialog(
+      builder: (BuildContext context) => AppDialog(
         scrollable: true,
         title: WholeWordText(
           meta == null
@@ -254,13 +255,13 @@ class _EntryScreenState extends State<EntryScreen>
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
           TextButton(
             key: const ValueKey<String>('entry-history-confirm'),
             style: TextButton.styleFrom(foregroundColor: context.colors.danger),
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text(meta == null ? 'Очистить' : 'Удалить'),
+            child: ActionLabel(meta == null ? 'Очистить' : 'Удалить'),
           ),
         ],
       ),
@@ -586,7 +587,7 @@ class _Field extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: AppSize.rowMin),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 10, trailing == null ? 16 : 4, 10),
+        padding: EdgeInsets.fromLTRB(16, 12, trailing == null ? 16 : 4, 12),
         child: Row(
           children: <Widget>[
             Expanded(
@@ -594,7 +595,7 @@ class _Field extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   Text(label, style: metaStyle(context)),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   child,
                 ],
               ),

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/passwords/secret_bytes.dart';
 import '../assistant_theme.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
 
 /// Скрытое поле для пароля или заметки (раздел 8): без подсказок,
 /// автоисправления и обучения клавиатуры, без `autofillHints` и вне
@@ -281,7 +282,7 @@ class _SecretRevealTextState extends State<SecretRevealText>
                   _expired ? '${widget.kind}: ••••••••  (скрыт)' : '••••••••',
                   key: const ValueKey<String>('secret-masked'),
                   style: monoTextStyle.copyWith(
-                    fontSize: 17,
+                    fontSize: 16,
                     letterSpacing: 2,
                     color: context.colors.muted,
                   ),
@@ -345,7 +346,7 @@ class _SecretRevealTextState extends State<SecretRevealText>
 
   static TextSpan _colored(String text, AppPalette colors) {
     final base = monoTextStyle.copyWith(
-      fontSize: 17,
+      fontSize: 16,
       color: colors.textStrong,
     );
     final spans = <TextSpan>[];
@@ -427,7 +428,8 @@ class _MasterDialogState extends State<_MasterDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return AppDialog(
+      contentWidth: 420,
       scrollable: true,
       title: WholeWordText(widget.title),
       content: SizedBox(
@@ -439,10 +441,7 @@ class _MasterDialogState extends State<_MasterDialog> {
             if (widget.text != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  widget.text!,
-                  style: TextStyle(color: context.colors.muted),
-                ),
+                child: Text(widget.text!),
               ),
             SecretField(
               key: const ValueKey<String>('master-dialog-field'),
@@ -459,12 +458,12 @@ class _MasterDialogState extends State<_MasterDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
-        TextButton(
+        FilledButton(
           key: const ValueKey<String>('master-dialog-ok'),
           onPressed: _busy ? null : () => unawaited(_submit()),
-          child: Text(_busy ? 'Проверяю…' : 'Подтвердить'),
+          child: ActionLabel(_busy ? 'Проверяю…' : 'Подтвердить'),
         ),
       ],
     );

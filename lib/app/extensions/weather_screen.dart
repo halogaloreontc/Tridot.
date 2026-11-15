@@ -8,33 +8,49 @@ import '../../core/skills/weather/weather_service.dart';
 import '../assistant_theme.dart';
 import '../widgets/whole_word_text.dart';
 import 'weather_kit.dart';
+import '../layout.dart';
+import '../widgets/app_dialog.dart';
 
 /// Окно согласия на запросы к Open-Meteo (ADR-030). `true` — «Разрешить».
 Future<bool> showWeatherConsent(BuildContext context) async {
   final accepted = await showDialog<bool>(
     context: context,
-    builder: (BuildContext context) => AlertDialog(
+    builder: (BuildContext context) => AppDialog(
       scrollable: true,
-      title: const WholeWordText('Разрешить прогноз Open-Meteo?'),
-      content: const Text(
-        'Чтобы узнать погоду, Tridot отправит на сайт open-meteo.com только '
-        'координаты города, округлённые примерно до километра, а при поиске '
-        '— название города. Задачи, чаты и ваше имя туда не уходят. Сервис '
-        'бесплатный и без регистрации; по его правилам журналы сервера '
-        'хранятся до 90 дней и никому не передаются. Без интернета помощник '
-        'покажет последний сохранённый прогноз.',
-        key: ValueKey<String>('weather-consent-text'),
+      icon: Icons.cloud_outlined,
+      iconColor: context.colors.tileBlue,
+      // Неразрывный дефис: «Open-» и «Meteo?» не расходятся по строкам.
+      title: const WholeWordText('Разрешить прогноз Open\u2011Meteo?'),
+      // Главное — что уходит в сеть; правила сервиса — подписью ниже.
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          const Text(
+            'Tridot отправит на сайт open-meteo.com только координаты '
+            'города, округлённые примерно до километра, а при поиске\u00A0— '
+            'название города. Задачи, чаты и ваше имя туда не уходят.',
+            key: ValueKey<String>('weather-consent-text'),
+          ),
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            'Сервис бесплатный и без регистрации, журналы сервера хранит до '
+            '90 дней и никому не передаёт. Без интернета помощник покажет '
+            'последний сохранённый прогноз.',
+            style: metaStyle(context),
+          ),
+        ],
       ),
       actions: <Widget>[
         TextButton(
           key: const ValueKey<String>('weather-consent-cancel'),
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
-        TextButton(
+        FilledButton(
           key: const ValueKey<String>('weather-consent-accept'),
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Разрешить'),
+          child: const ActionLabel('Разрешить'),
         ),
       ],
     ),
@@ -296,7 +312,7 @@ final class _WeatherScreenState extends State<WeatherScreen> {
             ],
             style: TextStyle(
               fontFamily: AppFonts.text,
-              fontSize: 17,
+              fontSize: 16,
               color: colors.textStrong,
             ),
             decoration: InputDecoration(
@@ -414,7 +430,7 @@ final class _WeatherScreenState extends State<WeatherScreen> {
       if (allowed == null)
         Container(
           key: const ValueKey<String>('weather-network-off'),
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: colors.raised,
             borderRadius: BorderRadius.circular(12),
@@ -493,7 +509,7 @@ final class _WeatherScreenState extends State<WeatherScreen> {
       ),
       if (_cityError != null)
         Padding(
-          padding: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.only(top: 8),
           child: WholeWordText(
             _cityError!,
             key: const ValueKey<String>('weather-city-error'),
@@ -589,7 +605,7 @@ final class _WeatherScreenState extends State<WeatherScreen> {
       ),
       if (_linkError != null || _linkSaved != null)
         Padding(
-          padding: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.only(top: 8),
           child: WholeWordText(
             _linkError ?? _linkSaved!,
             key: const ValueKey<String>('weather-link-error'),
@@ -598,7 +614,7 @@ final class _WeatherScreenState extends State<WeatherScreen> {
             ),
           ),
         ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 4),
       WholeWordText(
         'Ссылка хранится только на этом устройстве и открывается в '
         'браузере. Tridot сам по ней не ходит.',

@@ -253,15 +253,15 @@ final class _SessionFilesPanelState extends State<SessionFilesPanel> {
                     maxScaleFactor: 1.3,
                     // Одна строка — по центру «×» (цель 48, строка 25).
                     child: Padding(
-                      padding: const EdgeInsets.only(top: 11),
+                      padding: const EdgeInsets.only(top: 12),
                       child: Semantics(
                         header: true,
                         child: WholeWordText(
                           'Файлы сессии',
                           style: TextStyle(
-                            fontSize: 20,
-                            height: 1.25,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 18,
+                            height: 1.33,
+                            fontWeight: FontWeight.w600,
                             color: colors.textStrong,
                           ),
                         ),
@@ -447,7 +447,7 @@ final class _FileRowState extends State<_FileRow> {
                               ),
                             ),
                             Padding(
-                              padding: const EdgeInsets.only(top: 2),
+                              padding: const EdgeInsets.only(top: 4),
                               child: LayoutBuilder(
                                 builder: (
                                   BuildContext context,

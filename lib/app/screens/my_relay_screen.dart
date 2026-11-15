@@ -124,7 +124,7 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Padding(
-            padding: const EdgeInsets.fromLTRB(6, 8, 16, 8),
+            padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
             child: Row(
               children: <Widget>[
                 if (widget.onBack != null)
@@ -138,7 +138,7 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
                     icon: const Icon(Icons.chevron_left, size: 22),
                   )
                 else
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                 const SizedBox(width: 4),
                 RelayAvatars(
                   personas: widget.assistantsShown,
@@ -162,8 +162,8 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
                                   ? (MediaQuery.textScalerOf(context).scale(1) >
                                           1.3
                                       ? 18
-                                      : 26)
-                                  : 30,
+                                      : 24)
+                                  : 26,
                               height: 1.2,
                               letterSpacing: -0.4,
                               fontWeight: FontWeight.w700,
@@ -269,7 +269,7 @@ final class RelayStatsLine extends StatelessWidget {
           '\u00A0· ',
         );
     final style = TextStyle(
-      fontSize: 15,
+      fontSize: 14,
       height: 1.45,
       color: context.colors.muted,
     );
@@ -303,7 +303,7 @@ final class RelayStatsLine extends StatelessWidget {
               children: <Widget>[for (final chunk in parts) pair(chunk)],
             )
           : Wrap(
-              spacing: 6,
+              spacing: AppSpace.xs,
               children: <Widget>[for (final chunk in parts) line(chunk)],
             ),
     );
@@ -327,7 +327,7 @@ final class _Segments extends StatelessWidget {
   final bool phone;
   final ValueChanged<MyRelayTab> onSelected;
 
-  static const EdgeInsets _outer = EdgeInsets.fromLTRB(16, 6, 16, 2);
+  static const EdgeInsets _outer = EdgeInsets.fromLTRB(16, 8, 16, 4);
 
   /// Отступ подписи внутри сегмента, когда вкладки прокручиваются.
   double get _pad => phone ? 10 : 18;
@@ -337,7 +337,7 @@ final class _Segments extends StatelessWidget {
   double get _minPad => phone ? 10 : 18;
 
   TextStyle _style(BuildContext context, {required bool active}) => TextStyle(
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: active ? FontWeight.w600 : FontWeight.w400,
         color: active ? context.colors.textStrong : context.colors.text,
       );

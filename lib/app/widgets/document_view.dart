@@ -73,7 +73,7 @@ final class DocumentView extends StatelessWidget {
             'Документ открывается для выбранной задачи.',
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             'Выберите задачу в списке или создайте её командой в сессии.',
             textAlign: TextAlign.center,
@@ -240,7 +240,7 @@ final class _FormattingToolbar extends StatelessWidget {
     ];
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(2),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: context.colors.raised,
         borderRadius: BorderRadius.circular(10),

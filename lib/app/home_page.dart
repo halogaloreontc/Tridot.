@@ -57,6 +57,7 @@ import '../core/storage/storage_info.dart';
 import '../core/voice/voice_recognizer.dart';
 import 'assistant_theme.dart';
 import 'layout.dart';
+import 'widgets/app_dialog.dart';
 import 'attachments/attachment_picker.dart';
 import 'attachments/attachment_views.dart';
 import 'extensions/tool_kit.dart';
@@ -1825,50 +1826,29 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// «+» → «Облачный диск» → «Подключить диск»: дисков ещё нет, честное
   /// пояснение и путь к файлам с устройства.
   Future<void> _explainCloudDisks() async {
-    final attach = await showModalBottomSheet<bool>(
+    final attach = await showAppSheet<bool>(
       context: context,
-      builder: (BuildContext context) => SafeArea(
-        child: Padding(
-          key: const Key('cloud-disk-info'),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                'Облачный диск',
-                style: TextStyle(
-                  fontSize: 17,
-                  color: context.colors.textStrong,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                '${CloudDisk.yandex.label} и ${CloudDisk.google.label} '
-                'появятся позже. Пока файлы можно прикрепить с устройства.',
-                style: const TextStyle(fontSize: 15, height: 1.4),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 8,
-                runSpacing: 8,
-                children: <Widget>[
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('Понятно'),
-                  ),
-                  FilledButton.icon(
-                    key: const Key('cloud-disk-attach'),
-                    onPressed: () => Navigator.of(context).pop(true),
-                    icon: const Icon(Icons.attach_file, size: 18),
-                    label: const Text('Прикрепить файл'),
-                  ),
-                ],
-              ),
-            ],
-          ),
+      builder: (BuildContext context) => AppSheet(
+        key: const Key('cloud-disk-info'),
+        icon: Icons.cloud_outlined,
+        iconColor: context.colors.tileBlue,
+        title: const WholeWordText('Облачный диск'),
+        body: Text(
+          '${CloudDisk.yandex.label} и ${CloudDisk.google.label} '
+          'появятся позже. Пока файлы можно прикрепить с устройства.',
         ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const ActionLabel('Понятно'),
+          ),
+          FilledButton.icon(
+            key: const Key('cloud-disk-attach'),
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.attach_file, size: 18),
+            label: const Text('Прикрепить файл'),
+          ),
+        ],
       ),
     );
     if (attach == true && mounted) await _pickFiles(PickKind.any);
@@ -4793,6 +4773,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       );
     }
+    // Верхний край ленты гаснет на высоту строки текста (16 × 1.4 с
+    // учётом размера шрифта, не меньше 16): обрезанная строка под
+    // хроникой команд пропадает целиком, а не торчит половиной букв.
+    final topFade = math.max(
+      AppSpace.m,
+      MediaQuery.textScalerOf(context).scale(16) * 1.4,
+    );
     return _chatColumn(
       alignment: Alignment.topCenter,
       // Полосы прокрутки нет: лента — лист для чтения, к сообщениям ведут
@@ -4801,6 +4788,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: _fadeUnderRow(
           bottomInset,
+          topFade,
           ListView(
             key: const Key('chat-list'),
             controller: _chatScroll,
@@ -4809,7 +4797,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             // прячется: лента поднимает его над строкой.
             padding: EdgeInsets.fromLTRB(
               chatInset,
-              AppSpace.xs,
+              topFade,
               chatInset,
               AppSpace.m + bottomInset,
             ),
@@ -4821,17 +4809,28 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   /// Лента под строкой действий гаснет: строка без фона, и прокрученный
-  /// текст не просвечивает между кнопками обрывками букв (ADR-027).
-  static Widget _fadeUnderRow(double height, Widget child) {
-    if (height <= 0) return child;
+  /// текст не просвечивает между кнопками обрывками букв (ADR-027). Сверху
+  /// лента тоже гаснет на [topFade] — высоту строки, равную её верхнему
+  /// полю: строка, прокрученная под край, исчезает плавно, а не обрубком
+  /// букв под хроникой команд (поправка «плотнее»).
+  static Widget _fadeUnderRow(double height, double topFade, Widget child) {
     return ShaderMask(
       key: const Key('chat-fade'),
       blendMode: BlendMode.dstIn,
       shaderCallback: (Rect bounds) {
         final total = bounds.height;
-        if (total <= height) {
+        if (total <= height + topFade) {
           return const LinearGradient(
             colors: <Color>[Colors.black, Colors.black],
+          ).createShader(bounds);
+        }
+        final top = topFade / total;
+        if (height <= 0) {
+          return LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: const <Color>[Colors.transparent, Colors.black],
+            stops: <double>[0, top],
           ).createShader(bounds);
         }
         final clear = (total - height + AppSpace.xs) / total;
@@ -4840,6 +4839,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: const <Color>[
+            Colors.transparent,
             Colors.black,
             Colors.black,
             Colors.transparent,
@@ -4847,8 +4847,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ],
           stops: <double>[
             0,
-            solid.clamp(0.0, 1.0),
-            clear.clamp(0.0, 1.0),
+            top,
+            solid.clamp(top, 1.0),
+            clear.clamp(top, 1.0),
             1,
           ],
         ).createShader(bounds);
@@ -5204,7 +5205,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ])
               ListTile(
                 key: Key('password-action-$index'),
-                minTileHeight: 52,
+                minTileHeight: AppSize.rowMin,
                 leading: Icon(icon),
                 title: WholeWordText(label),
                 onTap: () => Navigator.of(context).pop(index),
@@ -5401,7 +5402,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     } else if (_loadError != null) {
       body = Center(
         child: Padding(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(AppSpace.m),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
@@ -5600,13 +5601,13 @@ final class _ChatLinkChip extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: AppSize.minTap),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 if (origin) ...<Widget>[
                   Icon(Icons.arrow_back, size: 18, color: accent),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                 ],
                 Flexible(
                   child: WholeWordText(
@@ -5618,7 +5619,7 @@ final class _ChatLinkChip extends StatelessWidget {
                   ),
                 ),
                 if (!origin) ...<Widget>[
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   Icon(Icons.arrow_forward, size: 18, color: accent),
                 ],
               ],
@@ -5794,7 +5795,7 @@ final class _MessageRow extends StatelessWidget {
       // Пузырь: заливка без рамки и без «хвоста»; найденный поиском или
       // выбранный в истории — рамкой акцента.
       textBlock = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: context.colors.bubble,
           border: highlighted
@@ -5842,7 +5843,7 @@ final class _MessageRow extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 PersonaDot(persona: author),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     author.russianName,
@@ -5858,7 +5859,7 @@ final class _MessageRow extends StatelessWidget {
           ),
         if (label != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 2),
+            padding: const EdgeInsets.only(bottom: 4),
             child: Text(
               label,
               style: metaStyle(context).copyWith(color: labelColor),
@@ -5867,7 +5868,7 @@ final class _MessageRow extends StatelessWidget {
         if (attachments != null && message.attachments.isNotEmpty)
           Padding(
             padding: EdgeInsets.only(
-              bottom: message.text.isEmpty ? 0 : 6,
+              bottom: message.text.isEmpty ? 0 : 8,
             ),
             child: MessageAttachments(
               attachments: message.attachments,
@@ -5905,7 +5906,7 @@ final class _MessageRow extends StatelessWidget {
           ),
         if (linkLabel != null && onOpenLink != null)
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: const EdgeInsets.only(top: 4),
             child: _ChatLinkChip(
               key: linkKey,
               label: linkLabel!,
@@ -5988,7 +5989,7 @@ final class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = TextStyle(
-      fontSize: 17,
+      fontSize: 16,
       fontWeight: FontWeight.w600,
       color: context.colors.textStrong,
     );
@@ -6188,7 +6189,7 @@ final class _DocToast extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.group),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
+          padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
           child: Row(
             children: <Widget>[
               Expanded(
@@ -6199,7 +6200,7 @@ final class _DocToast extends StatelessWidget {
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 14,
                       height: 1.4,
                       color: context.colors.textStrong,
                     ),

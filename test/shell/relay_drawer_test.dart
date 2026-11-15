@@ -306,7 +306,7 @@ void main() {
     );
   });
 
-  testWidgets('«Мой Связной»: телефон — 68 px и 18/600, компьютер — 60 и 17',
+  testWidgets('«Мой Связной»: телефон — 68 px, компьютер — 60, имя 16/600',
       (tester) async {
     for (final wide in <bool>[false, true]) {
       await _pump(tester, wide: wide, size: Size(wide ? 312 : 360, 900));
@@ -322,7 +322,7 @@ void main() {
       // «Мой Связной» целиком — шрифтом текста: шрифт названия — только
       // у «Tridot» в шапке (ADR-021).
       final style = title.textSpan!.style!;
-      expect(style.fontSize, wide ? 17 : 18);
+      expect(style.fontSize, 16);
       expect(style.fontWeight, FontWeight.w600);
     }
   });
@@ -349,7 +349,7 @@ void main() {
     final name = tester.widget<Text>(
       find.byKey(const ValueKey<String>('app-name')),
     );
-    expect(name.style!.fontSize, 30);
+    expect(name.style!.fontSize, 26);
     expect(
       tester.getRect(find.byKey(const ValueKey<String>('app-name'))).bottom,
       lessThanOrEqualTo(
@@ -646,9 +646,9 @@ void main() {
     expect(find.byKey(const Key('nav-tasks-alert')), findsNothing);
     expect(find.byKey(const Key('nav-projects-count')), findsNothing);
     expect(find.byKey(const Key('nav-planning-count')), findsNothing);
-    // Строки разделов — во всю ширину и не ниже 52.
+    // Строки разделов — во всю ширину и не ниже 48 (поправка «плотнее»).
     final row = tester.getRect(find.byKey(const Key('nav-tasks')));
-    expect(row.height, greaterThanOrEqualTo(52));
+    expect(row.height, greaterThanOrEqualTo(48));
     expect(
       tester.getRect(find.byKey(const Key('nav-projects'))).top,
       greaterThan(row.bottom - 1),

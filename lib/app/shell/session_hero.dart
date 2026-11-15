@@ -131,7 +131,7 @@ final class SessionHero extends StatelessWidget {
               ),
             ),
             if (projectName != null) ...<Widget>[
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Row(
                 key: const Key('hero-project'),
                 mainAxisSize: MainAxisSize.min,
@@ -141,7 +141,7 @@ final class SessionHero extends StatelessWidget {
                     size: 16,
                     color: context.colors.muted,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   Flexible(
                     child: Text.rich(
                       TextSpan(
@@ -155,7 +155,7 @@ final class SessionHero extends StatelessWidget {
                           TextSpan(
                             text: projectName,
                             style: projectNameStyle(
-                              fontSize: 17,
+                              fontSize: 16,
                               color: context.colors.muted,
                             ),
                           ),
@@ -253,7 +253,7 @@ final class _GenderChoice extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
@@ -315,8 +315,8 @@ final class _GenderChoice extends StatelessWidget {
                           foregroundColor: context.colors.accent,
                           minimumSize: const Size(48, 48),
                           padding: const EdgeInsets.symmetric(
-                            horizontal: pad / 2,
-                            vertical: 10,
+                            horizontal: pad / 4,
+                            vertical: 12,
                           ),
                         ),
                         child: Text(text, textAlign: TextAlign.center),
@@ -383,7 +383,7 @@ final class _HeroLine extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[

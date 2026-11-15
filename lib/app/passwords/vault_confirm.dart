@@ -12,6 +12,7 @@ import '../widgets/whole_word_text.dart';
 import 'passwords_kit.dart';
 import 'pin_pad.dart';
 import 'secret_widgets.dart';
+import '../widgets/app_dialog.dart';
 
 /// Подтверждение действия с открытым сейфом (ADR-025) — вместо прежнего
 /// «введите мастер-пароль»: переспрос для важных записей, ослабление
@@ -66,7 +67,7 @@ Future<bool> askVaultConfirm(
     if (!context.mounted) return false;
     final go = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) => AlertDialog(
+      builder: (BuildContext context) => AppDialog(
         scrollable: true,
         title: WholeWordText(title),
         content: WholeWordText(
@@ -76,12 +77,12 @@ Future<bool> askVaultConfirm(
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
-          TextButton(
+          FilledButton(
             key: const ValueKey<String>('vault-confirm-ok'),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Подтвердить'),
+            child: const ActionLabel('Подтвердить'),
           ),
         ],
       ),
@@ -242,7 +243,8 @@ class _ConfirmDialogState extends State<_ConfirmDialog> {
     final pin = (info?.pin ?? false) && !_useCode;
     return SecureWindowScope(
       auth: widget.kit.auth,
-      child: AlertDialog(
+      child: AppDialog(
+        contentWidth: 360,
         key: const ValueKey<String>('vault-confirm'),
         scrollable: true,
         title: WholeWordText(widget.title),
@@ -255,10 +257,7 @@ class _ConfirmDialogState extends State<_ConfirmDialog> {
               if (widget.text != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: WholeWordText(
-                    widget.text!,
-                    style: TextStyle(color: context.colors.muted),
-                  ),
+                  child: WholeWordText(widget.text!),
                 ),
               if (pin) ...<Widget>[
                 WholeWordText(
@@ -323,13 +322,13 @@ class _ConfirmDialogState extends State<_ConfirmDialog> {
         actions: <Widget>[
           TextButton(
             onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
           if (_useCode)
-            TextButton(
+            FilledButton(
               key: const ValueKey<String>('vault-confirm-submit'),
               onPressed: _busy ? null : () => unawaited(_submitCode()),
-              child: Text(_busy ? 'Проверяю…' : 'Подтвердить'),
+              child: ActionLabel(_busy ? 'Проверяю…' : 'Подтвердить'),
             ),
         ],
       ),

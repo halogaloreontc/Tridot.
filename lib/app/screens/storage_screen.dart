@@ -151,7 +151,7 @@ class _StorageScreenState extends State<StorageScreen> {
                   borderRadius: BorderRadius.circular(AppRadius.group),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
@@ -240,7 +240,7 @@ class _StorageScreenState extends State<StorageScreen> {
                       ),
                       if (!info.canBackup)
                         Padding(
-                          padding: EdgeInsets.only(top: 6),
+                          padding: EdgeInsets.only(top: 8),
                           child: Text(
                             'Данные только в памяти — копия недоступна',
                             style: metaStyle(context),
@@ -303,7 +303,7 @@ class _InfoRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(label, style: metaStyle(context)),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           child,
         ],
       ),

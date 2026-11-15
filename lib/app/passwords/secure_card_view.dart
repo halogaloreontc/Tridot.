@@ -163,7 +163,7 @@ class _SecureCardViewState extends State<SecureCardView> {
           borderRadius: BorderRadius.circular(14),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           child: body,
         ),
       ),
@@ -396,7 +396,7 @@ class _SecureCardViewState extends State<SecureCardView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _title(entry),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         _Line(
           icon: _copied ? Icons.content_paste_outlined : Icons.copy_outlined,
           text: _copied
@@ -457,7 +457,7 @@ class _SecureCardViewState extends State<SecureCardView> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         _Line(icon: Icons.edit_outlined, text: title),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         FilledButton.icon(
           key: const ValueKey<String>('secure-card-editor'),
           onPressed: () => unawaited(
@@ -531,7 +531,7 @@ class _SecureCardViewState extends State<SecureCardView> {
                     'пароли вернёт она. Можно и начать заново: старый сейф '
                     'уйдёт в архив, не сотрётся.',
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(

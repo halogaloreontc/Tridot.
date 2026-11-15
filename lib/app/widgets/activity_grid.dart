@@ -233,7 +233,7 @@ final class ActivityGrid extends StatelessWidget {
               ],
             ],
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           // Подписи дней стоят на месте, прокручиваются только недели;
           // свежие справа, поэтому прокрутка начинается с конца.
           Flexible(
@@ -250,7 +250,7 @@ final class ActivityGrid extends StatelessWidget {
                     child:
                         Row(mainAxisSize: MainAxisSize.min, children: monthRow),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Row(mainAxisSize: MainAxisSize.min, children: columns),
                 ],
               ),
@@ -268,7 +268,7 @@ final class ActivityGrid extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -287,7 +287,7 @@ final class ActivityGrid extends StatelessWidget {
                       child: Text(
                         title,
                         style: TextStyle(
-                          fontSize: 17,
+                          fontSize: 16,
                           height: 1.3,
                           fontWeight: FontWeight.w600,
                           color: context.colors.textStrong,
@@ -324,7 +324,7 @@ final class ActivityGrid extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Semantics(
               key: const Key('activity-semantics'),
               label: label,

@@ -6,10 +6,12 @@ import 'package:flutter/material.dart';
 import '../../core/passwords/password_generator.dart';
 import '../../core/passwords/secret_bytes.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
 import 'entry_screens.dart';
 import 'passwords_kit.dart';
 import 'passwords_screen.dart';
 import 'secret_widgets.dart';
+import '../widgets/app_dialog.dart';
 import '../widgets/whole_word_text.dart';
 
 /// Генератор паролей (5.4): режим «слова» (только английский словарь EFF
@@ -205,7 +207,7 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
               style: metaStyle(context),
             ),
           ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         if (_gone == _Gone.expired)
           Text(
             'Время вышло — пароль стёрт. Нажмите «Ещё», чтобы получить новый.',
@@ -226,7 +228,7 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
             seconds: kit.revealSeconds,
             hide: kit.hideTicks,
           ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
           '~$bits бит · надёжность ${StrengthScale.label(score)}',
           key: const ValueKey<String>('generator-bits'),
@@ -239,7 +241,7 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
           key: const ValueKey<String>('generator-structure'),
           style: metaStyle(context),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         if (words) ..._wordControls(o) else ..._charControls(o),
         const SizedBox(height: 8),
         Wrap(
@@ -346,7 +348,7 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
           ),
         ),
         Wrap(
-          spacing: 6,
+          spacing: AppSpace.xs,
           runSpacing: 4,
           children: <Widget>[
             _chip(
@@ -474,19 +476,29 @@ Future<(SecretBytes, GeneratorOptions)?> pickGenerated(
   return showModalBottomSheet<(SecretBytes, GeneratorOptions)>(
     context: context,
     isScrollControlled: true,
+    // Своя ручка ([SheetHandle]) вместо ручки темы с полем 48.
+    showDragHandle: false,
     builder: (BuildContext context) => SafeArea(
+      top: false,
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           16,
-          16,
+          0,
           16,
           16 + MediaQuery.viewInsetsOf(context).bottom,
         ),
-        child: GeneratorPanel(
-          kit: kit,
-          initial: const GeneratorOptions(mode: GeneratorMode.words),
-          onUse: (SecretBytes value, GeneratorOptions options) =>
-              Navigator.of(context).pop((value, options)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            const SheetHandle(),
+            GeneratorPanel(
+              kit: kit,
+              initial: const GeneratorOptions(mode: GeneratorMode.words),
+              onUse: (SecretBytes value, GeneratorOptions options) =>
+                  Navigator.of(context).pop((value, options)),
+            ),
+          ],
         ),
       ),
     ),

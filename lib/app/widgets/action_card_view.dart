@@ -173,7 +173,7 @@ class _ActionCardViewState extends State<ActionCardView> {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: Row(
                   children: <Widget>[
                     Icon(
@@ -183,7 +183,7 @@ class _ActionCardViewState extends State<ActionCardView> {
                       size: 22,
                       color: context.colors.icon,
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     // Срок — под заголовком: рядом с ним крупное слово
                     // («Перемещение») на узком экране не помещается.
                     Expanded(
@@ -244,7 +244,7 @@ class _ActionCardViewState extends State<ActionCardView> {
                 if (ActionCardView.noteOf(warn) case final String note
                     when note.isNotEmpty && warn != 'to_empty')
                   _warning(note, ValueKey<String>('action-warn-$warn')),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 // Основное действие — во всю ширину акцентом, отмена —
@@ -289,7 +289,7 @@ class _ActionCardViewState extends State<ActionCardView> {
                               key: const Key('action-result'),
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 15, color: status.$2),
+                              style: TextStyle(fontSize: 14, color: status.$2),
                             ),
                           ),
                           if (card.canSettle)
@@ -334,7 +334,7 @@ class _ActionCardViewState extends State<ActionCardView> {
       softWrap: false,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        fontSize: 17,
+        fontSize: 16,
         color: context.colors.textStrong,
       ),
     );

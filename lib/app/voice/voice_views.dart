@@ -8,6 +8,8 @@ import '../assistant_theme.dart';
 import '../widgets/grouped.dart';
 import 'voice_kit.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
+import '../layout.dart';
 
 /// Мегабайты для подписей: «12 из 44 МБ».
 String voiceMegabytes(int bytes) => (bytes / (1024 * 1024)).round().toString();
@@ -19,7 +21,7 @@ String voiceProgressText(VoiceKit voice) =>
 /// Размер архива модели для подписей: «~44 МБ» — из закреплённого
 /// размера, а не отдельной цифрой в тексте.
 String voiceModelSize(VoiceKit voice) =>
-    '~${voiceMegabytes(voice.spec.bytes)} МБ';
+    '~${voiceMegabytes(voice.spec.bytes)}\u00A0МБ';
 
 /// Предложение включить голосовой ввод: первый раз модель скачивается с
 /// сайта Vosk. `true` — «Скачать».
@@ -27,7 +29,9 @@ Future<bool> showVoiceOffer(BuildContext context, VoiceKit voice) async {
   final host = voice.spec.uri.host;
   final download = await showDialog<bool>(
     context: context,
-    builder: (BuildContext context) => AlertDialog(
+    builder: (BuildContext context) => AppDialog(
+      icon: Icons.mic_none,
+      iconColor: context.colors.tileViolet,
       scrollable: true,
       title: const WholeWordText('Включить голосовой ввод?'),
       content: Text(
@@ -39,12 +43,12 @@ Future<bool> showVoiceOffer(BuildContext context, VoiceKit voice) async {
         TextButton(
           key: const Key('voice-offer-later'),
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Не сейчас'),
+          child: const ActionLabel('Не сейчас'),
         ),
         FilledButton(
           key: const Key('voice-offer-download'),
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Скачать'),
+          child: const ActionLabel('Скачать'),
         ),
       ],
     ),
@@ -57,7 +61,9 @@ Future<bool> showVoiceOffer(BuildContext context, VoiceKit voice) async {
 Future<bool> showDeviceVoiceOffer(BuildContext context) async {
   final enable = await showDialog<bool>(
     context: context,
-    builder: (BuildContext context) => AlertDialog(
+    builder: (BuildContext context) => AppDialog(
+      icon: Icons.mic_none,
+      iconColor: context.colors.tileViolet,
       scrollable: true,
       title: const WholeWordText('Включить голосовой ввод?'),
       content: const Text(
@@ -68,12 +74,12 @@ Future<bool> showDeviceVoiceOffer(BuildContext context) async {
         TextButton(
           key: const Key('voice-offer-later'),
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Не сейчас'),
+          child: const ActionLabel('Не сейчас'),
         ),
         FilledButton(
           key: const Key('voice-offer-enable'),
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Включить'),
+          child: const ActionLabel('Включить'),
         ),
       ],
     ),
@@ -86,7 +92,9 @@ Future<bool> showDeviceVoiceOffer(BuildContext context) async {
 Future<bool> showDeviceLanguageOffer(BuildContext context) async {
   final download = await showDialog<bool>(
     context: context,
-    builder: (BuildContext context) => AlertDialog(
+    builder: (BuildContext context) => AppDialog(
+      icon: Icons.download_outlined,
+      iconColor: context.colors.tileBlue,
       scrollable: true,
       title: const WholeWordText('Скачать русский язык?'),
       content: const Text(
@@ -98,12 +106,12 @@ Future<bool> showDeviceLanguageOffer(BuildContext context) async {
         TextButton(
           key: const Key('voice-language-later'),
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Не сейчас'),
+          child: const ActionLabel('Не сейчас'),
         ),
         FilledButton(
           key: const Key('voice-language-download'),
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Скачать'),
+          child: const ActionLabel('Скачать'),
         ),
       ],
     ),
@@ -143,7 +151,9 @@ String deviceEngineSubtitle(VoiceKit voice) {
 Future<bool> showVoiceRationale(BuildContext context) async {
   final go = await showDialog<bool>(
     context: context,
-    builder: (BuildContext context) => AlertDialog(
+    builder: (BuildContext context) => AppDialog(
+      icon: Icons.mic_none,
+      iconColor: context.colors.tileViolet,
       scrollable: true,
       title: const WholeWordText('Доступ к микрофону'),
       content: const Text(
@@ -154,7 +164,7 @@ Future<bool> showVoiceRationale(BuildContext context) async {
         TextButton(
           key: const Key('voice-rationale-cancel'),
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
         FilledButton(
           key: const Key('voice-rationale-continue'),
@@ -245,13 +255,11 @@ final class _VoiceInstallSheetState extends State<_VoiceInstallSheet> {
           children: <Widget>[
             Text(
               'Модель голосового ввода',
-              style: TextStyle(
+              style: AssistantTheme.dialogTitle.copyWith(
                 color: context.colors.textStrong,
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppDialogMetrics.titleGap),
             VoiceInstallStatus(
               voice: widget.voice,
               onCancel: () {
@@ -621,7 +629,7 @@ final class VoiceSettingsSection extends StatelessWidget {
   Future<void> _confirmDelete(BuildContext context, VoiceKit voice) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
+      builder: (BuildContext dialogContext) => AppDialog(
         scrollable: true,
         title: const WholeWordText('Удалить модель распознавания?'),
         content: const Text(
@@ -632,7 +640,7 @@ final class VoiceSettingsSection extends StatelessWidget {
           TextButton(
             key: const Key('voice-delete-cancel'),
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
           TextButton(
             key: const Key('voice-delete-confirm'),
@@ -640,7 +648,7 @@ final class VoiceSettingsSection extends StatelessWidget {
               foregroundColor: context.colors.danger,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Удалить'),
+            child: const ActionLabel('Удалить'),
           ),
         ],
       ),

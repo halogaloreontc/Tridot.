@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../assistant_theme.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
 
 /// Выбранный файл: путь и байты. Байты затирает тот, кто их разбирает.
 final class PickedFile {
@@ -250,7 +251,8 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
   @override
   Widget build(BuildContext context) {
     final parent = p.dirname(_dir);
-    return AlertDialog(
+    return AppDialog(
+      contentWidth: 480,
       title: WholeWordText(widget.title),
       content: SizedBox(
         width: 480,
@@ -319,13 +321,13 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
         if (widget.pickFolder)
           FilledButton(
             key: const ValueKey<String>('file-browser-here'),
             onPressed: _failed ? null : () => Navigator.of(context).pop(_dir),
-            child: const Text('Сохранить сюда'),
+            child: const ActionLabel('Сохранить сюда'),
           ),
       ],
     );

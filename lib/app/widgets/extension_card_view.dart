@@ -110,13 +110,13 @@ final class ExtensionCardView extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             _header(context),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             if (fields == null)
               Text(
                 'Расширение недоступно в этой версии приложения',
@@ -153,7 +153,7 @@ final class ExtensionCardView extends StatelessWidget {
             size: 22,
             color: context.colors.icon,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               ExtensionForms.title(card.extensionId),
@@ -210,7 +210,7 @@ final class ExtensionCardView extends StatelessWidget {
       ],
       if (blocker != null && !repeated)
         Padding(
-          padding: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.only(top: 8),
           child: Text(
             blocker,
             key: const Key('ext-card-blocker'),
@@ -276,7 +276,7 @@ final class ExtensionCardView extends StatelessWidget {
                   ? 'Выберите файлы или папку'
                   : 'Выберите файлы',
           key: const Key('ext-card-files-empty'),
-          style: TextStyle(fontSize: 15, color: context.colors.muted),
+          style: TextStyle(fontSize: 14, color: context.colors.muted),
         ),
       for (final (i, file) in files.indexed)
         Row(
@@ -289,13 +289,13 @@ final class ExtensionCardView extends StatelessWidget {
               size: 16,
               color: context.colors.muted,
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 file.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 17),
+                style: const TextStyle(fontSize: 16),
               ),
             ),
             IconButton(
@@ -349,12 +349,12 @@ final class ExtensionCardView extends StatelessWidget {
                   ),
               ],
               child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     Icon(Icons.history, size: 18),
-                    SizedBox(width: 6),
+                    SizedBox(width: 8),
                     Text('Из сессии'),
                   ],
                 ),
@@ -362,7 +362,7 @@ final class ExtensionCardView extends StatelessWidget {
             ),
         ],
       ),
-      const SizedBox(height: 10),
+      const SizedBox(height: 8),
     ];
   }
 
@@ -382,7 +382,7 @@ final class ExtensionCardView extends StatelessWidget {
         Text(
           hint,
           key: ValueKey<String>('ext-card-empty-${field.code}'),
-          style: TextStyle(fontSize: 15, color: context.colors.muted),
+          style: TextStyle(fontSize: 14, color: context.colors.muted),
         ),
       ];
     }
@@ -405,7 +405,7 @@ final class ExtensionCardView extends StatelessWidget {
             style: TextStyle(fontSize: 13, color: context.colors.warning),
           ),
         ),
-      const SizedBox(height: 10),
+      const SizedBox(height: 8),
     ];
   }
 
@@ -440,10 +440,10 @@ final class ExtensionCardView extends StatelessWidget {
                         : '${tick?.stage ?? 'Работаю'}: '
                             '${(value * 100).clamp(0, 100).round()}%',
                     key: const Key('ext-card-stage'),
-                    style: const TextStyle(fontSize: 15),
+                    style: const TextStyle(fontSize: 14),
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 LinearProgressIndicator(
                   key: const Key('ext-card-progress'),
                   value: value,
@@ -475,11 +475,11 @@ final class ExtensionCardView extends StatelessWidget {
           key: const Key('ext-card-done'),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 15, color: context.colors.success),
+          style: TextStyle(fontSize: 14, color: context.colors.success),
         ),
       ),
       if (card.listing.isNotEmpty) ...<Widget>[
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 220),
           child: ListView(
@@ -491,7 +491,7 @@ final class ExtensionCardView extends StatelessWidget {
                   line,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 15),
+                  style: const TextStyle(fontSize: 14),
                 ),
               if (card.listingMore > 0)
                 Text(
@@ -584,7 +584,7 @@ final class ExtensionCardView extends StatelessWidget {
     }
     files.sort((File a, File b) => a.path.compareTo(b.path));
     return <Widget>[
-      const SizedBox(height: 6),
+      const SizedBox(height: 4),
       for (final (i, file) in files.indexed)
         TextButton(
           key: ValueKey<String>('ext-card-output-$i'),
@@ -608,7 +608,7 @@ final class ExtensionCardView extends StatelessWidget {
           child: Text(
             text,
             key: Key(key),
-            style: TextStyle(fontSize: 15, color: color),
+            style: TextStyle(fontSize: 14, color: color),
           ),
         ),
         const SizedBox(height: 8),
@@ -665,7 +665,7 @@ final class _ChoiceDropdown extends StatelessWidget {
                 .bodyMedium!
                 .copyWith(color: context.colors.muted),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           DropdownButtonFormField<String>(
             // Поле помнит начальное значение: сменилось снаружи (новый
             // файл, значение по умолчанию) — новое поле.
@@ -683,13 +683,13 @@ final class _ChoiceDropdown extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             icon: Icon(Icons.unfold_more, color: context.colors.icon),
             hint:
-                const WholeWordText('Выберите', style: TextStyle(fontSize: 17)),
+                const WholeWordText('Выберите', style: TextStyle(fontSize: 16)),
             // style заменяет стиль темы целиком (не дополняет): без
             // fontFamily выбранное значение и пункты списка ушли бы в
             // системный шрифт, а не шрифт приложения.
             style: TextStyle(
               fontFamily: AppFonts.text,
-              fontSize: 17,
+              fontSize: 16,
               color: context.colors.textStrong,
             ),
             // Поле внутри карточки — на уровень контрастнее карточки, без
@@ -706,7 +706,7 @@ final class _ChoiceDropdown extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
               ),
-              contentPadding: const EdgeInsets.fromLTRB(14, 4, 10, 4),
+              contentPadding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
             ),
             selectedItemBuilder: (BuildContext context) => <Widget>[
               for (final option in options)
@@ -716,7 +716,7 @@ final class _ChoiceDropdown extends StatelessWidget {
                     option.label,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 17),
+                    style: const TextStyle(fontSize: 16),
                   ),
                 ),
             ],
@@ -735,7 +735,7 @@ final class _ChoiceDropdown extends StatelessWidget {
                         WholeWordText(
                           option.label,
                           style: TextStyle(
-                            fontSize: 17,
+                            fontSize: 16,
                             color: option.enabled
                                 ? context.colors.textStrong
                                 : context.colors.muted,
@@ -812,7 +812,7 @@ final class _UrlFieldState extends State<_UrlField> {
         enableSuggestions: false,
         maxLines: 1,
         maxLength: YtdlUrl.maxLength,
-        style: const TextStyle(fontSize: 17),
+        style: const TextStyle(fontSize: 16),
         decoration: InputDecoration(
           isDense: true,
           fillColor: context.colors.fieldOnRaised,

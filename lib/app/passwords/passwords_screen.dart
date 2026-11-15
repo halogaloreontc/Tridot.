@@ -23,6 +23,7 @@ import 'recovery_code_view.dart';
 import 'secret_widgets.dart';
 import 'vault_confirm.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
 
 /// Экран «Пароли» (раздел 8): создание хранилища, замок, список записей.
 ///
@@ -277,7 +278,7 @@ class _Point extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -286,7 +287,7 @@ class _Point extends StatelessWidget {
             size: 18,
             color: strong ? context.colors.warning : context.colors.muted,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: WholeWordText(
               text,
@@ -416,7 +417,7 @@ class _CreateViewState extends State<_CreateView> {
               .headlineSmall!
               .copyWith(color: context.colors.textStrong),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         const _Point(
           Icons.phone_android_outlined,
           'Пароли хранятся только на этом устройстве, зашифрованными, и '
@@ -660,7 +661,7 @@ class _ProtectedCreateViewState extends State<_ProtectedCreateView> {
               .headlineSmall!
               .copyWith(color: context.colors.textStrong),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         const _Point(
           Icons.phone_android_outlined,
           'Пароли хранятся только на этом устройстве, зашифрованными, и '
@@ -1249,7 +1250,8 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
     final exists = widget.kit.state == VaultState.locked ||
         widget.kit.state == VaultState.unlocked;
     final protectedVault = widget.kit.deviceProtection;
-    return AlertDialog(
+    return AppDialog(
+      contentWidth: 460,
       key: const ValueKey<String>('recovery-dialog'),
       scrollable: true,
       title: WholeWordText(
@@ -1270,7 +1272,7 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
                       'расшифровать — ни мне, ни кому-либо ещё.',
               style: TextStyle(color: context.colors.textStrong),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Text(
               protectedVault
                   ? 'Поищите записанный код: он из пяти групп по пять знаков. '
@@ -1307,7 +1309,7 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Закрыть'),
+          child: const ActionLabel('Закрыть'),
         ),
         if (exists)
           TextButton(
@@ -1315,7 +1317,7 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
             style: TextButton.styleFrom(foregroundColor: context.colors.danger),
             onPressed:
                 _busy || !_confirmed ? null : () => unawaited(_startOver()),
-            child: const Text('Начать заново'),
+            child: const ActionLabel('Начать заново'),
           ),
       ],
     );
@@ -1332,7 +1334,7 @@ class _Banner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
         color: context.colors.workspace,
         borderRadius: BorderRadius.circular(AppRadius.group),
@@ -1440,7 +1442,7 @@ class _ListViewState extends State<_ListView> {
     final lockAt = vault.lockAt?.toLocal();
     final until = lockAt == null
         ? ''
-        : ' · запрётся в ${lockAt.hour.toString().padLeft(2, '0')}:'
+        : '\u00A0· запрётся в ${lockAt.hour.toString().padLeft(2, '0')}:'
             '${lockAt.minute.toString().padLeft(2, '0')}';
     // Узко или крупный шрифт: «Запереть» и «Добавить» — значками, иначе
     // они сжимают полосу до разрыва слов, а поиск — до невидимой подсказки.
@@ -1684,7 +1686,7 @@ class EntryTile extends StatelessWidget {
               child: Text(
                 letter,
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: context.colors.textStrong,
                 ),

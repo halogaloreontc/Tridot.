@@ -21,6 +21,7 @@ import '../notify/notify_channel.dart';
 import '../notify/notify_views.dart';
 import '../widgets/grouped.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
 
 /// Экран «Настройки»: поведение интерфейса, голос, защита, расширения,
 /// история сессий, данные, о приложении. В оболочке «Д» — вкладка
@@ -103,7 +104,7 @@ class SettingsScreen extends StatelessWidget {
   Future<void> _confirmClear(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => AppDialog(
         title: const WholeWordText('Очистить историю сессий?'),
         content: const WholeWordText(
           'Сообщения всех сессий, в том числе сессий задач, будут удалены. '
@@ -113,7 +114,7 @@ class SettingsScreen extends StatelessWidget {
           TextButton(
             key: const ValueKey<String>('clear-chat-cancel'),
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
           TextButton(
             key: const ValueKey<String>('clear-chat-confirm'),
@@ -121,7 +122,7 @@ class SettingsScreen extends StatelessWidget {
               foregroundColor: context.colors.danger,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Очистить'),
+            child: const ActionLabel('Очистить'),
           ),
         ],
       ),
@@ -281,7 +282,7 @@ class SettingsScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           const Padding(
-                            padding: EdgeInsets.only(top: 2, right: 12),
+                            padding: EdgeInsets.only(top: 4, right: 12),
                             child: RelayGlyph(size: 28),
                           ),
                           Expanded(
@@ -386,7 +387,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: WholeWordText(
               'Как в системе — тема меняется вместе с телефоном',
               style: text.bodySmall,

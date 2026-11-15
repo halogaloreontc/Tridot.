@@ -59,7 +59,7 @@ final class TaskTile extends StatelessWidget {
           // В карточке ленты — строка не ниже 56 (ADR-027).
           padding: EdgeInsets.symmetric(
             horizontal: 8,
-            vertical: dense ? 4 : 2,
+            vertical: dense ? 4 : 4,
           ),
           child: Row(
             children: <Widget>[
@@ -73,7 +73,7 @@ final class TaskTile extends StatelessWidget {
               const SizedBox(width: 4),
               Expanded(
                 child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: dense ? 6 : 4),
+                  padding: EdgeInsets.symmetric(vertical: dense ? 8 : 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -179,7 +179,7 @@ final class SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = Theme.of(context).textTheme.labelMedium!;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 20, 8, 6),
+      padding: const EdgeInsets.fromLTRB(8, 20, 8, 8),
       child: WholeWordText(
         text,
         style: style.copyWith(
@@ -215,7 +215,7 @@ final class EmptyState extends StatelessWidget {
             const SizedBox(height: 12),
             Text(title, textAlign: TextAlign.center),
             if (hint != null) ...<Widget>[
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 hint!,
                 style: metaStyle(context),

@@ -7,6 +7,7 @@ import '../../core/chats/chat_models.dart';
 import '../assistant_theme.dart';
 import '../layout.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
 
 /// Действие с сессией из меню долгого нажатия.
 enum SessionAction {
@@ -262,7 +263,7 @@ final class _HoldMenu extends StatelessWidget {
   static const String moveLabel = 'В проект…';
 
   /// Подпись пункта: 17 px, основной размер шкалы (ADR-027).
-  static const TextStyle labelStyle = TextStyle(fontSize: 17, height: 1.3);
+  static const TextStyle labelStyle = TextStyle(fontSize: 16, height: 1.3);
 
   /// Ширина меню, при которой самая длинная подпись помещается целиком с
   /// шрифтом [scaler]: поля пункта 16 + 16, значок 20 и отступ 12 (если
@@ -416,7 +417,7 @@ final class _MenuItem extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpace.m,
-              vertical: 10,
+              vertical: 12,
             ),
             child: Row(
               children: <Widget>[
@@ -498,7 +499,7 @@ final class _RenameDialogState extends State<_RenameDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return AppDialog(
       // Крупный шрифт и открытая клавиатура (поле с autofocus) на узком
       // телефоне: окно прокручивается, а не вылезает за край.
       scrollable: true,
@@ -521,12 +522,12 @@ final class _RenameDialogState extends State<_RenameDialog> {
         TextButton(
           key: const Key('rename-cancel'),
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
         FilledButton(
           key: const Key('rename-save'),
           onPressed: _value.isEmpty ? null : _save,
-          child: const Text('Сохранить'),
+          child: const ActionLabel('Сохранить'),
         ),
       ],
     );
@@ -542,7 +543,7 @@ Future<bool> showDeleteSessionDialog(
 }) async {
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (BuildContext context) => AlertDialog(
+    builder: (BuildContext context) => AppDialog(
       title: const WholeWordText('Удалить сессию?'),
       content: Text(
         'Удалить сессию «$title»? Это нельзя отменить.'
@@ -553,7 +554,7 @@ Future<bool> showDeleteSessionDialog(
         TextButton(
           key: const Key('delete-cancel'),
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
         TextButton(
           key: const Key('delete-confirm'),
@@ -561,7 +562,7 @@ Future<bool> showDeleteSessionDialog(
           style: TextButton.styleFrom(
             foregroundColor: context.colors.danger,
           ),
-          child: const Text('Удалить'),
+          child: const ActionLabel('Удалить'),
         ),
       ],
     ),

@@ -135,7 +135,7 @@ final class _CommandFinderSheetState extends State<CommandFinderSheet> {
                               child: Text(
                                 key.label,
                                 style: TextStyle(
-                                  fontSize: 15,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color: context.colors.muted,
                                 ),
@@ -155,7 +155,7 @@ final class _CommandFinderSheetState extends State<CommandFinderSheet> {
 
   Widget _tile(CommandEntry entry) => ListTile(
         key: Key('command-entry-${entry.id}'),
-        minTileHeight: 52,
+        minTileHeight: 48,
         leading: Icon(
           commandIcon(entry.iconName),
           size: 20,
@@ -164,7 +164,7 @@ final class _CommandFinderSheetState extends State<CommandFinderSheet> {
         title: Text(
           entry.label,
           style: TextStyle(
-            fontSize: 17,
+            fontSize: 16,
             color: context.colors.textStrong,
           ),
         ),

@@ -13,6 +13,7 @@ import 'passwords_kit.dart';
 import 'pin_pad.dart';
 import 'recovery_code_view.dart';
 import 'vault_confirm.dart';
+import '../widgets/app_dialog.dart';
 
 /// «Сейф → Настройки → Вход в сейф» (ADR-025): ПИН-код сейфа и вход по
 /// отпечатку / Face ID — по желанию, по умолчанию выключены; новый код
@@ -335,7 +336,8 @@ class _NewPinDialogState extends State<_NewPinDialog> {
     };
     return SecureWindowScope(
       auth: widget.kit.auth,
-      child: AlertDialog(
+      child: AppDialog(
+        contentWidth: 340,
         key: const ValueKey<String>('new-pin-dialog'),
         scrollable: true,
         title: WholeWordText(
@@ -357,7 +359,7 @@ class _NewPinDialogState extends State<_NewPinDialog> {
               if (_step == _PinStep.first &&
                   !widget.change &&
                   MediaQuery.sizeOf(context).height >= 700) ...<Widget>[
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 WholeWordText(
                   'Не 111111 и не 123456. Забудете — сейф откроет код '
                   'восстановления.',
@@ -385,7 +387,7 @@ class _NewPinDialogState extends State<_NewPinDialog> {
         actions: <Widget>[
           TextButton(
             onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
         ],
       ),

@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 import '../../core/chats/chat_projects.dart';
 import '../../core/formatting/plural.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
 import '../widgets/whole_word_text.dart';
+import '../widgets/app_dialog.dart';
 
 /// Название и описание проекта из окна «Новый проект» / «Описание».
 typedef ProjectDraft = ({String name, String? description});
@@ -74,7 +76,7 @@ final class _ProjectDialogState extends State<_ProjectDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return AppDialog(
       scrollable: true,
       title: WholeWordText(widget.title),
       content: Column(
@@ -112,12 +114,12 @@ final class _ProjectDialogState extends State<_ProjectDialog> {
         TextButton(
           key: const Key('project-cancel'),
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
         FilledButton(
           key: const Key('project-save'),
           onPressed: _cleanName == null ? null : _save,
-          child: Text(widget.action),
+          child: ActionLabel(widget.action),
         ),
       ],
     );
@@ -172,9 +174,7 @@ Future<ProjectMove?> showMoveToProjectSheet(
               padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: Text(
                 'В проект',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
+                style: AssistantTheme.dialogTitle.copyWith(
                   color: context.colors.textStrong,
                 ),
               ),
@@ -248,7 +248,7 @@ Future<ProjectDeleteChoice?> showDeleteProjectDialog(
   final count = '$sessions ${ruPlural(sessions, 'сессия', 'сессии', 'сессий')}';
   return showDialog<ProjectDeleteChoice>(
     context: context,
-    builder: (BuildContext context) => AlertDialog(
+    builder: (BuildContext context) => AppDialog(
       scrollable: true,
       title: const WholeWordText('Удалить проект?'),
       content: WholeWordText(
@@ -262,7 +262,7 @@ Future<ProjectDeleteChoice?> showDeleteProjectDialog(
         TextButton(
           key: const Key('project-delete-cancel'),
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
         if (sessions > 0)
           TextButton(
@@ -272,7 +272,7 @@ Future<ProjectDeleteChoice?> showDeleteProjectDialog(
             style: TextButton.styleFrom(
               foregroundColor: context.colors.danger,
             ),
-            child: Text('Удалить вместе с сессиями ($sessions)'),
+            child: ActionLabel('Удалить вместе с сессиями ($sessions)'),
           ),
         if (sessions > 0)
           FilledButton(
@@ -280,7 +280,7 @@ Future<ProjectDeleteChoice?> showDeleteProjectDialog(
             autofocus: true,
             onPressed: () =>
                 Navigator.of(context).pop(ProjectDeleteChoice.moveOut),
-            child: const Text('Вынести сессии из проекта'),
+            child: const ActionLabel('Вынести сессии из проекта'),
           )
         else
           TextButton(
@@ -290,7 +290,7 @@ Future<ProjectDeleteChoice?> showDeleteProjectDialog(
             style: TextButton.styleFrom(
               foregroundColor: context.colors.danger,
             ),
-            child: const Text('Удалить'),
+            child: const ActionLabel('Удалить'),
           ),
       ],
     ),
@@ -344,7 +344,7 @@ final class _TagDialogState extends State<_TagDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return AppDialog(
       scrollable: true,
       title: const WholeWordText('Метка задач'),
       content: Column(
@@ -354,9 +354,8 @@ final class _TagDialogState extends State<_TagDialog> {
           Text(
             'Задачи с этой меткой видны в проекте, а новая задача из его '
             'сессий получает её, если в команде нет своей метки.',
-            style: metaStyle(context),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpace.s),
           TextField(
             key: const Key('project-tag-field'),
             controller: _text,
@@ -374,8 +373,8 @@ final class _TagDialogState extends State<_TagDialog> {
           if (widget.suggestions.isNotEmpty) ...<Widget>[
             const SizedBox(height: 8),
             Wrap(
-              spacing: 6,
-              runSpacing: 6,
+              spacing: AppSpace.xs,
+              runSpacing: AppSpace.xs,
               children: <Widget>[
                 for (final tag in widget.suggestions)
                   ActionChip(
@@ -392,12 +391,12 @@ final class _TagDialogState extends State<_TagDialog> {
         TextButton(
           key: const Key('project-tag-cancel'),
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
+          child: const ActionLabel('Отмена'),
         ),
         FilledButton(
           key: const Key('project-tag-save'),
           onPressed: _valid ? _save : null,
-          child: const Text('Сохранить'),
+          child: const ActionLabel('Сохранить'),
         ),
       ],
     );

@@ -504,7 +504,7 @@ class _PersonaStyleState extends State<_PersonaStyle> {
           ),
           if (!available)
             Padding(
-              padding: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.only(top: 8),
               child: Text(
                 'Стиль «$style» сейчас выключен или удалён — '
                 '${persona.russianName} говорит нейтрально.',
@@ -518,7 +518,7 @@ class _PersonaStyleState extends State<_PersonaStyle> {
           // Пример — пузырём заливкой на уровень выше листа, без полосы.
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             decoration: BoxDecoration(
               color: context.colors.raised,
               borderRadius: BorderRadius.circular(AppRadius.inner),
@@ -579,7 +579,7 @@ class _Group extends StatelessWidget {
           // Перенос вместо прокрутки: на 320 px и крупном шрифте всё видно.
           Wrap(spacing: 8, runSpacing: 8, children: children),
           if (hint != null) ...<Widget>[
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(hint!, key: hintKey, style: metaStyle(context)),
           ],
         ],

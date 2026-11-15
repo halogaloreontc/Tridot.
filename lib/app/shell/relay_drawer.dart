@@ -589,7 +589,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
       key: const Key('drawer-extensions'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Semantics(
           header: true,
           button: true,
@@ -604,7 +604,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 44),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
                   children: <Widget>[
                     Expanded(
@@ -636,7 +636,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(left: 18),
+                padding: const EdgeInsets.only(left: AppSpace.m),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
@@ -727,7 +727,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                   curve: const Cubic(.2, .8, .2, 1),
                   width: _searching ? full : field,
                   height: height,
-                  padding: const EdgeInsets.only(left: 10, right: 4),
+                  padding: const EdgeInsets.only(left: 12, right: 4),
                   // Поиск — заливкой листа (ADR-027); рамка 1.5 акцентом —
                   // только в фокусе, чтобы его было видно с клавиатуры.
                   decoration: BoxDecoration(
@@ -743,7 +743,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                   child: Row(
                     children: <Widget>[
                       Icon(Icons.search, size: 20, color: context.colors.muted),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: CallbackShortcuts(
                           bindings: <ShortcutActivator, VoidCallback>{
@@ -767,7 +767,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                             },
                             textInputAction: TextInputAction.search,
                             style: TextStyle(
-                              fontSize: 17,
+                              fontSize: 16,
                               color: context.colors.textStrong,
                             ),
                             decoration: InputDecoration(
@@ -784,7 +784,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                               hint: fitSingleWord(
                                 scale > 1.3 ? 'Поиск' : 'Поиск по сессиям',
                                 style: TextStyle(
-                                  fontSize: 15,
+                                  fontSize: 14,
                                   color: context.colors.muted,
                                 ),
                               ),
@@ -811,14 +811,14 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                             style: TextButton.styleFrom(
                               minimumSize: const Size(44, 44),
                               padding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
+                                  const EdgeInsets.symmetric(horizontal: 12),
                             ),
                             child: const Text(
                               'Отмена',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 17,
+                                fontSize: 16,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -953,7 +953,7 @@ final class _TitlePlate extends StatelessWidget {
                     maxLines: 1,
                     softWrap: false,
                     style: displayTextStyle.copyWith(
-                      fontSize: 30,
+                      fontSize: 26,
                       height: 1.1,
                       color: context.colors.textStrong,
                     ),
@@ -1006,7 +1006,7 @@ final class _MyRelayCard extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: wide ? 8 : 10,
+                vertical: wide ? 8 : 12,
               ),
               child: Row(
                 children: <Widget>[
@@ -1019,7 +1019,7 @@ final class _MyRelayCard extends StatelessWidget {
                       TextSpan(
                         text: AppInfo.hubName,
                         style: TextStyle(
-                          fontSize: wide ? 17 : 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.w600,
                           height: 1.3,
                           color: context.colors.textStrong,
@@ -1277,13 +1277,13 @@ final class _ProjectRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: projectName
                       ? projectNameStyle(
-                          fontSize: 17,
+                          fontSize: 16,
                           color: selected
                               ? context.colors.textStrong
                               : context.colors.text,
                         )
                       : TextStyle(
-                          fontSize: 15,
+                          fontSize: 14,
                           color: context.colors.text,
                         ),
                 ),
@@ -1293,7 +1293,7 @@ final class _ProjectRow extends StatelessWidget {
                 Text(
                   '$count',
                   style: metaNumTextStyle.copyWith(
-                    fontSize: 15,
+                    fontSize: 14,
                     color: context.colors.muted,
                   ),
                 ),
@@ -1343,7 +1343,7 @@ final class _SectionRow extends StatelessWidget {
     // Просрочка — счётчик заметнее (рамка и текст ярче).
     final loud = alert != null;
     final labelStyle = TextStyle(
-      fontSize: 17,
+      fontSize: 16,
       fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
       height: 1.35,
       color: context.colors.textStrong,
@@ -1363,8 +1363,6 @@ final class _SectionRow extends StatelessWidget {
           padding: EdgeInsets.only(
             left: 16 - AppSpace.selectionInsetH,
             right: (trailing == null ? 16 : 4) - AppSpace.selectionInsetH,
-            top: 4,
-            bottom: 4,
           ),
           child: Row(
             children: <Widget>[
@@ -1393,7 +1391,7 @@ final class _SectionRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 15,
+                          fontSize: 14,
                           height: 1.3,
                           color: context.colors.danger,
                         ),
@@ -1402,15 +1400,15 @@ final class _SectionRow extends StatelessWidget {
                 ),
               ),
               if (count != null) ...<Widget>[
-                const SizedBox(width: 10),
-                // Счётчик — значением 17 приглушённым, без рамки.
+                const SizedBox(width: 8),
+                // Счётчик — значением 16 приглушённым, без рамки.
                 KeyedSubtree(
                   key: Key('nav-$id-count'),
                   child: Text(
                     '$count',
                     maxLines: 1,
                     style: metaNumTextStyle.copyWith(
-                      fontSize: 17,
+                      fontSize: 16,
                       height: 1.2,
                       fontWeight: loud ? FontWeight.w600 : FontWeight.w400,
                       color:
@@ -1446,7 +1444,7 @@ final class _SectionRow extends StatelessWidget {
 }
 
 TextStyle _groupStyle(BuildContext context) => TextStyle(
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: FontWeight.w600,
       height: 1.33,
       color: context.colors.muted,
@@ -1472,12 +1470,12 @@ final class _ListHeader extends StatelessWidget {
       header: true,
       liveRegion: live,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(10, top, 10, 6),
+        padding: EdgeInsets.fromLTRB(12, top, 12, 8),
         child: Row(
           children: <Widget>[
             if (icon != null) ...<Widget>[
               Icon(icon, size: 14, color: context.colors.muted),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
             ],
             Flexible(child: Text(text, style: _groupStyle(context))),
           ],
@@ -1519,7 +1517,7 @@ final class _GroupToggle extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: <Widget>[
                   Expanded(child: Text(label, style: _groupStyle(context))),
@@ -1527,7 +1525,7 @@ final class _GroupToggle extends StatelessWidget {
                   Text(
                     '$count',
                     style: metaNumStyle(context).copyWith(
-                      fontSize: 15,
+                      fontSize: 14,
                       color: context.colors.faint,
                     ),
                   ),
@@ -1571,7 +1569,7 @@ final class _ShowMoreRow extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: <Widget>[
                   Icon(
@@ -1584,7 +1582,7 @@ final class _ShowMoreRow extends StatelessWidget {
                     child: Text(
                       label,
                       style: metaStyle(context).copyWith(
-                        fontSize: 15,
+                        fontSize: 14,
                         color: context.colors.muted,
                       ),
                     ),
@@ -1619,7 +1617,7 @@ final class _ExtensionRow extends StatelessWidget {
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: wide ? 46 : 52),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {
                 final half = constraints.maxWidth.isFinite
@@ -1638,7 +1636,7 @@ final class _ExtensionRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         firstWordOnly: true,
                         style: TextStyle(
-                          fontSize: 17,
+                          fontSize: 16,
                           height: 1.35,
                           color: context.colors.textStrong,
                         ),
@@ -1665,7 +1663,7 @@ final class _ExtensionRow extends StatelessWidget {
                                     context.colors.muted,
                               ),
                             ),
-                            const SizedBox(width: 7),
+                            const SizedBox(width: 8),
                           ],
                           Flexible(
                             child: Text(
@@ -1674,7 +1672,7 @@ final class _ExtensionRow extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: metaStyle(context).copyWith(
-                                fontSize: 15,
+                                fontSize: 14,
                                 color:
                                     entry.statusColor ?? context.colors.muted,
                               ),
@@ -1909,14 +1907,14 @@ final class SessionRowBody extends StatelessWidget {
       entry.time,
       maxLines: 1,
       style: metaStyle(context).copyWith(
-        fontSize: 15,
+        fontSize: 14,
         color: context.colors.muted,
       ),
     );
     return ConstrainedBox(
       constraints: BoxConstraints(minHeight: wide ? 58 : 64),
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 10, vertical: wide ? 7 : 8),
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: wide ? 8 : 8),
         child: Row(
           children: <Widget>[
             // Тот, кто ответил последним, — тихой точкой его цвета
@@ -1955,7 +1953,7 @@ final class SessionRowBody extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           firstWordOnly: true,
                           style: TextStyle(
-                            fontSize: 17,
+                            fontSize: 16,
                             fontWeight: FontWeight.w500,
                             height: 1.35,
                             color: titleColor,
@@ -1974,7 +1972,7 @@ final class SessionRowBody extends StatelessWidget {
                           ),
                         ),
                       ],
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       // «⋯» встаёт на место времени: ширина строки не
                       // прыгает.
                       Visibility(
@@ -2021,7 +2019,7 @@ final class SessionRowBody extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 14,
                         height: 1.4,
                         color: context.colors.muted,
                       ),
@@ -2062,7 +2060,7 @@ final class _HitRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: Container(
           constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -2115,7 +2113,7 @@ final class _HitRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 14,
                   height: 1.4,
                   color: context.colors.muted,
                 ),

@@ -1,9 +1,12 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../../core/chats/attachments.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
+import '../widgets/app_dialog.dart';
 
 /// Значок вида вложения (ADR-019).
 IconData attachmentIcon(AttachmentKind kind) => switch (kind) {
@@ -53,7 +56,7 @@ final class AttachmentChip extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 260, minHeight: 40),
             child: Padding(
-              padding: EdgeInsets.fromLTRB(10, 4, onRemove == null ? 12 : 0, 4),
+              padding: EdgeInsets.fromLTRB(12, 4, onRemove == null ? 12 : 0, 4),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
@@ -75,7 +78,7 @@ final class AttachmentChip extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 15,
+                            fontSize: 14,
                             color: context.colors.textStrong,
                           ),
                         ),
@@ -124,8 +127,8 @@ final class MessageAttachments extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+      spacing: AppSpace.xs,
+      runSpacing: AppSpace.xs,
       alignment: alignEnd ? WrapAlignment.end : WrapAlignment.start,
       children: <Widget>[
         for (final attachment in attachments)
@@ -223,25 +226,45 @@ Future<void> showAttachmentInfo(
 ) {
   final exists = store.exists(attachment);
   final path = store.pathOf(attachment);
+  // Своя ручка ([SheetHandle]) вместо ручки темы с полем 48; при крупном
+  // шрифте сведения листаются, а не вылезают за край.
   return showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
+    showDragHandle: false,
+    constraints: BoxConstraints(
+      maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+    ),
     builder: (BuildContext context) => SafeArea(
-      child: Padding(
+      top: false,
+      child: SingleChildScrollView(
         key: const Key('attachment-info'),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            const SheetHandle(),
+            // Значок — у первой строки имени, а не посреди двух строк.
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Icon(attachmentIcon(attachment.kind), size: 20),
-                const SizedBox(width: 10),
+                Padding(
+                  padding: EdgeInsets.only(
+                    top: math.max(
+                      0,
+                      (MediaQuery.textScalerOf(context).scale(16) * 1.3 - 20) /
+                          2,
+                    ),
+                  ),
+                  child: Icon(attachmentIcon(attachment.kind), size: 20),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     attachment.name,
                     style: TextStyle(
-                      fontSize: 17,
+                      fontSize: 16,
                       color: context.colors.textStrong,
                     ),
                   ),
@@ -262,7 +285,7 @@ Future<void> showAttachmentInfo(
                       '«распакуй архив» (расширение «Архиватор»), сменить '
                       'формат — «сконвертируй файл» (расширение «Конвертер»).'
                   : 'Файла больше нет на устройстве.',
-              style: const TextStyle(fontSize: 15, height: 1.4),
+              style: const TextStyle(fontSize: 14, height: 1.4),
             ),
             if (exists && path != null) ...<Widget>[
               const SizedBox(height: 8),

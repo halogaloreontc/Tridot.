@@ -88,7 +88,7 @@ final class ProjectScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Padding(
-                      padding: EdgeInsets.only(top: 2, right: 10),
+                      padding: EdgeInsets.only(top: 4, right: 12),
                       child: IconTile(
                         icon: Icons.folder_outlined,
                         color: context.colors.tileAmber,
@@ -99,7 +99,7 @@ final class ProjectScreen extends StatelessWidget {
                         project.name,
                         key: const Key('project-title'),
                         style: projectNameStyle(
-                          fontSize: 26,
+                          fontSize: 24,
                           color: context.colors.textStrong,
                         ),
                       ),
@@ -108,7 +108,7 @@ final class ProjectScreen extends StatelessWidget {
                   ],
                 ),
                 if (project.description != null) ...<Widget>[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     project.description!,
                     key: const Key('project-description'),

@@ -42,7 +42,7 @@ final class TaskChatHeader extends StatelessWidget {
   static const double mediumWidth = 320;
 
   static TextStyle _titleStyleOf(BuildContext context) => TextStyle(
-        fontSize: 17,
+        fontSize: 16,
         fontWeight: FontWeight.w600,
         color: context.colors.textStrong,
       );
@@ -168,13 +168,13 @@ final class TaskChatHeader extends StatelessWidget {
       children: <Widget>[
         Flexible(child: title),
         if (due != null) ...<Widget>[
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Text(
             formatDue(due, task.duePrecision, now),
             style: metaStyle(context),
           ),
         ],
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Text(
           status,
           key: const Key('task-chat-status'),

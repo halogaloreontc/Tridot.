@@ -435,7 +435,7 @@ final class _FolderCard extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 15,
+                              fontSize: 14,
                               color: context.colors.muted,
                             ),
                           ),

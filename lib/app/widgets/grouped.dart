@@ -25,7 +25,7 @@ bool _stacked(BuildContext context) {
       (scale >= groupedStackScale && MediaQuery.sizeOf(context).width < 360);
 }
 
-/// Группа строк: заголовок 15 w600 приглушённым, тело — заливкой листа со
+/// Группа строк: заголовок 14 w600 приглушённым, тело — заливкой листа со
 /// скруглением 12, разделители «вставкой», футер 13 приглушённым.
 final class InsetGroup extends StatelessWidget {
   const InsetGroup({
@@ -106,7 +106,7 @@ final class InsetGroup extends StatelessWidget {
                 AppSpace.rowH,
                 0,
                 AppSpace.rowH,
-                6,
+                8,
               ),
               child: WholeWordText(
                 header,
@@ -138,7 +138,7 @@ final class InsetGroup extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpace.rowH,
-                6,
+                8,
                 AppSpace.rowH,
                 0,
               ),
@@ -208,8 +208,8 @@ final class IconTile extends StatelessWidget {
       );
 }
 
-/// Строка группы: значок (плитка или значок 22), заголовок 17, подпись 15,
-/// значение 17 приглушённым справа (при крупном шрифте — под заголовком),
+/// Строка группы: значок (плитка или значок 22), заголовок 16, подпись 14,
+/// значение 16 приглушённым справа (при крупном шрифте — под заголовком),
 /// шеврон. `destructive` — текст цветом ошибки по центру, без значка.
 final class GroupedRow extends StatelessWidget {
   const GroupedRow({
@@ -333,7 +333,7 @@ final class GroupedRow extends StatelessWidget {
                     ),
                     if (subtitle case final String subtitle)
                       Padding(
-                        padding: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.only(top: 4),
                         child: WholeWordText(
                           subtitle,
                           style: text.bodyMedium!.copyWith(
@@ -343,7 +343,7 @@ final class GroupedRow extends StatelessWidget {
                       ),
                     if (stacked && valueText != null)
                       Padding(
-                        padding: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.only(top: 4),
                         child: valueText,
                       ),
                   ],
@@ -445,7 +445,7 @@ final class GroupedChoiceList<T> extends StatelessWidget {
   }
 }
 
-/// Крупный заголовок экрана: 30 w700, отступы 20, 8, 20, 16.
+/// Крупный заголовок экрана: 26 w700, отступы 16, 8, 16, 12.
 final class LargeTitle extends StatelessWidget {
   const LargeTitle(this.text, {super.key, this.trailing});
 
@@ -462,7 +462,7 @@ final class LargeTitle extends StatelessWidget {
         AppSpace.pageH,
         AppSpace.xs,
         AppSpace.pageH,
-        AppSpace.m,
+        AppSpace.s,
       ),
       child: Row(
         children: <Widget>[
@@ -480,7 +480,7 @@ final class LargeTitle extends StatelessWidget {
 }
 
 /// Поле поиска: заливка (`raised` на листе, `workspace` на фоне экрана),
-/// скругление 10, видимая высота 40 в цели нажатия 48, значок лупы.
+/// скругление 12, видимая высота 40 в цели нажатия 48, значок лупы.
 final class SearchField extends StatelessWidget {
   const SearchField({
     super.key,
@@ -529,7 +529,7 @@ final class SearchField extends StatelessWidget {
             filled: true,
             fillColor: onBackground ? colors.workspace : colors.raised,
             hintText: hint,
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
             prefixIcon: Icon(Icons.search, size: 20, color: colors.muted),
             prefixIconConstraints:
                 const BoxConstraints(minWidth: 36, minHeight: 40),
@@ -572,8 +572,8 @@ final class SearchField extends StatelessWidget {
   }
 }
 
-/// Карточка заливкой `raised`, скругление 14, без рамки: заголовок 17 со
-/// значком 22, тело 15 приглушённым.
+/// Карточка заливкой `raised`, скругление 12, без рамки: заголовок 16 со
+/// значком 22, тело 14 приглушённым.
 final class FilledCard extends StatelessWidget {
   const FilledCard({
     super.key,
@@ -581,7 +581,7 @@ final class FilledCard extends StatelessWidget {
     this.title,
     required this.child,
     this.color,
-    this.padding = const EdgeInsets.fromLTRB(16, 14, 16, 16),
+    this.padding = const EdgeInsets.fromLTRB(16, 12, 16, 16),
   });
 
   final IconData? icon;

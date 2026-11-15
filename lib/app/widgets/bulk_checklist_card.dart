@@ -126,7 +126,7 @@ final class BulkChecklistCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                 child: Wrap(
                   spacing: 12,
                   runSpacing: 4,
@@ -211,7 +211,7 @@ final class BulkChecklistCard extends StatelessWidget {
                               result,
                               key: const Key('bulk-result'),
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: 14,
                                 color: checklist.state ==
                                         BulkChecklistState.applied
                                     ? context.colors.success
@@ -246,7 +246,7 @@ final class BulkChecklistCard extends StatelessWidget {
       shrinkWrap: true,
       primary: false,
       physics: height == null ? const NeverScrollableScrollPhysics() : null,
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: checklist.items.length,
       itemBuilder: (BuildContext context, int index) =>
           _item(context, checklist.items[index], enabled: enabled),
@@ -268,7 +268,7 @@ final class BulkChecklistCard extends StatelessWidget {
           : null,
       dense: true,
       controlAffinity: ListTileControlAffinity.leading,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
       visualDensity: VisualDensity.compact,
       activeColor: context.colors.textStrong,
       checkColor: context.colors.workspace,
@@ -276,7 +276,7 @@ final class BulkChecklistCard extends StatelessWidget {
       title: Text(
         item.title,
         style: TextStyle(
-          fontSize: 15,
+          fontSize: 14,
           color: item.checked || !enabled
               ? context.colors.text
               : context.colors.muted,

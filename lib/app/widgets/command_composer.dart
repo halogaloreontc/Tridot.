@@ -316,7 +316,7 @@ final class _CommandComposerState extends State<CommandComposer>
         final showPartial =
             voiceMode == VoiceButtonMode.listening && partial.isNotEmpty;
         final hintStyle = TextStyle(
-          fontSize: 17,
+          fontSize: 16,
           color: context.colors.faint,
         );
         final hint = switch (voiceMode) {
@@ -454,7 +454,7 @@ final class _CommandComposerState extends State<CommandComposer>
                 if (!widget.sending) widget.onSend();
               },
               style: TextStyle(
-                fontSize: 17,
+                fontSize: 16,
                 color: context.colors.textStrong,
               ),
               decoration: InputDecoration(
@@ -475,7 +475,7 @@ final class _CommandComposerState extends State<CommandComposer>
                 errorBorder: InputBorder.none,
                 focusedErrorBorder: InputBorder.none,
                 filled: false,
-                contentPadding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                 isDense: true,
               ),
             ),
@@ -484,7 +484,7 @@ final class _CommandComposerState extends State<CommandComposer>
         return Container(
           key: const Key('assistant-composer'),
           margin: const EdgeInsets.only(top: 8),
-          padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
           decoration: BoxDecoration(
             color: context.colors.raised,
             borderRadius: BorderRadius.circular(AppRadius.bubble + 4),
@@ -496,7 +496,7 @@ final class _CommandComposerState extends State<CommandComposer>
                 Align(alignment: Alignment.centerLeft, child: header),
               if (widget.pending.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 2, 4, 6),
+                  padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Wrap(
@@ -521,7 +521,7 @@ final class _CommandComposerState extends State<CommandComposer>
               // попадает только после того, как нажат «стоп».
               if (showPartial)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -532,14 +532,14 @@ final class _CommandComposerState extends State<CommandComposer>
                       style: TextStyle(
                         color: context.colors.muted,
                         fontStyle: FontStyle.italic,
-                        fontSize: 17,
+                        fontSize: 16,
                       ),
                     ),
                   ),
                 ),
               if (!showPartial && notice.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Semantics(
@@ -551,7 +551,7 @@ final class _CommandComposerState extends State<CommandComposer>
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: context.colors.text,
-                          fontSize: 15,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -745,7 +745,7 @@ final class _ModeSwitch extends StatelessWidget {
         text: TextSpan(
           text: label,
           style: DefaultTextStyle.of(context).style.merge(
-                const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
               ),
         ),
         textDirection: TextDirection.ltr,
@@ -781,7 +781,7 @@ final class _ModeSwitch extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
@@ -867,12 +867,12 @@ final class _ModeSwitch extends StatelessWidget {
         children: <Widget>[
           Icon(icon, size: 17, color: color),
           if (labels) ...<Widget>[
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             Text(
               label,
               style: TextStyle(
                 color: color,
-                fontSize: 15,
+                fontSize: 14,
                 fontWeight: active ? FontWeight.w500 : FontWeight.w400,
               ),
             ),
@@ -1100,21 +1100,21 @@ final class _PlusSheetState extends State<_PlusSheet> {
       child: ListTile(
         key: key,
         onTap: onTap,
-        minTileHeight: 52,
+        minTileHeight: AppSize.rowMin,
         horizontalTitleGap: 12,
-        contentPadding: EdgeInsets.only(left: nested ? 28 : 16, right: 16),
+        contentPadding: EdgeInsets.only(left: nested ? 32 : 16, right: 16),
         leading: leading,
         // Целыми словами: на 320 px со шрифтом 200 % простой Text рвал
         // «Прикрепит|ь файл».
         title: WholeWordText(
           label,
-          style: TextStyle(fontSize: 17, color: colors.textStrong),
+          style: TextStyle(fontSize: 16, color: colors.textStrong),
         ),
         subtitle: detail == null
             ? null
             : WholeWordText(
                 detail,
-                style: TextStyle(fontSize: 15, color: colors.muted),
+                style: TextStyle(fontSize: 14, color: colors.muted),
               ),
         trailing: trailing,
       ),

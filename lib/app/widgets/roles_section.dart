@@ -9,6 +9,7 @@ import 'connection_screen.dart';
 import 'extensions_section.dart' show connectionChanged;
 import 'grouped.dart';
 import 'whole_word_text.dart';
+import 'app_dialog.dart';
 
 /// Раздел «Роли» во вкладке «Мой Связной → Помощники», под настройками
 /// помощников (ADR-012, ADR-027): карточка на
@@ -158,7 +159,7 @@ class _RolesSectionState extends State<RolesSection> {
           'прихода — после «Подтвердить» на каждой карточке.';
     }
     return Padding(
-      padding: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.only(top: 8),
       child: SwitchListTile(
         key: ValueKey<String>('role-actions-${role.id}'),
         contentPadding: EdgeInsets.zero,
@@ -189,7 +190,7 @@ class _RolesSectionState extends State<RolesSection> {
   Future<bool> _confirmActions(String login) async {
     final yes = await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) => AlertDialog(
+      builder: (BuildContext context) => AppDialog(
         key: const Key('role-actions-dialog'),
         title: const WholeWordText('Разрешить действия?'),
         content: Text(
@@ -201,12 +202,12 @@ class _RolesSectionState extends State<RolesSection> {
           TextButton(
             key: const Key('role-actions-no'),
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
           FilledButton(
             key: const Key('role-actions-yes'),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Разрешить'),
+            child: const ActionLabel('Разрешить'),
           ),
         ],
       ),
@@ -252,7 +253,7 @@ class _RolesSectionState extends State<RolesSection> {
               style: TextStyle(color: context.colors.textStrong),
             ),
             subtitle: Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 4),
               child: WholeWordText(role.description),
             ),
           ),
@@ -274,7 +275,7 @@ class _RolesSectionState extends State<RolesSection> {
                 if (on)
                   if (_switchedOff(role) case final String note)
                     Padding(
-                      padding: const EdgeInsets.only(top: 6),
+                      padding: const EdgeInsets.only(top: 8),
                       child: Text(
                         note,
                         key: ValueKey<String>('role-off-${role.id}'),
@@ -282,7 +283,7 @@ class _RolesSectionState extends State<RolesSection> {
                       ),
                     ),
                 if (link != null && service != null) ...<Widget>[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     service.connected
                         ? connectionStatus(service)

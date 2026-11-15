@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'app_palette.dart';
+import 'layout.dart';
 
 export 'app_palette.dart';
 
 /// Тема приложения из палитры [AppPalette] («П2», ADR-027): тёмная и
-/// светлая, шкала текста 17/15/13 (ADR-021, ADR-027). Поверхности
+/// светлая, шкала текста 16/14/13 (ADR-021, ADR-027 и поправка «плотнее»). Поверхности
 /// разделяет заливка, а не линия: поля, кнопки, чипы и диалоги без рамок.
 final class AssistantTheme {
   const AssistantTheme._();
@@ -16,7 +17,10 @@ final class AssistantTheme {
   /// Светлая тема: фон #F2F2F7, белый лист.
   static ThemeData light() => build(AppPalette.light);
 
-  /// Шкала текста (ADR-027, ADR-021): Golos Text 17/15/13. Цвет в стилях
+  /// Шкала текста (ADR-027, поправка «плотнее»): Golos Text 16/14/13 —
+  /// на шаг мельче прежней 17/15/13 из «Заметок» iOS, ближе к Material 3
+  /// на Android. Кнопки — 15/600, заголовок окна — 18/600 ([dialogTitle]),
+  /// текст окна — 15 ([dialogBody]), крупный заголовок экрана — 26. Цвет в стилях
   /// не задан — он приходит из `DefaultTextStyle` или палитры; только у
   /// [TextTheme.bodySmall] и [TextTheme.labelMedium] по умолчанию
   /// приглушённый. Семейство задано в каждом стиле: `styleFrom(textStyle:)`
@@ -24,28 +28,34 @@ final class AssistantTheme {
   /// чем был у Inter: −0,1 у основного, 0 у второстепенного, +0,1 у подписей,
   /// −0,2…−0,3 у заголовков.
   static TextTheme textTheme(AppPalette p) => TextTheme(
-        displayLarge: _text(34, 1.18, FontWeight.w700, -0.3),
-        displayMedium: _text(32, 1.18, FontWeight.w700, -0.3),
-        displaySmall: _text(30, 1.2, FontWeight.w700, -0.3),
-        headlineLarge: _text(30, 1.2, FontWeight.w700, -0.3),
-        headlineMedium: _text(28, 1.2, FontWeight.w700, -0.3),
-        headlineSmall: _text(22, 1.25, FontWeight.w600, -0.2),
-        titleLarge: _text(22, 1.25, FontWeight.w600, -0.2),
-        titleMedium: _text(17, 1.29, FontWeight.w600, -0.1),
-        titleSmall: _text(15, 1.33, FontWeight.w600, 0),
-        bodyLarge: _text(17, 1.45, FontWeight.w400, -0.1),
-        bodyMedium: _text(15, 1.4, FontWeight.w400, 0),
+        displayLarge: _text(30, 1.2, FontWeight.w700, -0.3),
+        displayMedium: _text(28, 1.2, FontWeight.w700, -0.3),
+        displaySmall: _text(26, 1.23, FontWeight.w700, -0.3),
+        headlineLarge: _text(26, 1.23, FontWeight.w700, -0.3),
+        headlineMedium: _text(24, 1.25, FontWeight.w700, -0.3),
+        headlineSmall: _text(20, 1.3, FontWeight.w600, -0.2),
+        titleLarge: _text(20, 1.3, FontWeight.w600, -0.2),
+        titleMedium: _text(16, 1.375, FontWeight.w600, -0.1),
+        titleSmall: _text(14, 1.43, FontWeight.w600, 0),
+        bodyLarge: _text(16, 1.4, FontWeight.w400, -0.1),
+        bodyMedium: _text(14, 1.43, FontWeight.w400, 0),
         // Без табличных цифр: пропорциональные ровнее в тексте. Табличные —
         // только у [metaNumTextStyle] (время и счётчики в столбик).
         bodySmall: _text(13, 1.38, FontWeight.w400, 0.1).copyWith(
           color: p.muted,
         ),
-        labelLarge: _text(17, 1.29, FontWeight.w600, -0.1),
-        labelMedium: _text(15, 1.33, FontWeight.w600, 0).copyWith(
+        labelLarge: _text(15, 1.33, FontWeight.w600, 0),
+        labelMedium: _text(14, 1.43, FontWeight.w600, 0).copyWith(
           color: p.muted,
         ),
         labelSmall: _text(13, 1.38, FontWeight.w500, 0.1),
       );
+
+  /// Заголовок окна подтверждения и разрешения: 18/600.
+  static final TextStyle dialogTitle = _text(18, 1.33, FontWeight.w600, -0.1);
+
+  /// Текст окна: 15/1.4 — между текстом ленты (16) и подписями (14).
+  static final TextStyle dialogBody = _text(15, 1.4, FontWeight.w400, 0);
 
   static TextStyle _text(
     double size,
@@ -136,7 +146,7 @@ final class AssistantTheme {
       ),
       iconTheme: IconThemeData(color: p.icon, size: 22),
       listTileTheme: ListTileThemeData(
-        minTileHeight: 52,
+        minTileHeight: AppSize.rowMin,
         iconColor: p.icon,
         textColor: p.text,
         titleTextStyle: texts.bodyLarge!.copyWith(color: p.textStrong),
@@ -168,7 +178,7 @@ final class AssistantTheme {
         fillColor: p.raised,
         isDense: false,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         hintStyle: texts.bodyLarge!.copyWith(color: p.faint),
         labelStyle: texts.bodyMedium!.copyWith(color: p.muted),
         // Поднятая подпись рисуется в 0.75 от своего размера: 17.5 даёт
@@ -206,9 +216,11 @@ final class AssistantTheme {
                 s.contains(WidgetState.disabled) ? p.muted : p.onAccent,
           ),
           textStyle: WidgetStatePropertyAll<TextStyle>(label),
-          minimumSize: const WidgetStatePropertyAll<Size>(Size(64, 48)),
+          minimumSize: const WidgetStatePropertyAll<Size>(
+            Size(64, AppSize.button),
+          ),
           padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
-            EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           ),
           shape: buttonShape,
           elevation: const WidgetStatePropertyAll<double>(0),
@@ -227,9 +239,11 @@ final class AssistantTheme {
                 s.contains(WidgetState.disabled) ? p.muted : p.accent,
           ),
           textStyle: WidgetStatePropertyAll<TextStyle>(label),
-          minimumSize: const WidgetStatePropertyAll<Size>(Size(48, 48)),
+          minimumSize: const WidgetStatePropertyAll<Size>(
+            Size(64, AppSize.button),
+          ),
           padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
-            EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           ),
           side: noBorder,
           shape: buttonShape,
@@ -242,7 +256,12 @@ final class AssistantTheme {
                 s.contains(WidgetState.disabled) ? p.muted : p.accent,
           ),
           textStyle: WidgetStatePropertyAll<TextStyle>(label),
-          minimumSize: const WidgetStatePropertyAll<Size>(Size(48, 48)),
+          minimumSize: const WidgetStatePropertyAll<Size>(
+            Size(48, AppSize.button),
+          ),
+          padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+            EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
           shape: buttonShape,
         ),
       ),
@@ -252,7 +271,12 @@ final class AssistantTheme {
           foregroundColor: WidgetStatePropertyAll<Color>(p.accent),
           textStyle: WidgetStatePropertyAll<TextStyle>(label),
           elevation: const WidgetStatePropertyAll<double>(0),
-          minimumSize: const WidgetStatePropertyAll<Size>(Size(48, 48)),
+          minimumSize: const WidgetStatePropertyAll<Size>(
+            Size(64, AppSize.button),
+          ),
+          padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+            EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          ),
           shape: buttonShape,
         ),
       ),
@@ -283,7 +307,7 @@ final class AssistantTheme {
         disabledColor: p.bubble.withValues(alpha: 0.5),
         side: BorderSide.none,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(18)),
+          borderRadius: BorderRadius.all(Radius.circular(AppRadius.chip)),
         ),
         labelStyle: texts.bodyMedium!.copyWith(color: p.text),
         secondaryLabelStyle: texts.bodyMedium!.copyWith(color: p.accent),
@@ -300,10 +324,14 @@ final class AssistantTheme {
         modalElevation: 0,
         shadowColor: light ? p.shadow : const Color(0x00000000),
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
         ),
+        // Ручка у каждой шторки, которую можно смахнуть (поправка
+        // «плотнее»): шторки без ручки выглядели незаконченными.
+        showDragHandle: true,
         dragHandleColor: p.faint.withValues(alpha: 0.4),
-        dragHandleSize: const Size(36, 5),
+        dragHandleSize: const Size(32, 4),
       ),
       // Диалоги на телефоне — почти во всю ширину (поля 16, а не 40):
       // с крупным шрифтом заголовок и кнопки не рвут слова (ADR-021).
@@ -312,10 +340,10 @@ final class AssistantTheme {
         surfaceTintColor: const Color(0x00000000),
         elevation: 0,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderRadius: BorderRadius.all(Radius.circular(AppRadius.dialog)),
         ),
-        titleTextStyle: texts.titleMedium!.copyWith(color: p.textStrong),
-        contentTextStyle: texts.bodyMedium!.copyWith(color: p.text),
+        titleTextStyle: dialogTitle.copyWith(color: p.textStrong),
+        contentTextStyle: dialogBody.copyWith(color: p.text),
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       ),
       // Поповер: в светлой — белый с тенью, в тёмной — на уровень светлее

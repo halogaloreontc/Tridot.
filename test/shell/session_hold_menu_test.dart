@@ -307,10 +307,10 @@ void main() {
       final dot = tester.getRect(find.byKey(Key('drawer-extension-dot-$id')));
       expect(
         status.right,
-        moreOrLessEquals(row.right - 10, epsilon: 0.5),
-        reason: '$id: подпись у правого края (поле 10)',
+        moreOrLessEquals(row.right - 12, epsilon: 0.5),
+        reason: '$id: подпись у правого края (поле 12, сетка 4)',
       );
-      expect(dot.right, moreOrLessEquals(status.left - 7, epsilon: 0.5));
+      expect(dot.right, moreOrLessEquals(status.left - 8, epsilon: 0.5));
       expect(dot.left, greaterThan(row.center.dx), reason: id);
     }
   });

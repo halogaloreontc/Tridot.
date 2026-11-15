@@ -356,7 +356,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
         children: <Widget>[
           for (final c in _columns)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
+              padding: const EdgeInsets.symmetric(vertical: 4),
               child: Text(
                 '${c.title}: ${c.sample}',
                 style: TextStyle(color: context.colors.text),
@@ -370,7 +370,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
           'Файл не в UTF-8. Прочитать как Windows-1251?',
           style: TextStyle(color: context.colors.textStrong),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
           'Так бывает, если файл пересохраняли в Excel. Колонки (примеры — '
           'в маске, у пароля — без примера):',
@@ -692,11 +692,11 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
       Text(
         'Импортировано: новых ${result.added}, заменено ${result.replaced}.',
         key: const ValueKey<String>('import-done'),
-        style: TextStyle(color: context.colors.textStrong, fontSize: 17),
+        style: TextStyle(color: context.colors.textStrong, fontSize: 16),
       ),
       if (_excel)
         Padding(
-          padding: EdgeInsets.only(top: 6),
+          padding: EdgeInsets.only(top: 8),
           child: Text(
             'Если файл открывали в Excel, часть паролей могла измениться; '
             'проверьте важные через «Проверить себя».',
@@ -727,7 +727,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
         'Файл CSV лежит открытым текстом. Удалим его?',
         style: TextStyle(color: context.colors.warning),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 4),
       if (_deleted)
         Text(
           'Файл удалён. Честно: на SSD удалённое иногда можно восстановить '

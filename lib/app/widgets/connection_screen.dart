@@ -6,6 +6,7 @@ import '../../core/connectors/manifest/manifest_format.dart';
 import '../assistant_theme.dart';
 import 'task_tile.dart';
 import 'whole_word_text.dart';
+import 'app_dialog.dart';
 
 /// Статус подключения одной строкой: «Подключён: ivanov · под своим
 /// логином», «Не подключён».
@@ -162,7 +163,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   Future<void> _logout() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => AppDialog(
         scrollable: true,
         title: WholeWordText('Выйти из «${_service.slot.title}»?'),
         content: const Text(
@@ -173,7 +174,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           TextButton(
             key: const ValueKey<String>('connection-logout-cancel'),
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Отмена'),
+            child: const ActionLabel('Отмена'),
           ),
           TextButton(
             key: const ValueKey<String>('connection-logout-confirm'),
@@ -181,7 +182,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               foregroundColor: context.colors.danger,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Выйти'),
+            child: const ActionLabel('Выйти'),
           ),
         ],
       ),
@@ -321,7 +322,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           ),
         if (record.connected)
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
             child: Text(
               'Последний ответ: ${_moment(record.lastOk)}',
               style: metaStyle(context),
@@ -329,7 +330,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           ),
         if (record.connected && failure != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
             child: Text(
               'Сейчас: $failure',
               style: TextStyle(color: context.colors.warning),
@@ -585,7 +586,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               children: <Widget>[
                 for (final example in examples)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 2, 8, 2),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
