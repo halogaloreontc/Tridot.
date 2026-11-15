@@ -13,7 +13,7 @@
 {"id":"unk-001","text":"Расскажи что-нибудь","intent":"unknown"}
 {"id":"unk-002","text":"","intent":"unknown"}
 {"id":"unk-003","text":"Привет","intent":"unknown"}
-{"id":"unk-004","text":"Покажи погоду","intent":"unknown"}
+{"id":"unk-004","text":"Покажи погоду","connector":"weather","intent":"weather.now"}
 {"id":"list-007","text":"что у меня на завтра?","intent":"listTasks"}
 {"id":"list-008","text":"какие у меня дела на сегодня","intent":"listTasks"}
 {"id":"list-009","text":"покажи список «Дом»","intent":"listTasks","note":"название списка в кавычках после «список»"}

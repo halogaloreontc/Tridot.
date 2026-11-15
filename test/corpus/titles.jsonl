@@ -52,7 +52,7 @@
 {"id": "ttl-052", "text": "поставь мне позвонить маме завтра", "intent": "createTask", "title": "Позвонить маме", "due": "2026-11-03", "precision": "date", "source": "manual"}
 {"id": "ttl-053", "text": "заведи оплатить интернет", "intent": "createTask", "title": "Оплатить интернет", "due": null, "source": "manual"}
 {"id": "ttl-054", "text": "поставь греться чайник", "intent": "unknown", "note": "бытовая просьба, не задача", "source": "manual"}
-{"id": "ttl-055", "text": "поставь будильник на 7", "intent": "unknown", "source": "manual"}
+{"id": "ttl-055", "text": "поставь будильник на 7", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0"}, "note": "будильник в «Часах» (ADR-029), не задача", "source": "manual"}
 {"id": "ttl-056", "text": "сделай «Отчёт»", "intent": "unknown", "note": "«сделай» создаёт только с «задачу»", "source": "manual"}
 {"id": "ttl-057", "text": "запиши меня к врачу на пятницу", "intent": "createTask", "title": "Записаться к врачу", "due": "2026-11-06", "precision": "date", "note": "«запиши меня к/на …» — задача записаться", "source": "manual"}
 {"id": "ttl-058", "text": "запиши меня на стрижку", "intent": "createTask", "title": "Записаться на стрижку", "due": null, "source": "manual"}

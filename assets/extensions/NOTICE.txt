@@ -116,3 +116,13 @@ https://www.apache.org/licenses/LICENSE-2.0
 Вместе с Media3 в сборку Android входит её зависимость Guava (Google,
 Apache License 2.0), https://github.com/google/guava
 В сборках для Windows, macOS и Linux её нет.
+
+6. Open-Meteo — данные погоды (по согласию, не встроены)
+---------------------------------------------------------
+Данные погоды: Open-Meteo.com (https://open-meteo.com/), лицензия
+Creative Commons Attribution 4.0 International (CC BY 4.0),
+https://creativecommons.org/licenses/by/4.0/
+Данные приводятся к другим единицам и подписям (округление температур,
+ветер в м/с, названия неба и советы по одежде). Open-Meteo не связан с
+приложением и его не одобрял. Запросы к open-meteo.com идут только после
+разрешения в «Настройки → Расширения → Погода».

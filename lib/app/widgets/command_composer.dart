@@ -359,32 +359,49 @@ final class _CommandComposerState extends State<CommandComposer>
         // акцента со стрелкой.
         final send = voice
             ? _VoiceButton(mode: voiceMode, onTap: widget.onVoiceTap)
-            : IconButton(
-                key: const Key('assistant-send'),
-                // Пустое поле отправка и так пропускает; кнопка лишь тише,
-                // а не выключена: набранный только что текст уходит, даже
-                // если кадр ещё не перерисован.
-                onPressed: widget.sending ? null : widget.onSend,
-                tooltip: 'Отправить',
-                style: IconButton.styleFrom(
-                  fixedSize: const Size(44, 44),
-                  backgroundColor:
-                      hasText ? context.colors.accent : context.colors.raised,
-                  foregroundColor:
-                      hasText ? context.colors.onAccent : context.colors.faint,
-                  disabledBackgroundColor: context.colors.raised,
-                  disabledForegroundColor: context.colors.faint,
+            : DecoratedBox(
+                // Та же тень, что у «+»: круги одного вида.
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: hasText ? null : _controlShadow(context),
                 ),
-                icon: widget.sending
-                    ? SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: context.colors.muted,
-                        ),
-                      )
-                    : const Icon(Icons.arrow_upward, size: 22),
+                child: IconButton(
+                  key: const Key('assistant-send'),
+                  // Пустое поле отправка и так пропускает; кнопка лишь тише,
+                  // а не выключена: набранный только что текст уходит, даже
+                  // если кадр ещё не перерисован.
+                  onPressed: widget.sending ? null : widget.onSend,
+                  tooltip: 'Отправить',
+                  style: IconButton.styleFrom(
+                    // Тема даёт кнопкам minimumSize 48 — тогда круг крупнее «+».
+                    fixedSize: const Size.square(AppSize.sendButton),
+                    minimumSize: const Size.square(AppSize.sendButton),
+                    // Пустое — круг цвета выбранного сегмента «Диалог /
+                    // Документ»: на панели поля ([AppPalette.raised]) он
+                    // виден, а не сливается с ней.
+                    backgroundColor: hasText
+                        ? context.colors.accent
+                        : context.colors.fieldOnRaised,
+                    foregroundColor: hasText
+                        ? context.colors.onAccent
+                        : context.colors.faint,
+                    disabledBackgroundColor: context.colors.fieldOnRaised,
+                    shadowColor: context.colors.shadow,
+                    surfaceTintColor: Colors.transparent,
+                    elevation: 0,
+                    disabledForegroundColor: context.colors.faint,
+                  ),
+                  icon: widget.sending
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: context.colors.muted,
+                          ),
+                        )
+                      : const Icon(Icons.arrow_upward, size: 22),
+                ),
               );
         // Поле ввода — одна панель заливкой без рамок (ADR-027): сверху
         // текст во всю ширину, снизу «+», переключатель «Диалог /
@@ -631,8 +648,9 @@ final class _VoiceButton extends StatelessWidget {
         color: listening
             ? context.colors.danger
             : off
-                ? context.colors.raised
+                ? context.colors.fieldOnRaised
                 : context.colors.accent,
+        boxShadow: off ? _controlShadow(context) : null,
       ),
       child: icon,
     );
@@ -677,17 +695,33 @@ final class _RoundIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Круг цвета выбранного сегмента «Диалог / Документ» (а не панели
+    // поля — тогда он пропадает и остаётся один значок).
     return Container(
-      width: 44,
-      height: 44,
+      width: AppSize.sendButton,
+      height: AppSize.sendButton,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: context.colors.raised,
+        color: context.colors.fieldOnRaised,
+        boxShadow: _controlShadow(context),
       ),
       child: Icon(icon, size: 24, color: context.colors.icon),
     );
   }
 }
+
+/// Тонкая тень круглой кнопки на панели поля: в светлой теме белый круг на
+/// светло-сером без неё почти не виден; в тёмной хватает заливки.
+List<BoxShadow>? _controlShadow(BuildContext context) =>
+    context.colors.brightness == Brightness.light
+        ? <BoxShadow>[
+            BoxShadow(
+              color: context.colors.shadow,
+              blurRadius: 2,
+              offset: const Offset(0, .5),
+            ),
+          ]
+        : null;
 
 /// Компактный переключатель «Диалог / Документ»: капсула из двух иконок,
 /// на широком поле — с подписями справа от иконок.

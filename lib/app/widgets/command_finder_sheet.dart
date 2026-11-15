@@ -34,6 +34,8 @@ IconData commandIcon(String name) => switch (name) {
       'convert' => Icons.transform,
       'download' => Icons.download_outlined,
       'list' => Icons.list_alt,
+      'alarm' => Icons.alarm_outlined,
+      'timer' => Icons.timer_outlined,
       _ => Icons.bolt,
     };
 

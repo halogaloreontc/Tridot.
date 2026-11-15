@@ -382,6 +382,10 @@ final class GroupedSwitchRow extends SwitchListTile {
   }) : super(
           title: WholeWordText(title),
           subtitle: subtitle == null ? null : WholeWordText(subtitle),
+          // Подписи с того же отступа, что у [GroupedRow]: значок
+          // [AppSize.iconTile] и зазор [AppSpace.s].
+          minLeadingWidth: AppSize.iconTile,
+          horizontalTitleGap: AppSpace.s,
         );
 }
 

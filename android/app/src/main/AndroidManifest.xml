@@ -11,6 +11,21 @@
          системный запрос BiometricPrompt; биометрические данные приложению
          не передаются никогда. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <!-- Напоминания о задачах (ADR-029): уведомления создаются на телефоне
+         и никуда не отправляются. Android 13+ спрашивает разрешение — только
+         когда появилась первая задача со сроком, после объяснения. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Напоминание точно в срок (Android 12+, «Будильники и напоминания»):
+         без него Android присылает его с опозданием до нескольких минут.
+         USE_EXACT_ALARM не нужен: Google Play даёт его только будильникам и
+         календарям. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <!-- После перезагрузки напоминания ставятся заново. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Будильник и таймер в приложении «Часы» (ADR-029): «Часы» открываются
+         с заполненным будильником, человек подтверждает там. Обычное
+         разрешение, без вопроса. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM"/>
     <!-- Копия Android: задачи и чаты копируются, хранилище паролей и
          secrets.json — нет (res/xml/data_extraction_rules.xml, backup_rules.xml). -->
     <application
@@ -43,6 +58,23 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Напоминания о задачах (ADR-029): показ уведомления и «Через 10
+             минут». Только для своих PendingIntent. -->
+        <receiver
+            android:name=".notify.ReminderReceiver"
+            android:exported="false" />
+        <!-- Перезагрузка, обновление, смена времени: расписание заново. -->
+        <receiver
+            android:name=".notify.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.TIME_SET"/>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED"/>
+            </intent-filter>
+        </receiver>
         <!-- «Открыть» у результата архиватора (ADR-024): FileProvider только
              для копий в cache/tridot-open (res/xml/file_paths.xml). -->
         <provider
@@ -66,9 +98,41 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Есть ли «Часы», которые ставят будильник и таймер (ADR-029). -->
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_TIMER"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Своя страница погоды открывается в браузере (ADR-030). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <category android:name="android.intent.category.BROWSABLE"/>
+            <data android:scheme="https"/>
+        </intent>
+        <!-- «Другое приложение…» погоды (ADR-030): выбранное в системном
+             списке нужно потом открыть и подписать, а с Android 11 чужие
+             пакеты без запроса не видны. Видны только приложения с иконкой
+             на рабочем столе, без QUERY_ALL_PACKAGES. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent>
+        <!-- Известные приложения погоды (ADR-030). Тот же список —
+             LinksChannel.KNOWN. -->
+        <package android:name="com.google.android.apps.weather"/>
+        <package android:name="com.sec.android.daemonapp"/>
+        <package android:name="com.miui.weather2"/>
+        <package android:name="com.huawei.android.totemweather"/>
+        <package android:name="com.coloros.weather2"/>
+        <package android:name="com.oplus.weather"/>
+        <package android:name="ru.yandex.weatherplugin"/>
+        <package android:name="ru.gismeteo.gismeteo"/>
+        <package android:name="com.accuweather.android"/>
     </queries>
 </manifest>

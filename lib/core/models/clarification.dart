@@ -7,7 +7,15 @@ final class ClarifyOption {
     required this.text,
     this.answers = const <String>{},
     this.connectorId,
+    this.answer,
   });
+
+  /// Вариант — ответ «да» (`true`) или «нет» (`false`) на вопрос
+  /// владельца, а не новая команда: «Поставить» и «Отмена» у будильника
+  /// (ADR-029). Маршрутизатор не разбирает [text] заново, а отдаёт ответ
+  /// владельцу вопроса, как набранное «да» или «нет». `null` — обычный
+  /// вариант.
+  final bool? answer;
 
   /// Подпись кнопки и ответ, который её заменяет: «Пароли», «Все данные».
   /// Нажатие кнопки отправляет именно эту подпись — тот же путь, что
@@ -39,8 +47,24 @@ final class ClarifyOption {
 /// «нет» — отмена, «да» или «хорошо» — переспрос с теми же вариантами,
 /// любая другая фраза снимает вопрос и разбирается как обычно.
 final class Clarification {
-  Clarification({required this.questionId, required this.options})
-      : assert(options.length >= 2, 'Уточнение — выбор из двух и больше');
+  Clarification({
+    required this.questionId,
+    required this.options,
+    this.context,
+  }) : assert(options.length >= 2, 'Уточнение — выбор из двух и больше');
+
+  /// Что нужно владельцу вопроса для ответа «да» на вариант с
+  /// [ClarifyOption.answer] (разобранная просьба). Маршрутизатор его не
+  /// читает; только в памяти.
+  final Object? context;
+
+  /// Вариант-ответ «да» ([ClarifyOption.answer] = `true`) или `null`.
+  ClarifyOption? get yesOption =>
+      options.where((ClarifyOption o) => o.answer == true).firstOrNull;
+
+  /// Вариант-ответ «нет» или `null`.
+  ClarifyOption? get noOption =>
+      options.where((ClarifyOption o) => o.answer == false).firstOrNull;
 
   /// Запись каталога ответов с вопросом: `data.clarify.backup`.
   final String questionId;

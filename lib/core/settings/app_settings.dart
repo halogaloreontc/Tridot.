@@ -54,6 +54,10 @@ final class AppSettings {
     this.voiceInput = false,
     this.voiceSendImmediately = false,
     this.voiceMicExplained = false,
+    this.notifyExplained = false,
+    this.notifyDismissedDay,
+    this.notifyDateOnly = true,
+    this.notifyDateOnlyHour = defaultDateOnlyHour,
     this.appLock = false,
     this.appLockAfter = 60,
     this.formDefaults = const <String, String>{},
@@ -95,6 +99,10 @@ final class AppSettings {
       voiceInput: json['voice.enabled'] == true,
       voiceSendImmediately: json['voice.send_now'] == true,
       voiceMicExplained: json['voice.mic_explained'] == true,
+      notifyExplained: json['notify.explained'] == true,
+      notifyDismissedDay: _day(json['notify.dismissed_day']),
+      notifyDateOnly: json['notify.date_only'] != false,
+      notifyDateOnlyHour: _dateOnlyHour(json['notify.date_only_hour']),
       appLock: json['security.app_lock'] == true,
       appLockAfter: _lockAfter(json['security.app_lock_after']),
       formDefaults: cleanFormDefaults(json['form_defaults']),
@@ -121,6 +129,14 @@ final class AppSettings {
     }
     return out;
   }
+
+  /// Во сколько напоминать о задаче на день без времени (ADR-029).
+  static const int defaultDateOnlyHour = 9;
+
+  /// Час напоминания о задаче без времени: с 5 до 12, иначе
+  /// [defaultDateOnlyHour].
+  static int _dateOnlyHour(Object? value) =>
+      value is int && value >= 5 && value <= 12 ? value : defaultDateOnlyHour;
 
   /// Варианты «запрашивать после фона» (секунды): сразу, 1 мин, 5 мин.
   static const List<int> appLockAfterChoices = <int>[0, 60, 300];
@@ -284,6 +300,21 @@ final class AppSettings {
   /// Зачем нужен микрофон, уже объяснено (перед первым запросом доступа).
   final bool voiceMicExplained;
 
+  /// Зачем нужны уведомления, уже объяснено (ADR-029): лист «Напоминания
+  /// вовремя» показан хотя бы раз.
+  final bool notifyExplained;
+
+  /// День последнего «Не сейчас» в листе об уведомлениях (`2026-11-15`):
+  /// в этот день он больше сам не появляется. Только дата.
+  final String? notifyDismissedDay;
+
+  /// Напоминать о задачах на день без времени (в [notifyDateOnlyHour]).
+  /// По умолчанию включено.
+  final bool notifyDateOnly;
+
+  /// Час напоминания о задаче на день без времени: 9 по умолчанию.
+  final int notifyDateOnlyHour;
+
   /// «Вход в приложение по отпечатку / Face ID» (ADR-025). По умолчанию
   /// выключен. Это проверка в интерфейсе, а не шифрование.
   final bool appLock;
@@ -316,6 +347,10 @@ final class AppSettings {
     bool? voiceInput,
     bool? voiceSendImmediately,
     bool? voiceMicExplained,
+    bool? notifyExplained,
+    String? notifyDismissedDay,
+    bool? notifyDateOnly,
+    int? notifyDateOnlyHour,
     bool? appLock,
     int? appLockAfter,
     Map<String, String>? formDefaults,
@@ -341,6 +376,10 @@ final class AppSettings {
         voiceInput: voiceInput ?? this.voiceInput,
         voiceSendImmediately: voiceSendImmediately ?? this.voiceSendImmediately,
         voiceMicExplained: voiceMicExplained ?? this.voiceMicExplained,
+        notifyExplained: notifyExplained ?? this.notifyExplained,
+        notifyDismissedDay: notifyDismissedDay ?? this.notifyDismissedDay,
+        notifyDateOnly: notifyDateOnly ?? this.notifyDateOnly,
+        notifyDateOnlyHour: notifyDateOnlyHour ?? this.notifyDateOnlyHour,
         appLock: appLock ?? this.appLock,
         appLockAfter: appLockAfter ?? this.appLockAfter,
         formDefaults: formDefaults ?? this.formDefaults,
@@ -383,6 +422,12 @@ final class AppSettings {
         if (voiceInput) 'voice.enabled': true,
         if (voiceSendImmediately) 'voice.send_now': true,
         if (voiceMicExplained) 'voice.mic_explained': true,
+        if (notifyExplained) 'notify.explained': true,
+        if (notifyDismissedDay != null)
+          'notify.dismissed_day': notifyDismissedDay,
+        if (!notifyDateOnly) 'notify.date_only': false,
+        if (notifyDateOnlyHour != defaultDateOnlyHour)
+          'notify.date_only_hour': notifyDateOnlyHour,
         if (appLock) 'security.app_lock': true,
         if (appLockAfter != 60) 'security.app_lock_after': appLockAfter,
         if (formDefaults.isNotEmpty)

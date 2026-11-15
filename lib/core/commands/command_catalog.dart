@@ -339,6 +339,25 @@ final class CommandCatalog {
       iconName: 'update',
       sample: 'Отчёт',
     ),
+    // Будильник и таймер в «Часах» (ADR-029).
+    CommandEntry(
+      id: 'alarm.set',
+      category: CommandCategory.planning,
+      label: 'Будильник',
+      template: 'Поставь будильник на |',
+      connectorId: 'alarm',
+      iconName: 'alarm',
+      sample: '7:00',
+    ),
+    CommandEntry(
+      id: 'alarm.timer',
+      category: CommandCategory.planning,
+      label: 'Таймер',
+      template: 'Поставь таймер на |',
+      connectorId: 'alarm',
+      iconName: 'timer',
+      sample: '5 минут',
+    ),
     CommandEntry(
       id: 'plan.overdue',
       category: CommandCategory.planning,

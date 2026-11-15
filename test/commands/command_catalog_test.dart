@@ -14,6 +14,7 @@ import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
+import 'package:local_assistant/core/skills/alarm/alarm_connector.dart';
 import 'package:local_assistant/core/skills/archiver/archiver_connector.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
 import 'package:local_assistant/core/skills/converter/converter_connector.dart';
@@ -44,6 +45,7 @@ List<Connector> _connectors() => <Connector>[
       ArchiverConnector(),
       ConverterConnector(),
       YtdlConnector(),
+      AlarmConnector(clock: FixedClock(_now)),
     ];
 
 ExtensionRegistry _registry({Set<String> disabled = const <String>{}}) =>

@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show AppExitResponse;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, listEquals, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -30,6 +31,7 @@ import '../core/models/action_card.dart';
 import '../core/models/bulk.dart';
 import '../core/models/secure_card.dart';
 import '../core/models/task.dart';
+import '../core/notify/reminder_plan.dart';
 import '../core/passwords/secret_guard.dart';
 import '../core/passwords/vault.dart';
 import '../core/replies/reply_library.dart';
@@ -42,6 +44,8 @@ import '../core/skills/converter/convert_targets.dart';
 import '../core/skills/converter/ffmpeg_job.dart';
 import '../core/skills/converter/image_convert.dart';
 import '../core/skills/converter/platform_media_job.dart';
+import '../core/models/launch_request.dart';
+import '../core/skills/weather/open_meteo_client.dart';
 import '../core/skills/ytdl/ytdl_formats.dart';
 import '../core/skills/ytdl/ytdl_job.dart';
 import '../core/skills/passwords/passwords_phrases.dart';
@@ -59,6 +63,8 @@ import 'files/file_opener.dart';
 import 'jobs/job_cards.dart';
 import 'jobs/job_hub.dart';
 import 'jobs/job_picker.dart';
+import 'notify/notify_channel.dart';
+import 'notify/notify_views.dart';
 import 'passwords/entry_screens.dart';
 import 'security/app_lock.dart';
 import 'passwords/generator_view.dart';
@@ -81,6 +87,8 @@ import 'shell/session_files_panel.dart';
 import 'shell/session_header.dart';
 import 'shell/session_hero.dart';
 import 'shell/today_panel.dart';
+import 'extensions/weather_kit.dart';
+import 'extensions/weather_screen.dart';
 import 'voice/voice_kit.dart';
 import 'voice/voice_views.dart';
 import 'widgets/action_card_view.dart';
@@ -98,6 +106,7 @@ import 'widgets/status_cube.dart';
 import 'widgets/task_chat_header.dart';
 import 'widgets/grouped.dart';
 import 'widgets/task_tile.dart';
+import 'widgets/weather_card_view.dart';
 import 'widgets/whole_word_text.dart';
 
 /// Разделы оболочки «Д»: сессия (главный экран), задачи, проекты,
@@ -167,6 +176,8 @@ final class HomePage extends StatefulWidget {
     this.ffmpeg,
     this.nativeMedia,
     this.ytdl,
+    this.weather,
+    this.notify,
     this.appLock,
     this.onAppearanceChanged,
     this.onReduceMotionChanged,
@@ -227,8 +238,16 @@ final class HomePage extends StatefulWidget {
   /// сборка для Google Play).
   final YtdlKit? ytdl;
 
+  /// Погода (ADR-030): настройки, карточка и открытие своей страницы или
+  /// приложения; `null` — навыка нет (тесты).
+  final WeatherKit? weather;
+
   /// Вход в приложение по отпечатку / Face ID (ADR-025); `null` — нет.
   final AppLockController? appLock;
+
+  /// Системные уведомления о задачах и будильник (ADR-029); `null` — их
+  /// нет (тесты, Windows, Linux).
+  final NotifyPlatform? notify;
 
   /// Оформление сменилось в настройках (или прочитано с диска): приложение
   /// перекрашивает тему ([AppAppearance], ADR-027).
@@ -555,6 +574,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _settingsReady = _loadSettings();
     _chatsReady = _loadChats();
     _refresh();
+    _openedTask = _notify.openedTask.listen(
+      (String taskId) => unawaited(_openNotifiedTask(taskId)),
+    );
+    unawaited(_openLaunchTask());
     // Хранилище запирается, как только навык выключили (D18).
     final passwords = widget.passwords;
     if (passwords != null) {
@@ -658,8 +681,137 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
+  // -------------------------------------------- уведомления (ADR-029)
+
+  NotifyPlatform get _notify => widget.notify ?? const UnsupportedNotify();
+
+  StreamSubscription<String>? _openedTask;
+
+  /// Расписание, отданное системе последним: тот же план не шлётся
+  /// повторно.
+  List<Reminder>? _syncedPlan;
+  Set<String> _syncedSnoozable = const <String>{};
+
+  /// Лист «Напоминания вовремя» открыт.
+  bool _notifyAsking = false;
+
+  /// Расписание напоминаний — заново из активных задач. Только после
+  /// загрузки задач и настроек; тот же план не отправляется второй раз.
+  void _syncReminders() {
+    if (!_notify.supported || !_loaded || !_settingsLoaded) return;
+    final plan = ReminderPlan.from(
+      _active,
+      now: _now,
+      persona: _settings.personas.notifier.russianName,
+      dateOnlyHour:
+          _settings.notifyDateOnly ? _settings.notifyDateOnlyHour : null,
+    );
+    final snoozable = ReminderPlan.snoozable(_active, now: _now);
+    final synced = _syncedPlan;
+    if (synced != null &&
+        listEquals(synced, plan) &&
+        setEquals(_syncedSnoozable, snoozable)) {
+      return;
+    }
+    _syncedPlan = plan;
+    _syncedSnoozable = snoozable;
+    unawaited(_notify.sync(plan, snoozable: snoozable));
+  }
+
+  /// Ответ создал задачу или перенёс её на будущее: в первый раз —
+  /// объяснить, зачем уведомления, и спросить (не при запуске и не чаще
+  /// раза в день после «Не сейчас»).
+  Future<void> _askNotifyFor(AssistantResponse response) async {
+    final due = response.task?.dueAt;
+    if (!_notify.supported ||
+        _notifyAsking ||
+        response.status != AssistantStatus.completed ||
+        due == null ||
+        !due.isAfter(_now)) {
+      return;
+    }
+    if (_settings.notifyDismissedDay == AppSettings.dayKey(_now)) return;
+    final status = await _notify.status();
+    if (!mounted) return;
+    final chatId = _book.currentId;
+    if (status == NotifyPermission.permanentlyDenied &&
+        _settings.notifyExplained) {
+      // Уже объясняли, а уведомления выключены в настройках системы: одна
+      // строка в день вместо листа.
+      _changeSettings(
+        _settings.copyWith(notifyDismissedDay: AppSettings.dayKey(_now)),
+      );
+      _notifierLine(chatId, 'notify.off');
+      return;
+    }
+    // Выключены в системе ещё до первого объяснения (Android 12 и раньше,
+    // Mac после переустановки): лист сам откроется на «Открыть настройки».
+    if (!status.canAsk && status != NotifyPermission.permanentlyDenied) {
+      return;
+    }
+    _notifyAsking = true;
+    final NotifyOutcome outcome;
+    try {
+      outcome = await showNotifyRationale(
+        context,
+        platform: _notify,
+        notifier: _settings.personas.notifier,
+      );
+    } finally {
+      _notifyAsking = false;
+    }
+    if (!mounted) return;
+    _changeSettings(
+      _settings.copyWith(
+        notifyExplained: true,
+        notifyDismissedDay:
+            outcome == NotifyOutcome.granted ? null : AppSettings.dayKey(_now),
+      ),
+    );
+    if (outcome == NotifyOutcome.granted) {
+      _syncedPlan = null;
+      _syncReminders();
+      _notifierLine(chatId, 'notify.granted');
+      if (await _notify.exactStatus() == ExactAlarm.denied && mounted) {
+        _notifierLine(chatId, 'notify.exactOff');
+      }
+    }
+  }
+
+  /// Строка ведущего оповещений в чат [chatId].
+  void _notifierLine(String chatId, String replyId) {
+    final line = _answer(widget.assistant.notifierSays(replyId));
+    setState(() => _book.append(chatId, line));
+    _scrollToLatest();
+  }
+
+  /// Нажато уведомление о задаче: открыть её чат.
+  Future<void> _openNotifiedTask(String taskId) async {
+    try {
+      await _chatsReady;
+    } on Object {
+      // Чаты не прочитались — откроем, что есть.
+    }
+    if (!mounted) return;
+    var task = _findTask(taskId);
+    if (task == null) {
+      await _refresh();
+      if (!mounted) return;
+      task = _findTask(taskId);
+    }
+    if (task == null) return;
+    _openTaskChat(task, mode: AssistantViewMode.dialogue);
+  }
+
+  /// Приложение открыли нажатием на уведомление.
+  Future<void> _openLaunchTask() async {
+    final taskId = await _notify.takeLaunchTask();
+    if (taskId != null) await _openNotifiedTask(taskId);
+  }
+
   @override
   void dispose() {
+    unawaited(_openedTask?.cancel());
     widget.ffmpeg?.removeListener(_onJobsChanged);
     widget.ytdl?.tool.removeListener(_onJobsChanged);
     _jobHub
@@ -788,7 +940,114 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         clarification: response.clarification,
         suggestions: response.suggestions,
         job: response.job,
+        weather: response.weather,
       );
+
+  // --------------------------------------------------------------- погода
+
+  /// Карточки погоды, которые сейчас обновляются.
+  final Set<String> _weatherRefreshing = <String>{};
+
+  /// Открыть страницу или приложение погоды после живого ответа; не
+  /// открылось — строка тем же голосом следом (ADR-030).
+  Future<void> _launchWeather(
+    LaunchRequest request,
+    String chatId,
+    String? personaId,
+  ) async {
+    final kit = widget.weather;
+    final outcome =
+        kit == null ? WeatherLaunch.linkFailed : await kit.launch(request);
+    _weatherFollowUp(outcome, chatId, personaId);
+  }
+
+  void _weatherFollowUp(
+    WeatherLaunch outcome,
+    String chatId,
+    String? personaId,
+  ) {
+    final id = outcome.followUpId;
+    if (id == null || !mounted) return;
+    setState(() {
+      _book.append(chatId, _answer(widget.assistant.followUp(id, personaId)));
+    });
+    _scrollToLatest();
+  }
+
+  Future<void> _openWeatherSettings() async {
+    final kit = widget.weather;
+    if (kit == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => WeatherScreen(kit: kit),
+      ),
+    );
+  }
+
+  /// «Обновить»: новый снимок в том же сообщении, чат сохраняется.
+  Future<void> _refreshWeather(String chatId, ChatMessage message) async {
+    final kit = widget.weather;
+    final place = message.weather?.forecast?.place;
+    if (kit == null || place == null) return;
+    setState(() => _weatherRefreshing.add(message.id));
+    final result = await kit.refresh(place);
+    if (!mounted) return;
+    setState(() {
+      _weatherRefreshing.remove(message.id);
+      final forecast = result.forecast;
+      if (forecast != null) {
+        _book.replace(
+          chatId,
+          message.id,
+          message.withWeather(
+            message.weather!.refreshed(forecast, stale: result.stale),
+          ),
+        );
+      }
+    });
+    if (result.forecast == null || result.stale) {
+      _announce(
+        weatherErrorText(result.error ?? WeatherError.failed),
+      );
+    }
+  }
+
+  Widget? _weatherCard(ChatMessage message) {
+    final card = message.weather;
+    if (card == null) return null;
+    final kit = widget.weather;
+    final chatId = _book.currentId;
+    final link = kit?.settings.link;
+    return WeatherCardView(
+      key: ValueKey<String>('weather-${message.id}'),
+      card: card,
+      compact: MediaQuery.sizeOf(context).width < wideBreakpoint,
+      busy: _weatherRefreshing.contains(message.id),
+      onRefresh: kit == null
+          ? null
+          : () => unawaited(_refreshWeather(chatId, message)),
+      onMore: kit == null || link == null
+          ? null
+          : () => unawaited(
+                kit.launch(LaunchRequest.url(link)).then(
+                      (WeatherLaunch o) =>
+                          _weatherFollowUp(o, chatId, message.personaId),
+                    ),
+              ),
+      onOpenSite: kit == null
+          ? null
+          : () => unawaited(kit.links.openUrl(OpenMeteo.siteUrl)),
+      onOpenAgain: kit == null
+          ? null
+          : () => unawaited(
+                kit.openAgain().then(
+                      (WeatherLaunch o) =>
+                          _weatherFollowUp(o, chatId, message.personaId),
+                    ),
+              ),
+      onSetup: kit == null ? null : () => unawaited(_openWeatherSettings()),
+    );
+  }
 
   // --------------------------------------------------- карточки расширений
 
@@ -892,6 +1151,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
     _dailyChecks();
     _preloadVoice();
+    _syncReminders();
   }
 
   /// Чаты с диска: метаданные сразу, сообщения — при открытии. Открытой
@@ -979,6 +1239,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => _settings = settings);
     unawaited(_settingsStore.save(settings));
     _preloadVoice();
+    _syncReminders();
   }
 
   /// Вход в приложение по отпечатку / Face ID: настройки — в замок. Замок
@@ -1058,6 +1319,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         }
       });
       if (chatRemoved) _onChatChanged();
+      _syncReminders();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -1293,6 +1555,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _cubeTimer = Timer(const Duration(milliseconds: 1600), () {
       if (mounted && !_sending) setState(() => _cube = CubeState.idle);
     });
+    // Своя страница или приложение погоды: только у живого ответа, в
+    // истории запроса нет.
+    if (response.launch case final LaunchRequest launch) {
+      unawaited(_launchWeather(launch, chatId, reply.personaId));
+    }
     if (fromDocument &&
         _mode == AssistantViewMode.document &&
         _section == AppSection.session &&
@@ -1309,6 +1576,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     _refocusInput(refocus, chatId);
     await _refresh();
+    if (mounted) await _askNotifyFor(response);
   }
 
   /// Вернуть фокус полю после ответа — только тому, кто печатал, и только
@@ -3685,7 +3953,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ffmpeg: widget.ffmpeg,
         nativeMedia: widget.nativeMedia?.caps ?? NativeMediaCaps.none,
         ytdl: widget.ytdl,
+        weather: widget.weather,
         appLock: widget.appLock,
+        notify: widget.notify,
         showTitle: false,
         onOpenAssistants: () =>
             setState(() => _myRelayTab = MyRelayTab.assistants),
@@ -3958,6 +4228,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 // Полосы по одной — только на широком окне (мышь); на
                 // телефоне и планшете (палец) — одна кнопка списка.
                 compact: !wide,
+                reduceMotion: _settings.reduceMotion,
                 // Колесо и перетаскивание над хроникой двигают ленту под
                 // ней: у полосы нет «мёртвой» зоны.
                 scrollController: _mode == AssistantViewMode.dialogue
@@ -4236,6 +4507,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           _actionCard(message, i, lastWithCard) ??
           _secureCard(message) ??
           _jobCard(message) ??
+          _weatherCard(message) ??
           _clarifyOptions(message) ??
           (i == latestAnswer ? _suggestionChips(message) : null);
       final row = _MessageRow(

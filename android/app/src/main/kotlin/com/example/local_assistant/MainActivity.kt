@@ -7,6 +7,7 @@ import android.os.Looper
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import com.example.local_assistant.media.MediaChannel
+import com.example.local_assistant.notify.NotifyChannel
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -15,6 +16,8 @@ import java.util.UUID
 
 class MainActivity : FlutterActivity() {
     private var disposeMedia: (() -> Unit)? = null
+    private var notify: NotifyChannel? = null
+    private var links: LinksChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -26,6 +29,12 @@ class MainActivity : FlutterActivity() {
         // приложение по отпечатку / Face ID.
         VaultKeyChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         DeviceAuthChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        // Уведомления о задачах и будильник в «Часах» (ADR-029): только на
+        // устройстве, без сети.
+        notify = NotifyChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        // Своя страница и приложение погоды (ADR-030): открывает система,
+        // канал в сеть не ходит.
+        links = LinksChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         // «Открыть» у результата карточки расширения (ADR-024): копия во
         // временной папке и FileProvider только на чтение. Путь вне папок
         // приложения не открывается.
@@ -63,7 +72,32 @@ class MainActivity : FlutterActivity() {
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         disposeMedia?.invoke()
         disposeMedia = null
+        notify = null
+        links = null
         super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    /** Ответ системного выбора «Другое приложение…» (погода). */
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (links?.onActivityResult(requestCode, resultCode, data) == true) return
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        notify?.onRequestPermissionsResult(requestCode)
+    }
+
+    /** Нажато уведомление, пока приложение открыто: чат задачи. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        notify?.onNewIntent(intent)
     }
 
     /**

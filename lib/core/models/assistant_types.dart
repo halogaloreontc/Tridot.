@@ -2,6 +2,8 @@ import '../commands/command_suggest.dart';
 import '../jobs/extension_card.dart';
 import '../personas/persona.dart';
 import 'action_card.dart';
+import 'launch_request.dart';
+import 'weather_card.dart';
 import 'bulk.dart';
 import 'clarification.dart';
 import 'secure_card.dart';
@@ -26,6 +28,8 @@ final class AssistantResponse {
     this.clarification,
     this.suggestions,
     this.job,
+    this.weather,
+    this.launch,
   });
 
   /// Готовый текст для пользователя. В истории чата хранится именно он:
@@ -86,6 +90,14 @@ final class AssistantResponse {
   /// карточки.
   final ExtensionCard? job;
 
+  /// Карточка погоды (ADR-030): прогноз или «Открыть ещё раз». Пишется в
+  /// историю чата. `null` — без карточки.
+  final WeatherCard? weather;
+
+  /// Открыть страницу или приложение погоды сразу после ответа. Только в
+  /// памяти и только у живого ответа: в историю не попадает.
+  final LaunchRequest? launch;
+
   /// Тот же ответ с подсказкой команд [suggestions].
   AssistantResponse withSuggestions(CommandSuggestions? suggestions) =>
       AssistantResponse(
@@ -104,6 +116,8 @@ final class AssistantResponse {
         clarification: clarification,
         suggestions: suggestions,
         job: job,
+        weather: weather,
+        launch: launch,
       );
 
   /// Тот же ответ от помощника [personaId].
@@ -123,6 +137,8 @@ final class AssistantResponse {
         clarification: clarification,
         suggestions: suggestions,
         job: job,
+        weather: weather,
+        launch: launch,
       );
 
   /// Тот же ответ, в котором пользователь обратился к [personaId] по имени.
@@ -142,6 +158,8 @@ final class AssistantResponse {
         clarification: clarification,
         suggestions: suggestions,
         job: job,
+        weather: weather,
+        launch: launch,
       );
 
   /// Тот же ответ с другим текстом и фактами (выходной фильтр паролей).
@@ -162,5 +180,7 @@ final class AssistantResponse {
         clarification: clarification,
         suggestions: suggestions,
         job: job,
+        weather: weather,
+        launch: launch,
       );
 }

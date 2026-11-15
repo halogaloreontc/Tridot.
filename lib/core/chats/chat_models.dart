@@ -8,6 +8,7 @@ import '../models/bulk.dart';
 import '../commands/command_suggest.dart';
 import '../models/clarification.dart';
 import '../models/secure_card.dart';
+import '../models/weather_card.dart';
 
 /// Какой это чат: чат одной задачи или сессия (ADR-015).
 ///
@@ -93,6 +94,7 @@ final class ChatMessage {
     this.suggestions,
     this.attachments = const <ChatAttachment>[],
     this.job,
+    this.weather,
   });
 
   /// `m_<микросекунды>_<номер>`: уникален в пределах устройства.
@@ -152,6 +154,10 @@ final class ChatMessage {
   /// «Прервано» ([ExtensionCard.fromJson]).
   final ExtensionCard? job;
 
+  /// Карточка погоды под ответом (ADR-030): снимок прогноза или «Открыть
+  /// ещё раз» — без адреса ссылки. Битая — сообщение без карточки.
+  final WeatherCard? weather;
+
   bool get fromUser => author == ChatAuthor.user;
 
   /// То же сообщение с другим [id] и ссылкой [link] (копия в чат задачи).
@@ -167,6 +173,7 @@ final class ChatMessage {
         card: card,
         link: link,
         job: job,
+        weather: weather,
       );
 
   /// То же сообщение со ссылкой [link].
@@ -186,6 +193,7 @@ final class ChatMessage {
         suggestions: suggestions,
         attachments: attachments,
         job: job,
+        weather: weather,
       );
 
   /// То же сообщение с другим текстом [text] (строка о сохранённых файлах
@@ -206,6 +214,27 @@ final class ChatMessage {
         suggestions: suggestions,
         attachments: attachments,
         job: job,
+        weather: weather,
+      );
+
+  /// То же сообщение с карточкой погоды [weather] («Обновить»).
+  ChatMessage withWeather(WeatherCard weather) => ChatMessage(
+        id: id,
+        author: author,
+        text: text,
+        timestamp: timestamp,
+        personaId: personaId,
+        status: status,
+        taskId: taskId,
+        checklist: checklist,
+        card: card,
+        link: link,
+        secureCard: secureCard,
+        clarification: clarification,
+        suggestions: suggestions,
+        attachments: attachments,
+        job: job,
+        weather: weather,
       );
 
   /// Пустые поля не пишутся.
@@ -221,6 +250,7 @@ final class ChatMessage {
         if (card != null) 'card': card!.toJson(),
         if (link != null) 'link': link!.toJson(),
         if (job != null) 'job': job!.toJson(),
+        if (weather != null) 'weather': weather!.toJson(),
         if (attachments.isNotEmpty)
           'attachments': <Map<String, Object?>>[
             for (final attachment in attachments) attachment.toJson(),
@@ -264,6 +294,9 @@ final class ChatMessage {
       card: json.containsKey('card') ? ActionCard.fromJson(json['card']) : null,
       link: ChatLink.fromJson(json['link']),
       job: json.containsKey('job') ? ExtensionCard.fromJson(json['job']) : null,
+      weather: json.containsKey('weather')
+          ? WeatherCard.fromJson(json['weather'])
+          : null,
       attachments: files is List
           ? <ChatAttachment>[
               for (final file in files)

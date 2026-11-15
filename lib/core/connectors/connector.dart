@@ -5,6 +5,8 @@ import '../models/action_card.dart';
 import '../models/assistant_types.dart';
 import '../models/bulk.dart';
 import '../models/clarification.dart';
+import '../models/launch_request.dart';
+import '../models/weather_card.dart';
 import '../models/secure_card.dart';
 import '../models/task.dart';
 import '../personas/persona.dart';
@@ -528,6 +530,8 @@ final class AssistantSession {
     SecureCardRequest? secureCard,
     Clarification? clarification,
     ExtensionCard? job,
+    WeatherCard? weather,
+    LaunchRequest? launch,
     String? prefix,
   }) =>
       AssistantResponse(
@@ -544,6 +548,8 @@ final class AssistantSession {
         secureCard: secureCard,
         clarification: clarification,
         job: job,
+        weather: weather,
+        launch: launch,
       );
 
   /// Файлы, прикреплённые к текущему сообщению (ADR-019), — только для

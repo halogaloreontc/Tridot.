@@ -99,6 +99,8 @@ void main() {
     ]) {
       expect(DutyZones.dutyOf(id), PersonaDuty.extensions, reason: id);
     }
+    // Будильник и таймер в «Часах» (ADR-029) — зона оповещений.
+    expect(DutyZones.dutyOf('alarm'), PersonaDuty.notifications);
   });
 
   final overdue = Task(

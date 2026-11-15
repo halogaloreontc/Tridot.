@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../assistant_theme.dart';
 import '../layout.dart';
+import 'history_drum.dart';
 import 'whole_word_text.dart';
 
 /// Одна команда пользователя в истории разговора.
@@ -195,8 +196,10 @@ final class _HistoryRow extends StatelessWidget {
 /// последняя — цвета успеха.
 ///
 /// - Узко ([compact], телефон и планшет — пальцем): полосы слишком мелкие
-///   для пальца, поэтому вся строка — одна кнопка не уже [minTarget],
-///   которая открывает «История команд».
+///   для пальца, поэтому вся строка — одна кнопка не уже [minTarget].
+///   Она открывает «барабан» ([showHistoryDrum]): окошко вырастает из
+///   кнопки, команды листаются свайпом в стороны; из него же — «Весь
+///   список» (шторка «История команд»).
 /// - Широко (компьютер, мышь): наведение на полосу показывает карточку с
 ///   командой и ответом, нажатие ведёт к сообщению. Рядом — кнопка списка
 ///   (`history-rail-list`): весь список, в том числе команды, которым не
@@ -212,14 +215,18 @@ final class HistoryRail extends StatelessWidget {
     required this.onSelect,
     this.activeIndex,
     this.compact = false,
+    this.reduceMotion = false,
   });
 
   final List<HistoryEntry> entries;
   final ValueChanged<int> onSelect;
   final int? activeIndex;
 
-  /// Узкий экран: вся строка — одна кнопка, открывающая список команд.
+  /// Узкий экран: вся строка — одна кнопка, открывающая «барабан».
   final bool compact;
+
+  /// «Меньше движения»: «барабан» появляется без анимации.
+  final bool reduceMotion;
 
   /// Высота строки — она же высота цели нажатия.
   static const double height = AppSize.minTap;
@@ -277,7 +284,7 @@ final class HistoryRail extends StatelessWidget {
                   compact: compact,
                   width: step,
                   onTap: compact
-                      ? () => _openList(context)
+                      ? () => _openDrum(context)
                       : () => onSelect(index),
                 ),
             ],
@@ -327,7 +334,7 @@ final class HistoryRail extends StatelessWidget {
       child: GestureDetector(
         key: const Key('history-rail-open'),
         behavior: HitTestBehavior.opaque,
-        onTap: () => _openList(context),
+        onTap: () => _openDrum(context),
         child: ExcludeSemantics(
           child: ConstrainedBox(
             // Одна-две полосы — всё равно цель не уже пальца.
@@ -394,6 +401,51 @@ final class HistoryRail extends StatelessWidget {
     final index = await showCommandHistory(context, entries: entries);
     if (index != null) onSelect(index);
   }
+
+  /// «Барабан» из кнопки: окошко растёт из подложки-«таблетки» (или из
+  /// самой строки, если подложки нет).
+  Future<void> _openDrum(BuildContext context) async {
+    final box = (context
+            .findAncestorStateOfType<_HistoryRailPillState>()
+            ?._pillKey
+            .currentContext
+            ?.findRenderObject() ??
+        context.findRenderObject())! as RenderBox;
+    final anchor = box.localToGlobal(Offset.zero) & box.size;
+    // Иначе клавиатура вернётся, когда окошко закроется (ADR-028).
+    FocusManager.instance.primaryFocus?.unfocus();
+    final index = await showHistoryDrum(
+      context,
+      entries: entries,
+      anchor: anchor,
+      activeIndex: activeIndex,
+      reduceMotion: reduceMotion,
+    );
+    if (!context.mounted || index == null) return;
+    if (index == historyDrumShowAll) {
+      await _openList(context);
+    } else {
+      onSelect(index);
+    }
+  }
+}
+
+/// Высота и цвет полосы хроники по свежести команды: [age] 0 — последняя.
+/// Общая для полос в строке и под «барабаном».
+(double, Color) historyMarkLook(
+  BuildContext context, {
+  required int age,
+  required bool active,
+  double scale = 1,
+}) {
+  final colors = context.colors;
+  if (active) return (20 * scale, colors.textStrong);
+  return switch (age) {
+    0 => (18 * scale, colors.success),
+    1 => (15 * scale, colors.muted),
+    2 || 3 => (12 * scale, colors.faint),
+    _ => (9 * scale, colors.border),
+  };
 }
 
 /// [HistoryRail] на подложке-«таблетке» заливкой без рамки (ADR-027).
@@ -412,12 +464,16 @@ final class HistoryRailPill extends StatefulWidget {
     this.activeIndex,
     this.compact = false,
     this.scrollController,
+    this.reduceMotion = false,
   });
 
   final List<HistoryEntry> entries;
   final ValueChanged<int> onSelect;
   final int? activeIndex;
   final bool compact;
+
+  /// «Меньше движения»: «барабан» появляется без анимации.
+  final bool reduceMotion;
 
   /// Прокрутка того, что под подложкой; `null` — ничего не передаётся.
   final ScrollController? scrollController;
@@ -428,6 +484,9 @@ final class HistoryRailPill extends StatefulWidget {
 
 final class _HistoryRailPillState extends State<HistoryRailPill> {
   Drag? _drag;
+
+  /// Подложка: из неё вырастает «барабан».
+  final GlobalKey _pillKey = GlobalKey();
 
   ScrollPosition? get _position {
     final controller = widget.scrollController;
@@ -492,6 +551,7 @@ final class _HistoryRailPillState extends State<HistoryRailPill> {
         borderRadius: BorderRadius.circular(HistoryRail.height / 2),
       ),
       child: Padding(
+        key: _pillKey,
         padding: const EdgeInsets.symmetric(horizontal: 4),
         child: SizedBox(
           height: HistoryRail.height,
@@ -500,6 +560,7 @@ final class _HistoryRailPillState extends State<HistoryRailPill> {
             onSelect: widget.onSelect,
             activeIndex: widget.activeIndex,
             compact: widget.compact,
+            reduceMotion: widget.reduceMotion,
           ),
         ),
       ),
@@ -559,17 +620,12 @@ final class _MarkState extends State<_Mark> {
   bool _hover = false;
 
   /// Высота и цвет полосы по свежести команды.
-  (double, Color) _look(BuildContext context) {
-    final colors = context.colors;
-    final scale = widget.compact ? .8 : 1.0;
-    if (widget.active || _hover) return (20 * scale, colors.textStrong);
-    return switch (widget.age) {
-      0 => (18 * scale, colors.success),
-      1 => (15 * scale, colors.muted),
-      2 || 3 => (12 * scale, colors.faint),
-      _ => (9 * scale, colors.border),
-    };
-  }
+  (double, Color) _look(BuildContext context) => historyMarkLook(
+        context,
+        age: widget.age,
+        active: widget.active || _hover,
+        scale: widget.compact ? .8 : 1.0,
+      );
 
   @override
   Widget build(BuildContext context) {

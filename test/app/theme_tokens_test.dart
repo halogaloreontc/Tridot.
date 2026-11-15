@@ -193,6 +193,23 @@ void main() {
       }
     });
 
+    test('круглые кнопки на панели поля видны кругом, значок — читается', () {
+      // «+», крестик голосового ввода, пустая отправка и выключенный
+      // микрофон — заливкой fieldOnRaised на панели raised.
+      for (final MapEntry(key: name, value: p) in _themes.entries) {
+        expect(
+          contrast(p.fieldOnRaised, p.raised),
+          greaterThan(1.1),
+          reason: name,
+        );
+        expect(
+          contrast(p.icon, p.fieldOnRaised),
+          greaterThanOrEqualTo(3),
+          reason: name,
+        );
+      }
+    });
+
     test('lerp: края — сами палитры, середина — между ними', () {
       const dark = AppPalette.dark;
       const light = AppPalette.light;

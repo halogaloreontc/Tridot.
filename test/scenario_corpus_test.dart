@@ -14,6 +14,7 @@ import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
+import 'package:local_assistant/core/skills/alarm/alarm_connector.dart';
 import 'package:local_assistant/core/skills/calculator/calculator.dart';
 import 'package:local_assistant/core/skills/archiver/archiver_connector.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
@@ -21,6 +22,7 @@ import 'package:local_assistant/core/skills/converter/converter_connector.dart';
 import 'package:local_assistant/core/skills/data/data_connector.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
+import 'package:local_assistant/core/skills/weather/weather_connector.dart';
 import 'package:local_assistant/core/skills/ytdl/ytdl_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
@@ -135,8 +137,31 @@ String? _formOf(Object? payload) => switch (payload) {
           if (r.unoffered case final String format) 'unoffered': format,
           ...r.options,
         }),
+      final AlarmRequest r => _sortedForm(<String, String>{
+          if (r.hour case final int hour) 'hour': '$hour',
+          if (r.minute case final int minute) 'minute': '$minute',
+          if (r.days.isNotEmpty) 'days': _daysForm(r.days),
+          if (r.seconds case final int seconds) 'seconds': '$seconds',
+          if (r.label case final String label) 'label': label,
+          if (r.issue == AlarmIssue.date && r.at != null)
+            'date': r.at!.toIso8601String().substring(0, 10),
+        }),
+      // Погода (ADR-030): день (ISO), город в именительном падеже, диапазон.
+      final WeatherAsk a => _sortedForm(<String, String>{
+          if (a.date case final DateTime date)
+            'day': date.toIso8601String().substring(0, 10),
+          if (a.placeName case final String place) 'place': place,
+          if (a.range case final WeatherRange range) 'range': range.name,
+        }),
       _ => null,
     };
+
+/// Дни будильника для поля `form`: «1-5» подряд, иначе «1,3».
+String _daysForm(List<int> days) {
+  final contiguous =
+      days.length > 1 && days.last - days.first == days.length - 1;
+  return contiguous ? '${days.first}-${days.last}' : days.join(',');
+}
 
 String _sortedForm(Map<String, String> form) => <String>[
       for (final key in form.keys.toList()..sort()) '$key=${form[key]}',
@@ -199,6 +224,17 @@ final Map<String, Connector Function(DateTime now, bool connected)>
   // платформе: его фразы («скачай видео …») не должны перехватывать
   // задачи и конвертер.
   YtdlConnector.id: (DateTime now, bool connected) => YtdlConnector(),
+  // Будильник и таймер в «Часах» (ADR-029): «поставь будильник на 7» — не
+  // задача, а «купить будильник» и «напомни поставить будильник» — задачи.
+  AlarmConnector.id: (DateTime now, bool connected) =>
+      AlarmConnector(clock: FixedClock(now)),
+  // Погода (ADR-030) выключена по умолчанию, но в корпусе включена: «будет
+  // дождь?» — её, а «напомни взять зонт» и «купить зонт» — задачи. `match`
+  // в сеть не ходит; подделка сервиса без транспорта.
+  WeatherConnector.id: (DateTime now, bool connected) => WeatherConnector(
+        backend: WeatherService.memory(clock: FixedClock(now)),
+        clock: FixedClock(now),
+      ),
 };
 
 /// Ответ калькулятора для сравнения с полем `answer`: пример — как его
@@ -344,8 +380,11 @@ void _validate(Map<String, dynamic> json, String location) {
     if (form is! Map || form.values.any((Object? v) => v is! String)) {
       fail('поле form — объект «поле: значение» строками');
     }
-    if (connector != ConverterConnector.id) {
-      fail('поле form бывает только у connector «converter»');
+    if (connector != ConverterConnector.id &&
+        connector != AlarmConnector.id &&
+        connector != WeatherConnector.id) {
+      fail('поле form бывает только у connector «converter», «alarm» и '
+          '«weather»');
     }
   }
   final after = json['after'];
@@ -405,6 +444,7 @@ final class _Case {
           ArchiverConnector.id,
           ConverterConnector.id,
           YtdlConnector.id,
+          WeatherConnector.id,
         },
         enabledRoles: roles,
         disabledRoles: <String>{

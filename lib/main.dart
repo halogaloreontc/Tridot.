@@ -8,11 +8,14 @@ import 'package:path_provider/path_provider.dart';
 
 import 'app/assistant_theme.dart';
 import 'app/extensions/tool_kit.dart';
+import 'app/extensions/weather_kit.dart';
 import 'app/extensions/ytdl_kit.dart';
+import 'app/links/link_opener.dart';
 import 'app/files/file_opener.dart';
 import 'app/jobs/job_picker.dart';
 import 'app/jobs/media_channel_bridge.dart';
 import 'app/home_page.dart';
+import 'app/notify/notify_channel.dart';
 import 'app/passwords/device_keys.dart';
 import 'app/passwords/passwords_kit.dart';
 import 'app/security/app_lock.dart';
@@ -41,6 +44,7 @@ import 'core/scenario/scenario_parser.dart';
 import 'core/services/clock.dart';
 import 'core/services/task_service.dart';
 import 'core/settings/app_settings.dart';
+import 'core/skills/alarm/alarm_connector.dart';
 import 'core/skills/archiver/archiver_connector.dart';
 import 'core/skills/calculator/calculator_connector.dart';
 import 'core/skills/converter/converter_connector.dart';
@@ -48,6 +52,7 @@ import 'core/skills/converter/platform_media_job.dart';
 import 'core/skills/data/data_connector.dart';
 import 'core/skills/passwords/passwords_connector.dart';
 import 'core/skills/talk/talk_connector.dart';
+import 'core/skills/weather/weather_connector.dart';
 import 'core/skills/ytdl/ytdl_connector.dart';
 import 'core/skills/ytdl/ytdl_unavailable.dart';
 import 'core/storage/json_task_repository.dart';
@@ -212,6 +217,22 @@ Future<void> main() async {
       await ytdl.load();
     }
   }
+  // Уведомления о задачах и будильник в «Часах» (ADR-029): свой канал
+  // `tridot/notify` на Android и macOS, на остальных — нет.
+  final notify = NotifyPlatform.current();
+  // Погода (ADR-030): выключена по умолчанию; Open-Meteo — только после
+  // «Разрешить», своя ссылка и приложение открываются системой. Настройки
+  // и кэш — в <поддержка>/assistant/weather, на устройстве.
+  final weatherService = WeatherService(
+    transport: transport,
+    store: JsonWeatherStore(p.join(support.path, 'assistant', 'weather')),
+    clock: clock,
+  );
+  final weather = WeatherKit(
+    service: weatherService,
+    links: LinkOpener(platform: currentJobPlatform()),
+  );
+  await weather.load();
   final extensions = ExtensionRegistry(
     connectors: <Connector>[
       TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
@@ -235,6 +256,11 @@ Future<void> main() async {
       // видео — скачиваемым ffmpeg на Windows и Linux, средствами системы
       // на телефоне и Mac.
       ConverterConnector(environment: converterEnvironment),
+      // Погода (ADR-030): ведёт Связной; сеть — только с разрешения.
+      WeatherConnector(backend: weatherService, clock: clock),
+      // Будильник и таймер (ADR-029): открывает «Часы» с заполненным
+      // будильником, человек подтверждает там. Ведёт Нода (оповещения).
+      AlarmConnector(setter: NotifyAlarmSetter(notify)),
       // Загрузчик видео: ссылка уходит только в yt-dlp. Где его нет
       // (Android, macOS, сборка для Google Play), на те же фразы Лиорио
       // честно отвечает, почему, — без карточки и без ссылки в ответе.
@@ -303,6 +329,8 @@ Future<void> main() async {
       ffmpeg: ffmpeg,
       nativeMedia: nativeMedia,
       ytdl: ytdl,
+      weather: weather,
+      notify: notify,
       initialAppearance: early.appearance,
       initialReduceMotion: early.reduceMotion,
     ),
@@ -418,6 +446,8 @@ final class AssistantApp extends StatefulWidget {
     this.ffmpeg,
     this.nativeMedia,
     this.ytdl,
+    this.weather,
+    this.notify,
     this.appLock,
     this.initialAppearance = AppAppearance.system,
     this.initialReduceMotion = false,
@@ -458,8 +488,14 @@ final class AssistantApp extends StatefulWidget {
   /// Загрузчик видео; `null` — нет в этой сборке или на платформе.
   final YtdlKit? ytdl;
 
+  /// Погода (ADR-030).
+  final WeatherKit? weather;
+
   /// Вход в приложение по отпечатку / Face ID; `null` — нет замка.
   final AppLockController? appLock;
+
+  /// Уведомления и будильник (ADR-029); `null` — их нет.
+  final NotifyPlatform? notify;
 
   @override
   State<AssistantApp> createState() => _AssistantAppState();
@@ -505,6 +541,8 @@ final class _AssistantAppState extends State<AssistantApp> {
       ffmpeg: widget.ffmpeg,
       nativeMedia: widget.nativeMedia,
       ytdl: widget.ytdl,
+      weather: widget.weather,
+      notify: widget.notify,
       appLock: widget.appLock,
       onAppearanceChanged: (AppAppearance appearance) =>
           _themeMode.value = themeModeOf(appearance),

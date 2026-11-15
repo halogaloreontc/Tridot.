@@ -9,6 +9,7 @@ import '../../core/settings/app_settings.dart';
 import '../../core/skills/converter/convert_caps.dart';
 import '../assistant_theme.dart';
 import '../extensions/tool_kit.dart';
+import '../extensions/weather_kit.dart';
 import '../extensions/ytdl_kit.dart';
 import '../passwords/passwords_kit.dart';
 import '../shell/relay_drawer.dart';
@@ -16,6 +17,8 @@ import '../voice/voice_kit.dart';
 import '../voice/voice_views.dart';
 import '../widgets/extensions_section.dart';
 import '../layout.dart';
+import '../notify/notify_channel.dart';
+import '../notify/notify_views.dart';
 import '../widgets/grouped.dart';
 import '../widgets/whole_word_text.dart';
 
@@ -40,8 +43,14 @@ class SettingsScreen extends StatelessWidget {
     this.ffmpeg,
     this.nativeMedia = NativeMediaCaps.none,
     this.ytdl,
+    this.weather,
     this.appLock,
+    this.notify,
   });
+
+  /// Уведомления и будильник (ADR-029): группа «Разрешения», если на этом
+  /// устройстве есть системные уведомления.
+  final NotifyPlatform? notify;
 
   /// Заголовок «Настройки» над экраном.
   final bool showTitle;
@@ -81,6 +90,9 @@ class SettingsScreen extends StatelessWidget {
 
   /// Загрузчик видео: «Настроить» в плитке «Загрузчик видео».
   final YtdlKit? ytdl;
+
+  /// Погода (ADR-030): «Расширения → Погода → Настроить».
+  final WeatherKit? weather;
 
   /// Вход в приложение по отпечатку / Face ID (ADR-025); `null` — раздела
   /// «Защита» нет.
@@ -208,6 +220,13 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     ],
                   ),
+                if (notify case final NotifyPlatform platform
+                    when platform.supported)
+                  PermissionsSection(
+                    platform: platform,
+                    settings: settings,
+                    onChanged: onChanged,
+                  ),
                 if (extensions case final ExtensionRegistry registry)
                   ExtensionsSection(
                     registry: registry,
@@ -218,6 +237,7 @@ class SettingsScreen extends StatelessWidget {
                     ffmpeg: ffmpeg,
                     nativeMedia: nativeMedia,
                     ytdl: ytdl,
+                    weather: weather,
                   ),
                 if (onOpenStorage != null)
                   InsetGroup(

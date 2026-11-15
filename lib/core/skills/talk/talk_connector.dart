@@ -516,7 +516,8 @@ final class TalkConnector implements Connector, ConnectorHealth {
             ? 'расширения (пока ни одно не включено)'
             : 'расширения (${extensions.join(', ')})',
       if (cast.notifier.id == persona.id)
-        'оповещения (напоминания, просрочки'
+        'оповещения (напоминания'
+            '${on('alarm') ? ', будильник' : ''}, просрочки'
             '${on('warehouse') ? ', сигналы склада' : ''})',
     ];
     return parts.isEmpty

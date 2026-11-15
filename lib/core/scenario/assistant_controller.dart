@@ -602,6 +602,25 @@ final class AssistantController {
         intent: 'attachments.saved',
       );
 
+  /// Строка ведущего оповещений (ADR-029): «Теперь напомню о задачах
+  /// уведомлением…» после разрешения уведомлений. Вне счёта реплик.
+  AssistantResponse notifierSays(String id) => speak(
+        Reply(id),
+        personas.notifier,
+        intent: id,
+        countTurn: false,
+      );
+
+  /// Строка вслед за ответом голосом того, кто ответил ([personaId]):
+  /// «Ссылка не открылась…» после погоды (ADR-030). Вне счёта реплик.
+  AssistantResponse followUp(String id, String? personaId) => speak(
+        Reply(id),
+        personas.cast.byId(personaId),
+        intent: id,
+        status: AssistantStatus.noAction,
+        countTurn: false,
+      );
+
   /// Строка под ответом на команду с файлами: файлы сохранены в сессии.
   /// Голосом того, кто ответил ([personaId]); вне счёта реплик.
   String attachmentsNote(int count, String? personaId) => speak(
@@ -977,6 +996,27 @@ final class AssistantController {
         : null;
     if (clarification != null) {
       final option = clarification.choose(answerUtterance);
+      final typed = ConfirmationReply.of(answerUtterance);
+      // Варианты «Поставить» и «Отмена» (ClarifyOption.answer) — ответ
+      // «да» или «нет» владельцу; набранное «да» или «нет» — тоже.
+      final answer = option?.answer ??
+          switch (typed) {
+            ConfirmationReply.yes when clarification.yesOption != null => true,
+            ConfirmationReply.no when clarification.noOption != null => false,
+            _ => null,
+          };
+      if (answer != null) {
+        _speakAsAsker(asker, addressed: addressed, trailing: named);
+        return _markTrailing(
+          await _answer(
+            owner!,
+            pending!,
+            answer ? ConfirmationReply.yes : ConfirmationReply.no,
+            viaButton: option != null,
+          ),
+          named,
+        );
+      }
       if (option != null) {
         _answered = pending;
         _speakAsAsker(asker, addressed: addressed, trailing: named);
@@ -985,7 +1025,7 @@ final class AssistantController {
           named,
         );
       }
-      final reply = ConfirmationReply.of(answerUtterance);
+      final reply = typed;
       if (reply == ConfirmationReply.no) {
         _answered = pending;
         _speakAsAsker(asker, addressed: addressed, trailing: named);

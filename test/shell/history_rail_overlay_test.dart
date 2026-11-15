@@ -1,11 +1,13 @@
 // Хроника команд над лентой (полосы-хроника): не в шапке, а своей полосой
 // под ней, по центру над сообщениями и документом, на подложке заливкой без
 // рамки (ADR-027); шапка — одна строка 56; ни метка даты, ни сообщения при
-// прокрутке, ни начало документа под хронику не заходят. Список — та же шторка «История команд», что и в
-// «⋯» шапки.
+// прокрутке, ни начало документа под хронику не заходят. На телефоне кнопка
+// хроники открывает «барабан» (history_drum_test.dart), на компьютере
+// список — та же шторка «История команд», что и в «⋯» шапки.
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show SemanticsNode;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
@@ -60,7 +62,7 @@ Future<void> _say(WidgetTester tester, String text) async {
 }
 
 final _pill = find.byKey(const Key('history-rail-pill'));
-final _sheet = find.byKey(const Key('history-sheet'));
+final _drum = find.byKey(const Key('history-drum-popup'));
 
 Finder _inFeed(String text) => find.descendant(
       of: find.byKey(const Key('chat-list')),
@@ -114,7 +116,7 @@ void main() {
     expect(decoration.color, AppPalette.dark.raised);
     expect(decoration.border, isNull, reason: 'заливка без рамки (ADR-027)');
 
-    // Одна кнопка — «История команд», выбор ведёт к команде.
+    // Одна кнопка — «барабан» истории команд, выбор ведёт к команде.
     final open = find.byKey(const Key('history-rail-open'));
     expect(tester.getSize(open).height, greaterThanOrEqualTo(44));
     expect(tester.getSize(open).width, greaterThanOrEqualTo(44));
@@ -124,10 +126,13 @@ void main() {
     );
     await tester.tap(open);
     await tester.pumpAndSettle();
-    expect(_sheet, findsOneWidget);
-    await tester.tap(find.byKey(const Key('history-item-0')));
+    expect(_drum, findsOneWidget);
+    // Home — к самой старой, Enter — перейти к ней.
+    await tester.sendKeyEvent(LogicalKeyboardKey.home);
     await tester.pumpAndSettle();
-    expect(_sheet, findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(_drum, findsNothing);
     expect(_inFeed('Покажи задачи 0'), findsOneWidget);
     expect(
       tester.getRect(_inFeed('Покажи задачи 0')).top,
@@ -257,7 +262,28 @@ void main() {
     // Нажатие по кнопке хроники — по-прежнему у неё.
     await tester.tap(find.byKey(const Key('history-rail-open')));
     await tester.pumpAndSettle();
-    expect(_sheet, findsOneWidget);
+    expect(_drum, findsOneWidget);
+  });
+
+  testWidgets('телефон: «барабан» при открытой клавиатуре её не возвращает',
+      (tester) async {
+    await _pump(tester, const Size(390, 844));
+    for (var i = 0; i < 3; i++) {
+      await _say(tester, 'Покажи задачи $i');
+    }
+    await tester.tap(find.byKey(const Key('assistant-input')));
+    await tester.pump();
+    final composer = FocusManager.instance.primaryFocus;
+    expect(composer, isNotNull);
+    await tester.tap(find.byKey(const Key('history-rail-open')));
+    await tester.pumpAndSettle();
+    expect(_drum, findsOneWidget);
+    expect(tester.testTextInput.isVisible, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(_drum, findsNothing);
+    expect(FocusManager.instance.primaryFocus, isNot(same(composer)));
+    expect(tester.testTextInput.isVisible, isFalse);
   });
 
   testWidgets('компьютер: колесо мыши над хроникой прокручивает ленту',

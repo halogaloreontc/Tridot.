@@ -252,6 +252,15 @@
     "ytdl.done": "Скачано: {name}.",
     "ytdl.unavailable.android": "На телефоне загрузчика нет: Android не запускает скачанные программы, yt-dlp нужен Python. Есть в версиях для Windows и Linux.",
     "ytdl.unavailable.platform": "Загрузчик — только в версиях для Windows и Linux.",
-    "ytdl.unavailable.build": "В этой версии загрузчика нет."
+    "ytdl.unavailable.build": "В этой версии загрузчика нет.",
+    "alarm.set": "Будильник на {time}{details} — в «Часах».",
+    "alarm.timer.set": "Таймер на {duration}{details} — в «Часах».",
+    "alarm.cancelled": "Не ставлю.",
+    "notify.granted": "Напоминания включены.",
+    "weather.now": "{place}: {temp}, {sky}, ощущается {feels}, ветер {wind}.",
+    "weather.day": "{place}, {day}: {sky}, {min}…{max}, осадки {chance}.",
+    "weather.rain.yes": "{place}, {day}: {kind}, {chance}. Нужен зонт.",
+    "weather.rain.no": "{place}, {day}: без осадков.",
+    "weather.week": "{place}: неделя — в карточке."
   }
 }

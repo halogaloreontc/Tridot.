@@ -12,6 +12,9 @@ import '../../core/passwords/vault.dart';
 import '../assistant_theme.dart';
 import '../extensions/tool_kit.dart';
 import '../extensions/tool_screen.dart';
+import '../extensions/weather_kit.dart';
+import '../extensions/weather_screen.dart';
+import '../../core/skills/weather/weather_settings.dart';
 import '../extensions/ytdl_kit.dart';
 import '../extensions/ytdl_settings.dart';
 import '../passwords/passwords_kit.dart';
@@ -43,6 +46,7 @@ class ExtensionsSection extends StatefulWidget {
     this.ffmpeg,
     this.nativeMedia = NativeMediaCaps.none,
     this.ytdl,
+    this.weather,
   });
 
   final ExtensionRegistry registry;
@@ -66,6 +70,10 @@ class ExtensionsSection extends StatefulWidget {
   /// зарегистрирован).
   final YtdlKit? ytdl;
 
+  /// Погода (ADR-030): источник, разрешение сети, город. `null` — навык
+  /// без настроек (тесты).
+  final WeatherKit? weather;
+
   @override
   State<ExtensionsSection> createState() => _ExtensionsSectionState();
 }
@@ -81,6 +89,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
     widget.passwords?.addListener(_changed);
     widget.ffmpeg?.addListener(_changed);
     widget.ytdl?.tool.addListener(_changed);
+    widget.weather?.addListener(_changed);
   }
 
   @override
@@ -89,6 +98,10 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
     if (oldWidget.ytdl != widget.ytdl) {
       oldWidget.ytdl?.tool.removeListener(_changed);
       widget.ytdl?.tool.addListener(_changed);
+    }
+    if (oldWidget.weather != widget.weather) {
+      oldWidget.weather?.removeListener(_changed);
+      widget.weather?.addListener(_changed);
     }
     if (oldWidget.ffmpeg != widget.ffmpeg) {
       oldWidget.ffmpeg?.removeListener(_changed);
@@ -114,6 +127,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
   void dispose() {
     widget.ffmpeg?.removeListener(_changed);
     widget.ytdl?.tool.removeListener(_changed);
+    widget.weather?.removeListener(_changed);
     widget.passwords?.removeListener(_changed);
     widget.registry.removeListener(_changed);
     for (final connection in widget.connections) {
@@ -251,6 +265,48 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
         final yes = await showToolOffer(context, kit);
         if (yes && mounted) await _openTool(kit, autoStart: true);
       }());
+    };
+  }
+
+  /// Id погоды.
+  static const String _weatherId = 'weather';
+
+  /// Статус плитки «Погода»: источник и разрешение сети.
+  String _weatherStatus(WeatherKit kit, bool enabled) {
+    final s = kit.settings;
+    final status = switch (s.source) {
+      WeatherSource.none => 'Источник не выбран',
+      WeatherSource.openMeteo => !s.networkAllowed
+          ? 'Open-Meteo: сеть не разрешена'
+          : s.place == null
+              ? 'Open-Meteo: город не выбран'
+              : 'Open-Meteo: ${s.place!.name}',
+      WeatherSource.link =>
+        s.link == null ? 'Своя ссылка не задана' : 'Своя ссылка',
+      WeatherSource.app =>
+        s.app == null ? 'Приложение не выбрано' : 'Приложение: ${s.app!.label}',
+    };
+    return enabled ? status : 'Выключено. $status';
+  }
+
+  Future<void> _openWeather(WeatherKit kit) => Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => WeatherScreen(kit: kit),
+        ),
+      );
+
+  /// Переключатель погоды: при включении без источника сразу открывается
+  /// экран настройки.
+  ValueChanged<bool>? _weatherSwitch(ExtensionInfo info) {
+    final base = _switch(info);
+    if (base == null) return null;
+    return (bool value) {
+      base(value);
+      final kit = widget.weather;
+      if (!value || kit == null || kit.settings.source != WeatherSource.none) {
+        return;
+      }
+      unawaited(_openWeather(kit));
     };
   }
 
@@ -444,6 +500,18 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
                     registry.enabledUnder(choice, info) && widget.ytdl != null
                         ? () => _openYtdl(widget.ytdl!)
                         : null,
+              )
+            else if (info.id == _weatherId && widget.weather != null)
+              _ExtensionTile(
+                info: info,
+                enabled: registry.enabledUnder(choice, info),
+                onChanged: _weatherSwitch(info),
+                status: _roleNote(info) ??
+                    _weatherStatus(
+                      widget.weather!,
+                      registry.enabledUnder(choice, info),
+                    ),
+                onConfigure: () => _openWeather(widget.weather!),
               )
             else if (info.id == _converterId)
               _ExtensionTile(
