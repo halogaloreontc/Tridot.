@@ -8,34 +8,31 @@ import '../assistant_theme.dart';
 /// Части фразы, которые распознали навыки ([AssistantController.highlight]).
 typedef CommandHighlighter = List<CommandSpan> Function(String text);
 
-/// JetBrains Mono шире Inter того же кегля: распознанные части чуть мельче,
-/// чтобы строка не прыгала по высоте и ширине.
-const double commandMonoScale = 0.92;
+/// Как показывать распознанные части фразы (ADR-027).
+enum CommandSpanMode {
+  /// Обычный текст: в ленте команда выглядит как любая фраза — без
+  /// моноширинного шрифта и цветных чисел.
+  plain,
 
-/// Стиль распознанной части фразы (ADR-021): моноширинный шрифт и мягкий
-/// цвет по виду части. Название остаётся цветом текста — его выделяет
-/// только шрифт.
-TextStyle commandSpanStyle(CommandSpanKind kind, TextStyle base) {
-  final color = switch (kind) {
-    CommandSpanKind.verb => AssistantColors.commandVerb,
-    CommandSpanKind.due ||
-    CommandSpanKind.number =>
-      AssistantColors.commandValue,
-    CommandSpanKind.tag => AssistantColors.commandTag,
-    CommandSpanKind.address => AssistantColors.commandAddress,
-    CommandSpanKind.title => base.color,
-  };
-  return base.copyWith(
-    fontFamily: AppFonts.mono,
-    fontFamilyFallback: const <String>['monospace'],
-    fontSize: (base.fontSize ?? 14) * commandMonoScale,
-    color: color,
-  );
+  /// Мягко: в поле ввода во время набора распознанный глагол — цветом
+  /// `cmdTint` и полужирным; срок, числа, метки и адрес — как текст.
+  subtle,
 }
 
-/// Метка (только для отладки и тестов) пробела внутри распознанной части:
-/// он набран шрифтом текста, но часть не разрывает.
-const String commandGapLabel = 'command-gap';
+/// Стиль распознанной части фразы (ADR-027): только Inter, без
+/// моноширинного шрифта. В режиме [CommandSpanMode.subtle] выделен лишь
+/// глагол команды.
+TextStyle commandSpanStyle(
+  CommandSpanKind kind,
+  TextStyle base, {
+  required AppPalette colors,
+  CommandSpanMode mode = CommandSpanMode.subtle,
+}) {
+  if (mode == CommandSpanMode.plain || kind != CommandSpanKind.verb) {
+    return base;
+  }
+  return base.copyWith(color: colors.cmdTint, fontWeight: FontWeight.w600);
+}
 
 /// [text] с подсвеченными [spans]. [composing] — набираемое слово
 /// клавиатуры: оно подчёркивается, как в обычном поле ввода.
@@ -44,6 +41,8 @@ TextSpan highlightedCommand(
   List<CommandSpan> spans,
   TextStyle base, {
   TextRange? composing,
+  required AppPalette colors,
+  CommandSpanMode mode = CommandSpanMode.subtle,
 }) {
   final bounds = <int>{0, text.length};
   for (final span in spans) {
@@ -82,20 +81,18 @@ TextSpan highlightedCommand(
       children.add(TextSpan(text: piece, style: styled(base)));
       continue;
     }
-    // Пробелы внутри и по краям распознанной части — шрифтом текста:
-    // моноширинный пробел шире, и рядом с Inter он выглядел двойным.
-    final mono = commandSpanStyle(inside.kind, base);
-    final gap = base.copyWith(debugLabel: commandGapLabel);
-    for (final run in RegExp(r'\s+|\S+').allMatches(piece)) {
-      final part = run.group(0)!;
-      final space = part.trim().isEmpty;
-      children.add(TextSpan(text: part, style: styled(space ? gap : mono)));
-    }
+    final style = commandSpanStyle(
+      inside.kind,
+      base,
+      colors: colors,
+      mode: mode,
+    );
+    children.add(TextSpan(text: piece, style: styled(style)));
   }
   return TextSpan(style: base, children: children);
 }
 
-/// Поле ввода команды с подсветкой распознанного (ADR-021). Разбор идёт не
+/// Поле ввода команды с мягкой подсветкой распознанного (ADR-027). Разбор идёт не
 /// на каждую букву, а через [delay] после последней правки; пока он не
 /// готов, остаётся прежняя подсветка, если текст только дописан в конец.
 final class CommandInputController extends TextEditingController {
@@ -182,6 +179,7 @@ final class CommandInputController extends TextEditingController {
       current,
       CommandSpans.normalize(spans, current.length),
       style ?? const TextStyle(),
+      colors: context.colors,
       composing:
           withComposing && value.isComposingRangeValid ? value.composing : null,
     );

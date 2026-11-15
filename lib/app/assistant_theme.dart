@@ -1,185 +1,538 @@
 import 'package:flutter/material.dart';
 
-import '../core/personas/persona_palette.dart';
+import 'app_palette.dart';
 
-/// Тема приложения из токенов [AssistantColors] (палитра «П1», ADR-015).
+export 'app_palette.dart';
+
+/// Тема приложения из палитры [AppPalette] («П2», ADR-027): тёмная и
+/// светлая, шкала текста 17/15/13 (ADR-021, ADR-027). Поверхности
+/// разделяет заливка, а не линия: поля, кнопки, чипы и диалоги без рамок.
 final class AssistantTheme {
   const AssistantTheme._();
 
-  static ThemeData dark() {
-    const scheme = ColorScheme.dark(
-      surface: AssistantColors.workspace,
-      onSurface: AssistantColors.text,
-      primary: AssistantColors.primary,
-      onPrimary: AssistantColors.onPrimary,
-      secondary: AssistantColors.textStrong,
-      onSecondary: AssistantColors.onPrimary,
-      error: AssistantColors.danger,
-      onError: AssistantColors.onPrimary,
-      outline: AssistantColors.border,
-      outlineVariant: AssistantColors.borderSoft,
+  /// Тёмная тема: чёрный фон, лист чата #1C1C1E.
+  static ThemeData dark() => build(AppPalette.dark);
+
+  /// Светлая тема: фон #F2F2F7, белый лист.
+  static ThemeData light() => build(AppPalette.light);
+
+  /// Шкала текста (ADR-027). Цвет в стилях не задан — он приходит из
+  /// `DefaultTextStyle` или палитры; только у [TextTheme.bodySmall] и
+  /// [TextTheme.labelMedium] по умолчанию приглушённый. Семейство задано в
+  /// каждом стиле: `styleFrom(textStyle:)` иначе теряет Inter.
+  static TextTheme textTheme(AppPalette p) => TextTheme(
+        displayLarge: _inter(34, 1.18, FontWeight.w700, -0.4),
+        displayMedium: _inter(32, 1.18, FontWeight.w700, -0.4),
+        displaySmall: _inter(30, 1.2, FontWeight.w700, -0.4),
+        headlineLarge: _inter(30, 1.2, FontWeight.w700, -0.3),
+        headlineMedium: _inter(28, 1.2, FontWeight.w700, -0.3),
+        headlineSmall: _inter(22, 1.25, FontWeight.w600, -0.2),
+        titleLarge: _inter(22, 1.25, FontWeight.w600, -0.2),
+        titleMedium: _inter(17, 1.29, FontWeight.w600, -0.2),
+        titleSmall: _inter(15, 1.33, FontWeight.w600, 0),
+        bodyLarge: _inter(17, 1.41, FontWeight.w400, -0.2),
+        bodyMedium: _inter(15, 1.35, FontWeight.w400, -0.1),
+        // Без табличных цифр: в Inter они делают моноширинными и «-», «–»
+        // («мастер - паролем»). Табличные — только у [metaNumTextStyle].
+        bodySmall: _inter(13, 1.38, FontWeight.w400, 0).copyWith(
+          color: p.muted,
+        ),
+        labelLarge: _inter(17, 1.2, FontWeight.w600, -0.2),
+        labelMedium: _inter(15, 1.33, FontWeight.w600, 0).copyWith(
+          color: p.muted,
+        ),
+        labelSmall: _inter(13, 1.38, FontWeight.w500, 0),
+      );
+
+  static TextStyle _inter(
+    double size,
+    double height,
+    FontWeight weight,
+    double spacing,
+  ) =>
+      TextStyle(
+        fontFamily: AppFonts.text,
+        fontSize: size,
+        height: height,
+        fontWeight: weight,
+        letterSpacing: spacing,
+      );
+
+  /// Тема из палитры [p]. Все компонентные темы — здесь: экраны не
+  /// рисуют свои рамки и заливки полей, кнопок, чипов и диалогов.
+  static ThemeData build(AppPalette p) {
+    final light = p.isLight;
+    final text = textTheme(p).apply(
+      bodyColor: p.text,
+      displayColor: p.textStrong,
     );
+    // `apply` перекрашивает и приглушённые стили — возвращаем им цвет.
+    final texts = text.copyWith(
+      bodySmall: text.bodySmall!.copyWith(color: p.muted),
+      labelMedium: text.labelMedium!.copyWith(color: p.muted),
+    );
+    final scheme = ColorScheme(
+      brightness: p.brightness,
+      primary: p.accent,
+      onPrimary: p.onAccent,
+      primaryContainer: p.sadoBg,
+      onPrimaryContainer: p.accent,
+      secondary: p.accent,
+      onSecondary: p.onAccent,
+      secondaryContainer: p.bubble,
+      onSecondaryContainer: p.textStrong,
+      tertiary: p.liorio,
+      onTertiary: p.onAccent,
+      error: p.danger,
+      onError: light ? const Color(0xFFFFFFFF) : const Color(0xFF1C1C1E),
+      surface: p.workspace,
+      onSurface: p.text,
+      onSurfaceVariant: p.muted,
+      surfaceContainerLowest: p.workspace,
+      surfaceContainerLow: p.workspace,
+      surfaceContainer: p.workspace,
+      surfaceContainerHigh: p.raised,
+      surfaceContainerHighest: p.bubble,
+      surfaceTint: const Color(0x00000000),
+      outline: p.border,
+      outlineVariant: p.divider,
+      shadow: p.shadow,
+      scrim: p.scrim,
+      inverseSurface: light ? const Color(0xFF2C2C2E) : p.bubble,
+      onInverseSurface: light ? const Color(0xFFFFFFFF) : p.text,
+      inversePrimary: light ? AppPalette.dark.accent : AppPalette.light.accent,
+    );
+    const field = BorderRadius.all(Radius.circular(12));
+    final noBorder = WidgetStatePropertyAll<BorderSide>(BorderSide.none);
+    final buttonShape = WidgetStatePropertyAll<OutlinedBorder>(
+      const RoundedRectangleBorder(borderRadius: field),
+    );
+    final label = texts.labelLarge!;
+    final popover = light ? p.workspace : p.raised;
     return ThemeData(
       useMaterial3: true,
+      brightness: p.brightness,
       colorScheme: scheme,
-      scaffoldBackgroundColor: AssistantColors.background,
-      canvasColor: AssistantColors.workspace,
-      fontFamily: 'Inter',
-      dividerTheme: const DividerThemeData(
-        color: AssistantColors.divider,
-        thickness: 1,
+      extensions: <ThemeExtension<dynamic>>[p],
+      scaffoldBackgroundColor: p.background,
+      canvasColor: p.workspace,
+      cardColor: p.workspace,
+      dividerColor: p.divider,
+      hintColor: p.faint,
+      disabledColor: p.faint,
+      fontFamily: AppFonts.text,
+      textTheme: texts,
+      primaryTextTheme: texts,
+      visualDensity: VisualDensity.standard,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      splashFactory: InkRipple.splashFactory,
+      dividerTheme: DividerThemeData(
+        color: p.divider,
+        thickness: 0.5,
         space: 0,
       ),
-      textTheme: const TextTheme(
-        bodyMedium: TextStyle(fontSize: 14, height: 1.55),
-        bodySmall: TextStyle(fontSize: 11, height: 1.45),
-        titleLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
+      iconTheme: IconThemeData(color: p.icon, size: 22),
+      listTileTheme: ListTileThemeData(
+        minTileHeight: 52,
+        iconColor: p.icon,
+        textColor: p.text,
+        titleTextStyle: texts.bodyLarge!.copyWith(color: p.textStrong),
+        subtitleTextStyle: texts.bodyMedium!.copyWith(color: p.muted),
+        leadingAndTrailingTextStyle: texts.bodyLarge!.copyWith(color: p.muted),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       ),
-      iconTheme: const IconThemeData(color: AssistantColors.icon, size: 18),
-      drawerTheme: const DrawerThemeData(
-        scrimColor: AssistantColors.scrim,
-        shape: RoundedRectangleBorder(),
-        endShape: RoundedRectangleBorder(),
+      appBarTheme: AppBarTheme(
+        backgroundColor: p.background,
+        foregroundColor: p.textStrong,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: const Color(0x00000000),
+        centerTitle: false,
+        titleTextStyle: texts.titleMedium!.copyWith(color: p.textStrong),
+        iconTheme: IconThemeData(color: p.accent, size: 24),
+        actionsIconTheme: IconThemeData(color: p.accent, size: 24),
       ),
-      switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith(
-          (Set<WidgetState> states) => states.contains(WidgetState.selected)
-              ? AssistantColors.workspace
-              : AssistantColors.icon,
+      drawerTheme: DrawerThemeData(
+        backgroundColor: p.background,
+        surfaceTintColor: const Color(0x00000000),
+        scrimColor: p.scrim,
+        elevation: 0,
+        shape: const RoundedRectangleBorder(),
+        endShape: const RoundedRectangleBorder(),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: p.raised,
+        isDense: false,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: texts.bodyLarge!.copyWith(color: p.faint),
+        labelStyle: texts.bodyMedium!.copyWith(color: p.muted),
+        // Поднятая подпись рисуется в 0.75 от своего размера: 17.5 даёт
+        // 13 px — не мельче минимума (ADR-027). Подпись — внутри заливки,
+        // а не в разрыве контура: [FilledFieldBorder] не контурная.
+        floatingLabelStyle: texts.bodyMedium!.copyWith(
+          color: p.muted,
+          fontSize: kFloatingLabelSize,
         ),
-        trackColor: WidgetStateProperty.resolveWith(
-          (Set<WidgetState> states) => states.contains(WidgetState.selected)
-              ? AssistantColors.success
-              : AssistantColors.raised,
+        helperStyle: texts.bodySmall!.copyWith(color: p.muted),
+        errorStyle: texts.bodySmall!.copyWith(color: p.danger),
+        prefixIconColor: p.icon,
+        suffixIconColor: p.icon,
+        border: const FilledFieldBorder(),
+        enabledBorder: const FilledFieldBorder(),
+        disabledBorder: const FilledFieldBorder(),
+        focusedBorder: FilledFieldBorder(
+          borderSide: BorderSide(color: p.accent, width: 1.5),
         ),
-        trackOutlineColor: WidgetStateProperty.resolveWith(
-          (Set<WidgetState> states) => states.contains(WidgetState.selected)
-              ? AssistantColors.success
-              : AssistantColors.border,
+        errorBorder: FilledFieldBorder(
+          borderSide: BorderSide(color: p.danger, width: 1.5),
+        ),
+        focusedErrorBorder: FilledFieldBorder(
+          borderSide: BorderSide(color: p.danger, width: 1.5),
         ),
       ),
-      // Полоса прогресса: светлая заливка на тёмной дорожке. Без этого
-      // Material 3 берёт для дорожки цвет, почти неотличимый от заливки в
-      // тёмной теме, и полоса не видна. Голосовая полоса — те же цвета.
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: AssistantColors.primary,
-        linearTrackColor: AssistantColors.borderSoft,
-        linearMinHeight: 4,
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (Set<WidgetState> s) =>
+                s.contains(WidgetState.disabled) ? p.bubble : p.accent,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (Set<WidgetState> s) =>
+                s.contains(WidgetState.disabled) ? p.muted : p.onAccent,
+          ),
+          textStyle: WidgetStatePropertyAll<TextStyle>(label),
+          minimumSize: const WidgetStatePropertyAll<Size>(Size(64, 48)),
+          padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+            EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          ),
+          shape: buttonShape,
+          elevation: const WidgetStatePropertyAll<double>(0),
+        ),
+      ),
+      // Второстепенная кнопка — «тональная»: заливка без рамки.
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (Set<WidgetState> s) => s.contains(WidgetState.disabled)
+                ? p.bubble.withValues(alpha: 0.5)
+                : p.bubble,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (Set<WidgetState> s) =>
+                s.contains(WidgetState.disabled) ? p.muted : p.accent,
+          ),
+          textStyle: WidgetStatePropertyAll<TextStyle>(label),
+          minimumSize: const WidgetStatePropertyAll<Size>(Size(48, 48)),
+          padding: const WidgetStatePropertyAll<EdgeInsetsGeometry>(
+            EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+          side: noBorder,
+          shape: buttonShape,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (Set<WidgetState> s) =>
+                s.contains(WidgetState.disabled) ? p.muted : p.accent,
+          ),
+          textStyle: WidgetStatePropertyAll<TextStyle>(label),
+          minimumSize: const WidgetStatePropertyAll<Size>(Size(48, 48)),
+          shape: buttonShape,
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStatePropertyAll<Color>(p.bubble),
+          foregroundColor: WidgetStatePropertyAll<Color>(p.accent),
+          textStyle: WidgetStatePropertyAll<TextStyle>(label),
+          elevation: const WidgetStatePropertyAll<double>(0),
+          minimumSize: const WidgetStatePropertyAll<Size>(Size(48, 48)),
+          shape: buttonShape,
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll<Size>(Size(48, 48)),
+          iconSize: const WidgetStatePropertyAll<double>(22),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: p.accent,
+        foregroundColor: p.onAccent,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+      ),
+      cardTheme: CardThemeData(
+        color: p.workspace,
+        surfaceTintColor: const Color(0x00000000),
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: const RoundedRectangleBorder(borderRadius: field),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: p.bubble,
+        selectedColor: p.accent.withValues(alpha: 0.15),
+        disabledColor: p.bubble.withValues(alpha: 0.5),
+        side: BorderSide.none,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(18)),
+        ),
+        labelStyle: texts.bodyMedium!.copyWith(color: p.text),
+        secondaryLabelStyle: texts.bodyMedium!.copyWith(color: p.accent),
+        checkmarkColor: p.accent,
+        iconTheme: IconThemeData(color: p.icon, size: 18),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        showCheckmark: false,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: p.background,
+        modalBackgroundColor: p.background,
+        surfaceTintColor: const Color(0x00000000),
+        elevation: 0,
+        modalElevation: 0,
+        shadowColor: light ? p.shadow : const Color(0x00000000),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        dragHandleColor: p.faint.withValues(alpha: 0.4),
+        dragHandleSize: const Size(36, 5),
       ),
       // Диалоги на телефоне — почти во всю ширину (поля 16, а не 40):
       // с крупным шрифтом заголовок и кнопки не рвут слова (ADR-021).
-      dialogTheme: const DialogThemeData(
-        insetPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      dialogTheme: DialogThemeData(
+        backgroundColor: p.workspace,
+        surfaceTintColor: const Color(0x00000000),
+        elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+        titleTextStyle: texts.titleMedium!.copyWith(color: p.textStrong),
+        contentTextStyle: texts.bodyMedium!.copyWith(color: p.text),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       ),
-      snackBarTheme: const SnackBarThemeData(
+      // Поповер: в светлой — белый с тенью, в тёмной — на уровень светлее
+      // листа чата (#2C2C2E), иначе меню сливается с лентой (§1.1).
+      popupMenuTheme: PopupMenuThemeData(
+        color: popover,
+        surfaceTintColor: const Color(0x00000000),
+        elevation: light ? 8 : 0,
+        shadowColor: p.shadow,
+        shape: const RoundedRectangleBorder(borderRadius: field),
+        textStyle: texts.bodyLarge!.copyWith(color: p.text),
+        labelTextStyle: WidgetStatePropertyAll<TextStyle>(
+          texts.bodyLarge!.copyWith(color: p.text),
+        ),
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll<Color>(popover),
+          surfaceTintColor:
+              const WidgetStatePropertyAll<Color>(Color(0x00000000)),
+          elevation: WidgetStatePropertyAll<double>(light ? 8 : 0),
+          shadowColor: WidgetStatePropertyAll<Color>(p.shadow),
+          side: noBorder,
+          shape: buttonShape,
+        ),
+      ),
+      dropdownMenuTheme: DropdownMenuThemeData(
+        textStyle: texts.bodyLarge!.copyWith(color: p.textStrong),
+        menuStyle: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll<Color>(popover),
+          surfaceTintColor:
+              const WidgetStatePropertyAll<Color>(Color(0x00000000)),
+          side: noBorder,
+          shape: buttonShape,
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (Set<WidgetState> states) =>
+              states.contains(WidgetState.selected) ? p.onAccent : p.muted,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (Set<WidgetState> states) =>
+              states.contains(WidgetState.selected) ? p.accent : p.bubble,
+        ),
+        trackOutlineColor:
+            const WidgetStatePropertyAll<Color>(Color(0x00000000)),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (Set<WidgetState> s) => s.contains(WidgetState.selected)
+              ? p.accent
+              : const Color(0x00000000),
+        ),
+        checkColor: WidgetStatePropertyAll<Color>(p.onAccent),
+        side: BorderSide(color: p.border, width: 1.5),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (Set<WidgetState> s) =>
+              s.contains(WidgetState.selected) ? p.accent : p.border,
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (Set<WidgetState> s) =>
+                s.contains(WidgetState.selected) ? p.workspace : p.bubble,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (Set<WidgetState> s) =>
+                s.contains(WidgetState.selected) ? p.textStrong : p.text,
+          ),
+          textStyle: WidgetStatePropertyAll<TextStyle>(texts.bodyMedium!),
+          side: noBorder,
+          minimumSize: const WidgetStatePropertyAll<Size>(Size(48, 44)),
+        ),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: p.accent,
+        unselectedLabelColor: p.muted,
+        indicatorColor: p.accent,
+        dividerColor: const Color(0x00000000),
+        labelStyle: texts.bodyMedium!.copyWith(fontWeight: FontWeight.w600),
+        unselectedLabelStyle: texts.bodyMedium,
+      ),
+      // Полоса прогресса: акцент на мягкой дорожке.
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: p.accent,
+        linearTrackColor: p.bubble,
+        circularTrackColor: const Color(0x00000000),
+        linearMinHeight: 4,
+      ),
+      sliderTheme: SliderThemeData(
+        activeTrackColor: p.accent,
+        inactiveTrackColor: p.bubble,
+        thumbColor: p.accent,
+        overlayColor: p.accent.withValues(alpha: 0.12),
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: p.accent,
+        selectionColor: p.accent.withValues(alpha: 0.3),
+        selectionHandleColor: p.accent,
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: light ? const Color(0xFF2C2C2E) : p.bubble,
+          borderRadius: const BorderRadius.all(Radius.circular(8)),
+        ),
+        textStyle: texts.bodySmall!.copyWith(
+          color: light ? const Color(0xFFFFFFFF) : p.text,
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
         // Плавающее уведомление не прячет под собой поле ввода целиком.
         behavior: SnackBarBehavior.floating,
-        backgroundColor: AssistantColors.divider,
+        backgroundColor: light ? const Color(0xFF2C2C2E) : p.bubble,
+        actionTextColor: light ? AppPalette.dark.accent : p.accent,
+        elevation: 0,
+        shape: const RoundedRectangleBorder(borderRadius: field),
         // Шрифт явно: без него SnackBar берёт системный (Roboto), а не
         // Inter (ADR-021).
-        contentTextStyle: TextStyle(
+        contentTextStyle: texts.bodyMedium!.copyWith(
           fontFamily: AppFonts.text,
-          color: AssistantColors.text,
+          color: light ? const Color(0xFFFFFFFF) : p.text,
         ),
       ),
     );
   }
 }
 
-/// Палитра «П1» тёмной темы — единственный источник цветов. Экраны берут
-/// цвета отсюда, а не задают свои.
-abstract final class AssistantColors {
-  /// Фон окна под колонками (совпадает с [panel]).
-  static const background = Color(0xFF0F1110);
-  static const sidebar = Color(0xFF0B0C0C);
-  static const workspace = Color(0xFF131514);
-  static const panel = Color(0xFF0F1110);
-  static const raised = Color(0xFF1C1F1E);
-  static const bubble = Color(0xFF2A2F2D);
-  static const border = Color(0xFF46504B);
-  static const borderSoft = Color(0xFF303633);
+/// Размер поднятой подписи поля до масштаба 0.75 Material: 13 px на экране.
+const double kFloatingLabelSize = 17.5;
 
-  /// Подложка хроники команд поверх ленты: [panel] с непрозрачностью
-  /// около 0,85 — полосы читаются поверх сообщений.
-  static const railPill = Color(0xD90F1110);
+/// Рамка залитого поля (§4.1): скруглённая заливка без контура; контур
+/// 1.5 — только в фокусе и при ошибке. В отличие от
+/// [OutlineInputBorder] не контурная ([isOutline] — `false`): поднятая
+/// подпись стоит внутри заливки, без «выреза» в линии.
+class FilledFieldBorder extends OutlineInputBorder {
+  const FilledFieldBorder({
+    super.borderSide = BorderSide.none,
+    super.borderRadius = const BorderRadius.all(Radius.circular(12)),
+  });
 
-  /// Рамка поля в фокусе (раскрытый поиск по сессиям).
-  static const borderFocus = Color(0xFF8A9390);
+  @override
+  bool get isOutline => false;
 
-  /// Тонкие разделители: шапка, края колонок.
-  static const divider = Color(0xFF262A28);
-  static const text = Color(0xFFDDE2DF);
-  static const textStrong = Color(0xFFF5F7F6);
+  @override
+  FilledFieldBorder copyWith({
+    BorderSide? borderSide,
+    BorderRadius? borderRadius,
+    double? gapPadding,
+  }) =>
+      FilledFieldBorder(
+        borderSide: borderSide ?? this.borderSide,
+        borderRadius: borderRadius ?? this.borderRadius,
+      );
 
-  /// Приглушённый текст: контраст около 8:1 на [workspace].
-  static const muted = Color(0xFFAEB6B1);
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
 
-  /// Иконки по умолчанию.
-  static const icon = Color(0xFFA0A9A3);
+  @override
+  FilledFieldBorder scale(double t) => FilledFieldBorder(
+        borderSide: borderSide.scale(t),
+        borderRadius: borderRadius * t,
+      );
 
-  /// Ещё тише [muted]: рамки галочек, «нет связи», подписи хроники.
-  static const faint = Color(0xFF838C86);
+  @override
+  ShapeBorder? lerpFrom(ShapeBorder? a, double t) {
+    if (a is FilledFieldBorder) {
+      return FilledFieldBorder(
+        borderSide: BorderSide.lerp(a.borderSide, borderSide, t),
+        borderRadius: BorderRadius.lerp(a.borderRadius, borderRadius, t)!,
+      );
+    }
+    return super.lerpFrom(a, t);
+  }
 
-  /// Кубик состояния в покое.
-  static const cubeIdle = Color(0xFF8A9390);
+  @override
+  ShapeBorder? lerpTo(ShapeBorder? b, double t) {
+    if (b is FilledFieldBorder) {
+      return FilledFieldBorder(
+        borderSide: BorderSide.lerp(borderSide, b.borderSide, t),
+        borderRadius: BorderRadius.lerp(borderRadius, b.borderRadius, t)!,
+      );
+    }
+    return super.lerpTo(b, t);
+  }
 
-  /// Главная кнопка («+» — новая сессия, отправка).
-  static const primary = Color(0xFFF5F7F6);
-  static const onPrimary = Color(0xFF111312);
+  @override
+  void paint(
+    Canvas canvas,
+    Rect rect, {
+    double? gapStart,
+    double gapExtent = 0.0,
+    double gapPercentage = 0.0,
+    TextDirection? textDirection,
+  }) {
+    if (borderSide.style == BorderStyle.none || borderSide.width == 0) {
+      return;
+    }
+    final outer = borderRadius.toRRect(rect);
+    canvas.drawRRect(
+      outer.deflate(borderSide.strokeInset),
+      borderSide.toPaint(),
+    );
+  }
 
-  /// «На связи», выполнено.
-  static const success = Color(0xFF4FD18B);
-  static const warning = Color(0xFFB8A47C);
+  @override
+  bool operator ==(Object other) =>
+      other is FilledFieldBorder &&
+      other.borderSide == borderSide &&
+      other.borderRadius == borderRadius;
 
-  /// Просрочено, ошибка.
-  static const danger = Color(0xFFFF6B6B);
-
-  /// Связной: акцент и фон знака. Третий акцент П1, фиолетовый (ADR-016).
-  static const sado = Color(PersonaPalette.sado);
-  static const sadoBg = Color(PersonaPalette.sadoBg);
-
-  /// Связной на светлом фоне: светлой темы пока нет (ADR-016).
-  static const sadoOnLight = Color(PersonaPalette.sadoOnLight);
-
-  /// Лиорио: акцент и фон знака.
-  static const liorio = Color(PersonaPalette.liorio);
-  static const liorioBg = Color(PersonaPalette.liorioBg);
-
-  /// Нода: акцент и фон знака.
-  static const noda = Color(PersonaPalette.noda);
-  static const nodaBg = Color(PersonaPalette.nodaBg);
-
-  /// Совпадение в результатах поиска — цвета Ноды, как `mark` в макете
-  /// D-Phone-Menu-Search.
-  static const mark = noda;
-  static const markBg = nodaBg;
-
-  /// Уровни сетки активности: нет, мало, средне, много.
-  static const heat0 = Color(0xFF262A28);
-  static const heat1 = Color(0xFF256E47);
-  static const heat2 = Color(0xFF33A267);
-  static const heat3 = Color(0xFF4FD18B);
-
-  /// Затемнение под выдвижной панелью.
-  static const scrim = Color(0x9E000000);
-
-  /// Подсветка команды (ADR-021): слово команды, срок и числа, метки.
-  /// Мягкие, чтобы фраза читалась целиком; контраст на пузыре и поле
-  /// ввода не ниже 7:1.
-  static const commandVerb = Color(0xFFA8DCC0);
-  static const commandValue = Color(0xFFE3D3A6);
-  static const commandTag = Color(0xFFB4CBEA);
-  static const commandAddress = Color(0xFFCDBEF2);
-
-  /// Лёгкое затемнение под меню действий с сессией (макет «Ж2»).
-  static const scrimLight = Color(0x4D000000);
-
-  /// Тень всплывающих меню и «поднятой» строки.
-  static const shadow = Color(0x99000000);
+  @override
+  int get hashCode => Object.hash(borderSide, borderRadius);
 }
 
-/// Шрифты приложения (ADR-021). Основной — Inter (тема); моноширинный
-/// JetBrains Mono — только пароли и распознанные части команды;
+/// Шрифты приложения (ADR-021, ADR-027). Основной — Inter (тема);
+/// моноширинный JetBrains Mono — только пароли и коды восстановления;
 /// Cormorant Unicase SemiBold — название «Tridot» и названия проектов.
 abstract final class AppFonts {
   static const String text = 'Inter';
@@ -187,18 +540,26 @@ abstract final class AppFonts {
   static const String display = 'Cormorant Unicase';
 }
 
-/// Метаданные: время, счётчики, версия, подписи. Inter с табличными
-/// цифрами — числа в столбик не прыгают. 11 px — минимум для читаемости.
+/// Метаданные: подписи, футеры, версия. Inter 13 — минимум (ADR-027).
+/// Цвета нет: он из палитры (`colors.muted`) или `bodySmall`. Табличных
+/// цифр нет: в Inter они расширяют и дефис с тире («16 – 19 ноября»).
 const metaTextStyle = TextStyle(
   fontFamily: AppFonts.text,
-  fontSize: 12,
-  height: 1.45,
-  color: AssistantColors.muted,
+  fontSize: 13,
+  height: 1.38,
+);
+
+/// [metaTextStyle] с табличными цифрами — только время и счётчики, где
+/// числа стоят в столбик и не должны прыгать.
+const metaNumTextStyle = TextStyle(
+  fontFamily: AppFonts.text,
+  fontSize: 13,
+  height: 1.38,
   fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
 );
 
-/// Моноширинный текст: значения паролей, вывод генератора, маска «••••».
-/// Больше нигде (ADR-021).
+/// Моноширинный текст: значения паролей, вывод генератора, маска «••••»,
+/// код восстановления. Больше нигде (ADR-021, ADR-027).
 const monoTextStyle = TextStyle(
   fontFamily: AppFonts.mono,
   fontFamilyFallback: <String>['monospace'],
@@ -206,17 +567,22 @@ const monoTextStyle = TextStyle(
 
 /// Название приложения и проектов: Cormorant Unicase SemiBold. Буквы у
 /// него одной высоты и мельче Inter того же кегля — размер задаёт место.
+/// Цвета нет — он из палитры.
 const displayTextStyle = TextStyle(
   fontFamily: AppFonts.display,
   fontFamilyFallback: <String>[AppFonts.text],
   fontWeight: FontWeight.w600,
-  color: AssistantColors.textStrong,
 );
 
 /// Название проекта-папки в списках и меню ([displayTextStyle]).
-TextStyle projectNameStyle({double fontSize = 17, Color? color}) =>
-    displayTextStyle.copyWith(
-      fontSize: fontSize,
-      height: 1.2,
-      color: color ?? AssistantColors.textStrong,
-    );
+TextStyle projectNameStyle({double fontSize = 17, required Color color}) =>
+    displayTextStyle.copyWith(fontSize: fontSize, height: 1.2, color: color);
+
+/// [metaTextStyle] приглушённым цветом текущей темы — время, счётчики,
+/// подписи.
+TextStyle metaStyle(BuildContext context) =>
+    metaTextStyle.copyWith(color: context.colors.muted);
+
+/// [metaNumTextStyle] приглушённым цветом — время и счётчики.
+TextStyle metaNumStyle(BuildContext context) =>
+    metaNumTextStyle.copyWith(color: context.colors.muted);

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_info.dart';
 import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
 import '../shell/relay_drawer.dart';
 import '../widgets/app_name_text.dart';
 
@@ -19,7 +20,7 @@ extension MyRelayTabInfo on MyRelayTab {
 }
 
 /// Строка статистики: числа ярче подписей, как в макете.
-TextSpan statsSpan(String stats) {
+TextSpan statsSpan(String stats, AppPalette colors) {
   final children = <TextSpan>[];
   var last = 0;
   for (final match in RegExp(r'\d+').allMatches(stats)) {
@@ -29,7 +30,7 @@ TextSpan statsSpan(String stats) {
     children.add(
       TextSpan(
         text: match.group(0),
-        style: const TextStyle(color: AssistantColors.textStrong),
+        style: TextStyle(color: colors.textStrong),
       ),
     );
     last = match.end;
@@ -106,8 +107,9 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Телефон: строка статистики — своими строками под шапкой, парами
-    // (D-Phone-Summary); широкий экран — рядом с названием (D-Desk-Summary).
+    // Телефон: строка статистики — своими строками парами в начале
+    // «Сводки» (D-Phone-Summary, ADR-027); широкий экран — рядом с
+    // названием (D-Desk-Summary).
     final phone = MediaQuery.sizeOf(context).width < 600;
     final stats = widget.stats == null
         ? null
@@ -118,7 +120,8 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
           );
     return Material(
       key: const Key('my-relay'),
-      color: AssistantColors.workspace,
+      // Сгруппированный экран — на фоне, панели — листом (ADR-027).
+      color: context.colors.background,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -142,7 +145,7 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
                 RelayAvatars(
                   personas: widget.assistantsShown,
                   size: 36,
-                  ring: AssistantColors.workspace,
+                  ring: context.colors.background,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -155,10 +158,17 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
                           appNameSpan(
                             AppInfo.hubName,
                             TextStyle(
-                              fontSize: phone ? 18 : 24,
-                              height: 1.25,
-                              fontWeight: FontWeight.w600,
-                              color: AssistantColors.textStrong,
+                              // Крупный шрифт на телефоне — мельче, чтобы «Tridot» не рвался.
+                              fontSize: phone
+                                  ? (MediaQuery.textScalerOf(context).scale(1) >
+                                          1.3
+                                      ? 18
+                                      : 26)
+                                  : 30,
+                              height: 1.2,
+                              letterSpacing: -0.4,
+                              fontWeight: FontWeight.w700,
+                              color: context.colors.textStrong,
                             ),
                           ),
                           maxLines: 2,
@@ -175,11 +185,6 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
               ],
             ),
           ),
-          if (stats != null && phone)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-              child: stats,
-            ),
           _Segments(
             selected: widget.tab,
             phone: phone,
@@ -190,7 +195,22 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
             child: TabBarView(
               controller: _tabs,
               children: <Widget>[
-                widget.summary,
+                // Телефон: статистика — только в «Сводке», над её
+                // содержимым, а не закреплена над всеми вкладками: там
+                // она лишь отнимала высоту у списков.
+                if (stats != null && phone)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                        child: stats,
+                      ),
+                      Expanded(child: widget.summary),
+                    ],
+                  )
+                else
+                  widget.summary,
                 widget.activity,
                 widget.assistants,
                 widget.settings,
@@ -240,11 +260,11 @@ final class RelayStatsLine extends StatelessWidget {
           '\u00A0· ',
         );
     Widget line(String chunk) => Text.rich(
-          statsSpan(glue(chunk)),
-          style: const TextStyle(
-            fontSize: 13,
+          statsSpan(glue(chunk), context.colors),
+          style: TextStyle(
+            fontSize: 15,
             height: 1.45,
-            color: AssistantColors.muted,
+            color: context.colors.muted,
           ),
         );
     final parts = chunks(stats, pairs: pairs);
@@ -265,7 +285,8 @@ final class RelayStatsLine extends StatelessWidget {
 }
 
 /// Вкладки «Мой Tridot» — сегменты в капсуле (макет «Д»): дорожка
-/// [AssistantColors.panel], выбранная — [AssistantColors.bubble], высота 44.
+/// `raised` в тёмной теме и `bubble` в светлой, выбранный сегмент — на
+/// уровень светлее поверх неё (`bubble` / `workspace`), высота 44.
 /// Не помещаются (узкий экран, крупный шрифт) — прокручиваются с отступом
 /// 16 по краям.
 final class _Segments extends StatelessWidget {
@@ -287,23 +308,29 @@ final class _Segments extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
       child: Container(
         padding: const EdgeInsets.all(2),
+        // Сегменты заливкой без рамки: дорожка — пузырь, выбранный — лист.
         decoration: BoxDecoration(
-          color: AssistantColors.panel,
-          border: Border.all(color: AssistantColors.borderSoft),
-          borderRadius: BorderRadius.circular(999),
+          color: Theme.of(context).brightness == Brightness.dark
+              ? context.colors.raised
+              : context.colors.bubble,
+          borderRadius: BorderRadius.circular(AppRadius.field),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             for (final tab in MyRelayTab.values)
-              _segment(tab, active: tab == selected),
+              _segment(context, tab, active: tab == selected),
           ],
         ),
       ),
     );
   }
 
-  Widget _segment(MyRelayTab tab, {required bool active}) {
+  Widget _segment(
+    BuildContext context,
+    MyRelayTab tab, {
+    required bool active,
+  }) {
     return Semantics(
       button: true,
       selected: active,
@@ -313,24 +340,28 @@ final class _Segments extends StatelessWidget {
       child: InkWell(
         key: Key('my-relay-tab-${tab.name}'),
         onTap: () => onSelected(tab),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
           constraints: const BoxConstraints(minHeight: 44),
           alignment: Alignment.center,
           padding: EdgeInsets.symmetric(horizontal: phone ? 10 : 18),
           decoration: BoxDecoration(
-            color: active ? AssistantColors.bubble : null,
-            borderRadius: BorderRadius.circular(999),
+            // Выбранный — на уровень светлее дорожки в обеих темах.
+            color: active
+                ? (Theme.of(context).brightness == Brightness.dark
+                    ? context.colors.bubble
+                    : context.colors.workspace)
+                : null,
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Text(
             tab.title,
             maxLines: 1,
             softWrap: false,
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-              color:
-                  active ? AssistantColors.textStrong : AssistantColors.muted,
+              fontSize: 15,
+              fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+              color: active ? context.colors.textStrong : context.colors.text,
             ),
           ),
         ),

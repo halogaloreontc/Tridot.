@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/formatting/due_format.dart';
 import '../../core/models/task.dart';
 import '../assistant_theme.dart';
+import '../widgets/grouped.dart';
 import '../widgets/task_tile.dart';
 import '../widgets/whole_word_text.dart';
 
@@ -264,7 +265,7 @@ final class PlanningScreen extends StatelessWidget {
 
     return SingleChildScrollView(
       key: const ValueKey<String>('planning-scroll'),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760),
@@ -277,8 +278,8 @@ final class PlanningScreen extends StatelessWidget {
                   'Планирование',
                   style: Theme.of(context)
                       .textTheme
-                      .titleLarge
-                      ?.copyWith(color: AssistantColors.textStrong),
+                      .displaySmall
+                      ?.copyWith(color: context.colors.textStrong),
                 ),
               ),
               const SizedBox(height: 4),
@@ -288,7 +289,7 @@ final class PlanningScreen extends StatelessWidget {
                   '$window ${_daysWord(window)} вперёд · '
                   'с ${_weekdaysShort[now.weekday - 1]}, '
                   '${_dayMonth(now, now)}',
-                  style: metaTextStyle,
+                  style: metaStyle(context),
                 ),
               ),
               if (!hasTasks)
@@ -298,7 +299,8 @@ final class PlanningScreen extends StatelessWidget {
                   hint: 'Задачи со сроком появятся здесь по дням.',
                 )
               else
-                for (final section in sections) ..._buildSection(section),
+                for (final section in sections)
+                  ..._buildSection(context, section),
             ],
           ),
         ),
@@ -306,28 +308,20 @@ final class PlanningScreen extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildSection(AgendaSection section) {
+  List<Widget> _buildSection(BuildContext context, AgendaSection section) {
     if (section.kind == AgendaKind.freeRun) {
       return <Widget>[
         Padding(
           key: ValueKey<String>('free-${section.start!.toIso8601String()}'),
-          padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
-          child: Row(
-            children: <Widget>[
-              const SizedBox(
-                width: 12,
-                child: Divider(color: AssistantColors.borderSoft),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  section.label,
-                  style: metaTextStyle.copyWith(
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-            ],
+          // Свободные дни — тихой строкой 15 приглушённым, без курсива и
+          // чёрточки-«терминального» маркера.
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: WholeWordText(
+            section.label,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium!
+                .copyWith(color: context.colors.muted),
           ),
         ),
       ];
@@ -335,24 +329,28 @@ final class PlanningScreen extends StatelessWidget {
     final isDay = section.kind == AgendaKind.day;
     final label =
         isDay ? section.label : '${section.label} · ${section.tasks.length}';
+    // День — сгруппированной панелью (ADR-027).
     return <Widget>[
-      SectionLabel(
-        label,
-        key: ValueKey<String>(
+      InsetGroup(
+        header: label,
+        headerKey: ValueKey<String>(
           isDay
               ? 'day-${section.start!.toIso8601String()}'
               : 'section-${section.kind.name}',
         ),
-        danger: section.kind == AgendaKind.overdue,
+        headerDanger: section.kind == AgendaKind.overdue,
+        margin: const EdgeInsets.only(top: 20),
+        children: <Widget>[
+          for (final task in section.tasks)
+            TaskTile(
+              task: task,
+              now: now,
+              selected: task.id == selectedId,
+              onTap: () => onOpenTask(task),
+              onToggleDone: () => onToggleDone(task),
+            ),
+        ],
       ),
-      for (final task in section.tasks)
-        TaskTile(
-          task: task,
-          now: now,
-          selected: task.id == selectedId,
-          onTap: () => onOpenTask(task),
-          onToggleDone: () => onToggleDone(task),
-        ),
     ];
   }
 }

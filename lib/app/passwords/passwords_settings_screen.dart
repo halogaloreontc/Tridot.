@@ -6,7 +6,7 @@ import '../../core/passwords/vault.dart';
 import '../../core/passwords/vault_errors.dart';
 import '../../core/passwords/vault_prefs.dart';
 import '../assistant_theme.dart';
-import '../widgets/task_tile.dart';
+import '../widgets/grouped.dart';
 import 'entry_screens.dart';
 import 'passwords_kit.dart';
 import 'passwords_screen.dart';
@@ -86,13 +86,9 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
     final value = pref.of(kit.vault.prefs);
     return ListTile(
       key: ValueKey<String>('prefs-${pref.key}'),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-      title: WholeWordText(
-        title,
-        style: const TextStyle(color: AssistantColors.text),
-      ),
+      title: WholeWordText(title),
       subtitle: Padding(
-        padding: const EdgeInsets.only(top: 6),
+        padding: const EdgeInsets.only(top: 8, bottom: 4),
         child: Wrap(
           spacing: 6,
           runSpacing: 6,
@@ -102,18 +98,13 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                 key: ValueKey<String>('prefs-${pref.key}-$option'),
                 label: Text('$option $unit'),
                 selected: option == value,
-                selectedColor: AssistantColors.bubble,
-                backgroundColor: AssistantColors.workspace,
-                checkmarkColor: AssistantColors.success,
+                // Заливкой без рамки (тема); выбранный — тоном акцента.
                 labelStyle: TextStyle(
                   color: option == value
-                      ? AssistantColors.textStrong
-                      : AssistantColors.text,
-                ),
-                side: BorderSide(
-                  color: option == value
-                      ? AssistantColors.success
-                      : AssistantColors.border,
+                      ? context.colors.accent
+                      : context.colors.text,
+                  fontWeight:
+                      option == value ? FontWeight.w600 : FontWeight.w400,
                 ),
                 // Выбранный вариант не серый «недоступный»: нажатие на
                 // него просто ничего не меняет.
@@ -132,17 +123,10 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
   Widget _flag(String title, String subtitle, VaultPref<bool> pref) {
     return SwitchListTile(
       key: ValueKey<String>('prefs-${pref.key}'),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
       value: pref.of(kit.vault.prefs),
       onChanged: _busy ? null : (bool v) => unawaited(_set(pref.key, v)),
-      title: WholeWordText(
-        title,
-        style: const TextStyle(color: AssistantColors.text),
-      ),
-      subtitle: WholeWordText(
-        subtitle,
-        style: const TextStyle(color: AssistantColors.muted),
-      ),
+      title: WholeWordText(title),
+      subtitle: WholeWordText(subtitle),
     );
   }
 
@@ -170,7 +154,6 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
             context: context,
             builder: (BuildContext context) => AlertDialog(
               scrollable: true,
-              backgroundColor: AssistantColors.raised,
               title: const WholeWordText(
                 'Удалить сохранённые прежние пароли всех записей?',
               ),
@@ -189,7 +172,7 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
                 TextButton(
                   key: const ValueKey<String>('prefs-history-purge'),
                   style: TextButton.styleFrom(
-                    foregroundColor: AssistantColors.danger,
+                    foregroundColor: context.colors.danger,
                   ),
                   onPressed: () => Navigator.of(context).pop(true),
                   child: const Text('Удалить'),
@@ -230,10 +213,11 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Настройки сейфа — сгруппированный экран (ADR-027).
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
-        backgroundColor: AssistantColors.workspace,
+        backgroundColor: context.colors.background,
         title: const Text('Настройки паролей'),
       ),
       body: Align(
@@ -241,123 +225,113 @@ class _PasswordsSettingsScreenState extends State<PasswordsSettingsScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(8, 4, 8, 32),
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 32),
             children: <Widget>[
-              const SectionLabel('ЗАЩИТА'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
-                  kit.isProtected
-                      ? 'Эти настройки хранятся внутри зашифрованного сейфа. '
-                          'Ослабить защиту можно только с подтверждением.'
-                      : 'Эти настройки хранятся внутри зашифрованного сейфа. '
-                          'Ослабить защиту можно только мастер-паролем.',
-                  style: metaTextStyle,
-                ),
-              ),
-              _choice(
-                'Запирать без действий через',
-                VaultPrefs.autolockMinutes,
-                'мин',
-              ),
-              if (!kit.isProtected)
-                _choice(
-                  'Мастер-пароль каждые',
-                  VaultPrefs.masterEveryHours,
-                  'ч',
-                ),
-              _choice('Время показа пароля', VaultPrefs.revealSeconds, 'с'),
-              if (kit.canCopySecrets)
-                _choice(
-                  'Очистка буфера через',
-                  VaultPrefs.clipboardSeconds,
-                  'с',
-                ),
-              _flag(
-                'Переспрашивать для важных',
-                'Показ и копирование важных записей — с подтверждением.',
-                VaultPrefs.repromptImportant,
-              ),
-              SwitchListTile(
-                key: const ValueKey<String>('prefs-pw_history'),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                value: kit.historyEnabled,
-                onChanged: _busy ? null : (bool v) => unawaited(_setHistory(v)),
-                title: const WholeWordText(
-                  'Хранить прежние пароли (хронология)',
-                  style: TextStyle(color: AssistantColors.text),
-                ),
-                subtitle: const WholeWordText(
-                  'Выключено: старый пароль стирается при смене. Включено: '
-                  'прежние пароли хранятся зашифрованными в записи, '
-                  'ошибочные можно удалить.',
-                  style: TextStyle(color: AssistantColors.muted),
-                ),
+              InsetGroup(
+                header: 'Защита',
+                footer: kit.isProtected
+                    ? 'Эти настройки хранятся внутри зашифрованного сейфа. '
+                        'Ослабить защиту можно только с подтверждением.'
+                    : 'Эти настройки хранятся внутри зашифрованного сейфа. '
+                        'Ослабить защиту можно только мастер-паролем.',
+                children: <Widget>[
+                  _choice(
+                    'Запирать без действий через',
+                    VaultPrefs.autolockMinutes,
+                    'мин',
+                  ),
+                  if (!kit.isProtected)
+                    _choice(
+                      'Мастер-пароль каждые',
+                      VaultPrefs.masterEveryHours,
+                      'ч',
+                    ),
+                  _choice(
+                    'Время показа пароля',
+                    VaultPrefs.revealSeconds,
+                    'с',
+                  ),
+                  if (kit.canCopySecrets)
+                    _choice(
+                      'Очистка буфера через',
+                      VaultPrefs.clipboardSeconds,
+                      'с',
+                    ),
+                  _flag(
+                    'Переспрашивать для важных',
+                    'Показ и копирование важных записей — с подтверждением.',
+                    VaultPrefs.repromptImportant,
+                  ),
+                  SwitchListTile(
+                    key: const ValueKey<String>('prefs-pw_history'),
+                    value: kit.historyEnabled,
+                    onChanged:
+                        _busy ? null : (bool v) => unawaited(_setHistory(v)),
+                    title: const WholeWordText(
+                      'Хранить прежние пароли (хронология)',
+                    ),
+                    subtitle: const WholeWordText(
+                      'Выключено: старый пароль стирается при смене. '
+                      'Включено: прежние пароли хранятся зашифрованными в '
+                      'записи, ошибочные можно удалить.',
+                    ),
+                  ),
+                ],
               ),
               VaultAccessSection(kit: kit),
-              const SectionLabel('ЧТО ПОПАДАЕТ В ИСТОРИЮ'),
-              _flag(
-                'Подсказки можно хранить в истории',
-                'Выключено: подсказка видна только во временной карточке, '
-                    'в историю сессии не пишется.',
-                VaultPrefs.hintsInHistory,
-              ),
-              _flag(
-                'Показывать логин целиком в сессии',
-                'Выключено: в ответах логин в маске (iv***@mail.ru), '
-                    'целиком — только в карточке.',
-                VaultPrefs.loginInReplies,
-              ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(8, 4, 8, 0),
-                child: Text(
-                  'Пароли и заметки в историю не попадают никогда: в сессии '
-                  'остаются только названия, логин в маске и факты вроде '
-                  '«пароль был показан». «Очистить историю» сейф не '
-                  'трогает.',
-                  style: metaTextStyle,
-                ),
-              ),
-              SectionLabel(kit.isProtected ? 'СЕЙФ' : 'МАСТЕР-ПАРОЛЬ'),
-              if (!kit.isProtected)
-                ListTile(
-                  key: const ValueKey<String>('prefs-change-master'),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                  leading: const Icon(Icons.key_outlined),
-                  title: const WholeWordText('Сменить мастер-пароль'),
-                  subtitle: const WholeWordText(
-                    'Сейф перешифруется новым ключом: старый мастер-пароль '
-                    'больше ничего не откроет.',
+              InsetGroup(
+                header: 'Что попадает в историю',
+                footer: 'Пароли и заметки в историю не попадают никогда: в '
+                    'сессии остаются только названия, логин в маске и факты '
+                    'вроде «пароль был показан». «Очистить историю» сейф не '
+                    'трогает.',
+                children: <Widget>[
+                  _flag(
+                    'Подсказки можно хранить в истории',
+                    'Выключено: подсказка видна только во временной '
+                        'карточке, в историю сессии не пишется.',
+                    VaultPrefs.hintsInHistory,
                   ),
-                  onTap: () => unawaited(_changeMaster()),
-                ),
-              ListTile(
-                key: const ValueKey<String>('prefs-start-over'),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                leading: const Icon(
-                  Icons.inventory_2_outlined,
-                  color: AssistantColors.danger,
-                ),
-                title: const WholeWordText('Отложить сейф в архив'),
-                subtitle: WholeWordText(
-                  kit.isProtected
-                      ? 'Начать заново с пустым сейфом: файл не стирается.'
-                      : 'Для тех, кто забыл мастер-пароль: файл не стирается, '
-                          'можно начать заново.',
-                ),
-                onTap: () => unawaited(showRecovery(context, kit)),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
-                  kit.protectionNoteFor(
-                    pin: kit.vault.protection?.pin ?? false,
-                    bio: kit.vault.protection?.bio ?? false,
-                    inSettings: true,
+                  _flag(
+                    'Показывать логин целиком в сессии',
+                    'Выключено: в ответах логин в маске (iv***@mail.ru), '
+                        'целиком — только в карточке.',
+                    VaultPrefs.loginInReplies,
                   ),
-                  style: metaTextStyle,
+                ],
+              ),
+              InsetGroup(
+                header: kit.isProtected ? 'Сейф' : 'Мастер-пароль',
+                footer: kit.protectionNoteFor(
+                  pin: kit.vault.protection?.pin ?? false,
+                  bio: kit.vault.protection?.bio ?? false,
+                  inSettings: true,
                 ),
+                children: <Widget>[
+                  if (!kit.isProtected)
+                    GroupedRow(
+                      key: const ValueKey<String>('prefs-change-master'),
+                      icon: Icons.key_outlined,
+                      tile: context.colors.tileGray,
+                      title: 'Сменить мастер-пароль',
+                      subtitle: 'Сейф перешифруется новым ключом: старый '
+                          'мастер-пароль больше ничего не откроет.',
+                      chevron: true,
+                      onTap: () => unawaited(_changeMaster()),
+                    ),
+                  GroupedRow(
+                    key: const ValueKey<String>('prefs-start-over'),
+                    icon: Icons.inventory_2_outlined,
+                    tile: context.colors.tileRed,
+                    title: 'Отложить сейф в архив',
+                    subtitle: kit.isProtected
+                        ? 'Начать заново с пустым сейфом: файл не стирается.'
+                        : 'Для тех, кто забыл мастер-пароль: файл не '
+                            'стирается, можно начать заново.',
+                    chevron: true,
+                    onTap: () => unawaited(showRecovery(context, kit)),
+                  ),
+                ],
               ),
             ],
           ),
@@ -441,7 +415,6 @@ class _ChangeMasterDialogState extends State<_ChangeMasterDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       scrollable: true,
-      backgroundColor: AssistantColors.raised,
       title: const WholeWordText('Сменить мастер-пароль'),
       content: SizedBox(
         width: 420,

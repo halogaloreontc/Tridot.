@@ -205,9 +205,9 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
     final saved = _savedTo;
     final last = kit.vault.lastBackupAt;
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: context.colors.workspace,
       appBar: AppBar(
-        backgroundColor: AssistantColors.workspace,
+        backgroundColor: context.colors.workspace,
         title: const Text('Резервная копия'),
       ),
       body: SafeArea(
@@ -215,25 +215,25 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
           padding: const EdgeInsets.all(16),
           children: saved != null
               ? <Widget>[
-                  const Text(
+                  Text(
                     'Копия готова и проверена.',
                     key: ValueKey<String>('backup-done'),
                     style: TextStyle(
-                      color: AssistantColors.textStrong,
-                      fontSize: 16,
+                      color: context.colors.textStrong,
+                      fontSize: 17,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     saved,
-                    style: const TextStyle(color: AssistantColors.muted),
+                    style: TextStyle(color: context.colors.muted),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     'Храните её не только на этом устройстве: на другом '
                     'компьютере, флешке или в облаке — файл зашифрован. Без '
                     'пароля копии её не открыть никому, и мне тоже.',
-                    style: TextStyle(color: AssistantColors.text),
+                    style: TextStyle(color: context.colors.text),
                   ),
                   const SizedBox(height: 16),
                   FilledButton(
@@ -242,18 +242,18 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                   ),
                 ]
               : <Widget>[
-                  const Text(
+                  Text(
                     'Если потеряете телефон или ноутбук, пароли вернёт только '
                     'копия. Она зашифрована: без её пароля её не открыть '
                     'никому.',
-                    style: TextStyle(color: AssistantColors.text),
+                    style: TextStyle(color: context.colors.text),
                   ),
                   if (last != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
                         'Последняя копия: ${agoText(last, kit.vault.clock.now())}.',
-                        style: const TextStyle(color: AssistantColors.muted),
+                        style: TextStyle(color: context.colors.muted),
                       ),
                     ),
                   const SizedBox(height: 16),
@@ -280,9 +280,9 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                     onChanged: _busy
                         ? null
                         : (bool? v) => setState(() => _own = v ?? false),
-                    title: const WholeWordText(
+                    title: WholeWordText(
                       'Отдельный пароль для копии',
-                      style: TextStyle(color: AssistantColors.text),
+                      style: TextStyle(color: context.colors.text),
                     ),
                     subtitle: WholeWordText(
                       kit.isProtected
@@ -290,7 +290,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                               'восстановления — он у вас уже записан.'
                           : 'По умолчанию копия закрыта мастер-паролем — '
                               'меньше запоминать.',
-                      style: const TextStyle(color: AssistantColors.muted),
+                      style: TextStyle(color: context.colors.muted),
                     ),
                   ),
                   if (_own) ...<Widget>[
@@ -318,7 +318,7 @@ class _BackupExportScreenState extends State<BackupExportScreen> {
                       child: Text(
                         _failure!,
                         key: const ValueKey<String>('backup-failure'),
-                        style: const TextStyle(color: AssistantColors.danger),
+                        style: TextStyle(color: context.colors.danger),
                       ),
                     ),
                   const SizedBox(height: 16),
@@ -545,7 +545,6 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     final go = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        backgroundColor: AssistantColors.raised,
         title: const WholeWordText('Заменить всё?'),
         content: Text(
           kit.isProtected
@@ -647,12 +646,12 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         Text(
           _done!,
           key: const ValueKey<String>('restore-done'),
-          style: const TextStyle(color: AssistantColors.textStrong),
+          style: TextStyle(color: context.colors.textStrong),
         ),
         const SizedBox(height: 8),
         Text(
           kit.protectionNote,
-          style: const TextStyle(color: AssistantColors.muted),
+          style: TextStyle(color: context.colors.muted),
         ),
         const SizedBox(height: 16),
         FilledButton(
@@ -667,17 +666,17 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     } else if (kit.isUnlocked) {
       children = _mergeView(contents);
     } else {
-      children = const <Widget>[
+      children = <Widget>[
         Text(
           'Сначала откройте сейф.',
-          style: TextStyle(color: AssistantColors.text),
+          style: TextStyle(color: context.colors.text),
         ),
       ];
     }
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: context.colors.workspace,
       appBar: AppBar(
-        backgroundColor: AssistantColors.workspace,
+        backgroundColor: context.colors.workspace,
         title: const Text('Восстановить из копии'),
       ),
       body: SafeArea(
@@ -691,7 +690,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 child: Text(
                   _error!,
                   key: const ValueKey<String>('restore-error'),
-                  style: const TextStyle(color: AssistantColors.danger),
+                  style: TextStyle(color: context.colors.danger),
                 ),
               ),
           ],
@@ -701,16 +700,16 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   }
 
   List<Widget> _openView() => <Widget>[
-        const Text(
+        Text(
           'Выберите файл копии (.relaybak) и введите её пароль — код '
           'восстановления, мастер-пароль (старые копии) или отдельный '
           'пароль копии.',
-          style: TextStyle(color: AssistantColors.text),
+          style: TextStyle(color: context.colors.text),
         ),
         const SizedBox(height: 4),
         Text(
           kit.files.placeNote,
-          style: const TextStyle(color: AssistantColors.muted),
+          style: TextStyle(color: context.colors.muted),
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
@@ -742,18 +741,18 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           'В копии '
           '${countText(contents.items.length, 'запись', 'записи', 'записей')}.',
           key: const ValueKey<String>('restore-count'),
-          style: const TextStyle(color: AssistantColors.textStrong),
+          style: TextStyle(color: context.colors.textStrong),
         ),
         if (contents.skipped > 0)
           Text(
             'Пропущено ${contents.skipped}: не прошли проверку.',
-            style: const TextStyle(color: AssistantColors.warning),
+            style: TextStyle(color: context.colors.warning),
           ),
         if (kit.isUnlocked && contents.hasHistory && !kit.historyEnabled)
-          const Text(
+          Text(
             'Прежние пароли из копии не перенесены: хронология выключена.',
             key: ValueKey<String>('restore-history-dropped'),
-            style: TextStyle(color: AssistantColors.muted),
+            style: TextStyle(color: context.colors.muted),
           ),
         const SizedBox(height: 8),
       ];
@@ -768,7 +767,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   'отпечатку можно включить заново.'
               : 'Создать сейф из копии. Настройки защиты не переносятся — '
                   'они по умолчанию; вход по отпечатку можно включить заново.',
-          style: const TextStyle(color: AssistantColors.text),
+          style: TextStyle(color: context.colors.text),
         ),
         if (!kit.deviceProtection)
           CheckboxListTile(
@@ -779,9 +778,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             onChanged: _busy
                 ? null
                 : (bool? v) => setState(() => _sameMaster = v ?? true),
-            title: const WholeWordText(
+            title: WholeWordText(
               'Мастер-пароль — тот же, что пароль копии',
-              style: TextStyle(color: AssistantColors.text),
+              style: TextStyle(color: context.colors.text),
             ),
           ),
         if (contents.hasHistory)
@@ -793,14 +792,14 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             onChanged: _busy
                 ? null
                 : (bool? v) => setState(() => _keepHistory = v ?? false),
-            title: const WholeWordText(
+            title: WholeWordText(
               'Включить хронологию паролей?',
-              style: TextStyle(color: AssistantColors.text),
+              style: TextStyle(color: context.colors.text),
             ),
-            subtitle: const WholeWordText(
+            subtitle: WholeWordText(
               'В копии есть прежние пароли. Включено: они перенесутся и '
               'будут храниться зашифрованными. Выключено: не перенесутся.',
-              style: TextStyle(color: AssistantColors.muted),
+              style: TextStyle(color: context.colors.muted),
             ),
           ),
         if (!_sameMaster && !kit.deviceProtection) ...<Widget>[
@@ -830,10 +829,10 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
 
   List<Widget> _mergeView(BackupContents contents) => <Widget>[
         ..._summary(contents),
-        const Text(
+        Text(
           'Объединить с текущим сейфом. При разных паролях по умолчанию '
           'остаются обе записи.',
-          style: TextStyle(color: AssistantColors.text),
+          style: TextStyle(color: context.colors.text),
         ),
         const SizedBox(height: 8),
         for (var i = 0; i < contents.items.length; i++) _mergeRow(contents, i),
@@ -847,7 +846,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         TextButton(
           key: const ValueKey<String>('restore-replace'),
           onPressed: _busy ? null : () => unawaited(_replaceAll()),
-          style: TextButton.styleFrom(foregroundColor: AssistantColors.danger),
+          style: TextButton.styleFrom(foregroundColor: context.colors.danger),
           child: const Text('Заменить всё…'),
         ),
       ];
@@ -873,21 +872,21 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             '${item.service}$host · $status',
             style: TextStyle(
               color: match.status == ImportStatus.conflict
-                  ? AssistantColors.warning
-                  : AssistantColors.text,
+                  ? context.colors.warning
+                  : context.colors.text,
             ),
           ),
           if (match.addressChanges)
             Text(
               'адрес изменится: было ${match.addressFrom} → станет '
               '${match.addressTo}',
-              style: const TextStyle(color: AssistantColors.warning),
+              style: TextStyle(color: context.colors.warning),
             ),
           if (match.status == ImportStatus.conflict)
             DropdownButton<ImportChoice>(
               key: ValueKey<String>('restore-choice-$i'),
               value: _choices[i],
-              dropdownColor: AssistantColors.raised,
+              dropdownColor: context.colors.raised,
               items: const <DropdownMenuItem<ImportChoice>>[
                 DropdownMenuItem<ImportChoice>(
                   value: ImportChoice.keepBoth,

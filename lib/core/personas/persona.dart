@@ -24,6 +24,8 @@ final class Persona {
     required this.gender,
     required this.accentColor,
     required this.accentBackground,
+    required this.accentColorOnLight,
+    required this.accentBackgroundOnLight,
     required this.description,
   });
 
@@ -94,6 +96,12 @@ final class Persona {
   /// Фон знака помощника (буква на нём — [accentColor]), ARGB.
   final int accentBackground;
 
+  /// [accentColor] для светлой темы: на белом нужен более тёмный тон.
+  final int accentColorOnLight;
+
+  /// [accentBackground] для светлой темы.
+  final int accentBackgroundOnLight;
+
   /// Одна строка для настроек.
   final String description;
 
@@ -135,6 +143,8 @@ final class Persona {
       gender: newGender,
       accentColor: accentColor,
       accentBackground: accentBackground,
+      accentColorOnLight: accentColorOnLight,
+      accentBackgroundOnLight: accentBackgroundOnLight,
       description: description,
     );
   }
@@ -271,6 +281,8 @@ abstract final class Personas {
     gender: ReplyGender.male,
     accentColor: PersonaPalette.sado,
     accentBackground: PersonaPalette.sadoBg,
+    accentColorOnLight: PersonaPalette.sadoOnLight,
+    accentBackgroundOnLight: PersonaPalette.sadoBgOnLight,
     description: 'Главный: беседа, задачи, планы и расчёты.',
   );
 
@@ -284,6 +296,8 @@ abstract final class Personas {
     gender: ReplyGender.male,
     accentColor: PersonaPalette.liorio,
     accentBackground: PersonaPalette.liorioBg,
+    accentColorOnLight: PersonaPalette.liorioOnLight,
+    accentBackgroundOnLight: PersonaPalette.liorioBgOnLight,
     description: 'Расширения: склад, пароли и подключения.',
   );
 
@@ -297,6 +311,8 @@ abstract final class Personas {
     gender: ReplyGender.female,
     accentColor: PersonaPalette.noda,
     accentBackground: PersonaPalette.nodaBg,
+    accentColorOnLight: PersonaPalette.nodaOnLight,
+    accentBackgroundOnLight: PersonaPalette.nodaBgOnLight,
     description: 'Оповещения: напоминания, просрочки и сигналы.',
   );
 

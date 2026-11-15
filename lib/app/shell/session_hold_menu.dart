@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/chats/chat_models.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
 import '../widgets/whole_word_text.dart';
 
 /// Действие с сессией из меню долгого нажатия.
@@ -144,8 +145,8 @@ final class _HoldMenuLayer extends StatelessWidget {
     final icons = needed(icons: true) <= room;
     final width = math.min(room, math.max(base, needed(icons: icons)));
     final items = 2 + (route.canRename ? 1 : 0) + (route.canMove ? 1 : 0);
-    // Высота меню: пункты по 52 (крупный шрифт — выше), черта, поля.
-    final menuHeight = 12 + items * math.max(52.0, 30 + 16 * scale) + 9;
+    // Высота меню: пункты по 48 (крупный шрифт — выше), разделители.
+    final menuHeight = items * math.max(48.0, 26 + 16 * scale) + items;
     final bottomLimit = screen.height - insets.bottom - padding.bottom - 8;
     final below = row.bottom + 6;
     final top = below + menuHeight <= bottomLimit
@@ -173,9 +174,9 @@ final class _HoldMenuLayer extends StatelessWidget {
             child: IgnorePointer(
               child: FadeTransition(
                 opacity: fade,
-                child: const ColoredBox(
+                child: ColoredBox(
                   key: Key('session-menu-dim'),
-                  color: AssistantColors.scrimLight,
+                  color: context.colors.scrimLight,
                 ),
               ),
             ),
@@ -200,22 +201,15 @@ final class _HoldMenuLayer extends StatelessWidget {
                   ),
                   child: Container(
                     key: const Key('session-menu-lifted'),
+                    // Поднятая строка — заливкой, без рамки (ADR-027).
                     decoration: BoxDecoration(
-                      color: AssistantColors.bubble,
-                      border: Border.all(color: AssistantColors.border),
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: const <BoxShadow>[
-                        BoxShadow(
-                          color: AssistantColors.shadow,
-                          blurRadius: 28,
-                          offset: Offset(0, 12),
-                        ),
-                      ],
+                      color: context.colors.bubble,
+                      borderRadius: BorderRadius.circular(AppRadius.group),
                     ),
                     child: Material(
                       type: MaterialType.transparency,
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(13),
+                        borderRadius: BorderRadius.circular(AppRadius.group),
                         child: route.liftedRow,
                       ),
                     ),
@@ -267,12 +261,12 @@ final class _HoldMenu extends StatelessWidget {
   /// Пункт переноса в проект-папку.
   static const String moveLabel = 'В проект…';
 
-  /// Подпись пункта: 16 px, как в макете «Ж2».
-  static const TextStyle labelStyle = TextStyle(fontSize: 16, height: 1.3);
+  /// Подпись пункта: 17 px, основной размер шкалы (ADR-027).
+  static const TextStyle labelStyle = TextStyle(fontSize: 17, height: 1.3);
 
   /// Ширина меню, при которой самая длинная подпись помещается целиком с
-  /// шрифтом [scaler]: поля меню 6 + 6, рамка 1 + 1, поля пункта 16 + 16,
-  /// значок 20 и отступ 14 (если [icons]).
+  /// шрифтом [scaler]: поля пункта 16 + 16, значок 20 и отступ 12 (если
+  /// [icons]).
   static double neededWidth(
     TextScaler scaler, {
     required bool pinned,
@@ -297,29 +291,68 @@ final class _HoldMenu extends StatelessWidget {
       widest = math.max(widest, painter.width);
       painter.dispose();
     }
-    return (12 + 2 + 32 + (icons ? 34 : 0) + widest + 2).ceilToDouble();
+    return (32 + (icons ? 32 : 0) + widest + 2).ceilToDouble();
   }
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    // Поповер (ADR-027): в тёмной теме отделён поверхностью, в светлой —
+    // мягкой тенью; рамок нет. Между пунктами — разделители «вставкой».
+    final items = <Widget>[
+      if (canRename)
+        _MenuItem(
+          key: const Key('session-menu-rename'),
+          showIcon: icons,
+          icon: Icons.edit_outlined,
+          label: 'Переименовать',
+          autofocus: true,
+          onTap: () => onChoose(SessionAction.rename),
+        ),
+      _MenuItem(
+        key: const Key('session-menu-pin'),
+        showIcon: icons,
+        icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+        label: pinned ? 'Открепить' : 'Закрепить',
+        autofocus: !canRename,
+        onTap: () => onChoose(SessionAction.pin),
+      ),
+      if (canMove)
+        _MenuItem(
+          key: const Key('session-menu-move'),
+          showIcon: icons,
+          icon: Icons.drive_file_move_outline,
+          label: moveLabel,
+          onTap: () => onChoose(SessionAction.move),
+        ),
+      _MenuItem(
+        key: const Key('session-menu-delete'),
+        showIcon: icons,
+        icon: Icons.delete_outline,
+        label: 'Удалить',
+        danger: true,
+        onTap: () => onChoose(SessionAction.delete),
+      ),
+    ];
     return Semantics(
       container: true,
       explicitChildNodes: true,
       label: 'Действия с сессией «$title»',
       child: Container(
         key: const Key('session-menu'),
-        padding: const EdgeInsets.all(6),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: AssistantColors.raised,
-          border: Border.all(color: AssistantColors.border),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: const <BoxShadow>[
-            BoxShadow(
-              color: AssistantColors.shadow,
-              blurRadius: 40,
-              offset: Offset(0, 16),
-            ),
-          ],
+          color: dark ? context.colors.raised : context.colors.workspace,
+          borderRadius: BorderRadius.circular(AppRadius.group),
+          boxShadow: dark
+              ? null
+              : <BoxShadow>[
+                  BoxShadow(
+                    color: context.colors.shadow,
+                    blurRadius: 24,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
         ),
         child: Material(
           type: MaterialType.transparency,
@@ -328,47 +361,18 @@ final class _HoldMenu extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                if (canRename)
-                  _MenuItem(
-                    key: const Key('session-menu-rename'),
-                    showIcon: icons,
-                    icon: Icons.edit_outlined,
-                    label: 'Переименовать',
-                    autofocus: true,
-                    onTap: () => onChoose(SessionAction.rename),
-                  ),
-                _MenuItem(
-                  key: const Key('session-menu-pin'),
-                  showIcon: icons,
-                  icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
-                  label: pinned ? 'Открепить' : 'Закрепить',
-                  autofocus: !canRename,
-                  onTap: () => onChoose(SessionAction.pin),
-                ),
-                if (canMove)
-                  _MenuItem(
-                    key: const Key('session-menu-move'),
-                    showIcon: icons,
-                    icon: Icons.drive_file_move_outline,
-                    label: moveLabel,
-                    onTap: () => onChoose(SessionAction.move),
-                  ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: AssistantColors.borderSoft,
-                  ),
-                ),
-                _MenuItem(
-                  key: const Key('session-menu-delete'),
-                  showIcon: icons,
-                  icon: Icons.delete_outline,
-                  label: 'Удалить',
-                  danger: true,
-                  onTap: () => onChoose(SessionAction.delete),
-                ),
+                for (var i = 0; i < items.length; i++) ...<Widget>[
+                  if (i > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(left: AppSpace.m),
+                      child: Divider(
+                        height: .5,
+                        thickness: .5,
+                        color: context.colors.divider,
+                      ),
+                    ),
+                  items[i],
+                ],
               ],
             ),
           ),
@@ -398,7 +402,7 @@ final class _MenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? AssistantColors.danger : AssistantColors.text;
+    final color = danger ? context.colors.danger : context.colors.text;
     return Semantics(
       button: true,
       label: label,
@@ -407,32 +411,33 @@ final class _MenuItem extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         autofocus: autofocus,
-        borderRadius: BorderRadius.circular(10),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 52),
+          constraints: const BoxConstraints(minHeight: AppSize.minTap),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.m,
+              vertical: 10,
+            ),
             child: Row(
               children: <Widget>[
-                if (showIcon) ...<Widget>[
-                  Icon(
-                    icon,
-                    size: 20,
-                    color:
-                        danger ? AssistantColors.danger : AssistantColors.icon,
-                  ),
-                  const SizedBox(width: 14),
-                ],
                 Expanded(
                   // Меню шире под крупный шрифт; если и экрана мало —
                   // перенос на вторую строку, а не обрезка.
-                  child: Text(
+                  child: WholeWordText(
                     label,
                     maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: _HoldMenu.labelStyle.copyWith(color: color),
                   ),
                 ),
+                // Значок — справа, как в меню телефона.
+                if (showIcon) ...<Widget>[
+                  const SizedBox(width: AppSpace.s),
+                  Icon(
+                    icon,
+                    size: 20,
+                    color: danger ? context.colors.danger : context.colors.icon,
+                  ),
+                ],
               ],
             ),
           ),
@@ -494,7 +499,6 @@ final class _RenameDialogState extends State<_RenameDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AssistantColors.raised,
       // Крупный шрифт и открытая клавиатура (поле с autofocus) на узком
       // телефоне: окно прокручивается, а не вылезает за край.
       scrollable: true,
@@ -539,7 +543,6 @@ Future<bool> showDeleteSessionDialog(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (BuildContext context) => AlertDialog(
-      backgroundColor: AssistantColors.raised,
       title: const WholeWordText('Удалить сессию?'),
       content: Text(
         'Удалить сессию «$title»? Это нельзя отменить.'
@@ -556,7 +559,7 @@ Future<bool> showDeleteSessionDialog(
           key: const Key('delete-confirm'),
           onPressed: () => Navigator.of(context).pop(true),
           style: TextButton.styleFrom(
-            foregroundColor: AssistantColors.danger,
+            foregroundColor: context.colors.danger,
           ),
           child: const Text('Удалить'),
         ),

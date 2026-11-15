@@ -109,24 +109,24 @@ final class BulkChecklistCard extends StatelessWidget {
     // отклика на нажатие.
     return Padding(
       key: ValueKey<String>('bulk-card-${checklist.id}'),
-      padding: const EdgeInsets.only(top: 8),
+      padding: EdgeInsets.zero,
       // Своя группа обхода: Tab идёт по карточке подряд — «Выбрать все»,
       // строки, «Перенести», «Отмена» — и не прыгает в панель задач рядом.
       child: FocusTraversalGroup(
         policy: WidgetOrderTraversalPolicy(),
         child: Material(
-          color: AssistantColors.raised,
+          color: context.colors.raised,
           clipBehavior: Clip.antiAlias,
+          // Карточка заливкой без рамки (ADR-027).
           shape: RoundedRectangleBorder(
-            side: const BorderSide(color: AssistantColors.borderSoft),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
                 child: Wrap(
                   spacing: 12,
                   runSpacing: 4,
@@ -135,18 +135,17 @@ final class BulkChecklistCard extends StatelessWidget {
                     Text(
                       _target,
                       key: const Key('bulk-target'),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AssistantColors.textStrong,
-                      ),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium!
+                          .copyWith(color: context.colors.textStrong),
                     ),
                     Text(
                       pending
                           ? 'отмечено $checked из $total'
                           : '$total ${_tasks(total)} в списке',
                       key: const Key('bulk-counter'),
-                      style: metaTextStyle,
+                      style: metaStyle(context),
                     ),
                   ],
                 ),
@@ -160,8 +159,7 @@ final class BulkChecklistCard extends StatelessWidget {
                       key: const Key('bulk-select-all'),
                       onPressed: busy ? null : () => onSetAll(!allChecked),
                       style: TextButton.styleFrom(
-                        foregroundColor: AssistantColors.text,
-                        minimumSize: const Size(0, 40),
+                        minimumSize: const Size(0, 48),
                       ),
                       child: Text(allChecked ? 'Снять все' : 'Выбрать все'),
                     ),
@@ -173,35 +171,30 @@ final class BulkChecklistCard extends StatelessWidget {
               FocusTraversalGroup(
                 child: _list(context, enabled: pending && !busy),
               ),
-              const Divider(height: 1),
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                // Основное действие — во всю ширину акцентом, отмена —
+                // текстовой кнопкой (ADR-027).
                 child: result == null
-                    ? Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: <Widget>[
                           FilledButton(
                             key: const Key('bulk-apply'),
                             onPressed: busy || checked == 0 ? null : onApply,
                             style: FilledButton.styleFrom(
-                              backgroundColor: AssistantColors.textStrong,
-                              foregroundColor: AssistantColors.workspace,
-                              disabledBackgroundColor: AssistantColors.bubble,
-                              disabledForegroundColor: AssistantColors.muted,
-                              minimumSize: const Size(0, 40),
+                              disabledBackgroundColor: context.colors.bubble,
+                              disabledForegroundColor: context.colors.muted,
+                              minimumSize: const Size.fromHeight(50),
                             ),
                             child: Text('$_verb ($checked)'),
                           ),
-                          OutlinedButton(
+                          const SizedBox(height: 4),
+                          TextButton(
                             key: const Key('bulk-cancel'),
                             onPressed: busy ? null : onCancel,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AssistantColors.text,
-                              side: const BorderSide(
-                                color: AssistantColors.border,
-                              ),
-                              minimumSize: const Size(0, 40),
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
                             ),
                             child: const Text('Отмена'),
                           ),
@@ -218,25 +211,21 @@ final class BulkChecklistCard extends StatelessWidget {
                               result,
                               key: const Key('bulk-result'),
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: 15,
                                 color: checklist.state ==
                                         BulkChecklistState.applied
-                                    ? AssistantColors.success
-                                    : AssistantColors.muted,
+                                    ? context.colors.success
+                                    : context.colors.muted,
                               ),
                             ),
                           ),
                           if (checklist.canUndo &&
                               checklist.state == BulkChecklistState.applied)
-                            OutlinedButton(
+                            TextButton(
                               key: const Key('bulk-undo'),
                               onPressed: busy ? null : onUndo,
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AssistantColors.text,
-                                side: const BorderSide(
-                                  color: AssistantColors.border,
-                                ),
-                                minimumSize: const Size(0, 40),
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(0, 48),
                               ),
                               child: const Text('Отменить'),
                             ),
@@ -260,7 +249,7 @@ final class BulkChecklistCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       itemCount: checklist.items.length,
       itemBuilder: (BuildContext context, int index) =>
-          _item(checklist.items[index], enabled: enabled),
+          _item(context, checklist.items[index], enabled: enabled),
     );
     if (height == null) return list;
     return ConstrainedBox(
@@ -269,7 +258,7 @@ final class BulkChecklistCard extends StatelessWidget {
     );
   }
 
-  Widget _item(BulkItem item, {required bool enabled}) {
+  Widget _item(BuildContext context, BulkItem item, {required bool enabled}) {
     final due = item.dueLabel;
     return CheckboxListTile(
       key: ValueKey<String>('bulk-item-${item.taskId}'),
@@ -281,21 +270,21 @@ final class BulkChecklistCard extends StatelessWidget {
       controlAffinity: ListTileControlAffinity.leading,
       contentPadding: const EdgeInsets.symmetric(horizontal: 6),
       visualDensity: VisualDensity.compact,
-      activeColor: AssistantColors.textStrong,
-      checkColor: AssistantColors.workspace,
-      side: const BorderSide(color: AssistantColors.muted, width: 1.5),
+      activeColor: context.colors.textStrong,
+      checkColor: context.colors.workspace,
+      side: BorderSide(color: context.colors.muted, width: 1.5),
       title: Text(
         item.title,
         style: TextStyle(
-          fontSize: 14,
+          fontSize: 15,
           color: item.checked || !enabled
-              ? AssistantColors.text
-              : AssistantColors.muted,
+              ? context.colors.text
+              : context.colors.muted,
         ),
       ),
       subtitle: Text(
         due ?? 'без срока',
-        style: metaTextStyle,
+        style: metaStyle(context),
       ),
     );
   }

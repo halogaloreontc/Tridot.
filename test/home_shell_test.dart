@@ -303,90 +303,45 @@ void main() {
   });
 
   testWidgets(
-      'хроника команд — под шапкой по центру, поле ввода — во всю колонку',
-      (tester) async {
+      'история команд — в «⋯» шапки, лента без хроники, поле ввода — во всю '
+      'колонку', (tester) async {
     await _pump(tester);
-    expect(find.byKey(const Key('history-rail')), findsNothing);
+    expect(find.byKey(const Key('session-more')), findsNothing);
     for (final text in <String>['привет', '2+2', 'запомни: хлеб']) {
       await _say(tester, text);
     }
-    final rail = tester.getRect(find.byKey(const Key('history-rail')));
-    final header = tester.getRect(find.byKey(const Key('session-title')));
-    expect(rail.top, greaterThanOrEqualTo(header.bottom));
-    expect(rail.top, lessThan(56 + 8));
-    expect(rail.height, greaterThanOrEqualTo(44));
-    expect(rail.center.dx, moreOrLessEquals(195, epsilon: 1));
-    expect(find.byKey(const Key('history-2')), findsOneWidget);
-    // Поле ввода — от отступа до отступа, места справа под хронику нет.
+    expect(find.byKey(const Key('history-rail')), findsNothing);
+    final more = tester.getRect(find.byKey(const Key('session-more')));
+    expect(more.bottom, lessThanOrEqualTo(56));
+    expect(more.width, greaterThanOrEqualTo(48));
+    expect(more.right, greaterThan(390 - 56));
+    // Поле ввода — от поля до поля ленты (20).
     final composer =
         tester.getRect(find.byKey(const Key('assistant-composer')));
-    expect(composer.left, moreOrLessEquals(16, epsilon: 1));
-    expect(composer.right, moreOrLessEquals(390 - 16, epsilon: 1));
-    // На телефоне хроника — кнопка «Хроника команд».
-    await tester.tap(find.byKey(const Key('history-rail-open')));
-    await tester.pumpAndSettle();
-    expect(find.text('Хроника команд'), findsOneWidget);
-    expect(find.byKey(const Key('history-item-0')), findsOneWidget);
+    expect(composer.left, moreOrLessEquals(chatInset, epsilon: 1));
+    expect(composer.right, moreOrLessEquals(390 - chatInset, epsilon: 1));
+    await openCommandHistory(tester);
+    expect(find.text('История команд'), findsOneWidget);
+    expect(find.byKey(const Key('history-item-2')), findsOneWidget);
+    final item = tester.getSize(find.byKey(const Key('history-item-0')));
+    expect(item.height, greaterThanOrEqualTo(52));
     await tester.tap(find.byKey(const Key('history-item-0')));
     await tester.pumpAndSettle();
-    expect(find.text('Хроника команд'), findsNothing);
-  });
-
-  testWidgets('телефон: одна-две команды — кнопка хроники не уже 44 px',
-      (tester) async {
-    await _pump(tester);
-    for (final text in <String>['привет', '2+2']) {
-      await _say(tester, text);
-      final button = tester.getSize(find.byKey(const Key('history-rail-open')));
-      expect(button.width, greaterThanOrEqualTo(44), reason: text);
-      expect(button.height, greaterThanOrEqualTo(44), reason: text);
-    }
-    final button = tester.getRect(find.byKey(const Key('history-rail-open')));
-    expect(button.center.dx, moreOrLessEquals(195, epsilon: 1));
-  });
-
-  testWidgets('планшет пальцем (800 px): хроника — одна кнопка списка',
-      (tester) async {
-    await _pump(tester, size: const Size(800, 1100));
-    for (final text in <String>['привет', '2+2', 'запомни: хлеб']) {
-      await _say(tester, text);
-    }
-    final button = tester.getSize(find.byKey(const Key('history-rail-open')));
-    expect(button.width, greaterThanOrEqualTo(44));
-    expect(button.height, greaterThanOrEqualTo(44));
-    await tester.tap(find.byKey(const Key('history-rail-open')));
-    await tester.pumpAndSettle();
-    expect(find.text('Хроника команд'), findsOneWidget);
+    expect(find.text('История команд'), findsNothing);
   });
 
   testWidgets(
-      'компьютер: 40 команд — «+N» и кнопка списка открывают «Хроника '
-      'команд» со всеми, старая команда достижима', (tester) async {
+      'компьютер: 40 команд — «История команд» со всеми, старая команда '
+      'достижима', (tester) async {
     await _pump(tester, size: const Size(1440, 900));
     for (var i = 0; i < 40; i++) {
       await _say(tester, '$i+1');
     }
     expect(tester.takeException(), isNull);
-    expect(find.byKey(const Key('history-rail-open')), findsNothing);
-    expect(find.byKey(const Key('history-0')), findsNothing);
-    final list = find.byKey(const Key('history-rail-list'));
-    final size = tester.getSize(list);
-    expect(size.width, greaterThanOrEqualTo(44));
-    expect(size.height, greaterThanOrEqualTo(44));
-    expect(
-      find.bySemanticsLabel(RegExp('Хроника команд: 40')),
-      findsOneWidget,
-    );
-    expect(
-      find.bySemanticsLabel(RegExp(r'Ещё \d+ команд')),
-      findsOneWidget,
-    );
-    // «+N» — тоже кнопка списка.
-    await tester.tap(find.byKey(const Key('history-more-open')));
-    await tester.pumpAndSettle();
-    expect(find.text('Хроника команд'), findsOneWidget);
-    // Самая старая — в конце списка: долистать пальцем.
-    final sheet = find.byType(BottomSheet);
+    await openCommandHistory(tester);
+    expect(find.text('История команд'), findsOneWidget);
+    // Самая старая — в конце списка: долистать.
+    final sheet = find.byKey(const Key('history-sheet'));
     await tester.dragUntilVisible(
       find.byKey(const Key('history-item-0')),
       sheet,
@@ -397,7 +352,7 @@ void main() {
     expect(item.bottom, lessThanOrEqualTo(900));
     await tester.tap(find.byKey(const Key('history-item-0')));
     await tester.pumpAndSettle();
-    expect(find.text('Хроника команд'), findsNothing);
+    expect(find.text('История команд'), findsNothing);
     // В ленте (то же — название сессии в меню).
     expect(
       find.descendant(
@@ -406,13 +361,9 @@ void main() {
       ),
       findsOneWidget,
     );
-    // Кнопка списка справа от полос.
-    await tester.tap(list);
-    await tester.pumpAndSettle();
-    expect(find.text('Хроника команд'), findsOneWidget);
   });
 
-  testWidgets('много команд на 320 px: хроника не переполняется, «+N»',
+  testWidgets('много команд на 320 px и шрифте 200 %: без переполнения',
       (tester) async {
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -421,12 +372,9 @@ void main() {
       await _say(tester, '$i+1');
     }
     expect(tester.takeException(), isNull);
-    final rail = tester.getRect(find.byKey(const Key('history-rail')));
-    expect(rail.left, greaterThanOrEqualTo(0));
-    expect(rail.right, lessThanOrEqualTo(320));
-    expect(find.byKey(const Key('history-more')), findsOneWidget);
-    expect(find.byKey(const Key('history-39')), findsOneWidget);
-    expect(find.byKey(const Key('history-0')), findsNothing);
+    await openCommandHistory(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('history-item-39')), findsOneWidget);
   });
 
   testWidgets(
@@ -451,7 +399,7 @@ void main() {
     }
     // Последнего ответа под документом больше нет.
     expect(find.textContaining('Я готов к работе'), findsNothing);
-    expect(find.byKey(const Key('history-rail')), findsOneWidget);
+    expect(find.byKey(const Key('session-more')), findsOneWidget);
     expect(find.byKey(const Key('assistant-composer')), findsOneWidget);
 
     await _say(tester, 'покажи задачи');
@@ -489,12 +437,11 @@ void main() {
     await tapInDrawer(tester, const Key('new-session'));
     expect(find.text('Что сделать?'), findsOneWidget);
     expect(find.byKey(const Key('session-hero')), findsOneWidget);
-    // Крупные кнопки: подпись под кругом.
+    // Плитки: значок и подпись, равными долями строки (ADR-027).
     expect(find.text('Задача'), findsOneWidget);
-    expect(
-      tester.getSize(find.byKey(const Key('quick-Задача'))).width,
-      76,
-    );
+    final tile = tester.getSize(find.byKey(const Key('quick-Задача')));
+    expect(tile.height, greaterThanOrEqualTo(72));
+    expect(tile.width, greaterThanOrEqualTo(72));
     await _say(tester, 'Сверить накладные за ноябрь');
     expect(find.text('Что сделать?'), findsNothing);
     expect(

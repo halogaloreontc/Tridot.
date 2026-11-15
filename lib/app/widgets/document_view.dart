@@ -47,10 +47,10 @@ final class DocumentView extends StatelessWidget {
   final VoidCallback onReopen;
   final VoidCallback onOpenTasks;
 
-  /// Добавка к отступу сверху: место под хронику команд поверх документа.
+  /// Добавка к отступу сверху (по умолчанию 0).
   final double topInset;
 
-  /// Прокрутка документа (её же двигает хроника команд над ним).
+  /// Прокрутка документа.
   final ScrollController? scrollController;
 
   @override
@@ -59,14 +59,14 @@ final class DocumentView extends StatelessWidget {
     if (current == null) {
       return ListView(
         controller: scrollController,
-        padding: EdgeInsets.fromLTRB(24, 20 + topInset, 24, 24),
+        padding: EdgeInsets.fromLTRB(20, 20 + topInset, 20, 24),
         children: <Widget>[
-          const Text('Задачи → Документ', style: metaTextStyle),
+          Text('Задачи → Документ', style: metaStyle(context)),
           const SizedBox(height: 32),
-          const Icon(
+          Icon(
             Icons.description_outlined,
             size: 32,
-            color: AssistantColors.muted,
+            color: context.colors.muted,
           ),
           const SizedBox(height: 12),
           const Text(
@@ -74,10 +74,10 @@ final class DocumentView extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Выберите задачу в списке или создайте её командой в сессии.',
             textAlign: TextAlign.center,
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
           const SizedBox(height: 16),
           Center(
@@ -95,7 +95,7 @@ final class DocumentView extends StatelessWidget {
     final due = current.dueAt;
     return ListView(
       controller: scrollController,
-      padding: EdgeInsets.fromLTRB(24, 20 + topInset, 24, 24),
+      padding: EdgeInsets.fromLTRB(20, 20 + topInset, 20, 24),
       children: <Widget>[
         Text(
           [
@@ -103,22 +103,22 @@ final class DocumentView extends StatelessWidget {
             if (current.project != null) '#${current.project}',
             if (due != null) formatDue(due, current.duePrecision, now),
           ].join(' → '),
-          style: metaTextStyle,
+          style: metaStyle(context),
         ),
         if (done)
           Container(
             margin: const EdgeInsets.only(top: 12),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
-              color: AssistantColors.raised,
+              color: context.colors.raised,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: <Widget>[
-                const Icon(
+                Icon(
                   Icons.check_circle,
                   size: 18,
-                  color: AssistantColors.success,
+                  color: context.colors.success,
                 ),
                 const SizedBox(width: 8),
                 const Expanded(child: Text('Задача выполнена')),
@@ -135,6 +135,9 @@ final class DocumentView extends StatelessWidget {
           style: Theme.of(context).textTheme.titleLarge,
           decoration: const InputDecoration(
             border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            filled: false,
             isDense: true,
             labelText: 'Название задачи',
             floatingLabelBehavior: FloatingLabelBehavior.never,
@@ -149,9 +152,12 @@ final class DocumentView extends StatelessWidget {
           child: TextField(
             key: const Key('document-project'),
             controller: projectController,
-            style: metaTextStyle.copyWith(color: AssistantColors.text),
+            style: metaStyle(context).copyWith(color: context.colors.text),
             decoration: const InputDecoration(
               border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              filled: false,
               isDense: true,
               prefixText: '#',
               labelText: 'Проект — первая метка задачи',
@@ -169,6 +175,9 @@ final class DocumentView extends StatelessWidget {
           maxLines: null,
           decoration: const InputDecoration(
             border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            filled: false,
             labelText: 'Заметки, шаги, ссылки…',
             floatingLabelBehavior: FloatingLabelBehavior.never,
             contentPadding: EdgeInsets.symmetric(vertical: 12),
@@ -180,10 +189,10 @@ final class DocumentView extends StatelessWidget {
               child: Text(
                 _saveLabel(),
                 key: const Key('document-save-status'),
-                style: metaTextStyle.copyWith(
+                style: metaStyle(context).copyWith(
                   color: saveState == DocumentSaveState.failed ||
                           saveState == DocumentSaveState.titleRequired
-                      ? AssistantColors.danger
+                      ? context.colors.danger
                       : null,
                 ),
               ),
@@ -233,9 +242,8 @@ final class _FormattingToolbar extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: AssistantColors.raised,
-        border: Border.all(color: AssistantColors.borderSoft),
-        borderRadius: BorderRadius.circular(6),
+        color: context.colors.raised,
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Wrap(
         children: <Widget>[

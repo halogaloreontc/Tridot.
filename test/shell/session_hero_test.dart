@@ -135,8 +135,22 @@ void main() {
     );
     expect(find.byKey(const Key('sado-gender-choice')), findsOneWidget);
     expect(find.text('Связной или Связная?'), findsOneWidget);
-    expect(find.text('Связной (он)'), findsOneWidget);
-    expect(find.text('Связная (она)'), findsOneWidget);
+    // Подпись полная («Связной (он)»), если помещается в полкарточки, иначе
+    // короткая — имя без местоимения; имя есть всегда.
+    for (final (key, name) in const <(String, String)>[
+      ('sado-gender-male', 'Связной'),
+      ('sado-gender-female', 'Связная'),
+    ]) {
+      final label = tester
+          .widget<Text>(
+            find.descendant(
+              of: find.byKey(ValueKey<String>(key)),
+              matching: find.byType(Text),
+            ),
+          )
+          .data!;
+      expect(label, startsWith(name));
+    }
     await tester.tap(find.byKey(const ValueKey<String>('sado-gender-female')));
     expect(chosen, <ReplyGender>[ReplyGender.female]);
 

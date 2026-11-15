@@ -5,6 +5,8 @@ import '../../core/formatting/plural.dart';
 import '../../core/models/task.dart';
 import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Ждущая отметки карточка действия в «Сегодня»: «Приход 318 ждёт
 /// отметки · Нода · склад».
@@ -164,7 +166,7 @@ final class TodayPanel extends StatelessWidget {
     final overdue = tasks.where((Task t) => isOverdue(t, now)).length;
     return Material(
       key: const Key('today-panel'),
-      color: AssistantColors.sidebar,
+      color: context.colors.sidebar,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         children: <Widget>[
@@ -178,13 +180,13 @@ final class TodayPanel extends StatelessWidget {
                     children: <Widget>[
                       Semantics(
                         header: true,
-                        child: const Text(
+                        child: Text(
                           'Сегодня',
                           style: TextStyle(
                             fontSize: 22,
                             height: 1.2,
                             fontWeight: FontWeight.w600,
-                            color: AssistantColors.textStrong,
+                            color: context.colors.textStrong,
                           ),
                         ),
                       ),
@@ -192,14 +194,14 @@ final class TodayPanel extends StatelessWidget {
                       Wrap(
                         spacing: 8,
                         children: <Widget>[
-                          Text(todayDateLabel(now), style: metaTextStyle),
-                          const ExcludeSemantics(
-                            child: Text('·', style: metaTextStyle),
+                          Text(todayDateLabel(now), style: metaStyle(context)),
+                          ExcludeSemantics(
+                            child: Text('·', style: metaStyle(context)),
                           ),
                           Text(
                             todaySummary(tasks.length, overdue),
                             key: const Key('today-summary'),
-                            style: metaTextStyle,
+                            style: metaStyle(context),
                           ),
                         ],
                       ),
@@ -213,11 +215,11 @@ final class TodayPanel extends StatelessWidget {
                   tooltip: closeTooltip,
                   onPressed: onClose,
                   style: IconButton.styleFrom(
-                    minimumSize: const Size(44, 44),
+                    minimumSize: const Size(AppSize.minTap, AppSize.minTap),
                   ),
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.keyboard_double_arrow_right,
-                    color: AssistantColors.text,
+                    color: context.colors.text,
                   ),
                 ),
             ],
@@ -230,13 +232,13 @@ final class TodayPanel extends StatelessWidget {
                   padding: const EdgeInsets.only(left: 4),
                   child: Semantics(
                     header: true,
-                    child: const Text(
+                    child: Text(
                       'Дела',
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 15,
+                        fontSize: 17,
                         fontWeight: FontWeight.w600,
-                        color: AssistantColors.textStrong,
+                        color: context.colors.textStrong,
                       ),
                     ),
                   ),
@@ -247,8 +249,8 @@ final class TodayPanel extends StatelessWidget {
                   key: const Key('today-all-tasks'),
                   onPressed: onAllTasks,
                   style: TextButton.styleFrom(
-                    minimumSize: const Size(44, 44),
-                    foregroundColor: AssistantColors.muted,
+                    minimumSize: const Size(AppSize.minTap, AppSize.minTap),
+                    foregroundColor: context.colors.muted,
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -257,7 +259,7 @@ final class TodayPanel extends StatelessWidget {
                         child: Text(
                           'Все задачи',
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 13),
+                          style: TextStyle(fontSize: 15),
                         ),
                       ),
                       Icon(Icons.chevron_right, size: 16),
@@ -268,7 +270,7 @@ final class TodayPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          ..._tasks(),
+          ..._tasks(context),
           for (final item in pending) ...<Widget>[
             const SizedBox(height: 8),
             _PendingRow(item: item),
@@ -279,12 +281,12 @@ final class TodayPanel extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Semantics(
                 header: true,
-                child: const Text(
+                child: Text(
                   'Разделы',
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 17,
                     fontWeight: FontWeight.w600,
-                    color: AssistantColors.textStrong,
+                    color: context.colors.textStrong,
                   ),
                 ),
               ),
@@ -303,7 +305,7 @@ final class TodayPanel extends StatelessWidget {
     );
   }
 
-  List<Widget> _tasks() {
+  List<Widget> _tasks(BuildContext context) {
     if (loading) {
       return const <Widget>[
         Padding(
@@ -322,7 +324,7 @@ final class TodayPanel extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '$error',
-                style: metaTextStyle,
+                style: metaStyle(context),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
@@ -342,13 +344,13 @@ final class TodayPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Text(
+              Text(
                 'На сегодня дел нет',
-                style: TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
               if (emptyHint != null) ...<Widget>[
                 const SizedBox(height: 4),
-                Text(emptyHint!, style: metaTextStyle),
+                Text(emptyHint!, style: metaStyle(context)),
               ],
             ],
           ),
@@ -389,12 +391,10 @@ final class _TaskRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final overdue = isOverdue(task, now);
     final due = todayDueLabel(task, now);
+    // Карточка заливкой, выбранная — на уровень контрастнее (ADR-027).
     return Material(
-      color: AssistantColors.raised,
+      color: selected ? context.colors.bubble : context.colors.workspace,
       shape: RoundedRectangleBorder(
-        side: BorderSide(
-          color: selected ? AssistantColors.border : AssistantColors.borderSoft,
-        ),
         borderRadius: BorderRadius.circular(14),
       ),
       child: InkWell(
@@ -417,19 +417,19 @@ final class _TaskRow extends StatelessWidget {
                     onTap: onToggle,
                     borderRadius: BorderRadius.circular(10),
                     child: SizedBox.square(
-                      dimension: 44,
+                      dimension: AppSize.minTap,
                       child: Center(
                         child: Container(
-                          width: 20,
-                          height: 20,
+                          width: 22,
+                          height: 22,
                           decoration: BoxDecoration(
+                            shape: BoxShape.circle,
                             border: Border.all(
                               color: overdue
-                                  ? AssistantColors.danger
-                                  : AssistantColors.faint,
+                                  ? context.colors.danger
+                                  : context.colors.border,
                               width: 1.5,
                             ),
-                            borderRadius: BorderRadius.circular(6),
                           ),
                         ),
                       ),
@@ -444,9 +444,9 @@ final class _TaskRow extends StatelessWidget {
                         task.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           height: 1.3,
-                          color: AssistantColors.textStrong,
+                          color: context.colors.textStrong,
                         ),
                       ),
                       Row(
@@ -457,9 +457,9 @@ final class _TaskRow extends StatelessWidget {
                               key: ValueKey<String>('today-overdue-${task.id}'),
                               width: 6,
                               height: 6,
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: AssistantColors.danger,
+                                color: context.colors.danger,
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -467,10 +467,10 @@ final class _TaskRow extends StatelessWidget {
                           Flexible(
                             child: Text(
                               due,
-                              style: metaTextStyle.copyWith(
+                              style: metaStyle(context).copyWith(
                                 color: overdue
-                                    ? AssistantColors.danger
-                                    : AssistantColors.muted,
+                                    ? context.colors.danger
+                                    : context.colors.muted,
                               ),
                             ),
                           ),
@@ -496,9 +496,8 @@ final class _PendingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AssistantColors.raised,
+      color: context.colors.workspace,
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: AssistantColors.border),
         borderRadius: BorderRadius.circular(14),
       ),
       child: InkWell(
@@ -516,8 +515,8 @@ final class _PendingRow extends StatelessWidget {
                   height: 28,
                   decoration: BoxDecoration(
                     color: item.lead == null
-                        ? AssistantColors.nodaBg
-                        : Color(item.lead!.accentBackground),
+                        ? context.colors.nodaBg
+                        : PersonaColors.of(item.lead!, context).$2,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -527,8 +526,8 @@ final class _PendingRow extends StatelessWidget {
                     ),
                     size: 16,
                     color: item.lead == null
-                        ? AssistantColors.noda
-                        : Color(item.lead!.accentColor),
+                        ? context.colors.noda
+                        : PersonaColors.of(item.lead!, context).$1,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -538,17 +537,17 @@ final class _PendingRow extends StatelessWidget {
                     children: <Widget>[
                       Text(
                         item.title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           height: 1.3,
-                          color: AssistantColors.textStrong,
+                          color: context.colors.textStrong,
                         ),
                       ),
                       Text(
                         item.subtitle,
-                        style: const TextStyle(
-                          fontSize: 13,
+                        style: TextStyle(
+                          fontSize: 15,
                           height: 1.3,
-                          color: AssistantColors.muted,
+                          color: context.colors.muted,
                         ),
                       ),
                     ],
@@ -576,16 +575,14 @@ final class _SectionPill extends StatelessWidget {
       onTap: section.onTap,
       excludeSemantics: true,
       child: Material(
-        color: AssistantColors.raised,
-        shape: const StadiumBorder(
-          side: BorderSide(color: AssistantColors.borderSoft),
-        ),
+        color: context.colors.bubble,
+        shape: const StadiumBorder(),
         child: InkWell(
           key: Key('today-section-${section.id}'),
           onTap: section.onTap,
           customBorder: const StadiumBorder(),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44),
+            constraints: const BoxConstraints(minHeight: AppSize.minTap),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
@@ -603,14 +600,13 @@ final class _SectionPill extends StatelessWidget {
                     const SizedBox(width: 6),
                   ],
                   Flexible(
-                    child: Text(
+                    child: WholeWordText(
                       section.label,
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
+                      style: TextStyle(
+                        fontSize: 15,
                         fontWeight: FontWeight.w500,
-                        color: AssistantColors.textStrong,
+                        color: context.colors.textStrong,
                       ),
                     ),
                   ),

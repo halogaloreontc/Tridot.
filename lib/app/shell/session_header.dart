@@ -11,9 +11,8 @@ import 'session_hold_menu.dart';
 /// Шапка сессии (макет «Д»): слева меню или «назад», в центре название
 /// сессии со стрелкой ▾ и под ним — кто в ней отвечает, или заголовок
 /// ([title]: чат задачи, раздел), справа — необязательная кнопка
-/// ([trailing]; на компьютере — «Показать «Сегодня»», когда колонка
-/// свёрнута). Всегда одна строка 56: хроника команд — не в шапке, а
-/// поверх ленты (HistoryRailPill).
+/// ([trailing]: «⋯» с «История команд» и на компьютере — «Показать
+/// «Сегодня»», когда колонка свёрнута). Всегда одна строка 56.
 ///
 /// Нажатие на название открывает то же меню сессии, что долгое нажатие на
 /// её строку в боковой панели: «Переименовать», «Закрепить», «Удалить»
@@ -37,10 +36,15 @@ final class SessionHeader extends StatelessWidget {
     this.reduceMotion = false,
     this.wide = false,
     this.sessionMenuBeside = false,
+    this.cube,
   });
 
+  /// Кубик состояния помощника справа от подписи — только пока он работает
+  /// или показывает итог (ADR-027); в ленте кубика нет.
+  final Widget? cube;
+
   /// Заголовок [title] не заменяет меню сессии, а стоит рядом с ним
-  /// (задача в фокусе, «Задачи › «её»»): справа — кнопка меню сессии
+  /// (задача в фокусе, «Задача» и её название): справа — кнопка меню сессии
   /// (ключ `session-title`), меню то же, что у названия.
   final bool sessionMenuBeside;
 
@@ -110,6 +114,7 @@ final class SessionHeader extends StatelessWidget {
             : _SessionTitle(
                 title: sessionTitle!,
                 persona: persona,
+                cube: cube,
                 onAction: onSessionAction,
                 pinned: pinned,
                 canRename: canRename,
@@ -239,7 +244,8 @@ final class _SessionMenuBesideState extends State<_SessionMenuBeside> {
             tooltip: 'Меню сессии «${widget.title}»',
             onPressed: _openMenu,
             style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
-            icon: const Icon(Icons.more_vert, size: 20),
+            icon:
+                Icon(Icons.more_horiz, size: 22, color: context.colors.accent),
           ),
         ],
       );
@@ -252,6 +258,7 @@ final class _SessionTitle extends StatefulWidget {
   const _SessionTitle({
     required this.title,
     required this.persona,
+    this.cube,
     required this.onAction,
     required this.pinned,
     required this.canRename,
@@ -263,6 +270,7 @@ final class _SessionTitle extends StatefulWidget {
 
   final String title;
   final Persona? persona;
+  final Widget? cube;
   final ValueChanged<SessionAction>? onAction;
   final bool pinned;
   final bool canRename;
@@ -339,6 +347,7 @@ final class _SessionTitleState extends State<_SessionTitle> {
             projectName: widget.projectName,
             arrow: acts,
             center: !widget.wide,
+            cube: widget.cube,
           ),
         ),
       ),
@@ -353,8 +362,10 @@ final class _TitleBody extends StatelessWidget {
     required this.arrow,
     required this.center,
     this.projectName,
+    this.cube,
   });
 
+  final Widget? cube;
   final String title;
   final Persona? persona;
   final String? projectName;
@@ -382,40 +393,47 @@ final class _TitleBody extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   Flexible(
-                    child: Text(
-                      title,
-                      key: const Key('session-title-text'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        height: 1.2,
-                        fontWeight: FontWeight.w600,
-                        color: AssistantColors.textStrong,
+                    // Одно слово («Планирование») при нехватке места
+                    // уменьшается целиком, несколько — режутся многоточием.
+                    child: _fitIfOneWord(
+                      Text(
+                        title,
+                        key: const Key('session-title-text'),
+                        maxLines: 1,
+                        softWrap: !title.trim().contains(' ') ? false : null,
+                        overflow: title.trim().contains(' ')
+                            ? TextOverflow.ellipsis
+                            : null,
+                        style: TextStyle(
+                          fontSize: 17,
+                          height: 1.2,
+                          fontWeight: FontWeight.w600,
+                          color: context.colors.textStrong,
+                        ),
                       ),
                     ),
                   ),
                   if (arrow) ...<Widget>[
                     const SizedBox(width: 2),
-                    const Icon(
+                    Icon(
                       Icons.keyboard_arrow_down,
                       size: 18,
-                      color: AssistantColors.textStrong,
+                      color: context.colors.textStrong,
                     ),
                   ],
                 ],
               ),
-              if (persona != null || projectName != null)
+              if (persona != null || projectName != null || cube != null)
                 Row(
                   key: const Key('session-persona'),
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     if (projectName != null) ...<Widget>[
-                      const Icon(
+                      Icon(
                         Icons.folder_outlined,
                         key: Key('session-project'),
                         size: 13,
-                        color: AssistantColors.muted,
+                        color: context.colors.muted,
                       ),
                       const SizedBox(width: 4),
                       Flexible(
@@ -423,30 +441,34 @@ final class _TitleBody extends StatelessWidget {
                           projectName!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12,
+                          style: TextStyle(
+                            fontSize: 13,
                             height: 1.2,
-                            color: AssistantColors.muted,
+                            color: context.colors.muted,
                           ),
                         ),
                       ),
                       if (persona != null) const SizedBox(width: 8),
                     ],
                     if (persona != null) ...<Widget>[
-                      PersonaMark(persona: persona, size: 13, round: true),
-                      const SizedBox(width: 5),
+                      PersonaDot(persona: persona),
+                      const SizedBox(width: 6),
                       Flexible(
                         child: Text(
                           persona.russianName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12,
+                          style: TextStyle(
+                            fontSize: 13,
                             height: 1.2,
-                            color: AssistantColors.muted,
+                            color: context.colors.muted,
                           ),
                         ),
                       ),
+                    ],
+                    if (cube case final Widget cube) ...<Widget>[
+                      const SizedBox(width: 8),
+                      cube,
                     ],
                   ],
                 ),
@@ -457,3 +479,12 @@ final class _TitleBody extends StatelessWidget {
     );
   }
 }
+
+/// [text] одного слова — в FittedBox (уменьшается целиком), иначе как есть.
+Widget _fitIfOneWord(Text text) => (text.data ?? '').trim().contains(' ')
+    ? text
+    : FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: AlignmentDirectional.centerStart,
+        child: text,
+      );

@@ -103,8 +103,8 @@ class _RecallFieldState extends State<RecallField> {
                   key: const ValueKey<String>('recall-verdict'),
                   style: TextStyle(
                     color: verdict == RecallVerdict.correct
-                        ? AssistantColors.success
-                        : AssistantColors.text,
+                        ? context.colors.success
+                        : context.colors.text,
                   ),
                 ),
               ),
@@ -185,9 +185,9 @@ class _HintLadderState extends State<HintLadder> {
   @override
   Widget build(BuildContext context) {
     if (_closed) {
-      return const Text(
+      return Text(
         'Готово.',
-        style: TextStyle(color: AssistantColors.text),
+        style: TextStyle(color: context.colors.text),
       );
     }
     return Column(
@@ -197,10 +197,10 @@ class _HintLadderState extends State<HintLadder> {
           entry.hint.isEmpty ? 'Своей подсказки нет.' : entry.hint,
           key: const ValueKey<String>('secure-card-hint-text'),
           style: TextStyle(
-            fontSize: 15,
+            fontSize: 17,
             color: entry.hint.isEmpty
-                ? AssistantColors.muted
-                : AssistantColors.textStrong,
+                ? context.colors.muted
+                : context.colors.textStrong,
           ),
         ),
         if (_stronger != null) ...<Widget>[
@@ -208,7 +208,7 @@ class _HintLadderState extends State<HintLadder> {
           Text(
             'Подсказка посильнее: $_stronger',
             key: const ValueKey<String>('hint-stronger-text'),
-            style: const TextStyle(color: AssistantColors.text),
+            style: TextStyle(color: context.colors.text),
           ),
         ],
         if (_first) ...<Widget>[
@@ -389,8 +389,8 @@ class _TrainingViewState extends State<TrainingView> {
       children: <Widget>[
         Text(
           'Вспомните пароль от «${entry.service}»',
-          style: const TextStyle(
-            color: AssistantColors.textStrong,
+          style: TextStyle(
+            color: context.colors.textStrong,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -408,7 +408,7 @@ class _TrainingViewState extends State<TrainingView> {
               child: Text(
                 entry.hint.isEmpty ? 'Своей подсказки нет.' : entry.hint,
                 key: const ValueKey<String>('training-hint-text'),
-                style: const TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
             ),
           if (_stronger != null)
@@ -416,7 +416,7 @@ class _TrainingViewState extends State<TrainingView> {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 'Подсказка посильнее: $_stronger',
-                style: const TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
             ),
           const SizedBox(height: 6),
@@ -458,7 +458,7 @@ class _TrainingViewState extends State<TrainingView> {
             Text(
               _result!,
               key: const ValueKey<String>('training-result'),
-              style: const TextStyle(color: AssistantColors.text),
+              style: TextStyle(color: context.colors.text),
             ),
           if (done == TrainingOutcome.wrong) ...<Widget>[
             const SizedBox(height: 8),
@@ -540,12 +540,12 @@ class CheckView extends StatelessWidget {
         Text(
           'Проверено записей: ${groups.total}. Утечки по базам не '
           'проверяются — только надёжность, повторы и возраст.',
-          style: metaTextStyle,
+          style: metaStyle(context),
         ),
         if (groups.unchecked.isNotEmpty)
           Text(
             'Ещё не оценены: ${groups.unchecked.length}.',
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
         // Важные записи без свежего мастер-пароля (15.2): их надёжность и
         // «название в пароле» не пересчитываются и не показываются.
@@ -554,15 +554,15 @@ class CheckView extends StatelessWidget {
             'Важные записи (${groups.pending.length}) — проверка после '
             'мастер-пароля.',
             key: const ValueKey<String>('check-pending'),
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
         if (visible.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
               'Замечаний нет.',
               key: ValueKey<String>('check-all-good'),
-              style: TextStyle(color: AssistantColors.success),
+              style: TextStyle(color: context.colors.success),
             ),
           ),
         for (final (key, title, lists) in visible) ...<Widget>[
@@ -570,15 +570,15 @@ class CheckView extends StatelessWidget {
           Text(
             title,
             key: ValueKey<String>(key),
-            style: const TextStyle(
-              color: AssistantColors.textStrong,
+            style: TextStyle(
+              color: context.colors.textStrong,
               fontWeight: FontWeight.w600,
             ),
           ),
           for (final (index, list) in lists.indexed)
             if (list.isNotEmpty) ...<Widget>[
               if (lists.length > 1)
-                Text('Группа ${index + 1}', style: metaTextStyle),
+                Text('Группа ${index + 1}', style: metaStyle(context)),
               for (final entry in list)
                 LayoutBuilder(
                   builder: (BuildContext context, BoxConstraints box) {
@@ -685,9 +685,9 @@ class _CheckScreenState extends State<CheckScreen> {
   Widget build(BuildContext context) {
     final groups = _groups;
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: context.colors.workspace,
       appBar: AppBar(
-        backgroundColor: AssistantColors.workspace,
+        backgroundColor: context.colors.workspace,
         title: const Text('Проверка паролей'),
       ),
       body: Align(
@@ -700,9 +700,9 @@ class _CheckScreenState extends State<CheckScreen> {
               if (_failed)
                 const Text('Не получилось проверить. Данные не пострадали.')
               else if (groups == null)
-                const Text(
+                Text(
                   'Проверяю…',
-                  style: TextStyle(color: AssistantColors.muted),
+                  style: TextStyle(color: context.colors.muted),
                 )
               else ...<Widget>[
                 CheckView(kit: widget.kit, groups: groups),
@@ -766,9 +766,9 @@ class _TrainingScreenState extends State<TrainingScreen> {
     final queue = kit.facade.trainingQueue(now);
     final current = _current == null ? null : kit.vault.entry(_current!);
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: context.colors.workspace,
       appBar: AppBar(
-        backgroundColor: AssistantColors.workspace,
+        backgroundColor: context.colors.workspace,
         title: const Text('Тренировка памяти'),
       ),
       body: Align(
@@ -795,17 +795,17 @@ class _TrainingScreenState extends State<TrainingScreen> {
                   child: const Text('К списку'),
                 ),
               ] else if (queue.isEmpty)
-                const Text(
+                Text(
                   'Тренировать пока нечего. Отметьте важные записи — почту, '
                   'банк, Госуслуги — переключателем «Важный» в редакторе.',
                   key: ValueKey<String>('training-empty'),
-                  style: TextStyle(color: AssistantColors.text),
+                  style: TextStyle(color: context.colors.text),
                 )
               else ...<Widget>[
-                const Text(
+                Text(
                   'Интервалы: 1 → 3 → 7 → 14 → 30 → 60 → 120 дней. Ошибка — '
                   'снова через день.',
-                  style: metaTextStyle,
+                  style: metaStyle(context),
                 ),
                 for (final ref in queue)
                   if (kit.vault.entry(ref.id) case final VaultEntry entry)
@@ -817,7 +817,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                             : 'через '
                                 '${TrainingSchedule.daysUntil(entry.train, now)} '
                                 'дн.',
-                        style: metaTextStyle,
+                        style: metaStyle(context),
                       ),
                       onTap: () => setState(() {
                         _current = entry.id;

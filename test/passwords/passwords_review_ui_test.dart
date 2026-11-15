@@ -512,6 +512,39 @@ void main() {
       await finish(tester);
     });
 
+    testWidgets('список: 320 px — «+» виден на акценте, логин одной строкой',
+        (WidgetTester tester) async {
+      phone(tester);
+      makeKit();
+      await seed();
+      await tester.pumpWidget(app(PasswordsScreen(kit: kit)));
+      await tester.pumpAndSettle();
+      // Глиф «+» — onAccent: иначе цвет значков темы почти не виден на
+      // акценте (~1.2:1).
+      final plus = tester.widget<Icon>(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('passwords-add')),
+          matching: find.byIcon(Icons.add),
+        ),
+      );
+      expect(plus.color, AppPalette.dark.onAccent);
+      // Логин в строке записи — одной строкой с «…», без переноса посреди
+      // адреса.
+      final logins = find.descendant(
+        of: find.byType(ListTile),
+        matching: find.textContaining('@'),
+      );
+      expect(logins, findsWidgets);
+      for (final text in tester.widgetList<Text>(logins)) {
+        expect(text.maxLines, 1);
+      }
+      expect(
+        find.byKey(const ValueKey<String>('passwords-title')),
+        findsOneWidget,
+      );
+      await finish(tester);
+    });
+
     testWidgets('редактор: 320 px и шрифт ×2 — предупреждение не обрезано',
         (WidgetTester tester) async {
       phone(tester);

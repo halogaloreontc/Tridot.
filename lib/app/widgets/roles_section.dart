@@ -7,7 +7,7 @@ import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
 import 'connection_screen.dart';
 import 'extensions_section.dart' show connectionChanged;
-import 'task_tile.dart';
+import 'grouped.dart';
 import 'whole_word_text.dart';
 
 /// Раздел «Роли» в настройках, над «Расширениями» (ADR-012): карточка на
@@ -172,14 +172,14 @@ class _RolesSectionState extends State<RolesSection> {
                 if (yes && mounted) _set(_choice.withActions(role.id, login));
               }
             : null,
-        title: const Text(
+        title: Text(
           'Разрешить действия',
-          style: TextStyle(color: AssistantColors.textStrong),
+          style: TextStyle(color: context.colors.textStrong),
         ),
         subtitle: Text(
           subtitle,
           key: ValueKey<String>('role-actions-note-${role.id}'),
-          style: const TextStyle(color: AssistantColors.muted),
+          style: TextStyle(color: context.colors.muted),
         ),
       ),
     );
@@ -220,17 +220,13 @@ class _RolesSectionState extends State<RolesSection> {
       key: const ValueKey<String>('roles-section'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const SectionLabel('Роли'),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8),
-          child: Text(
-            'Роль — набор навыков и кнопок для сферы работы. Включайте '
-            'одну или несколько; подключения и пароли при выключении '
-            'остаются.',
-            style: metaTextStyle,
-          ),
+        InsetGroup(
+          header: 'Роли',
+          footer: 'Роль — набор навыков и кнопок для сферы работы. Включайте '
+              'одну или несколько; подключения и пароли при выключении '
+              'остаются.',
+          children: <Widget>[for (final role in roles) _card(role)],
         ),
-        for (final role in roles) _card(role),
       ],
     );
   }
@@ -242,51 +238,37 @@ class _RolesSectionState extends State<RolesSection> {
     final service = link == null ? null : _connection(link.extensionId);
     return Container(
       key: ValueKey<String>('role-card-${role.id}'),
-      margin: const EdgeInsets.fromLTRB(0, 8, 0, 0),
-      padding: const EdgeInsets.fromLTRB(0, 4, 0, 8),
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: on ? AssistantColors.border : AssistantColors.borderSoft,
-        ),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           SwitchListTile(
             key: ValueKey<String>('role-${role.id}'),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
             value: on,
             onChanged: (bool value) => _set(choice.withRole(role, value)),
-            title: Text(
+            title: WholeWordText(
               role.title,
-              style: const TextStyle(
-                color: AssistantColors.textStrong,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: context.colors.textStrong),
             ),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                role.description,
-                style: const TextStyle(color: AssistantColors.muted),
-              ),
+              child: WholeWordText(role.description),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
                   'Входит: ${_includes(role)}',
                   key: ValueKey<String>('role-includes-${role.id}'),
-                  style: metaTextStyle,
+                  style: metaStyle(context),
                 ),
                 if (role.chips.isNotEmpty)
                   Text(
                     'Кнопки: ${role.chips.map((RoleChip c) => '«${c.label}»').join(', ')}',
-                    style: metaTextStyle,
+                    style: metaStyle(context),
                   ),
                 if (on)
                   if (_switchedOff(role) case final String note)
@@ -295,7 +277,7 @@ class _RolesSectionState extends State<RolesSection> {
                       child: Text(
                         note,
                         key: ValueKey<String>('role-off-${role.id}'),
-                        style: const TextStyle(color: AssistantColors.warning),
+                        style: TextStyle(color: context.colors.warning),
                       ),
                     ),
                 if (link != null && service != null) ...<Widget>[
@@ -307,8 +289,8 @@ class _RolesSectionState extends State<RolesSection> {
                     key: ValueKey<String>('role-status-${role.id}'),
                     style: TextStyle(
                       color: service.connected
-                          ? AssistantColors.text
-                          : AssistantColors.warning,
+                          ? context.colors.text
+                          : context.colors.warning,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -316,8 +298,6 @@ class _RolesSectionState extends State<RolesSection> {
                     key: ValueKey<String>('role-connect-${role.id}'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(40, 44),
-                      foregroundColor: AssistantColors.text,
-                      side: const BorderSide(color: AssistantColors.border),
                     ),
                     onPressed: () => _connect(service),
                     icon: Icon(

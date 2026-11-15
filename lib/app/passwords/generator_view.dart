@@ -198,26 +198,26 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
           ],
         ),
         if (!_wordsReady)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 4),
             child: Text(
               'Словарь слов не загрузился — доступен пароль из символов.',
-              style: metaTextStyle,
+              style: metaStyle(context),
             ),
           ),
         const SizedBox(height: 10),
         if (_gone == _Gone.expired)
-          const Text(
+          Text(
             'Время вышло — пароль стёрт. Нажмите «Ещё», чтобы получить новый.',
             key: ValueKey<String>('generator-expired'),
-            style: TextStyle(color: AssistantColors.muted),
+            style: TextStyle(color: context.colors.muted),
           )
         else if (_gone == _Gone.used)
-          const Text(
+          Text(
             'Пароль передан в редактор и здесь стёрт. Если запись не '
             'сохранили — нажмите «Ещё», чтобы получить новый.',
             key: ValueKey<String>('generator-used'),
-            style: TextStyle(color: AssistantColors.muted),
+            style: TextStyle(color: context.colors.muted),
           )
         else
           SecretRevealText(
@@ -230,14 +230,14 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
         Text(
           '~$bits бит · надёжность ${StrengthScale.label(score)}',
           key: const ValueKey<String>('generator-bits'),
-          style: const TextStyle(color: AssistantColors.text),
+          style: TextStyle(color: context.colors.text),
         ),
         Text(
           'Подсказка по структуре: ${o.structureHint}. Она не снижает '
           'стойкость: биты посчитаны так, будто устройство пароля известно. '
           'Допишите к ней своё — то, что напомнит именно вам.',
           key: const ValueKey<String>('generator-structure'),
-          style: metaTextStyle,
+          style: metaStyle(context),
         ),
         const SizedBox(height: 6),
         if (words) ..._wordControls(o) else ..._charControls(o),
@@ -286,12 +286,12 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
         ),
         // Подпись над списком, список — на всю ширину с многоточием: при
         // крупном шрифте на узком экране ничего не уходит за край.
-        const Text('Разделитель', style: metaTextStyle),
+        Text('Разделитель', style: metaStyle(context)),
         DropdownButton<String>(
           key: const ValueKey<String>('generator-separator'),
           isExpanded: true,
           value: o.separator,
-          dropdownColor: AssistantColors.raised,
+          dropdownColor: context.colors.raised,
           items: <DropdownMenuItem<String>>[
             for (final sep in GeneratorOptions.separators)
               DropdownMenuItem<String>(
@@ -332,7 +332,7 @@ class _GeneratorPanelState extends State<GeneratorPanel> {
       ];
 
   List<Widget> _charControls(GeneratorOptions o) => <Widget>[
-        Text('Длина: ${o.length}', style: metaTextStyle),
+        Text('Длина: ${o.length}', style: metaStyle(context)),
         // Ползунок тянут вбок: этот жест — его, а не свайп меню.
         DrawerSwipeBlocker(
           child: Slider(
@@ -420,7 +420,7 @@ class _Stepper extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(color: AssistantColors.text),
+            style: TextStyle(color: context.colors.text),
           ),
         ),
         IconButton(
@@ -447,9 +447,9 @@ class GeneratorScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: context.colors.workspace,
       appBar: AppBar(
-        backgroundColor: AssistantColors.workspace,
+        backgroundColor: context.colors.workspace,
         title: const Text('Генератор паролей'),
       ),
       body: Align(
@@ -474,7 +474,6 @@ Future<(SecretBytes, GeneratorOptions)?> pickGenerated(
   return showModalBottomSheet<(SecretBytes, GeneratorOptions)>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AssistantColors.raised,
     builder: (BuildContext context) => SafeArea(
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(

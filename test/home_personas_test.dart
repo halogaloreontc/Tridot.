@@ -232,19 +232,18 @@ String _heroPersona(WidgetTester tester) => tester
 
 void main() {
   group('Tridot: метки, имена и выбор рода Связной', () {
-    String letter(WidgetTester tester, String id) => tester
-        .widget<Text>(
-          find
-              .descendant(
-                of: find.byKey(ValueKey<String>('message-author-$id')).first,
-                matching: find.descendant(
-                  of: find.byType(PersonaMark),
-                  matching: find.byType(Text),
-                ),
-              )
-              .first,
-        )
-        .data!;
+    // Над ответом — точка и имя цветом помощника (ADR-027), без буквы.
+    String letter(WidgetTester tester, String id) {
+      final row = find.byKey(ValueKey<String>('author-name-$id')).first;
+      final dot = tester.widget<PersonaDot>(
+        find.descendant(of: row, matching: find.byType(PersonaDot)),
+      );
+      expect(dot.persona.id, id);
+      final name = tester
+          .widget<Text>(find.descendant(of: row, matching: find.byType(Text)))
+          .data!;
+      return name.substring(0, 1);
+    }
 
     testWidgets('над ответами — «С», «Л», «Н» цветом помощника',
         (tester) async {
@@ -265,7 +264,7 @@ void main() {
           matching: find.text('Связной'),
         ),
       );
-      expect(name.style?.color, AssistantColors.sado);
+      expect(name.style?.color, AppPalette.dark.sado);
     });
 
     testWidgets('переименованная Нода: обращение и метка — по новому имени',
@@ -369,9 +368,9 @@ void main() {
         find.descendant(of: author, matching: find.text('Связной')),
         findsOneWidget,
       );
-      // Знак и подпись помощника — кириллицей, как в макете «Д».
+      // Точка помощника у имени — без буквы (ADR-027).
       expect(
-        find.descendant(of: author, matching: find.text('С')),
+        find.descendant(of: author, matching: find.byType(PersonaDot)),
         findsOneWidget,
       );
       // Ответ из зоны Лиорио (склад, пароли) подписан им — здесь их нет.

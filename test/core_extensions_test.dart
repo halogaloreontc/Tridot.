@@ -65,7 +65,7 @@ void main() {
 
     test('настройки сохраняются и переживают битый файл', () async {
       final store = JsonSettingsStore('${dir.path}/settings.json');
-      expect((await store.load()).showTimestamps, isTrue);
+      expect((await store.load()).showTimestamps, isFalse);
       await store.save(const AppSettings(reduceMotion: true));
       expect((await store.load()).reduceMotion, isTrue);
 
@@ -101,10 +101,10 @@ void main() {
       expect((await store.load()).showTimestamps, isFalse);
 
       await File('${dir.path}/settings.json')
-          .writeAsString('{"reduce_motion": "да", "show_timestamps": 1}');
+          .writeAsString('{"reduce_motion": "да", "message_times": 1}');
       final loaded = await store.load();
       expect(loaded.reduceMotion, isFalse);
-      expect(loaded.showTimestamps, isTrue);
+      expect(loaded.showTimestamps, isFalse);
     });
 
     test('резервная копия кладётся рядом с файлом задач', () async {

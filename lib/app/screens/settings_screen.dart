@@ -11,12 +11,14 @@ import '../assistant_theme.dart';
 import '../extensions/tool_kit.dart';
 import '../extensions/ytdl_kit.dart';
 import '../passwords/passwords_kit.dart';
+import '../shell/relay_drawer.dart';
 import '../voice/voice_kit.dart';
 import '../voice/voice_views.dart';
 import '../widgets/extensions_section.dart';
 import '../widgets/personas_section.dart';
 import '../widgets/roles_section.dart';
-import '../widgets/task_tile.dart';
+import '../layout.dart';
+import '../widgets/grouped.dart';
 import '../widgets/whole_word_text.dart';
 
 /// Экран «Настройки»: поведение интерфейса, помощники, роли, расширения,
@@ -91,7 +93,6 @@ class SettingsScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: AssistantColors.raised,
         title: const WholeWordText('Очистить историю сессий?'),
         content: const Text(
           'Сообщения всех сессий, в том числе сессий задач, будут удалены. '
@@ -106,7 +107,7 @@ class SettingsScreen extends StatelessWidget {
           TextButton(
             key: const ValueKey<String>('clear-chat-confirm'),
             style: TextButton.styleFrom(
-              foregroundColor: AssistantColors.danger,
+              foregroundColor: context.colors.danger,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Очистить'),
@@ -119,164 +120,260 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     // Приветствия-сообщения больше нет: очищать есть что с первого.
     final canClear = messageCount > 0;
-    const switchTitle = TextStyle(color: AssistantColors.text);
+    final colors = context.colors;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              if (showTitle)
-                Text(
-                  'Настройки',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: AssistantColors.textStrong,
-                  ),
-                ),
-              const SectionLabel('Интерфейс'),
-              SwitchListTile(
-                key: const ValueKey<String>('setting-reduce-motion'),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                title: const WholeWordText(
-                  'Уменьшить анимацию',
-                  style: switchTitle,
-                ),
-                subtitle: const WholeWordText(
-                  'Кубик и переходы без движения',
-                  style: metaTextStyle,
-                ),
-                value: settings.reduceMotion,
-                onChanged: (value) =>
-                    onChanged(settings.copyWith(reduceMotion: value)),
-              ),
-              SwitchListTile(
-                key: const ValueKey<String>('setting-timestamps'),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                title: const WholeWordText(
-                  'Время под сообщениями',
-                  style: switchTitle,
-                ),
-                value: settings.showTimestamps,
-                onChanged: (value) =>
-                    onChanged(settings.copyWith(showTimestamps: value)),
-              ),
-              VoiceSettingsSection(
-                settings: settings,
-                onChanged: onChanged,
-                voice: voice,
-              ),
-              if (appLock case final AppLockController lock)
-                SecuritySection(
-                  settings: settings,
-                  onChanged: onChanged,
-                  lock: lock,
-                  hasVault: passwords != null,
-                ),
-              if (includePersonas)
-                PersonasSection(
-                  settings: settings,
-                  onChanged: onChanged,
-                  registry: extensions,
-                ),
-              if (extensions case final ExtensionRegistry registry
-                  when registry.roles.isNotEmpty)
-                RolesSection(
-                  registry: registry,
-                  settings: settings,
-                  onChanged: onChanged,
-                  connections: connections,
-                ),
-              if (extensions case final ExtensionRegistry registry)
-                ExtensionsSection(
-                  registry: registry,
-                  settings: settings,
-                  onChanged: onChanged,
-                  connections: connections,
-                  passwords: passwords,
-                  ffmpeg: ffmpeg,
-                  nativeMedia: nativeMedia,
-                  ytdl: ytdl,
-                ),
-              const SectionLabel('Сессии'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return ColoredBox(
+      color: colors.background,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(top: showTitle ? 0 : AppSpace.m, bottom: 32),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: AppSize.maxSettings),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                if (showTitle) const LargeTitle('Настройки'),
+                InsetGroup(
+                  header: 'Интерфейс',
+                  footer: 'Без «Времени у каждого сообщения» время видно над '
+                      'группой сообщений и в меню сообщения',
                   children: <Widget>[
-                    OutlinedButton.icon(
-                      key: const ValueKey<String>('clear-chat'),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(40, 44),
-                        foregroundColor: AssistantColors.danger,
-                        side: const BorderSide(color: AssistantColors.border),
+                    GroupedRow(
+                      key: const ValueKey<String>('setting-appearance'),
+                      icon: Icons.contrast,
+                      tile: colors.tileViolet,
+                      title: 'Оформление',
+                      value: settings.appearance.title,
+                      chevron: true,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (BuildContext context) => AppearanceScreen(
+                            settings: settings,
+                            onChanged: onChanged,
+                          ),
+                        ),
                       ),
-                      onPressed: canClear ? () => _confirmClear(context) : null,
-                      icon: const Icon(Icons.delete_sweep_outlined, size: 18),
-                      label: const Text('Очистить историю сессий'),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      canClear
-                          ? 'Сообщений: $messageCount'
-                          : 'История пуста — очищать нечего',
-                      style: metaTextStyle,
+                    GroupedSwitchRow(
+                      key: const ValueKey<String>('setting-reduce-motion'),
+                      // В группе у всех строк плитки: текст начинается с
+                      // одной линии, разделители — с одного отступа.
+                      secondary: IconTile(
+                        icon: Icons.motion_photos_off_outlined,
+                        color: colors.tileBlue,
+                      ),
+                      title: 'Уменьшить анимацию',
+                      subtitle: 'Кубик и переходы без движения',
+                      value: settings.reduceMotion,
+                      onChanged: (value) =>
+                          onChanged(settings.copyWith(reduceMotion: value)),
+                    ),
+                    GroupedSwitchRow(
+                      key: const ValueKey<String>('setting-timestamps'),
+                      secondary: IconTile(
+                        icon: Icons.schedule,
+                        color: colors.tileGray,
+                      ),
+                      title: 'Время у каждого сообщения',
+                      value: settings.showTimestamps,
+                      onChanged: (value) =>
+                          onChanged(settings.copyWith(showTimestamps: value)),
                     ),
                   ],
                 ),
-              ),
-              if (onOpenStorage != null) ...<Widget>[
-                const SectionLabel('Данные'),
-                ListTile(
-                  key: const ValueKey<String>('settings-storage'),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                  minTileHeight: 48,
-                  leading: const Icon(Icons.save_outlined),
-                  title: const WholeWordText(
-                    'Данные и резервная копия',
-                    style: switchTitle,
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: onOpenStorage,
+                VoiceSettingsSection(
+                  settings: settings,
+                  onChanged: onChanged,
+                  voice: voice,
                 ),
-              ],
-              const SectionLabel('О приложении'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const Text(
-                      // Приложение — не помощник: помощники в нём работают
-                      // (ADR-009).
-                      '$applicationName · приложение с помощниками, локально, '
-                      'без интернета и языковой модели',
-                      style: TextStyle(color: AssistantColors.text),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      key: const ValueKey<String>('licenses'),
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(40, 44),
-                        foregroundColor: AssistantColors.text,
+                if (appLock case final AppLockController lock)
+                  SecuritySection(
+                    settings: settings,
+                    onChanged: onChanged,
+                    lock: lock,
+                    hasVault: passwords != null,
+                  ),
+                if (includePersonas)
+                  PersonasSection(
+                    settings: settings,
+                    onChanged: onChanged,
+                    registry: extensions,
+                  ),
+                if (extensions case final ExtensionRegistry registry
+                    when registry.roles.isNotEmpty)
+                  RolesSection(
+                    registry: registry,
+                    settings: settings,
+                    onChanged: onChanged,
+                    connections: connections,
+                  ),
+                if (extensions case final ExtensionRegistry registry)
+                  ExtensionsSection(
+                    registry: registry,
+                    settings: settings,
+                    onChanged: onChanged,
+                    connections: connections,
+                    passwords: passwords,
+                    ffmpeg: ffmpeg,
+                    nativeMedia: nativeMedia,
+                    ytdl: ytdl,
+                  ),
+                if (onOpenStorage != null)
+                  InsetGroup(
+                    header: 'Данные',
+                    children: <Widget>[
+                      GroupedRow(
+                        key: const ValueKey<String>('settings-storage'),
+                        icon: Icons.save_outlined,
+                        tile: colors.tileBlue,
+                        title: 'Данные и резервная копия',
+                        chevron: true,
+                        onTap: onOpenStorage,
                       ),
-                      onPressed: () => showLicensePage(
+                    ],
+                  ),
+                InsetGroup(
+                  header: 'Сессии',
+                  footer: canClear
+                      ? 'Сообщений: $messageCount'
+                      : 'История пуста — очищать нечего',
+                  children: <Widget>[
+                    GroupedRow(
+                      key: const ValueKey<String>('clear-chat'),
+                      title: 'Очистить историю сессий',
+                      destructive: true,
+                      onTap: canClear ? () => _confirmClear(context) : null,
+                    ),
+                  ],
+                ),
+                InsetGroup(
+                  header: 'О приложении',
+                  footer: 'Версия ${AppInfo.version}',
+                  footerKey: const ValueKey<String>('app-version'),
+                  children: <Widget>[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpace.rowH,
+                        vertical: AppSpace.rowV,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const Padding(
+                            padding: EdgeInsets.only(top: 2, right: 12),
+                            child: RelayGlyph(size: 28),
+                          ),
+                          Expanded(
+                            child: WholeWordText(
+                              // Приложение — не помощник: помощники в нём работают
+                              // (ADR-009).
+                              '$applicationName · приложение с помощниками, '
+                              'локально, без интернета и языковой модели',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge!
+                                  .copyWith(color: colors.text),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GroupedRow(
+                      key: const ValueKey<String>('licenses'),
+                      icon: Icons.description_outlined,
+                      tile: colors.tileGray,
+                      title: 'Лицензии',
+                      chevron: true,
+                      onTap: () => showLicensePage(
                         context: context,
                         applicationName: applicationName,
                       ),
-                      child: const Text('Лицензии'),
                     ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// «Настройки → Оформление»: как в системе, светлое или тёмное. Список с
+/// галочкой, а не сегменты: на 320 px и шрифте 200 % слова не рвутся.
+class AppearanceScreen extends StatefulWidget {
+  const AppearanceScreen({
+    super.key,
+    required this.settings,
+    required this.onChanged,
+  });
+
+  final AppSettings settings;
+  final ValueChanged<AppSettings> onChanged;
+
+  @override
+  State<AppearanceScreen> createState() => _AppearanceScreenState();
+}
+
+class _AppearanceScreenState extends State<AppearanceScreen> {
+  late AppAppearance _value = widget.settings.appearance;
+
+  void _choose(AppAppearance value) {
+    if (value == _value) return;
+    setState(() => _value = value);
+    widget.onChanged(widget.settings.copyWith(appearance: value));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final text = Theme.of(context).textTheme;
+    return Scaffold(
+      appBar: AppBar(title: const WholeWordText('Оформление')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: <Widget>[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Material(
+              color: colors.workspace,
+              child: Column(
+                children: <Widget>[
+                  for (final (i, option) in AppAppearance.values.indexed) ...[
+                    if (i > 0) const Divider(indent: 16),
+                    Semantics(
+                      selected: option == _value,
+                      inMutuallyExclusiveGroup: true,
+                      child: ListTile(
+                        key: ValueKey<String>('appearance-${option.id}'),
+                        title: WholeWordText(
+                          option.title,
+                          style: text.bodyLarge!.copyWith(
+                            color: colors.textStrong,
+                          ),
+                        ),
+                        trailing: option == _value
+                            ? Icon(Icons.check, color: colors.accent)
+                            : null,
+                        onTap: () => _choose(option),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+            child: WholeWordText(
+              'Как в системе — тема меняется вместе с телефоном',
+              style: text.bodySmall,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -303,6 +303,8 @@ Future<void> main() async {
       ffmpeg: ffmpeg,
       nativeMedia: nativeMedia,
       ytdl: ytdl,
+      initialAppearance: early.appearance,
+      initialReduceMotion: early.reduceMotion,
     ),
   );
 }
@@ -380,7 +382,27 @@ Future<List<String>> _builtInPacks() async {
   return <String>[for (final path in paths) await rootBundle.loadString(path)];
 }
 
-final class AssistantApp extends StatelessWidget {
+/// Режим темы для оформления из настроек (ADR-027).
+ThemeMode themeModeOf(AppAppearance appearance) => switch (appearance) {
+      AppAppearance.system => ThemeMode.system,
+      AppAppearance.light => ThemeMode.light,
+      AppAppearance.dark => ThemeMode.dark,
+    };
+
+/// Значки строки состояния и цвет системной панели навигации под тему.
+SystemUiOverlayStyle overlayStyleFor(ThemeData theme) {
+  final light = theme.brightness == Brightness.light;
+  final background = theme.scaffoldBackgroundColor;
+  return (light ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light)
+      .copyWith(
+    statusBarColor: Colors.transparent,
+    systemNavigationBarColor: background,
+    systemNavigationBarIconBrightness:
+        light ? Brightness.dark : Brightness.light,
+  );
+}
+
+final class AssistantApp extends StatefulWidget {
   const AssistantApp({
     super.key,
     required this.assistant,
@@ -397,7 +419,16 @@ final class AssistantApp extends StatelessWidget {
     this.nativeMedia,
     this.ytdl,
     this.appLock,
+    this.initialAppearance = AppAppearance.system,
+    this.initialReduceMotion = false,
   });
+
+  /// Оформление, прочитанное из настроек до первого кадра.
+  final AppAppearance initialAppearance;
+
+  /// «Меньше анимации» из настроек до первого кадра: смена темы без
+  /// перетекания цветов.
+  final bool initialReduceMotion;
 
   final AssistantController assistant;
   final TaskService tasks;
@@ -431,35 +462,74 @@ final class AssistantApp extends StatelessWidget {
   final AppLockController? appLock;
 
   @override
+  State<AssistantApp> createState() => _AssistantAppState();
+}
+
+final class _AssistantAppState extends State<AssistantApp> {
+  /// Режим темы: меняется из настроек без перезапуска, состояние экранов
+  /// (поле ввода, открытый Сейф) остаётся.
+  late final ValueNotifier<ThemeMode> _themeMode =
+      ValueNotifier<ThemeMode>(themeModeOf(widget.initialAppearance));
+
+  /// «Меньше анимации»: тема меняется сразу, без перетекания (§5.6).
+  late final ValueNotifier<bool> _reduceMotion =
+      ValueNotifier<bool>(widget.initialReduceMotion);
+
+  @override
+  void dispose() {
+    _themeMode.dispose();
+    _reduceMotion.dispose();
+    super.dispose();
+  }
+
+  Widget _overlay(BuildContext context, Widget child) =>
+      AnnotatedRegion<SystemUiOverlayStyle>(
+        value: overlayStyleFor(Theme.of(context)),
+        child: child,
+      );
+
+  @override
   Widget build(BuildContext context) {
-    final lock = appLock;
-    return MaterialApp(
-      builder: lock == null
-          ? null
-          : (BuildContext context, Widget? child) => AppLockGate(
-                controller: lock,
-                child: child ?? const SizedBox.shrink(),
-              ),
-      title: AppInfo.name,
-      debugShowCheckedModeBanner: false,
-      theme: AssistantTheme.dark(),
-      darkTheme: AssistantTheme.dark(),
-      themeMode: ThemeMode.dark,
-      home: HomePage(
-        assistant: assistant,
-        tasks: tasks,
-        clock: clock,
-        storage: storage,
-        settingsStore: settingsStore,
-        chatStore: chatStore,
-        connections: connections,
-        passwords: passwords,
-        voice: voice,
-        fileOpener: fileOpener,
-        ffmpeg: ffmpeg,
-        nativeMedia: nativeMedia,
-        ytdl: ytdl,
-        appLock: appLock,
+    final lock = widget.appLock;
+    final home = HomePage(
+      assistant: widget.assistant,
+      tasks: widget.tasks,
+      clock: widget.clock,
+      storage: widget.storage,
+      settingsStore: widget.settingsStore,
+      chatStore: widget.chatStore,
+      connections: widget.connections,
+      passwords: widget.passwords,
+      voice: widget.voice,
+      fileOpener: widget.fileOpener,
+      ffmpeg: widget.ffmpeg,
+      nativeMedia: widget.nativeMedia,
+      ytdl: widget.ytdl,
+      appLock: widget.appLock,
+      onAppearanceChanged: (AppAppearance appearance) =>
+          _themeMode.value = themeModeOf(appearance),
+      onReduceMotionChanged: (bool reduce) => _reduceMotion.value = reduce,
+    );
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[_themeMode, _reduceMotion]),
+      builder: (BuildContext context, Widget? _) => MaterialApp(
+        builder: (BuildContext context, Widget? child) {
+          final content = child ?? const SizedBox.shrink();
+          return _overlay(
+            context,
+            lock == null
+                ? content
+                : AppLockGate(controller: lock, child: content),
+          );
+        },
+        title: AppInfo.name,
+        debugShowCheckedModeBanner: false,
+        theme: AssistantTheme.light(),
+        darkTheme: AssistantTheme.dark(),
+        themeMode: _themeMode.value,
+        themeAnimationDuration:
+            _reduceMotion.value ? Duration.zero : kThemeAnimationDuration,
+        home: home,
       ),
     );
   }

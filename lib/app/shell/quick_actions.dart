@@ -203,19 +203,21 @@ final class _QuickActionsState extends State<QuickActions> {
       action.$1 == 'Перенести' || action.$1 == 'Заверши её';
 }
 
-/// Круглые кнопки с подписями для пустой сессии.
+/// Плитки быстрых действий в пустой сессии (ADR-027): заливка без рамки,
+/// значок акцентом, подпись 15 — равными долями строки.
 final class _BigRow extends StatelessWidget {
   const _BigRow({required this.items});
 
   final List<QuickAction> items;
 
-  static const TextStyle _label = TextStyle(
-    fontSize: 12,
-    height: 1.3,
-    color: AssistantColors.text,
-  );
+  static TextStyle _labelOf(BuildContext context) => TextStyle(
+        fontSize: 15,
+        height: 1.3,
+        color: context.colors.text,
+      );
 
-  Widget _button(QuickAction item) {
+  Widget _button(BuildContext context, QuickAction item) {
+    final labelStyle = _labelOf(context);
     final (label, icon, onTap) = item;
     return Semantics(
       button: true,
@@ -223,31 +225,33 @@ final class _BigRow extends StatelessWidget {
       label: label,
       onTap: onTap,
       excludeSemantics: true,
-      child: InkWell(
-        key: Key('quick-$label'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: AssistantColors.raised,
-                shape: BoxShape.circle,
-                border: Border.all(color: AssistantColors.border),
+      child: Material(
+        color: context.colors.raised,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          key: Key('quick-$label'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 72),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Icon(icon, size: 24, color: context.colors.accent),
+                  const SizedBox(height: 6),
+                  fitSingleWord(
+                    label,
+                    alignment: Alignment.center,
+                    textAlign: TextAlign.center,
+                    style: labelStyle,
+                  ),
+                ],
               ),
-              child: Icon(icon, size: 22, color: AssistantColors.textStrong),
             ),
-            const SizedBox(height: 6),
-            fitSingleWord(
-              label,
-              alignment: Alignment.center,
-              textAlign: TextAlign.center,
-              style: _label,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -255,46 +259,19 @@ final class _BigRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Всегда одна строка (ADR-021): кнопка не уходит вниз и не прячется
-    // под полем ввода. Слот не уже 76 и растёт по подписи («Напомнить» с
-    // крупным шрифтом — целиком, без «Напомнит/ь»). Не влезает с зазором
-    // 28 — зазор 12 и равные слоты, а подпись шире слота уменьшается
-    // целиком.
+    // Всегда одна строка (ADR-021): плитка не уходит вниз и не прячется
+    // под полем ввода. Плитки — равными долями с зазором 8; подпись шире
+    // плитки уменьшается целиком («Напомнить» не рвётся).
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          final widths = <double>[
-            for (final (label, _, _) in items)
-              math.max(76, lineWidth(context, label, style: _label) + 2),
-          ];
-          const wideGap = 28.0;
-          const narrowGap = 12.0;
-          final natural = widths.fold<double>(0, (a, b) => a + b) +
-              wideGap * (items.length - 1);
-          if (!constraints.maxWidth.isFinite ||
-              natural <= constraints.maxWidth) {
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                for (var i = 0; i < items.length; i++) ...<Widget>[
-                  if (i > 0) const SizedBox(width: wideGap),
-                  SizedBox(width: widths[i], child: _button(items[i])),
-                ],
-              ],
-            );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              for (var i = 0; i < items.length; i++) ...<Widget>[
-                if (i > 0) const SizedBox(width: narrowGap),
-                Expanded(child: _button(items[i])),
-              ],
-            ],
-          );
-        },
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          for (var i = 0; i < items.length; i++) ...<Widget>[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(child: _button(context, items[i])),
+          ],
+        ],
       ),
     );
   }
@@ -317,13 +294,13 @@ final class _Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, icon, onTap) = item;
-    final color = onTap == null ? AssistantColors.faint : AssistantColors.text;
+    final color = onTap == null ? context.colors.faint : context.colors.text;
     final text = Text(
       label,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       softWrap: false,
-      style: TextStyle(fontSize: small ? 12 : 13, color: color),
+      style: TextStyle(fontSize: 15, color: color),
     );
     return Semantics(
       button: true,
@@ -335,30 +312,47 @@ final class _Pill extends StatelessWidget {
         key: Key('quick-$label'),
         onTap: onTap,
         customBorder: const StadiumBorder(),
-        child: Container(
-          height: 44,
-          padding: EdgeInsets.symmetric(
-            // Своей ширины на широкой колонке — с полями 16, как в
-            // D-Desk; в доле строки и в прокручиваемой строке — 8.
-            horizontal: small
-                ? 14
-                : strip
-                    ? 8
-                    : 16,
-          ),
-          decoration: BoxDecoration(
-            color: small ? null : AssistantColors.raised,
-            border: Border.all(color: AssistantColors.border),
-            borderRadius: BorderRadius.circular(22),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 6),
-              if (strip) text else Flexible(child: text),
-            ],
+        // Пилюля 36, цель нажатия — 44 по высоте.
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Container(
+            height: 36,
+            padding: EdgeInsets.symmetric(
+              // Своей ширины на широкой колонке — с полями 16, как в
+              // D-Desk; в доле строки и в прокручиваемой строке — 8.
+              horizontal: small
+                  ? 14
+                  : strip
+                      ? 8
+                      : 16,
+            ),
+            // Пилюля — заливкой, без рамки (ADR-027).
+            decoration: BoxDecoration(
+              color: context.colors.bubble,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            // В прокручиваемой строке пилюля не шире экрана: с крупным
+            // шрифтом подпись уменьшается целиком.
+            constraints: strip
+                ? BoxConstraints(
+                    maxWidth:
+                        math.max(120, MediaQuery.sizeOf(context).width - 48),
+                  )
+                : null,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(icon, size: 18, color: color),
+                const SizedBox(width: 6),
+                if (strip)
+                  Flexible(
+                    child: FittedBox(fit: BoxFit.scaleDown, child: text),
+                  )
+                else
+                  Flexible(child: text),
+              ],
+            ),
           ),
         ),
       ),

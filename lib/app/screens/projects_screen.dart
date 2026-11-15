@@ -4,7 +4,10 @@ import '../../core/formatting/due_format.dart';
 import '../../core/formatting/plural.dart';
 import '../../core/models/task.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
+import '../widgets/grouped.dart';
 import '../widgets/task_tile.dart';
+import '../widgets/whole_word_text.dart';
 
 /// Проект-папка на экране «Проекты» (ADR-018).
 final class ProjectFolderCard {
@@ -130,24 +133,30 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         ],
       ),
       if (widget.folders.isEmpty)
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
           child: Text(
             'Папок пока нет. В папке живут сессии одного дела, а новую '
             'сессию можно начать прямо в ней.',
             key: Key('projects-no-folders'),
-            style: metaTextStyle,
+            // Пустое состояние — 15, как вторичный текст (ADR-027).
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium!
+                .copyWith(color: context.colors.muted),
           ),
         )
       else
-        for (final folder in widget.folders)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _FolderCard(
-              folder: folder,
-              onTap: open == null ? null : () => open(folder.id),
-            ),
-          ),
+        InsetGroup(
+          margin: EdgeInsets.zero,
+          children: <Widget>[
+            for (final folder in widget.folders)
+              _FolderCard(
+                folder: folder,
+                onTap: open == null ? null : () => open(folder.id),
+              ),
+          ],
+        ),
     ];
   }
 
@@ -159,7 +168,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   Widget build(BuildContext context) {
     final projects = _projects();
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       child: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
@@ -167,23 +176,35 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Text(
-                'Проекты',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(color: AssistantColors.textStrong),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    'Проекты',
+                    style: Theme.of(context)
+                        .textTheme
+                        .displaySmall
+                        ?.copyWith(color: context.colors.textStrong),
+                  ),
+                ),
               ),
-              const SizedBox(height: 6),
-              const Text(
-                'Проект — папка для сессий: из неё сразу начинают новую '
-                'сессию. Метку задачи задают в команде: Добавь задачу '
-                '«Отчёт» #работа — или в документе задачи.',
-                style: metaTextStyle,
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: WholeWordText(
+                  'Проект — папка для сессий: из неё сразу начинают новую '
+                  'сессию. Метку задачи задают в команде: Добавь задачу '
+                  '«Отчёт» #работа — или в документе задачи.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium!
+                      .copyWith(color: context.colors.muted),
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               ..._buildFolders(),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               const SectionLabel('Метки задач'),
               if (projects.isEmpty)
                 const EmptyState(
@@ -241,12 +262,11 @@ final class _ProjectCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final overdue = project.tasks.where((t) => isOverdue(t, now)).length;
-    final radius = BorderRadius.circular(10);
+    // Метка — панелью листа без рамки (ADR-027).
     return Material(
-      color: expanded ? AssistantColors.raised : AssistantColors.panel,
+      color: context.colors.workspace,
       shape: RoundedRectangleBorder(
-        borderRadius: radius,
-        side: const BorderSide(color: AssistantColors.borderSoft),
+        borderRadius: BorderRadius.circular(AppRadius.group),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -259,11 +279,11 @@ final class _ProjectCard extends StatelessWidget {
               key: ValueKey<String>(project.key),
               onTap: onToggleExpanded,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48),
+                constraints: const BoxConstraints(minHeight: AppSize.rowMin),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
+                    horizontal: 16,
+                    vertical: 12,
                   ),
                   child: Row(
                     children: <Widget>[
@@ -275,20 +295,20 @@ final class _ProjectCard extends StatelessWidget {
                           children: <Widget>[
                             Text(
                               project.label,
-                              style: const TextStyle(
-                                color: AssistantColors.textStrong,
-                                fontWeight: FontWeight.w500,
+                              style: TextStyle(
+                                color: context.colors.textStrong,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                             Text(
                               'активных: ${project.tasks.length}',
-                              style: metaTextStyle,
+                              style: metaStyle(context),
                             ),
                             if (overdue > 0)
                               Text(
                                 'просрочено: $overdue',
-                                style: metaTextStyle.copyWith(
-                                  color: AssistantColors.danger,
+                                style: metaStyle(context).copyWith(
+                                  color: context.colors.danger,
                                 ),
                               ),
                           ],
@@ -297,7 +317,7 @@ final class _ProjectCard extends StatelessWidget {
                       const SizedBox(width: 8),
                       Icon(
                         expanded ? Icons.expand_less : Icons.expand_more,
-                        color: AssistantColors.muted,
+                        color: context.colors.muted,
                       ),
                     ],
                   ),
@@ -364,12 +384,7 @@ final class _FolderCard extends StatelessWidget {
     final sessions = '${folder.sessions} '
         '${ruPlural(folder.sessions, 'сессия', 'сессии', 'сессий')}';
     return Material(
-      color: AssistantColors.panel,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: const BorderSide(color: AssistantColors.borderSoft),
-      ),
-      clipBehavior: Clip.antiAlias,
+      type: MaterialType.transparency,
       child: Semantics(
         button: true,
         label: 'Проект «${folder.name}», $sessions',
@@ -381,12 +396,12 @@ final class _FolderCard extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 56),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: <Widget>[
-                  const Icon(
-                    Icons.folder_outlined,
-                    color: AssistantColors.icon,
+                  IconTile(
+                    icon: Icons.folder_outlined,
+                    color: context.colors.tileAmber,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -398,16 +413,19 @@ final class _FolderCard extends StatelessWidget {
                           folder.name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: projectNameStyle(fontSize: 18),
+                          style: projectNameStyle(
+                            fontSize: 18,
+                            color: context.colors.textStrong,
+                          ),
                         ),
                         Wrap(
                           spacing: 12,
                           children: <Widget>[
-                            Text(sessions, style: metaTextStyle),
+                            Text(sessions, style: metaStyle(context)),
                             if (folder.taskTag != null)
                               Text(
                                 '#${folder.taskTag}',
-                                style: metaTextStyle,
+                                style: metaStyle(context),
                               ),
                           ],
                         ),
@@ -416,17 +434,18 @@ final class _FolderCard extends StatelessWidget {
                             folder.description!,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AssistantColors.muted,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: context.colors.muted,
                             ),
                           ),
                       ],
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.chevron_right,
-                    color: AssistantColors.muted,
+                    size: 20,
+                    color: context.colors.faint,
                   ),
                 ],
               ),

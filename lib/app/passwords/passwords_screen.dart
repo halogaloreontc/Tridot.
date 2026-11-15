@@ -9,6 +9,8 @@ import '../../core/passwords/vault_errors.dart';
 import '../../core/passwords/vault_facade.dart';
 import '../../core/passwords/vault_format.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
+import '../widgets/grouped.dart';
 import 'backup_screens.dart';
 import 'entry_screens.dart';
 import 'generator_view.dart';
@@ -124,17 +126,25 @@ class _PasswordsScreenState extends State<PasswordsScreen> {
         VaultState.unlocked => _ListView(kit: kit, now: widget.now),
       };
     }
+    // Список сейфа — сгруппированным экраном на фоне (ADR-027); вход,
+    // создание и код — на листе: поля ввода заливкой видны на нём.
+    final grouped = state == VaultState.unlocked && !_recheck && code == null;
+    final surface =
+        grouped ? context.colors.background : context.colors.workspace;
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: surface,
       appBar: AppBar(
-        backgroundColor: AssistantColors.workspace,
-        title: const Text('Пароли'),
+        backgroundColor: surface,
+        // На списке название — крупным заголовком под полосой (§4.2),
+        // а не вторым маленьким в ней.
+        title: grouped ? null : const Text('Сейф'),
         actions: <Widget>[
           if (state == VaultState.unlocked && !_recheck && _code == null)
             PopupMenuButton<String>(
               key: const ValueKey<String>('passwords-menu'),
               tooltip: 'Ещё',
-              color: AssistantColors.raised,
+              // «⋯», как в шапке сессии.
+              icon: const Icon(Icons.more_horiz),
               onSelected: (String value) {
                 final Widget screen = switch (value) {
                   'generator' => GeneratorScreen(kit: kit),
@@ -235,21 +245,21 @@ class _Message extends StatelessWidget {
   Widget build(BuildContext context) {
     return _Column(
       children: <Widget>[
-        Icon(icon, size: 32, color: AssistantColors.muted),
+        Icon(icon, size: 32, color: context.colors.muted),
         const SizedBox(height: 12),
         Text(
           title,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 18,
-            color: AssistantColors.textStrong,
-          ),
+          style: Theme.of(context)
+              .textTheme
+              .headlineSmall!
+              .copyWith(color: context.colors.textStrong),
         ),
         const SizedBox(height: 8),
         Text(
           text,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: AssistantColors.muted),
+          style: TextStyle(color: context.colors.muted),
         ),
       ],
     );
@@ -274,15 +284,14 @@ class _Point extends StatelessWidget {
           Icon(
             icon,
             size: 18,
-            color: strong ? AssistantColors.warning : AssistantColors.muted,
+            color: strong ? context.colors.warning : context.colors.muted,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: WholeWordText(
               text,
               style: TextStyle(
-                color:
-                    strong ? AssistantColors.textStrong : AssistantColors.text,
+                color: strong ? context.colors.textStrong : context.colors.text,
               ),
             ),
           ),
@@ -390,19 +399,22 @@ class _CreateViewState extends State<_CreateView> {
                     key: const ValueKey<String>('passwords-restore'),
                     onPressed: _busy ? null : () => unawaited(_restore()),
                     icon: const Icon(Icons.restore, size: 18),
-                    label: const Text('Восстановить из копии'),
+                    label: const WholeWordText('Восстановить из копии'),
                   )
                 : OutlinedButton.icon(
                     key: const ValueKey<String>('passwords-restore'),
                     onPressed: _busy ? null : () => unawaited(_restore()),
                     icon: const Icon(Icons.restore, size: 18),
-                    label: const Text('Восстановить из копии'),
+                    label: const WholeWordText('Восстановить из копии'),
                   ),
           ),
         ),
-        const Text(
+        Text(
           'Создать сейф паролей',
-          style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
+          style: Theme.of(context)
+              .textTheme
+              .headlineSmall!
+              .copyWith(color: context.colors.textStrong),
         ),
         const SizedBox(height: 14),
         const _Point(
@@ -450,10 +462,10 @@ class _CreateViewState extends State<_CreateView> {
           onChanged: _busy
               ? null
               : (bool? value) => setState(() => _understood = value ?? false),
-          title: const WholeWordText(
+          title: WholeWordText(
             'Я понимаю: если забуду мастер-пароль, восстановить данные '
             'нельзя никак.',
-            style: TextStyle(color: AssistantColors.text),
+            style: TextStyle(color: context.colors.text),
           ),
         ),
         if (_failure != null)
@@ -461,7 +473,7 @@ class _CreateViewState extends State<_CreateView> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
               _failure!,
-              style: const TextStyle(color: AssistantColors.danger),
+              style: TextStyle(color: context.colors.danger),
             ),
           ),
         const SizedBox(height: 8),
@@ -525,15 +537,18 @@ class _RecheckViewState extends State<_RecheckView> {
   Widget build(BuildContext context) {
     return _Column(
       children: <Widget>[
-        const Text(
+        Text(
           'Сейф создан',
-          style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
+          style: Theme.of(context)
+              .textTheme
+              .headlineSmall!
+              .copyWith(color: context.colors.textStrong),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Введите мастер-пароль ещё раз — по памяти. Так он лучше '
           'запомнится.',
-          style: TextStyle(color: AssistantColors.text),
+          style: TextStyle(color: context.colors.text),
         ),
         const SizedBox(height: 16),
         SecretField(
@@ -614,13 +629,13 @@ class _ProtectedCreateViewState extends State<_ProtectedCreateView> {
             key: const ValueKey<String>('passwords-restore'),
             onPressed: _busy ? null : () => unawaited(_restore()),
             icon: const Icon(Icons.restore, size: 18),
-            label: const Text('Восстановить из копии'),
+            label: const WholeWordText('Восстановить из копии'),
           )
         : OutlinedButton.icon(
             key: const ValueKey<String>('passwords-restore'),
             onPressed: _busy ? null : () => unawaited(_restore()),
             icon: const Icon(Icons.restore, size: 18),
-            label: const Text('Восстановить из копии'),
+            label: const WholeWordText('Восстановить из копии'),
           );
     return _Column(
       children: <Widget>[
@@ -638,9 +653,12 @@ class _ProtectedCreateViewState extends State<_ProtectedCreateView> {
             child: restore,
           ),
         ),
-        const Text(
+        Text(
           'Создать сейф паролей',
-          style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
+          style: Theme.of(context)
+              .textTheme
+              .headlineSmall!
+              .copyWith(color: context.colors.textStrong),
         ),
         const SizedBox(height: 14),
         const _Point(
@@ -666,7 +684,7 @@ class _ProtectedCreateViewState extends State<_ProtectedCreateView> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
               _failure!,
-              style: const TextStyle(color: AssistantColors.danger),
+              style: TextStyle(color: context.colors.danger),
             ),
           ),
         const SizedBox(height: 8),
@@ -845,23 +863,26 @@ class _ProtectedLockState extends State<_ProtectedLock> {
       child: _Column(
         children: <Widget>[
           const SizedBox(height: 8),
-          const Icon(
+          Icon(
             Icons.lock_outline,
-            size: 36,
-            color: AssistantColors.muted,
+            size: 44,
+            color: context.colors.muted,
           ),
           const SizedBox(height: 12),
-          const WholeWordText(
+          WholeWordText(
             'Сейф заперт',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
+            style: Theme.of(context)
+                .textTheme
+                .headlineSmall!
+                .copyWith(color: context.colors.textStrong),
           ),
           const SizedBox(height: 20),
           if (_useCode) ...<Widget>[
-            const WholeWordText(
+            WholeWordText(
               'Откройте сейф кодом восстановления — тем, что был показан при '
               'создании сейфа.',
-              style: TextStyle(color: AssistantColors.text),
+              style: TextStyle(color: context.colors.text),
             ),
             const SizedBox(height: 12),
             SecretField(
@@ -882,10 +903,10 @@ class _ProtectedLockState extends State<_ProtectedLock> {
               child: Text(_busy ? 'Открываю…' : 'Открыть'),
             ),
           ] else if (info.pin) ...<Widget>[
-            const WholeWordText(
+            WholeWordText(
               'Введите ПИН-код сейфа',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AssistantColors.text),
+              style: TextStyle(color: context.colors.text),
             ),
             const SizedBox(height: 12),
             Center(
@@ -904,16 +925,16 @@ class _ProtectedLockState extends State<_ProtectedLock> {
             ),
           ] else if (info.device) ...<Widget>[
             if (_busy)
-              const WholeWordText(
+              WholeWordText(
                 'Открываю…',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
             if (error != null) ...<Widget>[
               WholeWordText(
                 error,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AssistantColors.danger),
+                style: TextStyle(color: context.colors.danger),
               ),
               const SizedBox(height: 12),
             ],
@@ -927,7 +948,7 @@ class _ProtectedLockState extends State<_ProtectedLock> {
             WholeWordText(
               error,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AssistantColors.danger),
+              style: TextStyle(color: context.colors.danger),
             ),
           if (info.bio && !_useCode)
             Padding(
@@ -974,7 +995,7 @@ class _ProtectedLockState extends State<_ProtectedLock> {
               codeOnly: !info.device && !info.pin && !info.bio,
             ),
             textAlign: TextAlign.center,
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
           const SizedBox(height: 8),
           TextButton(
@@ -1121,15 +1142,18 @@ class _LockViewState extends State<_LockView> {
     return _Column(
       children: <Widget>[
         const SizedBox(height: 8),
-        const Icon(Icons.lock_outline, size: 36, color: AssistantColors.muted),
+        Icon(Icons.lock_outline, size: 44, color: context.colors.muted),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Сейф заперт',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 18, color: AssistantColors.textStrong),
+          style: Theme.of(context)
+              .textTheme
+              .headlineSmall!
+              .copyWith(color: context.colors.textStrong),
         ),
         if (kit.deviceProtection)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 8),
             child: Text(
               'Введите мастер-пароль в последний раз: дальше сейф будет '
@@ -1137,7 +1161,7 @@ class _LockViewState extends State<_LockView> {
               'покажу код восстановления.',
               key: ValueKey<String>('lock-migrate-note'),
               textAlign: TextAlign.center,
-              style: TextStyle(color: AssistantColors.text),
+              style: TextStyle(color: context.colors.text),
             ),
           ),
         const SizedBox(height: 20),
@@ -1167,7 +1191,7 @@ class _LockViewState extends State<_LockView> {
           Text(
             kit.platform.unlockNote,
             textAlign: TextAlign.center,
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
         const SizedBox(height: 8),
         TextButton(
@@ -1228,7 +1252,6 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
     return AlertDialog(
       key: const ValueKey<String>('recovery-dialog'),
       scrollable: true,
-      backgroundColor: AssistantColors.raised,
       title: WholeWordText(
         protectedVault ? 'Нет кода восстановления?' : 'Забыли мастер-пароль?',
       ),
@@ -1245,7 +1268,7 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
                       'расшифровать — ни мне, ни кому-либо ещё.'
                   : 'Восстановить нельзя: без мастер-пароля сейф не '
                       'расшифровать — ни мне, ни кому-либо ещё.',
-              style: const TextStyle(color: AssistantColors.textStrong),
+              style: TextStyle(color: context.colors.textStrong),
             ),
             const SizedBox(height: 10),
             Text(
@@ -1256,15 +1279,15 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
                   : 'Часто пароль вспоминается через день-два. Попробуйте '
                       'вспомнить, где и когда вы его придумывали, — и не '
                       'спешите.',
-              style: const TextStyle(color: AssistantColors.text),
+              style: TextStyle(color: context.colors.text),
             ),
             if (exists) ...<Widget>[
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Начать заново: старый сейф не стирается, а '
                 'откладывается в архив — вдруг вспомните. Новый сейф '
                 'будет пустым. Чтобы продолжить, введите слово «начать».',
-                style: TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -1275,7 +1298,6 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                   labelText: 'Слово «начать»',
-                  border: OutlineInputBorder(),
                 ),
               ),
             ],
@@ -1290,8 +1312,7 @@ class _RecoveryDialogState extends State<_RecoveryDialog> {
         if (exists)
           TextButton(
             key: const ValueKey<String>('recovery-start-over'),
-            style:
-                TextButton.styleFrom(foregroundColor: AssistantColors.danger),
+            style: TextButton.styleFrom(foregroundColor: context.colors.danger),
             onPressed:
                 _busy || !_confirmed ? null : () => unawaited(_startOver()),
             child: const Text('Начать заново'),
@@ -1311,28 +1332,27 @@ class _Banner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: AssistantColors.raised,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AssistantColors.warning.withAlpha(110)),
+        color: context.colors.workspace,
+        borderRadius: BorderRadius.circular(AppRadius.group),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Icon(
+          Icon(
             Icons.warning_amber_outlined,
-            size: 18,
-            color: AssistantColors.warning,
+            size: 22,
+            color: context.colors.warning,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
                   text,
-                  style: const TextStyle(color: AssistantColors.text),
+                  style: TextStyle(color: context.colors.text),
                 ),
                 if (action != null) action!,
               ],
@@ -1433,27 +1453,28 @@ class _ListViewState extends State<_ListView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
+            const LargeTitle('Сейф', key: ValueKey<String>('passwords-title')),
             Container(
               key: const ValueKey<String>('passwords-open-bar'),
-              margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+              margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+              constraints: const BoxConstraints(minHeight: AppSize.rowMin),
               decoration: BoxDecoration(
-                color: AssistantColors.raised,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AssistantColors.borderSoft),
+                color: context.colors.workspace,
+                borderRadius: BorderRadius.circular(AppRadius.group),
               ),
               child: Row(
                 children: <Widget>[
-                  const Icon(
+                  Icon(
                     Icons.lock_open_outlined,
-                    size: 16,
-                    color: AssistantColors.success,
+                    size: 20,
+                    color: context.colors.success,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       'Сейф открыт$until',
-                      style: const TextStyle(color: AssistantColors.text),
+                      style: TextStyle(color: context.colors.text),
                     ),
                   ),
                   if (compact)
@@ -1516,11 +1537,26 @@ class _ListViewState extends State<_ListView> {
                       key: const ValueKey<String>('passwords-search'),
                       controller: _search,
                       onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         isDense: true,
-                        prefixIcon: Icon(Icons.search, size: 18),
+                        fillColor: context.colors.workspace,
+                        prefixIcon: const Icon(Icons.search, size: 20),
                         hintText: 'Поиск',
-                        border: OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.search),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.search),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.search),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                   ),
@@ -1531,7 +1567,17 @@ class _ListViewState extends State<_ListView> {
                       tooltip: 'Добавить',
                       onPressed: () =>
                           unawaited(_open(EntryEditorScreen(kit: kit))),
-                      icon: const Icon(Icons.add, size: 20),
+                      // Цвет глифа явно: иначе `iconTheme` темы (`icon`)
+                      // перебивает onAccent и «+» почти не виден на акценте.
+                      style: IconButton.styleFrom(
+                        backgroundColor: context.colors.accent,
+                        foregroundColor: context.colors.onAccent,
+                      ),
+                      icon: Icon(
+                        Icons.add,
+                        size: 20,
+                        color: context.colors.onAccent,
+                      ),
                     )
                   else
                     FilledButton.icon(
@@ -1554,21 +1600,28 @@ class _ListViewState extends State<_ListView> {
                                 'напишите в сессии: «запомни пароль от почты».'
                             : 'Ничего не нашлось.',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: AssistantColors.muted),
+                        style: TextStyle(color: context.colors.muted),
                       ),
                     )
-                  : ListView.separated(
+                  // Записи — одной сгруппированной панелью: строки лениво,
+                  // скругление у первой и последней (ADR-027).
+                  : ListView.builder(
                       key: const ValueKey<String>('passwords-list'),
-                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 24),
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                       itemCount: entries.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (BuildContext context, int i) => EntryTile(
-                        entry: entries[i],
-                        weak: weak.contains(entries[i].id),
-                        reused: reused.contains(entries[i].id),
-                        old: old.contains(entries[i].id),
-                        onTap: () => unawaited(
-                          _open(EntryScreen(kit: kit, id: entries[i].id)),
+                      itemBuilder: (BuildContext context, int i) =>
+                          GroupedListCell(
+                        first: i == 0,
+                        last: i == entries.length - 1,
+                        indent: AppSpace.separatorInset,
+                        child: EntryTile(
+                          entry: entries[i],
+                          weak: weak.contains(entries[i].id),
+                          reused: reused.contains(entries[i].id),
+                          old: old.contains(entries[i].id),
+                          onTap: () => unawaited(
+                            _open(EntryScreen(kit: kit, id: entries[i].id)),
+                          ),
                         ),
                       ),
                     ),
@@ -1618,23 +1671,42 @@ class EntryTile extends StatelessWidget {
     return ListTile(
       key: ValueKey<String>('entry-${entry.id}'),
       onTap: onTap,
-      leading: CircleAvatar(
-        radius: 16,
-        backgroundColor: AssistantColors.bubble,
-        child: Text(
-          letter,
-          style: const TextStyle(color: AssistantColors.textStrong),
+      // Монограмма 28 со скруглением 7 (ADR-027).
+      leading: DecoratedBox(
+        decoration: BoxDecoration(
+          color: context.colors.bubble,
+          borderRadius: BorderRadius.circular(AppRadius.tile),
+        ),
+        child: SizedBox.square(
+          dimension: AppSize.iconTile,
+          child: Center(
+            child: MediaQuery.withNoTextScaling(
+              child: Text(
+                letter,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.textStrong,
+                ),
+              ),
+            ),
+          ),
         ),
       ),
       title: WholeWordText(
         entry.service,
-        style: const TextStyle(color: AssistantColors.textStrong),
+        style: TextStyle(color: context.colors.textStrong),
       ),
       subtitle: entry.login.isEmpty
           ? null
-          : Text(
+          // Логин — одной строкой: перенос рвал бы адрес посреди слова
+          // («ca***@exa|mple.org»). Не входит — уменьшается целиком.
+          : WholeWordText(
               VaultFacade.maskLogin(entry.login),
-              style: const TextStyle(color: AssistantColors.muted),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              firstWordOnly: true,
+              style: TextStyle(color: context.colors.muted),
             ),
       trailing: trailing ??
           (entry.important || weak || reused || old
@@ -1646,28 +1718,28 @@ class EntryTile extends StatelessWidget {
                         'badge-weak-${entry.id}',
                         'Слабый',
                         Icons.warning_amber_outlined,
-                        AssistantColors.danger,
+                        context.colors.danger,
                       ),
                     if (reused)
                       _badge(
                         'badge-reused-${entry.id}',
                         'Повтор',
                         Icons.copy_all_outlined,
-                        AssistantColors.warning,
+                        context.colors.warning,
                       ),
                     if (old)
                       _badge(
                         'badge-old-${entry.id}',
                         'Давно не меняли',
                         Icons.history,
-                        AssistantColors.muted,
+                        context.colors.muted,
                       ),
                     if (entry.important)
                       _badge(
                         'badge-important-${entry.id}',
                         'Важный',
                         Icons.star_outline,
-                        AssistantColors.warning,
+                        context.colors.warning,
                       ),
                   ],
                 )

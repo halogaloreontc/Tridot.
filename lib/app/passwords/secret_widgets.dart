@@ -74,14 +74,13 @@ class _SecretFieldState extends State<SecretField> {
       onSubmitted: widget.onSubmitted,
       onChanged: widget.onChanged,
       // Пароль — моноширинным, как везде в навыке (ADR-021).
-      style: monoTextStyle.copyWith(color: AssistantColors.textStrong),
+      style: monoTextStyle.copyWith(color: context.colors.textStrong),
       decoration: InputDecoration(
         labelText: widget.label,
         helperText: widget.helper,
-        helperMaxLines: 3,
+        helperMaxLines: 5,
         errorText: widget.error,
         errorMaxLines: 3,
-        border: const OutlineInputBorder(),
         suffixIcon: widget.allowShow
             ? IconButton(
                 tooltip: _visible ? 'Скрыть' : 'Показать вводимое',
@@ -258,6 +257,8 @@ class _SecretRevealTextState extends State<SecretRevealText>
       excludeSemantics: true,
       child: GestureDetector(
         key: const ValueKey<String>('secret-hold'),
+        // Удержание — по всей строке маски, а не только по символам.
+        behavior: HitTestBehavior.opaque,
         onLongPressStart: (_) {
           _pressing = true;
           unawaited(_reveal(hold: true));
@@ -271,26 +272,22 @@ class _SecretRevealTextState extends State<SecretRevealText>
           if (_holding) _conceal();
         },
         child: Container(
-          constraints: const BoxConstraints(minHeight: 40),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: AssistantColors.background,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: AssistantColors.borderSoft),
-          ),
+          // Маска — текстом в строке, без своей рамки (ADR-027).
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           alignment: Alignment.centerLeft,
           child: shown == null
               ? Text(
                   _expired ? '${widget.kind}: ••••••••  (скрыт)' : '••••••••',
                   key: const ValueKey<String>('secret-masked'),
                   style: monoTextStyle.copyWith(
-                    fontSize: 15,
+                    fontSize: 17,
                     letterSpacing: 2,
-                    color: AssistantColors.muted,
+                    color: context.colors.muted,
                   ),
                 )
               : Text.rich(
-                  _colored(shown),
+                  _colored(shown, context.colors),
                   key: const ValueKey<String>('secret-shown'),
                 ),
         ),
@@ -318,8 +315,7 @@ class _SecretRevealTextState extends State<SecretRevealText>
             shown == null ? 'Показать на ${widget.seconds} с' : 'Скрыть',
           ),
         ),
-        if (!widget.compact)
-          const Text('или удерживайте', style: metaTextStyle),
+        if (!widget.compact) Text('или удерживайте', style: metaStyle(context)),
       ],
     );
     return Column(
@@ -337,8 +333,8 @@ class _SecretRevealTextState extends State<SecretRevealText>
                 key: const ValueKey<String>('secret-timer'),
                 value: 1 - _timer.value,
                 minHeight: 2,
-                color: AssistantColors.warning,
-                backgroundColor: AssistantColors.borderSoft,
+                color: context.colors.warning,
+                backgroundColor: context.colors.borderSoft,
               ),
             ),
           ),
@@ -347,10 +343,10 @@ class _SecretRevealTextState extends State<SecretRevealText>
     );
   }
 
-  static TextSpan _colored(String text) {
+  static TextSpan _colored(String text, AppPalette colors) {
     final base = monoTextStyle.copyWith(
-      fontSize: 15,
-      color: AssistantColors.textStrong,
+      fontSize: 17,
+      color: colors.textStrong,
     );
     final spans = <TextSpan>[];
     for (final rune in text.runes) {
@@ -361,10 +357,10 @@ class _SecretRevealTextState extends State<SecretRevealText>
         TextSpan(
           text: char,
           style: isDigit
-              ? base.copyWith(color: AssistantColors.liorio)
+              ? base.copyWith(color: colors.liorio)
               : isLetter
                   ? base
-                  : base.copyWith(color: AssistantColors.warning),
+                  : base.copyWith(color: colors.warning),
         ),
       );
     }
@@ -433,7 +429,6 @@ class _MasterDialogState extends State<_MasterDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       scrollable: true,
-      backgroundColor: AssistantColors.raised,
       title: WholeWordText(widget.title),
       content: SizedBox(
         width: 420,
@@ -446,7 +441,7 @@ class _MasterDialogState extends State<_MasterDialog> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
                   widget.text!,
-                  style: const TextStyle(color: AssistantColors.muted),
+                  style: TextStyle(color: context.colors.muted),
                 ),
               ),
             SecretField(

@@ -125,24 +125,24 @@ class _ActionCardViewState extends State<ActionCardView> {
     String plus(String text) => result.isEmpty ? text : '$text: $result';
     return switch (card.state) {
       ActionCardState.pending => null,
-      ActionCardState.sending => ('Отправляю на склад…', AssistantColors.muted),
-      ActionCardState.applied => (plus('Выполнено'), AssistantColors.success),
+      ActionCardState.sending => ('Отправляю на склад…', context.colors.muted),
+      ActionCardState.applied => (plus('Выполнено'), context.colors.success),
       ActionCardState.cancelled => (
           'Отменено — ничего не изменено',
-          AssistantColors.muted,
+          context.colors.muted,
         ),
       ActionCardState.expired => (
           'Карточка устарела — нужна новая команда',
-          AssistantColors.muted,
+          context.colors.muted,
         ),
       ActionCardState.replaced => (
           'Заменена новой карточкой',
-          AssistantColors.muted,
+          context.colors.muted,
         ),
-      ActionCardState.failed => (plus('Не выполнено'), AssistantColors.danger),
+      ActionCardState.failed => (plus('Не выполнено'), context.colors.danger),
       ActionCardState.unknown => (
           'Итог неизвестен — «Проверить» спросит склад',
-          AssistantColors.warning,
+          context.colors.warning,
         ),
     };
   }
@@ -158,52 +158,57 @@ class _ActionCardViewState extends State<ActionCardView> {
     final status = _status;
     return Padding(
       key: ValueKey<String>('action-card-${card.rid}'),
-      padding: const EdgeInsets.only(top: 8),
+      padding: EdgeInsets.zero,
       child: FocusTraversalGroup(
         policy: WidgetOrderTraversalPolicy(),
+        // Карточка заливкой без рамки (ADR-027).
         child: Material(
-          color: AssistantColors.raised,
+          color: context.colors.raised,
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
-            side: BorderSide(
-              color:
-                  pending ? AssistantColors.border : AssistantColors.borderSoft,
-            ),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
                 child: Row(
                   children: <Widget>[
                     Icon(
                       card.kind == ActionKind.move
                           ? Icons.swap_horiz
                           : Icons.fact_check_outlined,
-                      size: 18,
-                      color: AssistantColors.textStrong,
+                      size: 22,
+                      color: context.colors.icon,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
+                    // Срок — под заголовком: рядом с ним крупное слово
+                    // («Перемещение») на узком экране не помещается.
                     Expanded(
-                      child: WholeWordText(
-                        _title,
-                        key: const Key('action-title'),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AssistantColors.textStrong,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          WholeWordText(
+                            _title,
+                            key: const Key('action-title'),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium!
+                                .copyWith(color: context.colors.textStrong),
+                          ),
+                          if (pending)
+                            Text(
+                              'до ${_time(card.deadline)}',
+                              key: const Key('action-until'),
+                              style: metaStyle(context)
+                                  .copyWith(color: context.colors.muted),
+                            ),
+                        ],
                       ),
                     ),
-                    if (pending)
-                      Text(
-                        'до ${_time(card.deadline)}',
-                        key: const Key('action-until'),
-                        style: metaTextStyle,
-                      ),
                   ],
                 ),
               ),
@@ -212,7 +217,7 @@ class _ActionCardViewState extends State<ActionCardView> {
                   // Колонка подписей — по самой длинной подписи при нынешнем
                   // шрифте (не уже 76), но не шире 40 % строки; не влезает —
                   // подпись над значением: «Откуда» не рвётся (ADR-021).
-                  final row = constraints.maxWidth - 28;
+                  final row = constraints.maxWidth - 32;
                   var longest = 0.0;
                   for (final line in card.lines) {
                     longest = math.max(
@@ -220,7 +225,7 @@ class _ActionCardViewState extends State<ActionCardView> {
                       lineWidth(
                         context,
                         ActionCardView.labelOf(line.label),
-                        style: metaTextStyle,
+                        style: _labelStyle(context),
                       ),
                     );
                   }
@@ -240,38 +245,33 @@ class _ActionCardViewState extends State<ActionCardView> {
                     when note.isNotEmpty && warn != 'to_empty')
                   _warning(note, ValueKey<String>('action-warn-$warn')),
               const SizedBox(height: 6),
-              const Divider(height: 1),
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                // Основное действие — во всю ширину акцентом, отмена —
+                // текстовой кнопкой.
                 child: status == null
-                    ? Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: <Widget>[
                           FilledButton.icon(
                             key: const Key('action-confirm'),
                             onPressed:
                                 enabled ? () => _press(widget.onConfirm) : null,
                             style: FilledButton.styleFrom(
-                              backgroundColor: AssistantColors.textStrong,
-                              foregroundColor: AssistantColors.workspace,
-                              disabledBackgroundColor: AssistantColors.bubble,
-                              disabledForegroundColor: AssistantColors.muted,
-                              minimumSize: const Size(0, 40),
+                              disabledBackgroundColor: context.colors.bubble,
+                              disabledForegroundColor: context.colors.muted,
+                              minimumSize: const Size.fromHeight(50),
                             ),
-                            icon: const Icon(Icons.check, size: 18),
-                            label: const Text('Подтвердить'),
+                            icon: const Icon(Icons.check, size: 20),
+                            label: const WholeWordText('Подтвердить'),
                           ),
-                          OutlinedButton(
+                          const SizedBox(height: 4),
+                          TextButton(
                             key: const Key('action-cancel'),
                             onPressed:
                                 enabled ? () => _press(widget.onCancel) : null,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AssistantColors.text,
-                              side: const BorderSide(
-                                color: AssistantColors.border,
-                              ),
-                              minimumSize: const Size(0, 40),
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
                             ),
                             child: const Text('Отмена'),
                           ),
@@ -289,19 +289,15 @@ class _ActionCardViewState extends State<ActionCardView> {
                               key: const Key('action-result'),
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 13, color: status.$2),
+                              style: TextStyle(fontSize: 15, color: status.$2),
                             ),
                           ),
                           if (card.canSettle)
-                            OutlinedButton(
+                            TextButton(
                               key: const Key('action-settle'),
                               onPressed: widget.busy ? null : widget.onSettle,
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AssistantColors.text,
-                                side: const BorderSide(
-                                  color: AssistantColors.border,
-                                ),
-                                minimumSize: const Size(0, 40),
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(0, 48),
                               ),
                               child: const Text('Проверить'),
                             ),
@@ -315,13 +311,19 @@ class _ActionCardViewState extends State<ActionCardView> {
     );
   }
 
+  /// Подпись строки — 15 вторичным (ADR-027).
+  static TextStyle _labelStyle(BuildContext context) => Theme.of(context)
+      .textTheme
+      .bodyMedium!
+      .copyWith(color: context.colors.muted);
+
   /// Строка карточки: подпись в колонке шириной [column] слева от
   /// значения, `null` — подпись над значением (узко и крупный шрифт).
   Widget _line(ActionCardLine line, double? column) {
     final note = ActionCardView.noteOf(line.note);
     final label = WholeWordText(
       ActionCardView.labelOf(line.label),
-      style: metaTextStyle,
+      style: _labelStyle(context),
     );
     final value = Text(
       // Второй раз чистим: значение — одна строка без
@@ -331,14 +333,14 @@ class _ActionCardViewState extends State<ActionCardView> {
       maxLines: 1,
       softWrap: false,
       overflow: TextOverflow.ellipsis,
-      style: const TextStyle(
-        fontSize: 14,
-        color: AssistantColors.text,
+      style: TextStyle(
+        fontSize: 17,
+        color: context.colors.textStrong,
       ),
     );
     return Padding(
       key: ValueKey<String>('action-line-${line.label}'),
-      padding: const EdgeInsets.fromLTRB(14, 3, 14, 3),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -367,25 +369,25 @@ class _ActionCardViewState extends State<ActionCardView> {
   }
 
   Widget _warning(String text, Key key) => Padding(
-        padding: const EdgeInsets.fromLTRB(14, 3, 14, 0),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
         child: _warningText(text, key),
       );
 
   Widget _warningText(String text, Key key) => Row(
         key: key,
         children: <Widget>[
-          const Icon(
+          Icon(
             Icons.warning_amber_rounded,
             size: 14,
-            color: AssistantColors.warning,
+            color: context.colors.warning,
           ),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
               text,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AssistantColors.warning,
+              style: TextStyle(
+                fontSize: 13,
+                color: context.colors.warning,
               ),
             ),
           ),

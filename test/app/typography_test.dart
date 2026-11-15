@@ -1,6 +1,7 @@
-// Шрифты и подсветка команды (ADR-021): Inter — весь текст, JetBrains Mono —
-// только пароли и распознанные части команды, Cormorant Unicase — «Tridot»
-// и названия проектов.
+// Шрифты и шкала текста (ADR-021, ADR-027): Inter — весь текст, шкала
+// 17/15/13, ничего мельче 13; JetBrains Mono — только пароли и коды
+// восстановления; Cormorant Unicase — «Tridot» и названия проектов. Команды
+// в ленте — обычный текст, в поле ввода выделен только глагол.
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -81,29 +82,16 @@ List<(String, TextStyle)> _flatten(InlineSpan span, [TextStyle? parent]) {
 }
 
 /// Части с моноширинным шрифтом — одной строкой через «|».
-/// Распознанные части через «|». Пробелы внутри части — шрифтом текста
-/// (не моноширинным), но часть они не разрывают.
-String _mono(InlineSpan span) {
-  final groups = <String>[];
-  var current = '';
-  var gap = '';
-  for (final (text, style) in _flatten(span)) {
-    if (style.fontFamily == AppFonts.mono) {
-      current += gap + text;
-      gap = '';
-    } else if (text.trim().isEmpty &&
-        current.isNotEmpty &&
-        (style.debugLabel ?? '').contains(commandGapLabel)) {
-      gap += text;
-    } else {
-      if (current.isNotEmpty) groups.add(current);
-      current = '';
-      gap = '';
-    }
-  }
-  if (current.isNotEmpty) groups.add(current);
-  return groups.join('|');
-}
+String _mono(InlineSpan span) => <String>[
+      for (final (text, style) in _flatten(span))
+        if (style.fontFamily == AppFonts.mono) text,
+    ].join('|');
+
+/// Части, выделенные цветом распознанного глагола, — через «|».
+String _tinted(InlineSpan span, Color tint) => <String>[
+      for (final (text, style) in _flatten(span))
+        if (style.color == tint) text,
+    ].join('|');
 
 CommandInputController _input(WidgetTester tester) => tester
     .widget<TextField>(find.byKey(const Key('assistant-input')))
@@ -127,19 +115,78 @@ void main() {
       );
     });
 
-    test('метаданные — Inter с табличными цифрами', () {
+    test(
+        'метаданные — Inter 13, цвет из темы; табличные цифры только у '
+        'времени и счётчиков', () {
       expect(metaTextStyle.fontFamily, AppFonts.text);
+      expect(metaTextStyle.fontSize, 13);
+      expect(metaTextStyle.color, isNull);
+      // Табличные цифры в Inter расширяют «-» и «–»: в подписях их нет.
+      expect(metaTextStyle.fontFeatures, isNull);
+      for (final theme in <ThemeData>[
+        AssistantTheme.dark(),
+        AssistantTheme.light(),
+      ]) {
+        expect(theme.textTheme.bodySmall!.fontFeatures, isNull);
+      }
+      expect(metaNumTextStyle.fontSize, 13);
+      expect(metaNumTextStyle.color, isNull);
       expect(
-        metaTextStyle.fontFeatures,
+        metaNumTextStyle.fontFeatures,
         contains(const FontFeature.tabularFigures()),
       );
     });
+
+    for (final (name, theme) in <(String, ThemeData)>[
+      ('тёмная', AssistantTheme.dark()),
+      ('светлая', AssistantTheme.light()),
+    ]) {
+      test('шкала 17/15/13 и Inter в каждом стиле: $name', () {
+        final t = theme.textTheme;
+        expect(t.bodyLarge!.fontSize, 17);
+        expect(t.bodyLarge!.height, closeTo(1.41, 0.001));
+        expect(t.bodyMedium!.fontSize, 15);
+        expect(t.bodySmall!.fontSize, 13);
+        expect(t.titleMedium!.fontSize, 17);
+        expect(t.titleMedium!.fontWeight, FontWeight.w600);
+        expect(t.displaySmall!.fontSize, 30);
+        expect(t.headlineMedium!.fontSize, 28);
+        expect(t.labelLarge!.fontSize, 17);
+        final p = theme.extension<AppPalette>()!;
+        expect(t.bodySmall!.color, p.muted);
+        expect(t.bodyLarge!.color, p.text);
+        for (final style in <TextStyle?>[
+          t.displayLarge,
+          t.displayMedium,
+          t.displaySmall,
+          t.headlineLarge,
+          t.headlineMedium,
+          t.headlineSmall,
+          t.titleLarge,
+          t.titleMedium,
+          t.titleSmall,
+          t.bodyLarge,
+          t.bodyMedium,
+          t.bodySmall,
+          t.labelLarge,
+          t.labelMedium,
+          t.labelSmall,
+        ]) {
+          expect(style!.fontFamily, AppFonts.text);
+          expect(style.fontSize, greaterThanOrEqualTo(13));
+        }
+      });
+    }
 
     test('моноширинный — JetBrains Mono, название — Cormorant Unicase 600', () {
       expect(monoTextStyle.fontFamily, 'JetBrains Mono');
       expect(displayTextStyle.fontFamily, 'Cormorant Unicase');
       expect(displayTextStyle.fontWeight, FontWeight.w600);
-      expect(projectNameStyle().fontFamily, 'Cormorant Unicase');
+      expect(displayTextStyle.color, isNull);
+      expect(
+        projectNameStyle(color: AppPalette.light.textStrong).fontFamily,
+        'Cormorant Unicase',
+      );
     });
 
     test('шрифт названия подключён в pubspec, лицензия — в main.dart', () {
@@ -156,16 +203,17 @@ void main() {
       expect(main, contains("<String>['Cormorant Unicase']"));
     });
 
-    test('JetBrains Mono — только пароли, подсветка и тема', () {
+    test('JetBrains Mono — только пароли и коды восстановления', () {
       const allowed = <String>{
         'lib/app/assistant_theme.dart',
-        'lib/app/widgets/command_highlight.dart',
+        'lib/app/passwords/secret_widgets.dart',
+        'lib/app/passwords/recovery_code_view.dart',
       };
       final offenders = <String>[];
       for (final entity in Directory('lib/app').listSync(recursive: true)) {
         if (entity is! File || !entity.path.endsWith('.dart')) continue;
         final path = entity.path.replaceAll(r'\', '/');
-        if (allowed.contains(path) || path.contains('/passwords/')) continue;
+        if (allowed.contains(path)) continue;
         final text = entity.readAsStringSync();
         if (text.contains('monoTextStyle') ||
             text.contains('AppFonts.mono') ||
@@ -194,61 +242,65 @@ void main() {
   });
 
   group('highlightedCommand', () {
-    test('распознанное — моноширинным, остальное — как было', () {
-      const text = 'Добавь задачу хлеб завтра';
+    const p = AppPalette.dark;
+    const spans = <CommandSpan>[
+      CommandSpan(0, 13, CommandSpanKind.verb),
+      CommandSpan(19, 25, CommandSpanKind.due),
+    ];
+    const text = 'Добавь задачу хлеб завтра';
+    final base = TextStyle(fontSize: 17, color: p.textStrong);
+
+    test('в ленте (plain) — обычный текст: без моно и без цвета', () {
       final span = highlightedCommand(
         text,
-        const <CommandSpan>[
-          CommandSpan(0, 13, CommandSpanKind.verb),
-          CommandSpan(19, 25, CommandSpanKind.due),
-        ],
-        const TextStyle(fontSize: 16, color: AssistantColors.textStrong),
+        spans,
+        base,
+        colors: p,
+        mode: CommandSpanMode.plain,
       );
       expect(span.toPlainText(), text);
-      expect(_mono(span), 'Добавь задачу|завтра');
-      final parts = _flatten(span);
-      expect(parts.first.$2.color, AssistantColors.commandVerb);
-      expect(parts.first.$2.fontSize, closeTo(16 * commandMonoScale, 0.01));
-      expect(parts[1].$2.fontFamily, isNot(AppFonts.mono));
-      expect(parts.last.$2.color, AssistantColors.commandValue);
+      for (final (_, style) in _flatten(span)) {
+        expect(style.fontFamily, isNot(AppFonts.mono));
+        expect(style.fontSize, 17);
+        expect(style.color, p.textStrong);
+      }
     });
 
-    test('пробелы в подсветке и рядом — шрифтом текста, не двойные', () {
-      const text = 'перенеси задачу на пятницу';
-      final span = highlightedCommand(
-        text,
-        const <CommandSpan>[
-          CommandSpan(0, 16, CommandSpanKind.verb),
-          CommandSpan(16, 26, CommandSpanKind.due),
-        ],
-        const TextStyle(fontSize: 16),
-      );
-      expect(span.toPlainText(), text);
-      for (final (part, style) in _flatten(span)) {
-        if (part.trim().isEmpty) {
-          expect(style.fontFamily, isNot(AppFonts.mono), reason: '«$part»');
-        } else {
-          expect(style.fontFamily, AppFonts.mono, reason: part);
-        }
+    test('в поле ввода (subtle) — только глагол цветом и полужирным', () {
+      for (final palette in <AppPalette>[AppPalette.dark, AppPalette.light]) {
+        final span = highlightedCommand(
+          text,
+          spans,
+          base.copyWith(color: palette.textStrong),
+          colors: palette,
+        );
+        expect(span.toPlainText(), text);
+        expect(_mono(span), isEmpty);
+        expect(_tinted(span, palette.cmdTint), 'Добавь задачу');
+        final parts = _flatten(span);
+        expect(parts.first.$2.fontWeight, FontWeight.w600);
+        expect(parts.first.$2.fontSize, 17);
+        // Срок — как текст.
+        expect(parts.last.$2.color, palette.textStrong);
       }
     });
 
     test('набираемое слово подчёркнуто и внутри подсветки', () {
-      const text = 'Добавь задачу';
+      const typed = 'Добавь задачу';
       final span = highlightedCommand(
-        text,
+        typed,
         const <CommandSpan>[CommandSpan(0, 13, CommandSpanKind.verb)],
         const TextStyle(),
+        colors: p,
         composing: const TextRange(start: 7, end: 13),
       );
       final parts = _flatten(span);
       expect(parts.map(((String, TextStyle) p) => p.$1), <String>[
-        'Добавь',
-        ' ',
+        'Добавь ',
         'задачу',
       ]);
       expect(parts.last.$2.decoration, TextDecoration.underline);
-      expect(parts.last.$2.fontFamily, AppFonts.mono);
+      expect(parts.last.$2.color, p.cmdTint);
       expect(parts.first.$2.decoration, isNot(TextDecoration.underline));
     });
   });
@@ -299,8 +351,8 @@ void main() {
       final name = tester.widget<Text>(find.byKey(const Key('app-name')));
       expect(name.data, AppInfo.name);
       expect(name.style?.fontFamily, AppFonts.display);
-      final version = tester.widget<Text>(find.byKey(const Key('app-version')));
-      expect(version.style?.fontFamily, AppFonts.text);
+      // Версия — в «Настройки → О приложении», не в шапке (ADR-027).
+      expect(find.byKey(const Key('app-version')), findsNothing);
     });
 
     testWidgets('название проекта в панели — шрифтом названия', (tester) async {
@@ -340,10 +392,12 @@ void main() {
       );
       final span = input.buildTextSpan(
         context: tester.element(find.byKey(const Key('assistant-input'))),
-        style: const TextStyle(fontSize: 16),
+        style: const TextStyle(fontSize: 17),
         withComposing: false,
       );
-      expect(_mono(span), 'Добавь задачу|купить хлеб|на завтра');
+      // Без моноширинного шрифта; выделен только глагол.
+      expect(_mono(span), isEmpty);
+      expect(_tinted(span, AppPalette.dark.cmdTint), 'Добавь задачу');
     });
 
     testWidgets('фраза с паролем в поле ввода не подсвечивается',
@@ -358,13 +412,14 @@ void main() {
       expect(input.spans, isEmpty);
       final span = input.buildTextSpan(
         context: tester.element(find.byKey(const Key('assistant-input'))),
-        style: const TextStyle(fontSize: 16),
+        style: const TextStyle(fontSize: 17),
         withComposing: false,
       );
       expect(_mono(span), isEmpty);
+      expect(_tinted(span, AppPalette.dark.cmdTint), isEmpty);
     });
 
-    testWidgets('отправленная команда в ленте подсвечена, ответ — нет',
+    testWidgets('отправленная команда в ленте — обычный текст Inter 17',
         (tester) async {
       await _pump(tester);
       await _say(tester, 'Добавь задачу купить хлеб на завтра #дом');
@@ -373,24 +428,30 @@ void main() {
           .where((SelectableText t) => t.textSpan != null)
           .toList();
       expect(rich, hasLength(1));
-      expect(
-        _mono(rich.single.textSpan!),
-        'Добавь задачу|купить хлеб|на завтра|#дом',
-      );
+      expect(_mono(rich.single.textSpan!), isEmpty);
+      final colors = <Color?>{
+        for (final (_, style) in _flatten(rich.single.textSpan!)) style.color,
+      };
+      expect(colors, <Color?>{AppPalette.dark.textStrong});
+      for (final (_, style) in _flatten(rich.single.textSpan!)) {
+        expect(style.fontSize, 17);
+      }
       // Время под сообщениями и подписи — не моноширинным.
       for (final text in tester.widgetList<Text>(find.byType(Text))) {
         expect(text.style?.fontFamily, isNot(AppFonts.mono));
       }
     });
 
-    testWidgets('калькулятор: в ленте подсвечен пример', (tester) async {
+    testWidgets('калькулятор: числа в ленте — как обычный текст',
+        (tester) async {
       await _pump(tester);
       await _say(tester, 'сколько будет 2+2*2');
       final rich = tester
           .widgetList<SelectableText>(find.byType(SelectableText))
           .where((SelectableText t) => t.textSpan != null)
           .single;
-      expect(_mono(rich.textSpan!), '2+2*2');
+      expect(_mono(rich.textSpan!), isEmpty);
+      expect(_tinted(rich.textSpan!, AppPalette.dark.cmdTint), isEmpty);
     });
 
     testWidgets('фраза о паролях в ленте не подсвечена', (tester) async {

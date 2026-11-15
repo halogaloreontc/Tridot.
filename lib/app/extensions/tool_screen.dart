@@ -107,7 +107,6 @@ Future<bool> showToolOffer(
     context: context,
     builder: (BuildContext context) => AlertDialog(
       scrollable: true,
-      backgroundColor: AssistantColors.raised,
       title: WholeWordText('Скачать ${copy.name}?'),
       content: Text(
         '${copy.offerBody} Загрузка ~${toolMegabytes(spec.bytes)} МБ, после '
@@ -219,7 +218,6 @@ final class _ToolScreenState extends State<ToolScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        backgroundColor: AssistantColors.raised,
         title: WholeWordText('Удалить ${widget.copy.name}?'),
         content: Text(widget.copy.deleteBody),
         actions: <Widget>[
@@ -230,7 +228,7 @@ final class _ToolScreenState extends State<ToolScreen> {
           TextButton(
             key: const ValueKey<String>('tool-delete-confirm'),
             style: TextButton.styleFrom(
-              foregroundColor: AssistantColors.danger,
+              foregroundColor: context.colors.danger,
             ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Удалить'),
@@ -248,7 +246,7 @@ final class _ToolScreenState extends State<ToolScreen> {
     final busy = kit.isBusy;
     final copy = widget.copy;
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: context.colors.workspace,
       appBar: AppBar(title: Text(copy.screenTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -261,7 +259,7 @@ final class _ToolScreenState extends State<ToolScreen> {
             'время установки нужно ~${toolMegabytes(toolInstallBytes(spec))} '
             'МБ свободного места.',
             key: const ValueKey<String>('tool-size'),
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
           const SizedBox(height: 6),
           Text(
@@ -269,7 +267,7 @@ final class _ToolScreenState extends State<ToolScreen> {
             'Лицензия: ${spec.license}. Исходники и скрипты сборки: '
             '${spec.sourceUrl}. Файл проверяется по закреплённой в '
             'приложении контрольной сумме SHA-256.',
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
           const SizedBox(height: 16),
           Semantics(
@@ -279,8 +277,8 @@ final class _ToolScreenState extends State<ToolScreen> {
               key: const ValueKey<String>('tool-status'),
               style: TextStyle(
                 color: kit.phase == ToolPhase.error
-                    ? AssistantColors.danger
-                    : AssistantColors.textStrong,
+                    ? context.colors.danger
+                    : context.colors.textStrong,
               ),
             ),
           ),
@@ -304,8 +302,8 @@ final class _ToolScreenState extends State<ToolScreen> {
                 FilledButton.icon(
                   key: const ValueKey<String>('tool-download'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AssistantColors.textStrong,
-                    foregroundColor: AssistantColors.workspace,
+                    backgroundColor: context.colors.textStrong,
+                    foregroundColor: context.colors.workspace,
                     minimumSize: const Size(0, 44),
                   ),
                   onPressed: _install,
@@ -349,7 +347,7 @@ final class _ToolScreenState extends State<ToolScreen> {
                   key: const ValueKey<String>('tool-delete'),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 44),
-                    foregroundColor: AssistantColors.danger,
+                    foregroundColor: context.colors.danger,
                   ),
                   onPressed: _delete,
                   child: const Text('Удалить'),
@@ -362,7 +360,7 @@ final class _ToolScreenState extends State<ToolScreen> {
               child: Text(
                 note,
                 key: const ValueKey<String>('tool-update-note'),
-                style: metaTextStyle,
+                style: metaStyle(context),
               ),
             ),
           if (!spec.available)
@@ -372,7 +370,7 @@ final class _ToolScreenState extends State<ToolScreen> {
                 'В этой сборке приложения ${copy.name} скачать нельзя: нет '
                 'проверенной контрольной суммы.',
                 key: const ValueKey<String>('tool-unavailable'),
-                style: metaTextStyle,
+                style: metaStyle(context),
               ),
             ),
           ...widget.extra,

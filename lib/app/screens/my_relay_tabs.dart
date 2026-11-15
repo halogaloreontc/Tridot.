@@ -8,6 +8,7 @@ import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
 import '../shell/today_panel.dart';
 import '../widgets/activity_grid.dart';
+import '../widgets/grouped.dart';
 import '../widgets/personas_section.dart';
 import '../widgets/task_tile.dart';
 import '../widgets/whole_word_text.dart';
@@ -51,17 +52,18 @@ Widget _page({required Key key, required List<Widget> children}) =>
       ),
     );
 
-const TextStyle _heading = TextStyle(
-  fontSize: 15,
-  height: 1.3,
-  fontWeight: FontWeight.w600,
-  color: AssistantColors.textStrong,
-);
+TextStyle _heading(BuildContext context) => TextStyle(
+      fontSize: 17,
+      height: 1.3,
+      fontWeight: FontWeight.w600,
+      color: context.colors.textStrong,
+    );
 
-BoxDecoration get _card => BoxDecoration(
-      color: AssistantColors.raised,
-      border: Border.all(color: AssistantColors.borderSoft),
-      borderRadius: BorderRadius.circular(16),
+/// Панель «Мой Tridot» — заливкой листа на фоне экрана, без рамки
+/// (ADR-027).
+BoxDecoration _card(BuildContext context) => BoxDecoration(
+      color: context.colors.workspace,
+      borderRadius: BorderRadius.circular(12),
     );
 
 // ---------------------------------------------------------------- Сводка
@@ -157,14 +159,15 @@ final class RelaySummary extends StatelessWidget {
                     children: <Widget>[
                       Semantics(
                         header: true,
-                        child: const Text('Сейчас и дальше', style: _heading),
+                        child:
+                            Text('Сейчас и дальше', style: _heading(context)),
                       ),
                       // Счётчик дня — тот же, что был у кнопки «Сегодня».
                       Text(
                         'сегодня: ${todaySummary(today.length, overdue)}',
                         key: const Key('summary-today'),
-                        style: metaTextStyle.copyWith(
-                          color: overdue > 0 ? AssistantColors.danger : null,
+                        style: metaStyle(context).copyWith(
+                          color: overdue > 0 ? context.colors.danger : null,
                         ),
                       ),
                     ],
@@ -173,17 +176,14 @@ final class RelaySummary extends StatelessWidget {
                 TextButton(
                   key: const Key('summary-all-tasks'),
                   onPressed: onAllTasks,
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(44, 44),
-                    foregroundColor: AssistantColors.muted,
-                  ),
+                  style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       Flexible(
                         child: Text(
                           'Все задачи',
-                          style: TextStyle(fontSize: 13),
+                          style: TextStyle(fontSize: 15),
                         ),
                       ),
                       Icon(Icons.chevron_right, size: 18),
@@ -202,9 +202,9 @@ final class RelaySummary extends StatelessWidget {
             else
               DecoratedBox(
                 key: const Key('summary-next'),
-                decoration: _card,
+                decoration: _card(context),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.only(left: 16, right: 12),
                   child: Column(
                     children: <Widget>[
                       for (final (i, task) in next.indexed)
@@ -263,26 +263,26 @@ final class _NextRow extends StatelessWidget {
             height: 8,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: overdue ? AssistantColors.danger : null,
+              color: overdue ? context.colors.danger : null,
               border: overdue
                   ? null
-                  : Border.all(color: AssistantColors.icon, width: 1.5),
+                  : Border.all(color: context.colors.icon, width: 1.5),
             ),
           );
     return InkWell(
       onTap: onTap,
       child: Container(
-        constraints: const BoxConstraints(minHeight: 46),
+        constraints: const BoxConstraints(minHeight: 52),
         decoration: BoxDecoration(
           border: first
               ? null
-              : const Border(top: BorderSide(color: AssistantColors.divider)),
+              : Border(top: BorderSide(color: context.colors.divider)),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
           children: <Widget>[
             SizedBox(width: 20, child: Center(child: lead)),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,17 +291,17 @@ final class _NextRow extends StatelessWidget {
                     title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      height: 1.3,
-                      color: AssistantColors.textStrong,
-                    ),
+                    style: Theme.of(context).textTheme.bodyLarge!.copyWith(
+                          color: context.colors.textStrong,
+                        ),
                   ),
                   Text(
                     subtitle,
-                    style: metaTextStyle.copyWith(
-                      color: overdue ? AssistantColors.danger : null,
-                    ),
+                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                          color: overdue
+                              ? context.colors.danger
+                              : context.colors.muted,
+                        ),
                   ),
                 ],
               ),
@@ -361,36 +361,36 @@ final class _RelayActivityState extends State<RelayActivity> {
           gap: 3,
           approximate: widget.approximate,
         ),
-        SectionLabel('Выполненные · ${completed.length}'),
-        if (completed.isEmpty)
+        const SizedBox(height: 24),
+        if (completed.isEmpty) ...<Widget>[
+          SectionLabel('Выполненные · ${completed.length}'),
           const EmptyState(
             icon: Icons.inventory_2_outlined,
             title: 'Выполненных задач пока нет',
             hint: 'Завершённые задачи появятся здесь',
-          )
-        else ...<Widget>[
-          for (final task in shown)
-            TaskTile(
-              key: ValueKey<String>('activity-done-${task.id}'),
-              task: task,
-              now: widget.now,
-              onToggleDone: () => widget.onReopen(task),
-            ),
-          if (hidden > 0)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton(
-                key: const Key('activity-more'),
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(40, 44),
-                  foregroundColor: AssistantColors.text,
+          ),
+        ] else
+          InsetGroup(
+            header: 'Выполненные · ${completed.length}',
+            margin: EdgeInsets.zero,
+            children: <Widget>[
+              for (final task in shown)
+                TaskTile(
+                  key: ValueKey<String>('activity-done-${task.id}'),
+                  task: task,
+                  now: widget.now,
+                  onToggleDone: () => widget.onReopen(task),
                 ),
-                onPressed: () =>
-                    setState(() => _visible += RelayActivity.pageSize),
-                child: Text('Показать ещё · $hidden'),
-              ),
-            ),
-        ],
+              if (hidden > 0)
+                GroupedRow(
+                  key: const Key('activity-more'),
+                  accent: true,
+                  title: 'Показать ещё · $hidden',
+                  onTap: () =>
+                      setState(() => _visible += RelayActivity.pageSize),
+                ),
+            ],
+          ),
       ],
     );
   }
@@ -538,17 +538,22 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
           },
         ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Журнал помощников — в планах',
           key: Key('assistants-journal-planned'),
-          style: metaTextStyle,
+          style: metaStyle(context),
         ),
+        const SizedBox(height: 24),
         KeyedSubtree(
           key: _details,
-          child: PersonasSection(
-            settings: widget.settings,
-            onChanged: widget.onChanged,
-            registry: widget.registry,
+          // Страница уже даёт поля 16: группы — без своих боковых.
+          child: InsetGroupScope(
+            side: 0,
+            child: PersonasSection(
+              settings: widget.settings,
+              onChanged: widget.onChanged,
+              registry: widget.registry,
+            ),
           ),
         ),
       ],
@@ -587,20 +592,17 @@ final class _PersonaCard extends StatelessWidget {
     final address =
         personas.address == ReplyAddress.informal ? 'на ты' : 'на вы';
     // Крупный шрифт: «Изменить» уходит под имя, иначе строка не влезает.
-    final large = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final large = MediaQuery.textScalerOf(context).scale(1) >= 1.3;
     final edit = TextButton(
       key: Key('persona-edit-${persona.id}'),
       onPressed: onEdit,
-      style: TextButton.styleFrom(
-        minimumSize: const Size(44, 44),
-        foregroundColor: AssistantColors.text,
-      ),
+      style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
       child: const Text('Изменить'),
     );
     return Container(
       key: Key('persona-card-${persona.id}'),
-      decoration: _card,
-      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      decoration: _card(context),
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
@@ -614,12 +616,13 @@ final class _PersonaCard extends StatelessWidget {
                   children: <Widget>[
                     Semantics(
                       header: true,
-                      child: Text(persona.russianName, style: _heading),
+                      child:
+                          Text(persona.russianName, style: _heading(context)),
                     ),
                     Text(
                       personaRole(persona, personas),
                       key: Key('persona-role-${persona.id}'),
-                      style: metaTextStyle,
+                      style: metaStyle(context),
                     ),
                   ],
                 ),
@@ -636,7 +639,7 @@ final class _PersonaCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       female ? 'Активна' : 'Активен',
-                      style: const TextStyle(color: AssistantColors.text),
+                      style: TextStyle(color: context.colors.text),
                     ),
                   ),
                   Switch(
@@ -667,10 +670,10 @@ final class _PersonaCard extends StatelessWidget {
                   child: _Fact(
                     label: 'Ведёт',
                     value: roles.join(', '),
-                    trailing: const Icon(
+                    trailing: Icon(
                       Icons.chevron_right,
                       size: 18,
-                      color: AssistantColors.icon,
+                      color: context.colors.icon,
                     ),
                   ),
                 ),
@@ -702,14 +705,14 @@ final class _Fact extends StatelessWidget {
           // в IntrinsicHeight.
           Expanded(
             flex: 2,
-            child: WholeWordText(label, style: metaTextStyle),
+            child: WholeWordText(label, style: metaStyle(context)),
           ),
           Expanded(
             flex: 3,
             child: WholeWordText(
               value,
               textAlign: TextAlign.end,
-              style: const TextStyle(color: AssistantColors.textStrong),
+              style: TextStyle(color: context.colors.textStrong),
             ),
           ),
           if (trailing != null) trailing!,

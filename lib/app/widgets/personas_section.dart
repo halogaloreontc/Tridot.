@@ -5,7 +5,8 @@ import '../../core/personas/persona_names.dart';
 import '../../core/replies/reply_library.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
-import 'task_tile.dart';
+import '../layout.dart';
+import 'grouped.dart';
 import 'whole_word_text.dart';
 
 /// Раздел «Помощники» в настройках: режим (Соло, Дуэт, Трио), помощник в
@@ -89,120 +90,128 @@ class _PersonasSectionState extends State<PersonasSection> {
       key: const ValueKey<String>('personas-section'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const SectionLabel('Помощники'),
-        _Group(
-          title: 'Режим',
-          hint: '${switch (mode) {
-            TeamMode.solo => '$sado делает всё $alone.',
-            // Имя — только в именительном: своё имя пользователя
-            // склонять не надо (ADR-017).
-            TeamMode.duo => '$sado и один помощник на выбор; зона '
-                'выключенного — снова у главного.',
-            TeamMode.trio => 'Все трое: $sado, ${helpers[0].russianName} и '
-                '${helpers[1].russianName}.',
-          }} Написать помощнику напрямую: «${addressee.russianName}, …».',
-          hintKey: const ValueKey<String>('assistant-mode-hint'),
+        InsetGroup(
+          header: 'Помощники',
           children: <Widget>[
-            for (final (value, label) in const <(TeamMode, String)>[
-              (TeamMode.solo, 'Соло'),
-              (TeamMode.duo, 'Дуэт'),
-              (TeamMode.trio, 'Трио'),
+            _Group(
+              title: 'Режим',
+              hint: '${switch (mode) {
+                TeamMode.solo => '$sado делает всё $alone.',
+                // Имя — только в именительном: своё имя пользователя
+                // склонять не надо (ADR-017).
+                TeamMode.duo => '$sado и один помощник на выбор; зона '
+                    'выключенного — снова у главного.',
+                TeamMode.trio => 'Все трое: $sado, ${helpers[0].russianName} и '
+                    '${helpers[1].russianName}.',
+              }} Написать помощнику напрямую: «${addressee.russianName}, …».',
+              hintKey: const ValueKey<String>('assistant-mode-hint'),
+              children: <Widget>[
+                for (final (value, label) in const <(TeamMode, String)>[
+                  (TeamMode.solo, 'Соло'),
+                  (TeamMode.duo, 'Дуэт'),
+                  (TeamMode.trio, 'Трио'),
+                ])
+                  _Choice(
+                    key: ValueKey<String>('assistant-mode-${value.name}'),
+                    label: label,
+                    selected: mode == value,
+                    onSelected: () => _set(personas.copyWith(teamMode: value)),
+                  ),
+              ],
+            ),
+            if (mode == TeamMode.duo)
+              _Group(
+                title: 'Помощник в дуэте',
+                children: <Widget>[
+                  for (final helper in helpers)
+                    _Choice(
+                      key: ValueKey<String>('duo-helper-${helper.id}'),
+                      label: helper.russianName,
+                      accent: PersonaColors.of(helper, context).$1,
+                      selected: personas.duoHelper == helper.id,
+                      onSelected: () =>
+                          _set(personas.copyWith(duoHelper: helper.id)),
+                    ),
+                ],
+              ),
+            for (final (duty, title) in const <(PersonaDuty, String)>[
+              (PersonaDuty.extensions, 'Расширения ведёт'),
+              (PersonaDuty.notifications, 'Оповещения ведёт'),
             ])
-              _Choice(
-                key: ValueKey<String>('assistant-mode-${value.name}'),
-                label: label,
-                selected: mode == value,
-                onSelected: () => _set(personas.copyWith(teamMode: value)),
+              _DutyGroup(
+                duty: duty,
+                title: title,
+                personas: personas,
+                helpers: helpers,
+                onSelected: (String id) => _set(personas.withDuty(duty, id)),
               ),
           ],
         ),
-        if (mode == TeamMode.duo)
-          _Group(
-            title: 'Помощник в дуэте',
+        for (final persona in cast.members)
+          InsetGroup(
+            header: persona.russianName,
             children: <Widget>[
-              for (final helper in helpers)
-                _Choice(
-                  key: ValueKey<String>('duo-helper-${helper.id}'),
-                  label: helper.russianName,
-                  accent: Color(helper.accentColor),
-                  selected: personas.duoHelper == helper.id,
-                  onSelected: () =>
-                      _set(personas.copyWith(duoHelper: helper.id)),
-                ),
+              _PersonaStyle(
+                key: ValueKey<String>('persona-settings-${persona.id}'),
+                persona: persona,
+                personas: personas,
+                library: library,
+                onStyle: (String style) =>
+                    _set(personas.withStyle(persona.id, style)),
+                onName: (String name) =>
+                    _set(personas.withName(persona.id, name)),
+                onGender: (ReplyGender gender) =>
+                    _set(personas.withGender(persona.id, gender)),
+              ),
             ],
           ),
-        for (final (duty, title) in const <(PersonaDuty, String)>[
-          (PersonaDuty.extensions, 'Расширения ведёт'),
-          (PersonaDuty.notifications, 'Оповещения ведёт'),
-        ])
-          _DutyGroup(
-            duty: duty,
-            title: title,
-            personas: personas,
-            helpers: helpers,
-            onSelected: (String id) => _set(personas.withDuty(duty, id)),
-          ),
-        for (final persona in cast.members)
-          _PersonaStyle(
-            key: ValueKey<String>('persona-settings-${persona.id}'),
-            persona: persona,
-            personas: personas,
-            library: library,
-            onStyle: (String style) =>
-                _set(personas.withStyle(persona.id, style)),
-            onName: (String name) => _set(personas.withName(persona.id, name)),
-            onGender: (ReplyGender gender) =>
-                _set(personas.withGender(persona.id, gender)),
-          ),
-        _Group(
-          title: 'Обращение',
+        InsetGroup(
+          header: 'Как говорят',
           children: <Widget>[
-            _Choice(
-              key: const ValueKey<String>('address-vy'),
-              label: 'На «вы»',
-              selected: personas.address == ReplyAddress.formal,
-              onSelected: () =>
-                  _set(personas.copyWith(address: ReplyAddress.formal)),
+            _Group(
+              title: 'Обращение',
+              children: <Widget>[
+                _Choice(
+                  key: const ValueKey<String>('address-vy'),
+                  label: 'На «вы»',
+                  selected: personas.address == ReplyAddress.formal,
+                  onSelected: () =>
+                      _set(personas.copyWith(address: ReplyAddress.formal)),
+                ),
+                _Choice(
+                  key: const ValueKey<String>('address-ty'),
+                  label: 'На «ты»',
+                  selected: personas.address == ReplyAddress.informal,
+                  onSelected: () =>
+                      _set(personas.copyWith(address: ReplyAddress.informal)),
+                ),
+              ],
             ),
-            _Choice(
-              key: const ValueKey<String>('address-ty'),
-              label: 'На «ты»',
-              selected: personas.address == ReplyAddress.informal,
-              onSelected: () =>
-                  _set(personas.copyWith(address: ReplyAddress.informal)),
+            GroupedSwitchRow(
+              key: const ValueKey<String>('setting-emoji'),
+              title: 'Эмодзи в ответах',
+              subtitle: 'Если стиль ими пользуется',
+              value: personas.emoji,
+              onChanged: (bool value) => _set(personas.copyWith(emoji: value)),
             ),
-          ],
-        ),
-        SwitchListTile(
-          key: const ValueKey<String>('setting-emoji'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          title: const WholeWordText(
-            'Эмодзи в ответах',
-            style: TextStyle(color: AssistantColors.text),
-          ),
-          subtitle: const WholeWordText(
-            'Если стиль ими пользуется',
-            style: metaTextStyle,
-          ),
-          value: personas.emoji,
-          onChanged: (bool value) => _set(personas.copyWith(emoji: value)),
-        ),
-        _Group(
-          title: 'Шутки',
-          hint: 'Как часто беседа добавляет каламбур к приветствию и '
-              '«спасибо». Ответы задач всегда без шуток.',
-          children: <Widget>[
-            for (final (value, label) in const <(JokeFrequency, String)>[
-              (JokeFrequency.off, 'Не шутить'),
-              (JokeFrequency.rare, 'Изредка'),
-              (JokeFrequency.normal, 'Чаще'),
-            ])
-              _Choice(
-                key: ValueKey<String>('jokes-${value.name}'),
-                label: label,
-                selected: personas.jokes == value,
-                onSelected: () => _set(personas.copyWith(jokes: value)),
-              ),
+            _Group(
+              title: 'Шутки',
+              hint: 'Как часто беседа добавляет каламбур к приветствию и '
+                  '«спасибо». Ответы задач всегда без шуток.',
+              children: <Widget>[
+                for (final (value, label) in const <(JokeFrequency, String)>[
+                  (JokeFrequency.off, 'Не шутить'),
+                  (JokeFrequency.rare, 'Изредка'),
+                  (JokeFrequency.normal, 'Чаще'),
+                ])
+                  _Choice(
+                    key: ValueKey<String>('jokes-${value.name}'),
+                    label: label,
+                    selected: personas.jokes == value,
+                    onSelected: () => _set(personas.copyWith(jokes: value)),
+                  ),
+              ],
+            ),
           ],
         ),
       ],
@@ -246,7 +255,7 @@ class _DutyGroup extends StatelessWidget {
           _Choice(
             key: ValueKey<String>('duty-${duty.name}-${helper.id}'),
             label: helper.russianName,
-            accent: Color(helper.accentColor),
+            accent: PersonaColors.of(helper, context).$1,
             selected: assigned == helper.id,
             onSelected: () => onSelected(helper.id),
           ),
@@ -356,21 +365,22 @@ class _PersonaStyleState extends State<_PersonaStyle> {
     final available = library.hasStyle(style);
     final voice = personas.voiceOf(persona);
     final preview = library.render(PersonasSection.preview, voice);
-    final accent = Color(persona.accentColor);
+    final accent = PersonaColors.of(persona, context).$1;
     final isSado = persona.id == Personas.sado.id;
     // Род главного до выбора не отмечен: ни «он», ни «она».
     final ReplyGender? gender = isSado && !personas.sadoGenderChosen
         ? null
         : personas.genderOf(persona.id);
+    final text = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
             children: <Widget>[
-              PersonaMark(persona: persona, size: 24),
-              const SizedBox(width: 8),
+              PersonaDot(persona: persona, size: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: TextField(
                   key: ValueKey<String>('persona-name-${persona.id}'),
@@ -378,7 +388,7 @@ class _PersonaStyleState extends State<_PersonaStyle> {
                   focusNode: _focus,
                   maxLength: PersonaNames.maxLength,
                   textInputAction: TextInputAction.done,
-                  style: const TextStyle(color: AssistantColors.textStrong),
+                  style: TextStyle(color: context.colors.textStrong),
                   onChanged: (String value) {
                     // Ошибка видна сразу, сохраняется — по «Готово» или
                     // когда поле теряет фокус.
@@ -406,7 +416,10 @@ class _PersonaStyleState extends State<_PersonaStyle> {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: <Widget>[
-              const Text('Род:', style: TextStyle(color: AssistantColors.text)),
+              Text(
+                'Род:',
+                style: text.bodyMedium!.copyWith(color: context.colors.muted),
+              ),
               for (final (value, label) in const <(ReplyGender, String)>[
                 (ReplyGender.male, 'Он'),
                 (ReplyGender.female, 'Она'),
@@ -425,7 +438,7 @@ class _PersonaStyleState extends State<_PersonaStyle> {
           const SizedBox(height: 8),
           Text(
             '${persona.russianName}: стиль',
-            style: const TextStyle(color: AssistantColors.text),
+            style: text.bodyMedium!.copyWith(color: context.colors.muted),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -451,26 +464,26 @@ class _PersonaStyleState extends State<_PersonaStyle> {
                 'Стиль «$style» сейчас выключен или удалён — '
                 '${persona.russianName} говорит нейтрально.',
                 key: ValueKey<String>('style-missing-${persona.id}'),
-                style: metaTextStyle.copyWith(
-                  color: AssistantColors.warning,
+                style: metaStyle(context).copyWith(
+                  color: context.colors.warning,
                 ),
               ),
             ),
           const SizedBox(height: 8),
+          // Пример — пузырём заливкой на уровень выше листа, без полосы.
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: AssistantColors.panel,
-              border: Border(left: BorderSide(color: accent, width: 2)),
-              borderRadius: BorderRadius.circular(4),
+              color: context.colors.raised,
+              borderRadius: BorderRadius.circular(AppRadius.inner),
             ),
             child: Text(
               preview,
               key: ValueKey<String>('style-preview-${persona.id}'),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AssistantColors.text),
+              style: text.bodyLarge!.copyWith(color: context.colors.text),
             ),
           ),
           // Пример склоняется в мужском роде, пока род главного не выбран
@@ -482,7 +495,7 @@ class _PersonaStyleState extends State<_PersonaStyle> {
               child: Text(
                 'Пример — в мужском роде, пока род не выбран.',
                 key: ValueKey<String>('style-preview-note-${persona.id}'),
-                style: metaTextStyle,
+                style: metaStyle(context),
               ),
             ),
         ],
@@ -507,18 +520,22 @@ class _Group extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(title, style: const TextStyle(color: AssistantColors.text)),
+          WholeWordText(
+            title,
+            style: text.bodyLarge!.copyWith(color: context.colors.textStrong),
+          ),
           const SizedBox(height: 8),
           // Перенос вместо прокрутки: на 320 px и крупном шрифте всё видно.
           Wrap(spacing: 8, runSpacing: 8, children: children),
           if (hint != null) ...<Widget>[
             const SizedBox(height: 6),
-            Text(hint!, key: hintKey, style: metaTextStyle),
+            Text(hint!, key: hintKey, style: metaStyle(context)),
           ],
         ],
       ),
@@ -543,22 +560,20 @@ class _Choice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChoiceChip(
-      label: Text(label),
+      // Длинное слово («Нейтральный» при шрифте 200 %) уменьшается целиком.
+      label: WholeWordText(label),
       selected: selected,
       onSelected: (_) {
         if (!selected) onSelected();
       },
       showCheckmark: false,
+      // Заливкой без рамки (тема); выбранный — тоном акцента помощника.
       labelStyle: TextStyle(
-        color: selected ? AssistantColors.textStrong : AssistantColors.text,
+        color:
+            selected ? (accent ?? context.colors.accent) : context.colors.text,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
       ),
-      backgroundColor: AssistantColors.workspace,
-      selectedColor: AssistantColors.bubble,
-      side: BorderSide(
-        color: selected
-            ? (accent ?? AssistantColors.textStrong)
-            : AssistantColors.border,
-      ),
+      selectedColor: (accent ?? context.colors.accent).withValues(alpha: 0.15),
     );
   }
 }
@@ -585,7 +600,7 @@ class PersonaMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Color(persona.accentColor);
+    final accent = PersonaColors.of(persona, context).$1;
     return ExcludeSemantics(
       child: SizedBox.square(
         dimension: size,
@@ -593,7 +608,7 @@ class PersonaMark extends StatelessWidget {
           decoration: BoxDecoration(
             shape: round ? BoxShape.circle : BoxShape.rectangle,
             borderRadius: round ? null : BorderRadius.circular(size * .3),
-            color: Color(persona.accentBackground),
+            color: PersonaColors.of(persona, context).$2,
             border: ring == null ? null : Border.all(color: ring!, width: 2),
           ),
           // Буква не растёт с крупным шрифтом: знак фиксированного
@@ -615,4 +630,26 @@ class PersonaMark extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Точка помощника (ADR-027): тихий знак его цвета у имени — в ленте, в
+/// шапке сессии. Буквы и рамки нет.
+class PersonaDot extends StatelessWidget {
+  const PersonaDot({super.key, required this.persona, this.size = 8});
+
+  final Persona persona;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+        child: SizedBox.square(
+          dimension: size,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: PersonaColors.of(persona, context).$1,
+            ),
+          ),
+        ),
+      );
 }

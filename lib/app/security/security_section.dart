@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/settings/app_settings.dart';
-import '../assistant_theme.dart';
-import '../widgets/task_tile.dart';
-import '../widgets/whole_word_text.dart';
+import '../widgets/grouped.dart';
 import 'app_lock.dart';
 import 'device_auth.dart';
 
@@ -79,60 +77,41 @@ class _SecuritySectionState extends State<SecuritySection> {
     final available = status?.available ?? false;
     final settings = widget.settings;
     if (!available && !widget.hasVault) return const SizedBox.shrink();
+    String after(int seconds) => switch (seconds) {
+          0 => 'Сразу',
+          60 => 'Через 1 мин',
+          _ => 'Через ${seconds ~/ 60} мин',
+        };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const SectionLabel('Защита'),
-        if (available)
-          SwitchListTile(
-            key: const ValueKey<String>('setting-app-lock'),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-            title: const WholeWordText(
-              'Вход в приложение по отпечатку / Face ID',
-              style: TextStyle(color: AssistantColors.text),
-            ),
-            subtitle: WholeWordText(
-              'Спросит ${status!.means}. Это замок экрана, а не шифрование: '
-              'напоминания приходят как прежде.',
-              style: metaTextStyle,
-            ),
-            value: settings.appLock,
-            onChanged: _busy ? null : (bool v) => unawaited(_toggle(v)),
-          ),
+        InsetGroup(
+          header: 'Защита',
+          footer: widget.hasVault
+              ? 'ПИН-код сейфа и вход в сейф по отпечатку / Face ID — в '
+                  '«Сейф → Настройки → Вход в сейф».'
+              : null,
+          children: <Widget>[
+            if (available)
+              GroupedSwitchRow(
+                key: const ValueKey<String>('setting-app-lock'),
+                title: 'Вход в приложение по отпечатку / Face ID',
+                subtitle: 'Спросит ${status!.means}. Это замок экрана, а не '
+                    'шифрование: напоминания приходят как прежде.',
+                value: settings.appLock,
+                onChanged: _busy ? null : (bool v) => unawaited(_toggle(v)),
+              ),
+          ],
+        ),
         if (available && settings.appLock)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: <Widget>[
-                const Text('Снова спрашивать:', style: metaTextStyle),
-                for (final seconds in AppSettings.appLockAfterChoices)
-                  ChoiceChip(
-                    key: ValueKey<String>('setting-app-lock-after-$seconds'),
-                    label: Text(
-                      switch (seconds) {
-                        0 => 'сразу',
-                        60 => 'через 1 мин',
-                        _ => 'через ${seconds ~/ 60} мин',
-                      },
-                    ),
-                    selected: settings.appLockAfter == seconds,
-                    onSelected: (_) => widget.onChanged(
-                      settings.copyWith(appLockAfter: seconds),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        if (widget.hasVault)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: WholeWordText(
-              'ПИН-код сейфа и вход в сейф по отпечатку / Face ID — в '
-              '«Сейф → Настройки → Вход в сейф».',
-              style: metaTextStyle,
+          GroupedChoiceList<int>(
+            header: 'Снова спрашивать',
+            options: AppSettings.appLockAfterChoices,
+            selected: settings.appLockAfter,
+            label: after,
+            optionKey: (int s) => ValueKey<String>('setting-app-lock-after-$s'),
+            onSelected: (int seconds) => widget.onChanged(
+              settings.copyWith(appLockAfter: seconds),
             ),
           ),
       ],

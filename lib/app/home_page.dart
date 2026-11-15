@@ -4,7 +4,6 @@ import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart' show OrdinalSortKey;
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -49,6 +48,7 @@ import '../core/stats/relay_stats.dart';
 import '../core/storage/storage_info.dart';
 import '../core/voice/voice_recognizer.dart';
 import 'assistant_theme.dart';
+import 'layout.dart';
 import 'attachments/attachment_picker.dart';
 import 'attachments/attachment_views.dart';
 import 'extensions/tool_kit.dart';
@@ -93,6 +93,7 @@ import 'widgets/personas_section.dart';
 import 'widgets/quick_dock.dart';
 import 'widgets/status_cube.dart';
 import 'widgets/task_chat_header.dart';
+import 'widgets/grouped.dart';
 import 'widgets/task_tile.dart';
 import 'widgets/whole_word_text.dart';
 
@@ -121,7 +122,8 @@ const double wideBreakpoint = 1000;
 /// свёрнута, пока её не откроют кнопкой «Показать «Сегодня»» в шапке.
 const double todayOpenBreakpoint = 1280;
 
-/// Ширина, ниже которой хроника команд — одна кнопка со списком.
+/// Ширина, ниже которой окно — узкое (телефон): «⋯» прячется, пока в
+/// шапке задача.
 const double narrowBreakpoint = 700;
 
 /// Ширина постоянного меню и колонки «Сегодня» на широком экране.
@@ -139,7 +141,7 @@ const double chatColumnWidth = 760;
 
 /// Общий отступ содержимого колонки чата от её краёв: по нему выровнены
 /// текст ответов, правый край пузырей, быстрые действия и поле ввода.
-const double chatInset = 16;
+const double chatInset = AppSpace.pageH;
 
 final class HomePage extends StatefulWidget {
   const HomePage({
@@ -163,6 +165,8 @@ final class HomePage extends StatefulWidget {
     this.nativeMedia,
     this.ytdl,
     this.appLock,
+    this.onAppearanceChanged,
+    this.onReduceMotionChanged,
   });
 
   final AssistantController assistant;
@@ -223,6 +227,14 @@ final class HomePage extends StatefulWidget {
   /// Вход в приложение по отпечатку / Face ID (ADR-025); `null` — нет.
   final AppLockController? appLock;
 
+  /// Оформление сменилось в настройках (или прочитано с диска): приложение
+  /// перекрашивает тему ([AppAppearance], ADR-027).
+  final ValueChanged<AppAppearance>? onAppearanceChanged;
+
+  /// «Меньше анимации» сменилось (или прочитано): смена темы — без
+  /// перетекания цветов (§5.6).
+  final ValueChanged<bool>? onReduceMotionChanged;
+
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -245,9 +257,14 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Растёт после каждого чтения задач: открытые поверх маршруты
   /// («Данные и резервная копия») перестраиваются по нему.
   final ValueNotifier<int> _dataRevision = ValueNotifier<int>(0);
+
+  /// Заехал ли контент раздела под шапку: только тогда под ней линия
+  /// (§4.1) — на пустой сессии и в начале ленты шапки не отделить.
+  final ValueNotifier<bool> _underHeader = ValueNotifier<bool>(false);
+  Object? _headerView;
   final ScrollController _chatScroll = ScrollController();
 
-  /// Прокрутка «Документа»: её двигает и хроника команд над ним.
+  /// Прокрутка «Документа».
   final ScrollController _docScroll = ScrollController();
 
   final TextEditingController _docTitle = TextEditingController();
@@ -653,6 +670,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       unawaited(widget.voice?.recognizer.cancel());
     }
     _dataRevision.dispose();
+    _underHeader.dispose();
     WidgetsBinding.instance.removeObserver(this);
     widget.passwords?.removeListener(_onPasswordsChanged);
     if (widget.passwords?.onSettings == _onPasswordsSettings) {
@@ -859,6 +877,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       vaultExisted: settings.passwordsVaultExisted,
     );
     _applyAppLock(settings);
+    widget.onAppearanceChanged?.call(settings.appearance);
+    widget.onReduceMotionChanged?.call(settings.reduceMotion);
     setState(() {
       _settings = settings;
       _settingsLoaded = true;
@@ -943,6 +963,12 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _applyExtensions(settings);
     widget.assistant.personas = settings.personas;
     _applyAppLock(settings);
+    if (settings.appearance != _settings.appearance) {
+      widget.onAppearanceChanged?.call(settings.appearance);
+    }
+    if (settings.reduceMotion != _settings.reduceMotion) {
+      widget.onReduceMotionChanged?.call(settings.reduceMotion);
+    }
     setState(() => _settings = settings);
     unawaited(_settingsStore.save(settings));
     _preloadVoice();
@@ -1387,7 +1413,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _explainCloudDisks() async {
     final attach = await showModalBottomSheet<bool>(
       context: context,
-      backgroundColor: AssistantColors.raised,
       builder: (BuildContext context) => SafeArea(
         child: Padding(
           key: const Key('cloud-disk-info'),
@@ -1396,18 +1421,18 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Text(
+              Text(
                 'Облачный диск',
                 style: TextStyle(
                   fontSize: 17,
-                  color: AssistantColors.textStrong,
+                  color: context.colors.textStrong,
                 ),
               ),
               const SizedBox(height: 10),
               Text(
                 '${CloudDisk.yandex.label} и ${CloudDisk.google.label} '
                 'появятся позже. Пока файлы можно прикрепить с устройства.',
-                style: const TextStyle(fontSize: 14, height: 1.4),
+                style: const TextStyle(fontSize: 15, height: 1.4),
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -2530,13 +2555,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           child: Scaffold(
             key: _scaffoldKey,
             onDrawerChanged: (bool open) => setState(() => _drawerOpen = open),
-            backgroundColor: AssistantColors.background,
+            backgroundColor: context.colors.background,
             drawerEdgeDragWidth: DrawerSwipe.edge,
             drawer: sidebar && !keepDrawer
                 ? null
                 : Drawer(
                     width: drawerWidth,
-                    backgroundColor: AssistantColors.sidebar,
+                    backgroundColor: context.colors.sidebar,
                     child: SafeArea(child: _buildDrawer(wide: false)),
                   ),
             body: SafeArea(
@@ -3028,8 +3053,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             icon: Icons.inventory_2_outlined,
             status: service.connected ? 'на связи' : 'нет связи',
             statusColor: service.connected
-                ? AssistantColors.success
-                : AssistantColors.faint,
+                ? context.colors.success
+                : context.colors.faint,
             dot: true,
             onTap: () {
               _closeDrawers();
@@ -3045,8 +3070,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           // Открытое хранилище — повод обратить внимание: тёплая точка;
           // запертое, выключенное и не созданное — приглушённая.
           dotColor: passwords.state == VaultState.unlocked
-              ? AssistantColors.warning
-              : AssistantColors.faint,
+              ? context.colors.warning
+              : context.colors.faint,
           status: switch (passwords.state) {
             VaultState.notCreated => 'не создан',
             VaultState.locked => 'заперт',
@@ -3180,8 +3205,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               semantics: '${service.slot.title}, '
                   '${service.connected ? 'на связи' : 'нет связи'}',
               dot: service.connected
-                  ? AssistantColors.success
-                  : AssistantColors.faint,
+                  ? context.colors.success
+                  : context.colors.faint,
               onTap: () {
                 _closeDrawers();
                 unawaited(_openConnection(service));
@@ -3225,9 +3250,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           tooltip: 'Показать «Сегодня»',
           onPressed: () => setState(() => _todayOpen = true),
           style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
-          icon: const Icon(
+          icon: Icon(
             Icons.view_sidebar_outlined,
-            color: AssistantColors.text,
+            color: context.colors.text,
           ),
         ),
       );
@@ -3290,7 +3315,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ? () => setState(() => _sidebarOpen = true)
             : () => _scaffoldKey.currentState?.openDrawer(),
         style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
-        icon: const Icon(Icons.menu, color: AssistantColors.text),
+        icon: Icon(Icons.menu, color: context.colors.text),
       );
     } else {
       leading = null;
@@ -3309,6 +3334,14 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           mode: AssistantViewMode.dialogue,
         ),
       );
+    } else if (const <AppSection>{
+      AppSection.tasks,
+      AppSection.projects,
+      AppSection.planning,
+    }.contains(_section)) {
+      // У этих разделов — крупный заголовок на самом экране (§4.2):
+      // второй маленький в шапке дублировал бы его.
+      title = const SizedBox.shrink(key: Key('section-title-empty'));
     } else if (!inSession) {
       title = _SectionTitle(
         title: _section == AppSection.project
@@ -3326,16 +3359,25 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final canAct = current.messageCount > 0;
     // Material, а не ColoredBox: на нём рисуются подсветка и всплески
     // нажатий у ListTile и кнопок во всех разделах.
+    // Лента и документ — на листе; списки (задачи, проекты, планирование)
+    // — на фоне сгруппированного экрана (ADR-027).
+    // Другой раздел, сессия или режим — линию под шапкой решит его
+    // прокрутка; до неё — без линии.
+    final view = (_section, _book.currentId, _mode);
+    if (view != _headerView) {
+      _headerView = view;
+      _underHeader.value = false;
+    }
     final workspace = Material(
-      color: AssistantColors.workspace,
+      color: inSession ? context.colors.workspace : context.colors.background,
       child: Column(
         children: <Widget>[
           SessionHeader(
             wide: wide || title != null,
             leading: leading,
             title: title,
-            // Задача в фокусе: меню сессии — кнопкой рядом с «Задачи ›
-            // «её»», а не пропадает до «назад».
+            // Задача в фокусе: меню сессии — кнопкой рядом с «Задача» и
+            // её названием, а не пропадает до «назад».
             sessionMenuBeside: taskInFocus != null,
             sessionTitle: ChatBook.titleOf(current),
             persona: responder,
@@ -3352,10 +3394,35 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             reduceMotion: _settings.reduceMotion,
             // «Сегодня» — колонкой справа на компьютере; свёрнута — кнопка
             // в шапке. На телефоне кнопки нет: это «Мой Tridot» → «Сводка».
-            trailing: wide && !today ? _todayShowButton() : null,
+            // Задача в фокусе на узком экране: в шапке и так «назад»,
+            // задача, её сессия и меню — «⋯» не помещается.
+            trailing: _headerTrailing(
+              wide: wide,
+              today: today,
+              more: !(narrow && taskInFocus != null),
+            ),
+            // Кубик — в шапке и только пока помощник работает или
+            // показывает итог: у ответов в ленте его нет (ADR-027).
+            cube: _cube != CubeState.idle &&
+                    inSession &&
+                    (_workingChatId == null ||
+                        _workingChatId == _book.currentId)
+                ? _cubeWidget()
+                : null,
           ),
-          const Divider(),
-          Expanded(child: _buildSection(wide: wide)),
+          ValueListenableBuilder<bool>(
+            valueListenable: _underHeader,
+            builder: (BuildContext context, bool under, _) => Divider(
+              key: const Key('header-divider'),
+              color: under ? null : Colors.transparent,
+            ),
+          ),
+          Expanded(
+            child: NotificationListener<Notification>(
+              onNotification: _trackUnderHeader,
+              child: _buildSection(wide: wide),
+            ),
+          ),
         ],
       ),
     );
@@ -3370,7 +3437,42 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Нажатие на полосу хроники: в «Документе» сначала «Диалог», потом
+  /// Контент заехал под шапку: у верхнего края что-то скрыто. Лента
+  /// перевёрнута (новое внизу) — там верх это «после».
+  bool _trackUnderHeader(Notification n) {
+    final ScrollMetrics m;
+    final int depth;
+    if (n is ScrollNotification) {
+      (m, depth) = (n.metrics, n.depth);
+    } else if (n is ScrollMetricsNotification) {
+      (m, depth) = (n.metrics, n.depth);
+    } else {
+      return false;
+    }
+    if (depth != 0 || m.axis != Axis.vertical) return false;
+    final hidden = switch (m.axisDirection) {
+      AxisDirection.up => m.extentAfter,
+      _ => m.extentBefore,
+    };
+    _underHeader.value = hidden > 0.5;
+    return false;
+  }
+
+  /// Справа в шапке: «⋯» сессии и, на компьютере со свёрнутой колонкой,
+  /// «Показать «Сегодня»».
+  Widget? _headerTrailing({
+    required bool wide,
+    required bool today,
+    bool more = true,
+  }) {
+    final menu = more ? _sessionMoreButton() : null;
+    final show = wide && !today ? _todayShowButton() : null;
+    if (menu == null) return show;
+    if (show == null) return menu;
+    return Row(mainAxisSize: MainAxisSize.min, children: <Widget>[menu, show]);
+  }
+
+  /// Выбор в «История команд»: в «Документе» сначала «Диалог», потом
   /// переход к команде.
   void _selectCommand(int index) {
     if (_mode != AssistantViewMode.dialogue) {
@@ -3441,9 +3543,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           Navigator.of(context).push<void>(
             MaterialPageRoute<void>(
               builder: (BuildContext context) => Scaffold(
-                backgroundColor: AssistantColors.workspace,
+                backgroundColor: context.colors.background,
                 appBar: AppBar(
-                  backgroundColor: AssistantColors.workspace,
+                  backgroundColor: context.colors.background,
                   title: const Text('Данные и резервная копия'),
                 ),
                 // Маршрут не перестраивается вместе с HomePage: список
@@ -3655,18 +3757,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         current.isSession &&
         current.messageCount == 0 &&
         !(_sending && _workingChatId == current.id);
-    final history = hero ? const <HistoryEntry>[] : _historyEntries;
-    final rail = history.isNotEmpty;
     final now = _now;
     final overdue =
         hero ? _active.where((Task t) => isOverdue(t, now)).length : 0;
+    // История команд — в «⋯» шапки (ADR-027): лента и документ — листы
+    // для чтения, поверх них ничего не лежит.
     final Widget content = hero
         ? _sessionHero(overdue)
         : _mode == AssistantViewMode.dialogue
-            ? _buildDialogue(topInset: rail ? HistoryRail.overlayInset : 0)
+            ? _buildDialogue()
             : _withDocToast(
                 DocumentView(
-                  topInset: rail ? HistoryRail.overlayInset : 0,
                   scrollController: _docScroll,
                   task: _selectedTask,
                   now: _now,
@@ -3686,55 +3787,41 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               );
     return Column(
       children: <Widget>[
-        Expanded(
-          // Хроника команд — поверх ленты (или документа) сверху по
-          // центру, под шапкой: шапка остаётся одной строкой, ширину ленты
-          // и поля ввода хроника не занимает. Ленте и документу сверху
-          // добавлен отступ высотой с хронику — первое сообщение ею не
-          // закрыто.
-          child: Stack(
+        Expanded(child: content),
+        // Свайп вправо по полю ввода и кнопкам меню не открывает.
+        DrawerSwipeBlocker(child: _buildBottomArea(height)),
+      ],
+    );
+  }
+
+  /// «⋯» в шапке сессии: «История команд» (ADR-027). Пусто, пока команд
+  /// нет.
+  Widget? _sessionMoreButton() {
+    if (_section != AppSection.session) return null;
+    final history = _historyEntries;
+    if (history.isEmpty) return null;
+    return PopupMenuButton<String>(
+      key: const Key('session-more'),
+      tooltip: 'Ещё',
+      icon: Icon(Icons.more_horiz, color: context.colors.accent),
+      style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+      onSelected: (String value) async {
+        if (value != 'history') return;
+        final index = await showCommandHistory(context, entries: history);
+        if (index != null && mounted) _selectCommand(index);
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+        PopupMenuItem<String>(
+          key: const Key('menu-history'),
+          value: 'history',
+          child: Row(
             children: <Widget>[
-              // Экранный диктор читает хронику перед лентой: у обоих свой
-              // узел и порядок, а не по положению на экране (на широком
-              // окне лента начинается выше хроники).
-              Positioned.fill(
-                child: Semantics(
-                  container: true,
-                  sortKey: const OrdinalSortKey(1),
-                  child: content,
-                ),
-              ),
-              if (rail)
-                Positioned(
-                  top: HistoryRail.overlayTop,
-                  left: 0,
-                  right: 0,
-                  child: Semantics(
-                    container: true,
-                    sortKey: const OrdinalSortKey(0),
-                    child: Center(
-                      child: HistoryRailPill(
-                        entries: history,
-                        activeIndex: _highlightedCommand,
-                        onSelect: _selectCommand,
-                        // Полосы по одной — только на широком окне (мышь);
-                        // на телефоне и планшете (палец) — одна кнопка
-                        // списка.
-                        compact: !wide,
-                        // Колесо и перетаскивание над хроникой двигают то,
-                        // что под ней.
-                        scrollController: _mode == AssistantViewMode.dialogue
-                            ? _chatScroll
-                            : _docScroll,
-                      ),
-                    ),
-                  ),
-                ),
+              const Expanded(child: Text('История команд')),
+              const SizedBox(width: AppSpace.s),
+              Icon(Icons.history, size: 20, color: context.colors.icon),
             ],
           ),
         ),
-        // Свайп вправо по полю ввода и кнопкам меню не открывает.
-        DrawerSwipeBlocker(child: _buildBottomArea(height)),
       ],
     );
   }
@@ -3767,9 +3854,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildChat(double viewportHeight, {double topInset = 0}) {
+  Widget _buildChat(double viewportHeight) {
     final rows = <Widget>[];
-    DateTime? day;
     final latestAnswer = _messages.lastIndexWhere((m) => !m.fromUser);
     var commandIndex = -1;
     final commandIndexOf = <int, int>{};
@@ -3786,17 +3872,47 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final card = _messages[i].card;
       if (card != null) lastWithCard[card.id] = i;
     }
+    // Ритм ленты (ADR-027): метка времени над группой — при смене дня
+    // или после паузы больше 15 минут; имя помощника — при смене автора
+    // или после паузы больше 10 минут; промежутки — по тому, что было
+    // выше.
+    ChatMessage? previous;
+    String? lastAuthor;
+    DateTime? lastReplyAt;
+    var previousHadCard = false;
     for (var i = 0; i < _messages.length; i++) {
       final message = _messages[i];
-      final messageDay = DateTime(
-        message.timestamp.year,
-        message.timestamp.month,
-        message.timestamp.day,
-      );
-      if (day != messageDay) {
-        day = messageDay;
-        rows.add(_DaySeparator(label: _dayLabel(messageDay)));
+      final at = message.timestamp;
+      final before = previous;
+      final newGroup = before == null ||
+          !_sameDay(before.timestamp, at) ||
+          at.difference(before.timestamp) > const Duration(minutes: 15);
+      if (newGroup) {
+        rows.add(
+          _GroupTime(
+            key: ValueKey<String>('group-time-${message.id}'),
+            label: _groupLabel(at),
+            first: rows.isEmpty,
+          ),
+        );
       }
+      final author = message.fromUser
+          ? null
+          : _settings.personas.cast.find(message.personaId);
+      final showAuthor = author != null &&
+          (newGroup ||
+              lastAuthor != author.id ||
+              lastReplyAt == null ||
+              at.difference(lastReplyAt) > const Duration(minutes: 10));
+      final double gap = newGroup
+          ? 0
+          : previousHadCard
+              ? AppSpace.afterCard
+              : message.fromUser
+                  ? (before.fromUser ? AppSpace.xs : AppSpace.toUser)
+                  : showAuthor && !before.fromUser
+                      ? AppSpace.toUser
+                      : AppSpace.toReply;
       // Строка с карточкой паролей — с ключом: новое сообщение снизу не
       // пересоздаёт её (показанный пароль не гаснет от «был показан»).
       final key = message.fromUser
@@ -3806,6 +3922,21 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               : null;
       final (linkLabel, linkKey) = _linkOf(message);
       final hit = message.id == _highlightedMessageId;
+      final ci = commandIndexOf[i];
+      final task = message.taskId == _book.current.taskId
+          ? null
+          : _findTask(message.taskId);
+      final checklist = _checklistCard(
+            message,
+            i,
+            lastWithChecklist,
+            viewportHeight,
+          ) ??
+          _actionCard(message, i, lastWithCard) ??
+          _secureCard(message) ??
+          _jobCard(message) ??
+          _clarifyOptions(message) ??
+          (i == latestAnswer ? _suggestionChips(message) : null);
       final row = _MessageRow(
         cast: _settings.personas.cast,
         key: key,
@@ -3814,13 +3945,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         commandSpans: _commandSpansOf(message),
         // В чате задачи плитка самой задачи под ответами не нужна: она в
         // шапке.
-        task: message.taskId == _book.current.taskId
-            ? null
-            : _findTask(message.taskId),
+        task: task,
         now: _now,
         showTime: _settings.showTimestamps,
-        highlighted: hit || commandIndexOf[i] == _highlightedCommand,
-        cube: i == latestAnswer && !_sending ? _cubeWidget() : null,
+        showAuthor: showAuthor,
+        topGap: gap,
+        reduceMotion: _settings.reduceMotion,
+        // Подсветка — у найденного поиском сообщения и у команды,
+        // выбранной в «История команд»: без выбора (оба `null`) ничего не
+        // подсвечено.
+        highlighted: hit || (ci != null && ci == _highlightedCommand),
         selectedId: _selectedTask?.id,
         onOpenTask: (Task task) =>
             _openTaskChat(task, mode: AssistantViewMode.dialogue),
@@ -3828,17 +3962,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         linkLabel: linkLabel,
         linkKey: linkKey,
         onOpenLink: linkLabel == null ? null : () => _followLink(message.link!),
-        checklist: _checklistCard(
-              message,
-              i,
-              lastWithChecklist,
-              viewportHeight,
-            ) ??
-            _actionCard(message, i, lastWithCard) ??
-            _secureCard(message) ??
-            _jobCard(message) ??
-            _clarifyOptions(message) ??
-            (i == latestAnswer ? _suggestionChips(message) : null),
+        checklist: checklist,
       );
       // Сообщение из поиска: к нему прокручивается лента
       // ([_jumpToMessage]).
@@ -3850,9 +3974,16 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               )
             : row,
       );
+      previous = message;
+      previousHadCard = checklist != null || task != null || linkLabel != null;
+      if (author != null) {
+        lastAuthor = author.id;
+        lastReplyAt = at;
+      }
     }
     final working = _working;
     if (_sending && working != null && _workingChatId == _book.currentId) {
+      final author = _settings.personas.cast.find(working.personaId);
       rows.add(
         _MessageRow(
           cast: _settings.personas.cast,
@@ -3860,7 +3991,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           message: working,
           now: _now,
           showTime: false,
-          cube: _cubeWidget(),
+          showAuthor: author != null && author.id != lastAuthor,
+          topGap: previous == null ? 0 : AppSpace.toReply,
+          thinking: true,
           onOpenTask: (_) {},
           onToggleDone: (_) {},
         ),
@@ -3868,27 +4001,32 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     return _chatColumn(
       alignment: Alignment.topCenter,
-      // Полоса прокрутки вставала между сообщениями и хроникой и читалась
-      // как лишняя линия; к сообщениям ведёт хроника, колесо и тачпад.
+      // Полосы прокрутки нет: лента — лист для чтения, к сообщениям ведут
+      // поиск, «История команд», колесо и тачпад.
       child: ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: ListView(
           key: const Key('chat-list'),
           controller: _chatScroll,
           reverse: true,
-          // Сверху — место под хронику команд поверх ленты: самое старое
-          // сообщение при прокрутке до конца остаётся под ней, а не за ней.
-          padding: EdgeInsets.fromLTRB(
+          padding: const EdgeInsets.fromLTRB(
             chatInset,
-            topInset > 0 ? topInset : 16,
+            AppSpace.xs,
             chatInset,
-            16,
+            AppSpace.m,
           ),
           children: rows.reversed.toList(),
         ),
       ),
     );
   }
+
+  static bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// «Сегодня, 14:05» над группой сообщений.
+  String _groupLabel(DateTime at) =>
+      '${_dayLabel(DateTime(at.year, at.month, at.day))}, ${_timeLabel(at)}';
 
   /// Подпись и ключ ссылки под сообщением или `(null, null)`: «Открыть
   /// сессию задачи» под ответом о новой задаче, «из сессии «…»» под копией
@@ -3940,11 +4078,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  Widget _buildDialogue({double topInset = 0}) {
+  Widget _buildDialogue() {
     // Карточке списка нужна высота видимой части чата, а не экрана.
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) =>
-          _buildChat(constraints.maxHeight, topInset: topInset),
+          _buildChat(constraints.maxHeight),
     );
   }
 
@@ -4026,8 +4164,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               key: ValueKey<String>('clarify-option-$index'),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(40, 44),
-                foregroundColor: AssistantColors.textStrong,
-                side: const BorderSide(color: AssistantColors.border),
+                foregroundColor: context.colors.textStrong,
               ),
               onPressed: _sending || _bulkBusy
                   ? null
@@ -4049,8 +4186,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (suggestions == null) return null;
     ButtonStyle style() => OutlinedButton.styleFrom(
           minimumSize: const Size(40, 44),
-          foregroundColor: AssistantColors.textStrong,
-          side: const BorderSide(color: AssistantColors.border),
+          foregroundColor: context.colors.textStrong,
         );
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -4115,7 +4251,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _openPasswordActions() async {
     final action = await showModalBottomSheet<int>(
       context: context,
-      backgroundColor: AssistantColors.raised,
       showDragHandle: true,
       builder: (BuildContext context) => SafeArea(
         child: Column(
@@ -4215,7 +4350,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
       ];
 
-  /// Команда в хронике: текст, а у сообщения только из файлов — «Фото»,
+  /// Команда в «История команд»: текст, а у сообщения только из файлов — «Фото»,
   /// «Файл: отчёт.pdf».
   static String _commandLabel(ChatMessage message) =>
       message.text.isNotEmpty || message.attachments.isEmpty
@@ -4331,7 +4466,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               const SizedBox(height: 4),
               Text(
                 '$_loadError',
-                style: metaTextStyle,
+                style: metaStyle(context),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
@@ -4358,35 +4493,36 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     } else {
       final now = _now;
       final selectedId = _selectedTask?.id;
+      // Группы задач — сгруппированными панелями (ADR-027).
       body = ListView(
-        padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+        padding: const EdgeInsets.only(bottom: 16),
         children: <Widget>[
-          for (final (group, items)
-              in groupTasks(_visibleTasks, now)) ...<Widget>[
-            SectionLabel(
-              '${group.title} · ${items.length}',
-              danger: group == TaskGroup.overdue,
+          for (final (group, items) in groupTasks(_visibleTasks, now))
+            InsetGroup(
+              header: '${group.title} · ${items.length}',
+              headerDanger: group == TaskGroup.overdue,
+              children: <Widget>[
+                for (final task in items)
+                  TaskTile(
+                    task: task,
+                    now: now,
+                    selected: task.id == selectedId,
+                    onTap: () => _openTaskChat(task),
+                    onToggleDone: () => _toggleDone(task),
+                  ),
+              ],
             ),
-            for (final task in items)
-              TaskTile(
-                task: task,
-                now: now,
-                selected: task.id == selectedId,
-                onTap: () => _openTaskChat(task),
-                onToggleDone: () => _toggleDone(task),
-              ),
-          ],
         ],
       );
     }
     return Material(
       key: const Key('tasks-panel'),
-      color: AssistantColors.panel,
+      color: context.colors.background,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
             // Wrap, а не Row: при крупном системном шрифте счётчик уходит
             // на вторую строку, а не сжимает заголовок до буквы в строке.
             child: Wrap(
@@ -4395,25 +4531,28 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               spacing: 12,
               runSpacing: 4,
               children: <Widget>[
-                const Text(
-                  'Активные',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AssistantColors.textStrong,
+                Semantics(
+                  header: true,
+                  child: WholeWordText(
+                    'Задачи',
+                    style: Theme.of(context).textTheme.displaySmall!.copyWith(
+                          color: context.colors.textStrong,
+                        ),
                   ),
                 ),
                 Text(
                   _panelSummary(),
                   key: const Key('tasks-panel-summary'),
-                  style: metaTextStyle,
+                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                        color: context.colors.muted,
+                      ),
                 ),
               ],
             ),
           ),
           if (withSearch)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: _SearchField(
                 controller: _taskSearch,
                 onChanged: (String value) =>
@@ -4458,31 +4597,38 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
 // ------------------------------------------------------------------ части
 
-final class _DaySeparator extends StatelessWidget {
-  const _DaySeparator({required this.label});
+/// Метка времени над группой сообщений: «Сегодня, 14:05» по центру,
+/// без линий (ADR-027). Появляется при смене дня или после паузы больше
+/// 15 минут.
+final class _GroupTime extends StatelessWidget {
+  const _GroupTime({super.key, required this.label, required this.first});
 
   final String label;
+
+  /// Самая верхняя метка ленты: сверху отступ меньше.
+  final bool first;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: <Widget>[
-          const Expanded(child: Divider()),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(label, style: metaTextStyle),
-          ),
-          const Expanded(child: Divider()),
-        ],
+      padding: EdgeInsets.only(
+        top: first ? AppSpace.xs : AppSpace.timeLabel,
+        bottom: AppSpace.timeLabel,
+      ),
+      child: Center(
+        child: WholeWordText(
+          label,
+          textAlign: TextAlign.center,
+          style: metaStyle(context).copyWith(color: context.colors.muted),
+        ),
       ),
     );
   }
 }
 
-/// Ссылка на другой чат под сообщением. Текст переносится: при узком
-/// экране и крупном шрифте подпись не обрезается.
+/// Ссылка на другой чат под сообщением: текстовая кнопка цветом акцента
+/// со стрелкой, без рамки (ADR-027). Текст переносится: при узком экране
+/// и крупном шрифте подпись не обрезается.
 final class _ChatLinkChip extends StatelessWidget {
   const _ChatLinkChip({
     super.key,
@@ -4499,6 +4645,7 @@ final class _ChatLinkChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = context.colors.accent;
     return Semantics(
       button: true,
       label: label,
@@ -4506,33 +4653,60 @@ final class _ChatLinkChip extends StatelessWidget {
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 32),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            border: Border.all(color: AssistantColors.borderSoft),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Wrap(
-            spacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: <Widget>[
-              Icon(
-                origin ? Icons.subdirectory_arrow_left : Icons.forum_outlined,
-                size: 14,
-                color: AssistantColors.muted,
-              ),
-              Text(
-                label,
-                style: metaTextStyle.copyWith(color: AssistantColors.text),
-              ),
-            ],
+        borderRadius: BorderRadius.circular(AppRadius.inner),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: AppSize.minTap),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (origin) ...<Widget>[
+                  Icon(Icons.arrow_back, size: 18, color: accent),
+                  const SizedBox(width: 6),
+                ],
+                Flexible(
+                  child: WholeWordText(
+                    label,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium!
+                        .copyWith(color: accent, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                if (!origin) ...<Widget>[
+                  const SizedBox(width: 6),
+                  Icon(Icons.arrow_forward, size: 18, color: accent),
+                ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// Абзацы ответа: «\n\n» — промежуток [AppSpace.paragraph] вместо пустой
+/// строки, «\n» остаётся переносом. Текст тот же — выделяется и
+/// копируется целиком.
+TextSpan _paragraphs(String text, TextStyle style) {
+  final parts = text.split('\n\n');
+  return TextSpan(
+    style: style,
+    children: <InlineSpan>[
+      TextSpan(text: parts.first),
+      for (final part in parts.skip(1)) ...<InlineSpan>[
+        const TextSpan(text: '\n'),
+        // Пустая строка высотой с промежуток абзацев.
+        const TextSpan(
+          text: '\n',
+          style: TextStyle(fontSize: AppSpace.paragraph, height: 1),
+        ),
+        TextSpan(text: part),
+      ],
+    ],
+  );
 }
 
 final class _MessageRow extends StatelessWidget {
@@ -4544,8 +4718,11 @@ final class _MessageRow extends StatelessWidget {
     required this.showTime,
     required this.onOpenTask,
     required this.onToggleDone,
+    this.showAuthor = true,
+    this.topGap = 0,
+    this.thinking = false,
+    this.reduceMotion = false,
     this.task,
-    this.cube,
     this.highlighted = false,
     this.selectedId,
     this.checklist,
@@ -4558,8 +4735,8 @@ final class _MessageRow extends StatelessWidget {
 
   final ChatMessage message;
 
-  /// Распознанные части команды пользователя: моноширинным с мягким
-  /// цветом (ADR-021).
+  /// Распознанные части команды пользователя (ADR-021); в ленте они —
+  /// обычный текст (ADR-027).
   final List<CommandSpan> commandSpans;
 
   /// Хранилище копий вложений: превью и «файл не найден» (ADR-019).
@@ -4579,11 +4756,76 @@ final class _MessageRow extends StatelessWidget {
   final Task? task;
   final DateTime now;
   final bool showTime;
-  final Widget? cube;
+
+  /// Имя помощника над ответом: только при смене автора или после паузы.
+  final bool showAuthor;
+
+  /// Промежуток над сообщением — ритм ленты ([AppSpace]).
+  final double topGap;
+
+  /// Ответ ещё готовится: строка приглушённым текстом.
+  final bool thinking;
+  final bool reduceMotion;
   final bool highlighted;
   final String? selectedId;
   final ValueChanged<Task> onOpenTask;
   final ValueChanged<Task> onToggleDone;
+
+  /// Время сообщения — в меню выделения текста («Отправлено в 14:05»).
+  Widget _menu(BuildContext context, EditableTextState state) {
+    final time = _HomePageState._timeLabel(message.timestamp);
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: state.contextMenuAnchors,
+      buttonItems: <ContextMenuButtonItem>[
+        ...state.contextMenuButtonItems,
+        ContextMenuButtonItem(
+          label: message.fromUser ? 'Отправлено в $time' : 'Ответ в $time',
+          onPressed: () => state.hideToolbar(),
+        ),
+      ],
+    );
+  }
+
+  Widget _text(BuildContext context) {
+    final fromUser = message.fromUser;
+    final body = Theme.of(context).textTheme.bodyLarge!;
+    if (thinking) {
+      return Text(
+        message.text,
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium!
+            .copyWith(color: context.colors.muted),
+      );
+    }
+    if (fromUser && commandSpans.isNotEmpty) {
+      return SelectableText.rich(
+        highlightedCommand(
+          message.text,
+          CommandSpans.normalize(commandSpans, message.text.length),
+          body.copyWith(color: context.colors.textStrong),
+          colors: context.colors,
+          // В ленте команда — обычный текст (ADR-027).
+          mode: CommandSpanMode.plain,
+        ),
+        contextMenuBuilder: _menu,
+      );
+    }
+    final style = body.copyWith(
+      color: fromUser ? context.colors.textStrong : context.colors.text,
+    );
+    if (!fromUser && message.text.contains('\n\n')) {
+      return SelectableText.rich(
+        _paragraphs(message.text, style),
+        contextMenuBuilder: _menu,
+      );
+    }
+    return SelectableText(
+      message.text,
+      style: style,
+      contextMenuBuilder: _menu,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4595,51 +4837,86 @@ final class _MessageRow extends StatelessWidget {
       _ => null,
     };
     final labelColor = status == AssistantStatus.failed
-        ? AssistantColors.danger
-        : AssistantColors.warning;
+        ? context.colors.danger
+        : context.colors.warning;
     final current = task;
-    final cube = this.cube;
     final author = fromUser ? null : cast.find(message.personaId);
+    final hasText = message.text.isNotEmpty || message.attachments.isEmpty;
+    final Widget? textBlock;
+    if (!hasText) {
+      textBlock = null;
+    } else if (fromUser) {
+      // Пузырь: заливка без рамки и без «хвоста»; найденный поиском или
+      // выбранный в истории — рамкой акцента.
+      textBlock = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: context.colors.bubble,
+          border: highlighted
+              ? Border.all(color: context.colors.accent, width: 1.5)
+              : null,
+          borderRadius: BorderRadius.circular(AppRadius.bubble),
+        ),
+        child: _text(context),
+      );
+    } else if (highlighted) {
+      // Найденный ответ — мягкой заливкой акцента, которая гаснет.
+      textBlock = TweenAnimationBuilder<double>(
+        key: ValueKey<String>('reply-hit-${message.id}'),
+        tween: Tween<double>(begin: 1, end: reduceMotion ? 1 : 0),
+        duration:
+            reduceMotion ? Duration.zero : const Duration(milliseconds: 1200),
+        curve: const Interval(.5, 1, curve: Curves.easeOut),
+        builder: (BuildContext context, double t, Widget? child) =>
+            DecoratedBox(
+          decoration: BoxDecoration(
+            color: context.colors.accent.withValues(alpha: .12 * t),
+            borderRadius: BorderRadius.circular(AppRadius.inner),
+          ),
+          child: child,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: _text(context),
+        ),
+      );
+    } else {
+      // Ответ — обычные абзацы: без фона, рамки, полосы и отступа.
+      textBlock = _text(context);
+    }
     final content = Column(
       crossAxisAlignment:
           fromUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        if (author != null)
+        if (author != null && showAuthor)
           Padding(
-            padding: const EdgeInsets.only(bottom: 4),
+            padding: const EdgeInsets.only(bottom: AppSpace.nameToText),
             child: Row(
-              key: ValueKey<String>('message-author-${author.id}'),
+              key: ValueKey<String>('author-name-${author.id}'),
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                PersonaMark(persona: author, size: 16),
+                PersonaDot(persona: author),
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
                     author.russianName,
                     overflow: TextOverflow.ellipsis,
-                    style: metaTextStyle.copyWith(
-                      color: Color(author.accentColor),
+                    style: metaStyle(context).copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: PersonaColors.of(author, context).$1,
                     ),
                   ),
                 ),
-                // Кубик — состояние именно этого ответа, поэтому стоит в
-                // строке автора, а не отдельным значком слева от текста.
-                if (cube != null) ...<Widget>[
-                  const SizedBox(width: 8),
-                  cube,
-                ],
               ],
             ),
-          )
-        else if (cube != null)
-          Padding(padding: const EdgeInsets.only(bottom: 4), child: cube),
+          ),
         if (label != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 2),
             child: Text(
               label,
-              style: metaTextStyle.copyWith(color: labelColor),
+              style: metaStyle(context).copyWith(color: labelColor),
             ),
           ),
         if (attachments != null && message.attachments.isNotEmpty)
@@ -4653,89 +4930,37 @@ final class _MessageRow extends StatelessWidget {
               alignEnd: fromUser,
             ),
           ),
-        if (message.text.isNotEmpty || message.attachments.isEmpty)
-          Container(
-            padding: fromUser
-                ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
-                : highlighted
-                    ? const EdgeInsets.only(left: 10)
-                    : EdgeInsets.zero,
-            decoration: BoxDecoration(
-              color: fromUser ? AssistantColors.bubble : Colors.transparent,
-              // Ответ, найденный поиском, — чертой слева: у него нет пузыря.
-              border: fromUser
-                  ? Border.all(
-                      color: highlighted
-                          ? AssistantColors.textStrong
-                          : AssistantColors.border,
-                      width: highlighted ? 1 : .5,
-                    )
-                  : highlighted
-                      ? const Border(
-                          left: BorderSide(
-                            color: AssistantColors.textStrong,
-                            width: 2,
-                          ),
-                        )
-                      : null,
-              borderRadius: fromUser
-                  ? const BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      topRight: Radius.circular(16),
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(4),
-                    )
-                  : null,
-            ),
-            child: fromUser && commandSpans.isNotEmpty
-                ? SelectableText.rich(
-                    highlightedCommand(
-                      message.text,
-                      CommandSpans.normalize(
-                        commandSpans,
-                        message.text.length,
-                      ),
-                      const TextStyle(
-                        fontSize: 14,
-                        height: 1.5,
-                        color: AssistantColors.textStrong,
-                      ),
-                    ),
-                  )
-                : SelectableText(
-                    message.text,
-                    style: TextStyle(
-                      fontSize: 14,
-                      height: 1.5,
-                      color: fromUser
-                          ? AssistantColors.textStrong
-                          : AssistantColors.text,
-                    ),
-                  ),
+        if (textBlock != null) textBlock,
+        if (checklist != null)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpace.textToCard),
+            child: checklist!,
           ),
-        if (checklist != null) checklist!,
         if (current != null)
           Container(
-            margin: const EdgeInsets.only(top: 8),
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            key: ValueKey<String>('message-task-${current.id}'),
+            margin: const EdgeInsets.only(top: AppSpace.textToCard),
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color: AssistantColors.raised,
-              border: Border.all(color: AssistantColors.borderSoft),
-              borderRadius: BorderRadius.circular(12),
+              color: context.colors.raised,
+              borderRadius: BorderRadius.circular(AppRadius.card),
             ),
-            child: TaskTile(
-              task: current,
-              now: now,
-              dense: true,
-              highlightSelected: false,
-              selected: current.id == selectedId,
-              onTap: () => onOpenTask(current),
-              onToggleDone: () => onToggleDone(current),
+            child: Material(
+              type: MaterialType.transparency,
+              child: TaskTile(
+                task: current,
+                now: now,
+                dense: true,
+                highlightSelected: false,
+                selected: current.id == selectedId,
+                onTap: () => onOpenTask(current),
+                onToggleDone: () => onToggleDone(current),
+              ),
             ),
           ),
         if (linkLabel != null && onOpenLink != null)
           Padding(
-            padding: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.only(top: 2),
             child: _ChatLinkChip(
               key: linkKey,
               label: linkLabel!,
@@ -4745,24 +4970,57 @@ final class _MessageRow extends StatelessWidget {
           ),
         if (showTime)
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.only(top: AppSpace.xxs),
             child: Text(
               _HomePageState._timeLabel(message.timestamp),
-              style: metaTextStyle,
+              style:
+                  metaNumStyle(context).copyWith(color: context.colors.muted),
             ),
           ),
       ],
     );
-    // Текст ответа начинается у левого края колонки — там же, где
-    // быстрые действия и поле ввода; пузырь команды кончается у правого.
+    // Ответ — колонкой чтения не шире 640 от левого края; пузырь — не
+    // шире 78 % колонки и 460, у правого края.
     return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Align(
-        alignment: fromUser ? Alignment.centerRight : Alignment.centerLeft,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: content,
-        ),
+      padding: EdgeInsets.only(top: topGap),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final max = fromUser
+              ? math.min(
+                  constraints.maxWidth * AppSize.maxBubbleFactor,
+                  AppSize.maxBubble,
+                )
+              : AppSize.maxReading;
+          final Widget body = fromUser
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: max),
+                      child: content,
+                    ),
+                  ],
+                )
+              : content;
+          final row = Align(
+            alignment: fromUser ? Alignment.centerRight : Alignment.centerLeft,
+            child: fromUser
+                ? body
+                : ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: max),
+                    child: body,
+                  ),
+          );
+          // У ответа — ключ автора на всей строке, даже когда имя не
+          // повторяется: по нему видно, чей это ответ.
+          return author == null
+              ? row
+              : KeyedSubtree(
+                  key: ValueKey<String>('message-author-${author.id}'),
+                  child: row,
+                );
+        },
       ),
     );
   }
@@ -4775,24 +5033,30 @@ final class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = TextStyle(
+      fontSize: 17,
+      fontWeight: FontWeight.w600,
+      color: context.colors.textStrong,
+    );
     return Semantics(
       header: true,
-      child: Text(
-        title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: AssistantColors.textStrong,
-        ),
-      ),
+      // Одно слово («Планирование») уменьшается целиком, название проекта
+      // из нескольких слов режется многоточием.
+      child: title.trim().contains(' ')
+          ? Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style,
+            )
+          : fitSingleWord(title, style: style),
     );
   }
 }
 
-/// Задача, с которой работает помощник («её»), — в верхней панели справа
-/// от заголовка: «Задачи › Подготовить презентацию · завтра в 10:00».
+/// Задача, с которой работает помощник, — в шапке: «Задача» мелко и под
+/// ней название (ADR-027); на широком окне — со сроком и кнопками чата и
+/// документа задачи.
 final class _TaskCrumb extends StatelessWidget {
   const _TaskCrumb({
     required this.task,
@@ -4810,8 +5074,8 @@ final class _TaskCrumb extends StatelessWidget {
   /// Открыть чат этой задачи.
   final VoidCallback onOpenChat;
 
-  /// Меньше — строка «Задачи › «её»» и название в две строки, как на
-  /// узком экране: рядом с поиском и кнопкой панели полной строке тесно.
+  /// Меньше — без срока и кнопки документа, как на узком экране: рядом с
+  /// поиском и кнопкой панели полной строке тесно.
   static const double _fullWidth = 480;
 
   @override
@@ -4822,123 +5086,75 @@ final class _TaskCrumb extends StatelessWidget {
 
   Widget _build(BuildContext context, bool narrow) {
     final due = task.dueAt;
-    const titleStyle = TextStyle(
-      fontSize: 16,
-      fontWeight: FontWeight.w600,
-      color: AssistantColors.textStrong,
-    );
+    final titleStyle = Theme.of(context)
+        .textTheme
+        .titleMedium!
+        .copyWith(color: context.colors.textStrong, height: 1.25);
     final chatButton = IconButton(
       key: const Key('open-task-chat'),
       tooltip: 'Открыть сессию задачи',
       onPressed: onOpenChat,
-      iconSize: 16,
+      iconSize: 22,
+      color: context.colors.accent,
       icon: const Icon(Icons.forum_outlined),
     );
-    if (narrow) {
-      // Две строки помещаются в панель высотой 56, только пока шрифт не
-      // крупный; иначе остаётся название задачи, подпись — в подсказке.
-      final Widget crumb;
-      if (MediaQuery.textScalerOf(context).scale(1) > 1.3) {
-        crumb = Tooltip(
-          message: 'Задачи › «её»',
-          child: Text(
-            task.title,
-            key: const Key('selected-task-strip'),
+    final caption = !narrow && due != null
+        ? 'Задача · ${formatDue(due, task.duePrecision, now)}'
+        : 'Задача';
+    // Две строки помещаются в шапку высотой 56, только пока шрифт не
+    // крупный; иначе остаётся название задачи, подпись — в подсказке.
+    final Widget crumb;
+    if (MediaQuery.textScalerOf(context).scale(1) > 1.3) {
+      crumb = Tooltip(
+        message: caption,
+        // Первое слово — целиком (на 320 px со шрифтом 200 % было
+        // «Купит…»): не влезает — уменьшается, остальное — «…».
+        child: WholeWordText(
+          task.title,
+          key: const Key('selected-task-strip'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          firstWordOnly: true,
+          style: titleStyle,
+        ),
+      );
+    } else {
+      crumb = Column(
+        key: const Key('selected-task-strip'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            caption,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            style: metaStyle(context).copyWith(
+              height: 1.2,
+              color: context.colors.muted,
+            ),
+          ),
+          WholeWordText(
+            task.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            firstWordOnly: true,
             style: titleStyle,
           ),
-        );
-      } else {
-        crumb = Column(
-          key: const Key('selected-task-strip'),
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          // Плотные строки: две строки и в панели над узкой колонкой
-          // помещаются в её высоту при любом шрифте.
-          children: <Widget>[
-            Text(
-              'Задачи › «её»',
-              maxLines: 1,
-              style: metaTextStyle.copyWith(height: 1.2),
-            ),
-            Text(
-              task.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: titleStyle.copyWith(height: 1.25),
-            ),
-          ],
-        );
-      }
-      return Row(children: <Widget>[Expanded(child: crumb), chatButton]);
+        ],
+      );
     }
     return Row(
       children: <Widget>[
-        const Text('Задачи', style: titleStyle),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 6),
-          child: Icon(
-            Icons.chevron_right,
-            size: 16,
-            color: AssistantColors.muted,
+        Expanded(child: crumb),
+        chatButton,
+        if (!narrow)
+          IconButton(
+            tooltip: 'Открыть документ задачи',
+            onPressed: onOpenDocument,
+            iconSize: 22,
+            color: context.colors.accent,
+            icon: const Icon(Icons.description_outlined),
           ),
-        ),
-        Flexible(
-          child: Container(
-            key: const Key('selected-task-strip'),
-            height: 36,
-            padding: const EdgeInsets.only(left: 10, right: 2),
-            decoration: BoxDecoration(
-              color: AssistantColors.panel,
-              border: Border.all(color: AssistantColors.borderSoft),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const Icon(
-                  Icons.push_pin_outlined,
-                  size: 14,
-                  color: AssistantColors.textStrong,
-                ),
-                const SizedBox(width: 8),
-                const Text('«её»', style: metaTextStyle),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    task.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AssistantColors.textStrong,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                if (due != null) ...<Widget>[
-                  const SizedBox(width: 8),
-                  // Срок тоже сжимается: рядом с поиском места мало.
-                  Flexible(
-                    child: Text(
-                      formatDue(due, task.duePrecision, now),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: metaTextStyle,
-                    ),
-                  ),
-                ],
-                chatButton,
-                IconButton(
-                  tooltip: 'Открыть документ задачи',
-                  onPressed: onOpenDocument,
-                  iconSize: 16,
-                  icon: const Icon(Icons.description_outlined),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -4966,7 +5182,8 @@ final class _DocSnapshot {
   int get hashCode => Object.hash(id, title, project, body);
 }
 
-/// Поиск по задачам на экране «Задачи».
+/// Поиск по задачам на экране «Задачи»: поле поиска сгруппированного
+/// экрана (ADR-027).
 final class _SearchField extends StatelessWidget {
   const _SearchField({required this.controller, required this.onChanged});
 
@@ -4975,62 +5192,15 @@ final class _SearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 480, minWidth: 160),
-      child: SizedBox(
-        height: 44,
-        child: TextField(
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, minWidth: 160),
+        child: SearchField(
           key: const Key('task-search'),
           controller: controller,
           onChanged: onChanged,
-          style: const TextStyle(
-            fontSize: 14,
-            color: AssistantColors.textStrong,
-          ),
-          decoration: InputDecoration(
-            isDense: true,
-            // Подсказка в одну строку целиком: не помещается —
-            // уменьшается, а не режется «Поиск по зада…» (ADR-021).
-            hint: fitSingleWord(
-              'Поиск по задачам…',
-              style: const TextStyle(
-                fontSize: 14,
-                color: AssistantColors.muted,
-              ),
-            ),
-            prefixIcon: const Icon(
-              Icons.search,
-              size: 16,
-              color: AssistantColors.muted,
-            ),
-            prefixIconConstraints: const BoxConstraints(minWidth: 36),
-            suffixIcon: ValueListenableBuilder<TextEditingValue>(
-              valueListenable: controller,
-              builder: (BuildContext context, TextEditingValue value, _) =>
-                  value.text.isEmpty
-                      ? const SizedBox.shrink()
-                      : IconButton(
-                          tooltip: 'Очистить поиск',
-                          iconSize: 16,
-                          onPressed: () {
-                            controller.clear();
-                            onChanged('');
-                          },
-                          icon: const Icon(Icons.close),
-                        ),
-            ),
-            filled: true,
-            fillColor: AssistantColors.panel,
-            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AssistantColors.border),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AssistantColors.muted),
-            ),
-          ),
+          hint: 'Поиск по задачам',
         ),
       ),
     );
@@ -5057,11 +5227,11 @@ final class _DocToast extends StatelessWidget {
       liveRegion: true,
       container: true,
       child: Material(
-        color: AssistantColors.raised,
-        elevation: 4,
+        color: context.colors.raised,
+        elevation: 0,
+        shadowColor: context.colors.shadow,
         shape: RoundedRectangleBorder(
-          side: const BorderSide(color: AssistantColors.border),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.group),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
@@ -5074,10 +5244,10 @@ final class _DocToast extends StatelessWidget {
                     text,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
+                    style: TextStyle(
+                      fontSize: 15,
                       height: 1.4,
-                      color: AssistantColors.textStrong,
+                      color: context.colors.textStrong,
                     ),
                   ),
                 ),

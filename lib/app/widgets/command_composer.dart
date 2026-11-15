@@ -6,9 +6,11 @@ import '../../core/chats/attachments.dart';
 import '../../core/cloud/cloud_disk.dart';
 import '../../core/commands/command_catalog.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
 import '../attachments/attachment_picker.dart';
 import '../attachments/attachment_views.dart';
 import 'command_finder_sheet.dart';
+import 'whole_word_text.dart';
 
 enum AssistantViewMode { dialogue, document }
 
@@ -227,7 +229,7 @@ final class _CommandComposerState extends State<CommandComposer> {
     final choice = await showModalBottomSheet<Object>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AssistantColors.raised,
+      showDragHandle: true,
       constraints: const BoxConstraints(maxWidth: 560),
       builder: (BuildContext context) => _PlusSheet(
         cloudDisks: widget.cloudDisks,
@@ -280,19 +282,166 @@ final class _CommandComposerState extends State<CommandComposer> {
         final notice = widget.voiceNotice?.trim() ?? '';
         final showPartial =
             voiceMode == VoiceButtonMode.listening && partial.isNotEmpty;
+        final hintStyle = TextStyle(
+          fontSize: 17,
+          color: context.colors.faint,
+        );
         final hint = switch (voiceMode) {
           VoiceButtonMode.listening => 'Говорите…',
           VoiceButtonMode.loading => 'Готовлю распознавание…',
-          _ => 'Спросить, найти или поручить…',
+          _ => 'Сообщение',
         };
+        final plus = Tooltip(
+          message: 'Файлы, диски и шаблоны команд',
+          child: InkResponse(
+            key: const Key('templates-button'),
+            onTap: _openPlus,
+            radius: 24,
+            child: const _RoundIcon(icon: Icons.add),
+          ),
+        );
+        // Пока слушает или готовится, на месте «+» — крестик: прервать без
+        // итога.
+        final Widget left = voiceActive
+            ? Tooltip(
+                message: 'Отменить без текста',
+                // Подсказка — только наведением мыши: долгое касание у
+                // Tooltip отняло бы нажатие.
+                triggerMode: TooltipTriggerMode.manual,
+                child: Semantics(
+                  button: true,
+                  label: 'Отменить голосовой ввод',
+                  onTap: widget.onVoiceCancel,
+                  excludeSemantics: true,
+                  child: InkResponse(
+                    key: const Key('voice-abort'),
+                    onTap: widget.onVoiceCancel,
+                    onLongPress: widget.onVoiceCancel,
+                    radius: 24,
+                    child: const _RoundIcon(icon: Icons.close),
+                  ),
+                ),
+              )
+            : plus;
+        // Пустое поле — микрофон (если голос есть), с текстом — круг
+        // акцента со стрелкой.
+        final send = voice
+            ? _VoiceButton(mode: voiceMode, onTap: widget.onVoiceTap)
+            : IconButton(
+                key: const Key('assistant-send'),
+                // Пустое поле отправка и так пропускает; кнопка лишь тише,
+                // а не выключена: набранный только что текст уходит, даже
+                // если кадр ещё не перерисован.
+                onPressed: widget.sending ? null : widget.onSend,
+                tooltip: 'Отправить',
+                style: IconButton.styleFrom(
+                  fixedSize: const Size(44, 44),
+                  backgroundColor:
+                      hasText ? context.colors.accent : context.colors.raised,
+                  foregroundColor:
+                      hasText ? context.colors.onAccent : context.colors.faint,
+                  disabledBackgroundColor: context.colors.raised,
+                  disabledForegroundColor: context.colors.faint,
+                ),
+                icon: widget.sending
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: context.colors.muted,
+                        ),
+                      )
+                    : const Icon(Icons.arrow_upward, size: 22),
+              );
+        final stacked = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+        final Widget capsule = Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          decoration: BoxDecoration(
+            color: context.colors.raised,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          alignment: Alignment.centerLeft,
+          child: // Обёртка есть всегда, меняется только набор жестов: если
+              // оборачивать поле по условию, оно пересоздаётся на первой
+              // букве и теряет фокус и клавиатуру.
+              RawGestureDetector(
+            key: const Key('assistant-input-gestures'),
+            behavior: HitTestBehavior.deferToChild,
+            gestures: longPressVoice
+                ? <Type, GestureRecognizerFactory>{
+                    LongPressGestureRecognizer:
+                        GestureRecognizerFactoryWithHandlers<
+                            LongPressGestureRecognizer>(
+                      () => LongPressGestureRecognizer(
+                        duration: voiceLongPressDuration,
+                        // Мышью долгое нажатие — обычное выделение.
+                        supportedDevices: const <PointerDeviceKind>{
+                          PointerDeviceKind.touch,
+                          PointerDeviceKind.stylus,
+                        },
+                        debugOwner: this,
+                      ),
+                      (LongPressGestureRecognizer recognizer) {
+                        recognizer.onLongPress = () {
+                          Feedback.forLongPress(context);
+                          widget.onVoiceLongPress?.call();
+                        };
+                      },
+                    ),
+                  }
+                : const <Type, GestureRecognizerFactory>{},
+            // Тоже всегда на месте (меняется только подсказка): жест
+            // для экранного диктора.
+            child: Semantics(
+              key: const Key('assistant-input-semantics'),
+              hint: longPressVoice
+                  ? 'Долгое нажатие на пустое поле — голосовой ввод'
+                  : null,
+              child: TextField(
+                key: const Key('assistant-input'),
+                controller: widget.controller,
+                focusNode: widget.focusNode,
+                // Капсула в одну строку растёт до шести (ADR-027).
+                minLines: 1,
+                maxLines: 6,
+                textInputAction: TextInputAction.send,
+                textCapitalization: TextCapitalization.sentences,
+                onSubmitted: (_) {
+                  if (!widget.sending) widget.onSend();
+                },
+                style: TextStyle(
+                  fontSize: 17,
+                  color: context.colors.textStrong,
+                ),
+                decoration: InputDecoration(
+                  // Подсказка не рвёт слово: одно слово на узкой
+                  // капсуле с шрифтом 200 % уменьшается целиком,
+                  // фраза переносится по словам (до трёх строк).
+                  hint: hint.contains(' ')
+                      ? WholeWordText(
+                          hint,
+                          maxLines: 3,
+                          style: hintStyle,
+                        )
+                      : fitSingleWord(hint, style: hintStyle),
+                  // Ни рамки, ни рамки фокуса: капсула — заливкой.
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  errorBorder: InputBorder.none,
+                  focusedErrorBorder: InputBorder.none,
+                  filled: false,
+                  contentPadding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
+                  isDense: true,
+                ),
+              ),
+            ),
+          ),
+        );
         return Container(
           key: const Key('assistant-composer'),
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AssistantColors.raised,
-            border: Border.all(color: AssistantColors.border),
-            borderRadius: BorderRadius.circular(18),
-          ),
+          padding: const EdgeInsets.only(top: 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
@@ -333,10 +482,10 @@ final class _CommandComposerState extends State<CommandComposer> {
                       key: const Key('voice-partial'),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AssistantColors.muted,
+                      style: TextStyle(
+                        color: context.colors.muted,
                         fontStyle: FontStyle.italic,
-                        fontSize: 15,
+                        fontSize: 17,
                       ),
                     ),
                   ),
@@ -353,173 +502,65 @@ final class _CommandComposerState extends State<CommandComposer> {
                         key: const Key('voice-notice'),
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AssistantColors.text,
-                          fontSize: 14,
+                        style: TextStyle(
+                          color: context.colors.text,
+                          fontSize: 15,
                         ),
                       ),
                     ),
                   ),
                 ),
-              // Обёртка есть всегда, меняется только набор жестов: если
-              // оборачивать поле по условию, оно пересоздаётся на первой
-              // букве и теряет фокус и клавиатуру.
-              RawGestureDetector(
-                key: const Key('assistant-input-gestures'),
-                behavior: HitTestBehavior.deferToChild,
-                gestures: longPressVoice
-                    ? <Type, GestureRecognizerFactory>{
-                        LongPressGestureRecognizer:
-                            GestureRecognizerFactoryWithHandlers<
-                                LongPressGestureRecognizer>(
-                          () => LongPressGestureRecognizer(
-                            duration: voiceLongPressDuration,
-                            // Мышью долгое нажатие — обычное выделение.
-                            supportedDevices: const <PointerDeviceKind>{
-                              PointerDeviceKind.touch,
-                              PointerDeviceKind.stylus,
-                            },
-                            debugOwner: this,
-                          ),
-                          (LongPressGestureRecognizer recognizer) {
-                            recognizer.onLongPress = () {
-                              Feedback.forLongPress(context);
-                              widget.onVoiceLongPress?.call();
-                            };
-                          },
-                        ),
-                      }
-                    : const <Type, GestureRecognizerFactory>{},
-                // Тоже всегда на месте (меняется только подсказка): жест
-                // для экранного диктора.
-                child: Semantics(
-                  key: const Key('assistant-input-semantics'),
-                  hint: longPressVoice
-                      ? 'Долгое нажатие на пустое поле — голосовой ввод'
-                      : null,
-                  child: TextField(
-                    key: const Key('assistant-input'),
-                    controller: widget.controller,
-                    focusNode: widget.focusNode,
-                    // Две строки, как в макете «Д»: высота поля не прыгает,
-                    // когда текст переносится на вторую строку.
-                    minLines: 2,
-                    maxLines: 6,
-                    textInputAction: TextInputAction.send,
-                    textCapitalization: TextCapitalization.sentences,
-                    onSubmitted: (_) {
-                      if (!widget.sending) widget.onSend();
-                    },
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: AssistantColors.textStrong,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: hint,
-                      // Подсказка не режется многоточием: обычно она в двух
-                      // строках поля, на 320 px с шрифтом 200 % — в трёх.
-                      hintMaxLines: 3,
-                      hintStyle: const TextStyle(color: AssistantColors.muted),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
-                      isDense: true,
+              // Диалог или документ — тихим переключателем над полем.
+              // Крупный шрифт (> 130 %): капсула — во всю ширину отдельной
+              // строкой, под ней «+», переключатель и отправка. Иначе в
+              // узкой капсуле между двумя кругами слова рвутся посреди
+              // («позвони|ть маме»).
+              if (!stacked) ...<Widget>[
+                LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints c) => Align(
+                    alignment: Alignment.centerRight,
+                    child: _ModeSwitch(
+                      mode: widget.mode,
+                      onChanged: widget.onModeChanged,
+                      // Подписи — если помещаются целиком рядом с местом
+                      // под подсказки.
+                      labels: c.maxWidth >=
+                          120 +
+                              2 * (24 + 17 + 6) +
+                              _ModeSwitch.labelsWidth(context),
                     ),
                   ),
                 ),
-              ),
-              LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints constraints) {
-                  final plus = Tooltip(
-                    message: 'Файлы, диски и шаблоны команд',
-                    child: InkResponse(
-                      key: const Key('templates-button'),
-                      onTap: _openPlus,
-                      radius: 24,
-                      child: const _RoundIcon(icon: Icons.add),
+                const SizedBox(height: 8),
+                // Поле — капсулой (ADR-027): слева «+», справа отправка
+                // или микрофон, без рамок.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    left,
+                    const SizedBox(width: 8),
+                    Expanded(child: capsule),
+                    const SizedBox(width: 8),
+                    send,
+                  ],
+                ),
+              ] else ...<Widget>[
+                capsule,
+                const SizedBox(height: 8),
+                Row(
+                  children: <Widget>[
+                    left,
+                    const Spacer(),
+                    _ModeSwitch(
+                      mode: widget.mode,
+                      onChanged: widget.onModeChanged,
+                      labels: false,
                     ),
-                  );
-                  // Пока слушает или готовится, на месте «+» — крестик:
-                  // прервать без итога.
-                  final Widget left = voiceActive
-                      ? Tooltip(
-                          message: 'Отменить без текста',
-                          // Подсказка — только наведением мыши: долгое
-                          // касание у Tooltip отняло бы нажатие.
-                          triggerMode: TooltipTriggerMode.manual,
-                          child: Semantics(
-                            button: true,
-                            label: 'Отменить голосовой ввод',
-                            onTap: widget.onVoiceCancel,
-                            excludeSemantics: true,
-                            child: InkResponse(
-                              key: const Key('voice-abort'),
-                              onTap: widget.onVoiceCancel,
-                              onLongPress: widget.onVoiceCancel,
-                              radius: 24,
-                              child: const _RoundIcon(icon: Icons.close),
-                            ),
-                          ),
-                        )
-                      : plus;
-                  final send = voice
-                      ? _VoiceButton(mode: voiceMode, onTap: widget.onVoiceTap)
-                      : IconButton(
-                          key: const Key('assistant-send'),
-                          onPressed: widget.sending ? null : widget.onSend,
-                          tooltip: 'Отправить',
-                          style: IconButton.styleFrom(
-                            fixedSize: const Size(44, 44),
-                            backgroundColor: AssistantColors.primary,
-                            foregroundColor: AssistantColors.onPrimary,
-                            disabledBackgroundColor: AssistantColors.raised,
-                            disabledForegroundColor: AssistantColors.muted,
-                          ),
-                          icon: widget.sending
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.arrow_upward, size: 20),
-                        );
-                  // Две строки: сверху ввод, снизу «+», переключатель режимов
-                  // ровно посередине и микрофон или отправка. На широком поле
-                  // у иконок режимов есть подписи, на узком — только иконки.
-                  // Подписи — если помещаются целиком: «+» и микрофон по
-                  // 44, капсула (отступ 2 и рамка 1 с каждой стороны), у
-                  // каждой половины поля 24, иконка 17, зазор 6 и подпись по
-                  // её реальной ширине. На телефоне 390 — с подписями
-                  // (D-Phone), на 320 и при крупном шрифте — только иконки.
-                  final labels = constraints.maxWidth >=
-                      2 * 44 +
-                          6 +
-                          2 * (24 + 17 + 6) +
-                          _ModeSwitch.labelsWidth(context);
-                  return Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: left,
-                        ),
-                      ),
-                      _ModeSwitch(
-                        mode: widget.mode,
-                        onChanged: widget.onModeChanged,
-                        labels: labels,
-                      ),
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: send,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                    const SizedBox(width: 8),
+                    send,
+                  ],
+                ),
+              ],
             ],
           ),
         );
@@ -551,18 +592,22 @@ final class _VoiceButton extends StatelessWidget {
       _ => 'Голосовой ввод: нажмите и говорите',
     };
     final Widget icon = loading
-        ? const SizedBox(
+        ? SizedBox(
             width: 16,
             height: 16,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: AssistantColors.onPrimary,
+              color: context.colors.onAccent,
             ),
           )
         : Icon(
             listening ? Icons.stop_rounded : Icons.mic_none,
-            size: listening ? 22 : 20,
-            color: off ? AssistantColors.textStrong : AssistantColors.onPrimary,
+            size: listening ? 22 : 22,
+            color: off
+                ? context.colors.icon
+                : listening
+                    ? context.colors.onPrimary
+                    : context.colors.onAccent,
           );
     final circle = AnimatedContainer(
       duration: const Duration(milliseconds: 120),
@@ -572,11 +617,10 @@ final class _VoiceButton extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: listening
-            ? AssistantColors.danger
+            ? context.colors.danger
             : off
-                ? Colors.transparent
-                : AssistantColors.primary,
-        border: off ? Border.all(color: AssistantColors.border) : null,
+                ? context.colors.raised
+                : context.colors.accent,
       ),
       child: icon,
     );
@@ -626,9 +670,9 @@ final class _RoundIcon extends StatelessWidget {
       height: 44,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: AssistantColors.border),
+        color: context.colors.raised,
       ),
-      child: Icon(icon, size: 20, color: AssistantColors.textStrong),
+      child: Icon(icon, size: 24, color: context.colors.icon),
     );
   }
 }
@@ -654,7 +698,7 @@ final class _ModeSwitch extends StatelessWidget {
         text: TextSpan(
           text: label,
           style: DefaultTextStyle.of(context).style.merge(
-                const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
               ),
         ),
         textDirection: TextDirection.ltr,
@@ -669,41 +713,58 @@ final class _ModeSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: AssistantColors.panel,
-        border: Border.all(color: AssistantColors.borderSoft),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          _button(
-            'Диалог',
-            Icons.chat_bubble_outline,
-            AssistantViewMode.dialogue,
-            'mode-dialogue',
+    // Видимая капсула — 44 (сегменты 40), а цель нажатия у каждого
+    // сегмента — 48 (`AppSize.minTap`): дорожка рисуется позади.
+    return Stack(
+      alignment: Alignment.center,
+      children: <Widget>[
+        Positioned(
+          left: 0,
+          right: 0,
+          child: Container(
+            height: 44,
+            // Сегменты заливкой, без рамок (ADR-027).
+            decoration: BoxDecoration(
+              color: context.colors.raised,
+              borderRadius: BorderRadius.circular(999),
+            ),
           ),
-          _button(
-            'Документ',
-            Icons.edit_document,
-            AssistantViewMode.document,
-            'mode-document',
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              _button(
+                context,
+                'Диалог',
+                Icons.chat_bubble_outline,
+                AssistantViewMode.dialogue,
+                'mode-dialogue',
+              ),
+              _button(
+                context,
+                'Документ',
+                Icons.edit_document,
+                AssistantViewMode.document,
+                'mode-document',
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _button(
+    BuildContext context,
     String label,
     IconData icon,
     AssistantViewMode value,
     String key,
   ) {
     final active = mode == value;
-    final color = active ? AssistantColors.textStrong : AssistantColors.muted;
+    final color = active ? context.colors.textStrong : context.colors.muted;
     return Tooltip(
       message: label,
       excludeFromSemantics: true,
@@ -717,34 +778,53 @@ final class _ModeSwitch extends StatelessWidget {
           key: Key(key),
           onTap: () => onChanged(value),
           borderRadius: BorderRadius.circular(999),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-            alignment: Alignment.center,
-            padding: EdgeInsets.symmetric(horizontal: labels ? 12 : 8),
-            decoration: BoxDecoration(
-              color: active ? AssistantColors.bubble : Colors.transparent,
-              borderRadius: BorderRadius.circular(999),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: AppSize.minTap,
+              minWidth: AppSize.minTap,
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Icon(icon, size: 17, color: color),
-                if (labels) ...<Widget>[
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 13,
-                      fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-                    ),
-                  ),
-                ],
-              ],
+            child: Center(
+              widthFactor: 1,
+              child: _segment(context, label, icon, active, color),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _segment(
+    BuildContext context,
+    String label,
+    IconData icon,
+    bool active,
+    Color color,
+  ) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      constraints: const BoxConstraints(minHeight: 40, minWidth: 44),
+      alignment: Alignment.center,
+      padding: EdgeInsets.symmetric(horizontal: labels ? 12 : 8),
+      decoration: BoxDecoration(
+        color: active ? context.colors.bubble : Colors.transparent,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, size: 17, color: color),
+          if (labels) ...<Widget>[
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 15,
+                fontWeight: active ? FontWeight.w500 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -786,11 +866,11 @@ final class _PlusSheetState extends State<_PlusSheet> {
     return SafeArea(
       child: SingleChildScrollView(
         key: const Key('composer-plus-sheet'),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
+        // Одна сгруппированная панель на фоне шторки (ADR-027).
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        child: _inset(
+          context,
+          <Widget>[
             // Один подключённый диск — пункт сразу открывает его, без
             // выбора диска.
             if (cloud case CloudDiskSingle(:final disk))
@@ -799,6 +879,7 @@ final class _PlusSheetState extends State<_PlusSheet> {
                 icon: Icons.cloud_outlined,
                 label: 'Облачный диск',
                 detail: disk.label,
+                tile: context.colors.tileBlue,
                 onTap: () => _pick(disk),
               )
             else
@@ -807,6 +888,7 @@ final class _PlusSheetState extends State<_PlusSheet> {
                 key: const Key('composer-cloud'),
                 icon: Icons.cloud_outlined,
                 label: 'Облачный диск',
+                tile: context.colors.tileBlue,
                 children: switch (cloud) {
                   CloudDiskChoice(:final disks) => <Widget>[
                       for (final disk in disks)
@@ -836,6 +918,7 @@ final class _PlusSheetState extends State<_PlusSheet> {
                 key: const Key('composer-attach'),
                 icon: Icons.attach_file,
                 label: 'Прикрепить файл',
+                tile: context.colors.tileGray,
                 children: <Widget>[
                   for (final kind in PickKind.values)
                     _row(
@@ -852,6 +935,7 @@ final class _PlusSheetState extends State<_PlusSheet> {
               key: const Key('composer-templates'),
               icon: Icons.bolt,
               label: 'Шаблоны команд',
+              tile: context.colors.tileViolet,
               children: <Widget>[
                 for (final entry in widget.templates)
                   _row(
@@ -878,12 +962,39 @@ final class _PlusSheetState extends State<_PlusSheet> {
     );
   }
 
+  /// Строки на листе ячейкой со скруглением и разделителями «вставкой».
+  Widget _inset(BuildContext context, List<Widget> rows) => ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Material(
+          color: context.colors.workspace,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              for (var i = 0; i < rows.length; i++) ...<Widget>[
+                if (i > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 56),
+                    child: Divider(
+                      height: .5,
+                      thickness: .5,
+                      color: context.colors.divider,
+                    ),
+                  ),
+                rows[i],
+              ],
+            ],
+          ),
+        ),
+      );
+
   List<Widget> _group({
     required _PlusGroup group,
     required Key key,
     required IconData icon,
     required String label,
     required List<Widget> children,
+    Color? tile,
   }) {
     final open = _open == group;
     return <Widget>[
@@ -893,9 +1004,10 @@ final class _PlusSheetState extends State<_PlusSheet> {
         label: label,
         trailing: Icon(
           open ? Icons.expand_less : Icons.expand_more,
-          color: AssistantColors.icon,
+          color: context.colors.icon,
         ),
         expanded: open,
+        tile: tile,
         onTap: () => _toggle(group),
       ),
       if (open) ...children,
@@ -911,23 +1023,46 @@ final class _PlusSheetState extends State<_PlusSheet> {
     Widget? trailing,
     bool nested = false,
     bool? expanded,
+    Color? tile,
   }) {
+    final colors = context.colors;
+    // Пункт верхнего уровня — значком на цветной плитке, вложенный — просто
+    // значком.
+    final Widget leading = nested
+        ? SizedBox(
+            width: 28,
+            child: Icon(icon, size: 22, color: colors.icon),
+          )
+        : Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: tile ?? colors.tileGray,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Icon(icon, size: 18, color: Colors.white),
+          );
     return Semantics(
       expanded: expanded,
       child: ListTile(
         key: key,
         onTap: onTap,
-        minTileHeight: 48,
-        contentPadding: EdgeInsets.only(left: nested ? 56 : 20, right: 16),
-        leading: Icon(icon, size: 20, color: AssistantColors.textStrong),
-        title: Text(
+        minTileHeight: 52,
+        horizontalTitleGap: 12,
+        contentPadding: EdgeInsets.only(left: nested ? 28 : 16, right: 16),
+        leading: leading,
+        // Целыми словами: на 320 px со шрифтом 200 % простой Text рвал
+        // «Прикрепит|ь файл».
+        title: WholeWordText(
           label,
-          style: const TextStyle(
-            fontSize: 15,
-            color: AssistantColors.textStrong,
-          ),
+          style: TextStyle(fontSize: 17, color: colors.textStrong),
         ),
-        subtitle: detail == null ? null : Text(detail, style: metaTextStyle),
+        subtitle: detail == null
+            ? null
+            : WholeWordText(
+                detail,
+                style: TextStyle(fontSize: 15, color: colors.muted),
+              ),
         trailing: trailing,
       ),
     );

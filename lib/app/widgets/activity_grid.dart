@@ -59,12 +59,12 @@ int activityLevel(int count) {
   return 3;
 }
 
-/// Цвет уровня: heat0..heat3 палитры П1.
-Color activityShade(int level) => switch (level) {
-      <= 0 => AssistantColors.heat0,
-      1 => AssistantColors.heat1,
-      2 => AssistantColors.heat2,
-      _ => AssistantColors.heat3,
+/// Цвет уровня: heat0..heat3 палитры [colors] (фиолетовая шкала П2).
+Color activityShade(int level, AppPalette colors) => switch (level) {
+      <= 0 => colors.heat0,
+      1 => colors.heat1,
+      2 => colors.heat2,
+      _ => colors.heat3,
     };
 
 /// Подпись для экранного диктора по тем же данным, что и клетки:
@@ -173,7 +173,7 @@ final class ActivityGrid extends StatelessWidget {
             width: cell,
             height: cell,
             decoration: BoxDecoration(
-              color: activityShade(activityLevel(count)),
+              color: activityShade(activityLevel(count), context.colors),
               borderRadius: BorderRadius.circular(3),
             ),
           ),
@@ -194,7 +194,7 @@ final class ActivityGrid extends StatelessWidget {
               monthLabel,
               maxLines: 1,
               softWrap: false,
-              style: _small,
+              style: _small(context),
             ),
           ),
         ),
@@ -226,7 +226,7 @@ final class ActivityGrid extends StatelessWidget {
                       key: Key('activity-weekday-$i'),
                       maxLines: 1,
                       softWrap: false,
-                      style: _small,
+                      style: _small(context),
                     ),
                   ),
                 ),
@@ -262,13 +262,13 @@ final class ActivityGrid extends StatelessWidget {
 
     return DecoratedBox(
       key: const Key('activity-grid'),
+      // Панель листом без рамки (ADR-027).
       decoration: BoxDecoration(
-        color: AssistantColors.raised,
-        border: Border.all(color: AssistantColors.borderSoft),
-        borderRadius: BorderRadius.circular(16),
+        color: context.colors.workspace,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -286,11 +286,11 @@ final class ActivityGrid extends StatelessWidget {
                       header: true,
                       child: Text(
                         title,
-                        style: const TextStyle(
-                          fontSize: 15,
+                        style: TextStyle(
+                          fontSize: 17,
                           height: 1.3,
                           fontWeight: FontWeight.w600,
-                          color: AssistantColors.textStrong,
+                          color: context.colors.textStrong,
                         ),
                       ),
                     ),
@@ -298,7 +298,7 @@ final class ActivityGrid extends StatelessWidget {
                       '${weeksLabel(weeks)} · ${_daysWord(activeDays)}'
                       '${approximate ? ' · по сессиям приблизительно' : ''}',
                       key: const Key('activity-total'),
-                      style: metaTextStyle,
+                      style: metaStyle(context),
                     ),
                   ],
                 ),
@@ -308,17 +308,17 @@ final class ActivityGrid extends StatelessWidget {
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: <Widget>[
-                      const Text('меньше', style: metaTextStyle),
+                      Text('меньше', style: metaStyle(context)),
                       for (var level = 0; level < 4; level++)
                         Container(
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
-                            color: activityShade(level),
+                            color: activityShade(level, context.colors),
                             borderRadius: BorderRadius.circular(3),
                           ),
                         ),
-                      const Text('больше', style: metaTextStyle),
+                      Text('больше', style: metaStyle(context)),
                     ],
                   ),
                 ),
@@ -338,8 +338,8 @@ final class ActivityGrid extends StatelessWidget {
   }
 }
 
-const TextStyle _small = TextStyle(
-  fontSize: 12,
-  height: 1.2,
-  color: AssistantColors.muted,
-);
+TextStyle _small(BuildContext context) => TextStyle(
+      fontSize: 13,
+      height: 1.2,
+      color: context.colors.muted,
+    );

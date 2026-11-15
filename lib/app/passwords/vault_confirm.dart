@@ -68,11 +68,10 @@ Future<bool> askVaultConfirm(
       context: context,
       builder: (BuildContext context) => AlertDialog(
         scrollable: true,
-        backgroundColor: AssistantColors.raised,
         title: WholeWordText(title),
         content: WholeWordText(
           text ?? 'Подтвердите действие.',
-          style: const TextStyle(color: AssistantColors.text),
+          style: TextStyle(color: context.colors.text),
         ),
         actions: <Widget>[
           TextButton(
@@ -246,7 +245,6 @@ class _ConfirmDialogState extends State<_ConfirmDialog> {
       child: AlertDialog(
         key: const ValueKey<String>('vault-confirm'),
         scrollable: true,
-        backgroundColor: AssistantColors.raised,
         title: WholeWordText(widget.title),
         content: SizedBox(
           width: 360,
@@ -259,14 +257,14 @@ class _ConfirmDialogState extends State<_ConfirmDialog> {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: WholeWordText(
                     widget.text!,
-                    style: const TextStyle(color: AssistantColors.muted),
+                    style: TextStyle(color: context.colors.muted),
                   ),
                 ),
               if (pin) ...<Widget>[
-                const WholeWordText(
+                WholeWordText(
                   'Введите ПИН-код сейфа.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AssistantColors.text),
+                  style: TextStyle(color: context.colors.text),
                 ),
                 const SizedBox(height: 12),
                 Center(
@@ -296,7 +294,7 @@ class _ConfirmDialogState extends State<_ConfirmDialog> {
               ] else if (_error != null)
                 WholeWordText(
                   _error!,
-                  style: const TextStyle(color: AssistantColors.danger),
+                  style: TextStyle(color: context.colors.danger),
                 ),
               if (bio && !_useCode)
                 Padding(

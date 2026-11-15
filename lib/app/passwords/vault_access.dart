@@ -7,7 +7,7 @@ import '../../core/passwords/vault.dart';
 import '../../core/passwords/vault_codes.dart';
 import '../../core/passwords/vault_errors.dart';
 import '../assistant_theme.dart';
-import '../widgets/task_tile.dart';
+import '../widgets/grouped.dart';
 import '../widgets/whole_word_text.dart';
 import 'passwords_kit.dart';
 import 'pin_pad.dart';
@@ -137,74 +137,57 @@ class _VaultAccessSectionState extends State<VaultAccessSection> {
   Widget build(BuildContext context) {
     final info = kit.vault.protection;
     if (info == null || info.usesMaster) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return InsetGroup(
+      header: 'Вход в Сейф',
+      footer: kit.protectionNoteFor(
+        pin: kit.vault.protection?.pin ?? false,
+        bio: kit.vault.protection?.bio ?? false,
+        inSettings: true,
+      ),
       children: <Widget>[
-        const SectionLabel('ВХОД В СЕЙФ'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Text(
-            kit.protectionNoteFor(
-              pin: kit.vault.protection?.pin ?? false,
-              bio: kit.vault.protection?.bio ?? false,
-              inSettings: true,
-            ),
-            style: metaTextStyle,
-          ),
-        ),
         SwitchListTile(
           key: const ValueKey<String>('prefs-vault-pin'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
           value: info.pin,
           onChanged: _busy || !kit.pinAllowed
               ? null
               : (bool v) => unawaited(_setPin(v)),
-          title: const WholeWordText(
-            'ПИН-код сейфа',
-            style: TextStyle(color: AssistantColors.text),
-          ),
+          title: const WholeWordText('ПИН-код сейфа'),
           subtitle: WholeWordText(
             kit.pinAllowed
                 ? '6 цифр, по желанию. После 10 ошибок — только код '
                     'восстановления.'
                 : 'На компьютере ПИН-кода нет: его перебрали бы без '
                     'ограничений.',
-            style: const TextStyle(color: AssistantColors.muted),
           ),
         ),
         if (info.pin)
-          ListTile(
+          GroupedRow(
             key: const ValueKey<String>('prefs-vault-pin-change'),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-            leading: const Icon(Icons.pin_outlined),
-            title: const WholeWordText('Сменить ПИН-код'),
+            icon: Icons.pin_outlined,
+            tile: context.colors.tileBlue,
+            title: 'Сменить ПИН-код',
+            chevron: true,
             onTap: _busy ? null : () => unawaited(_changePin()),
           ),
         if (_bioAvailable || info.bio)
           SwitchListTile(
             key: const ValueKey<String>('prefs-vault-bio'),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
             value: info.bio,
             onChanged: _busy ? null : (bool v) => unawaited(_setBio(v)),
-            title: const WholeWordText(
-              'Сейф по отпечатку / Face ID',
-              style: TextStyle(color: AssistantColors.text),
-            ),
+            title: const WholeWordText('Сейф по отпечатку / Face ID'),
             subtitle: const WholeWordText(
               'Ключ сейфа выдаёт система после отпечатка или блокировки '
               'экрана. Новый отпечаток сбросит этот вход.',
-              style: TextStyle(color: AssistantColors.muted),
             ),
           ),
-        ListTile(
+        GroupedRow(
           key: const ValueKey<String>('prefs-vault-new-code'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          leading: const Icon(Icons.vpn_key_outlined),
-          title: const WholeWordText('Новый код восстановления'),
-          subtitle: const WholeWordText(
-            'Прежний код перестанет открывать этот сейф. Копии, сделанные '
-            'раньше, открываются тем, чем были закрыты.',
-          ),
+          icon: Icons.vpn_key_outlined,
+          tile: context.colors.tileViolet,
+          title: 'Новый код восстановления',
+          subtitle: 'Прежний код перестанет открывать этот сейф. Копии, '
+              'сделанные раньше, открываются тем, чем были закрыты.',
+          chevron: true,
           onTap: _busy ? null : () => unawaited(_newCode()),
         ),
       ],
@@ -355,7 +338,6 @@ class _NewPinDialogState extends State<_NewPinDialog> {
       child: AlertDialog(
         key: const ValueKey<String>('new-pin-dialog'),
         scrollable: true,
-        backgroundColor: AssistantColors.raised,
         title: WholeWordText(
           widget.change ? 'Сменить ПИН-код' : 'ПИН-код сейфа',
         ),
@@ -368,7 +350,7 @@ class _NewPinDialogState extends State<_NewPinDialog> {
                 prompt,
                 key: const ValueKey<String>('new-pin-step'),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
               // Низкий экран: подсказку не показываем — иначе «0» и
               // «стереть» уходят за край диалога.
@@ -376,12 +358,12 @@ class _NewPinDialogState extends State<_NewPinDialog> {
                   !widget.change &&
                   MediaQuery.sizeOf(context).height >= 700) ...<Widget>[
                 const SizedBox(height: 6),
-                const WholeWordText(
+                WholeWordText(
                   'Не 111111 и не 123456. Забудете — сейф откроет код '
                   'восстановления.',
                   key: ValueKey<String>('new-pin-hint'),
                   textAlign: TextAlign.center,
-                  style: metaTextStyle,
+                  style: metaStyle(context),
                 ),
               ],
               const SizedBox(height: 12),

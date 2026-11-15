@@ -251,7 +251,6 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
   Widget build(BuildContext context) {
     final parent = p.dirname(_dir);
     return AlertDialog(
-      backgroundColor: AssistantColors.raised,
       title: WholeWordText(widget.title),
       content: SizedBox(
         width: 480,
@@ -270,7 +269,7 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'Имя файла: ${widget.fileName}',
-                  style: const TextStyle(color: AssistantColors.muted),
+                  style: TextStyle(color: context.colors.muted),
                 ),
               ),
             const SizedBox(height: 8),
@@ -282,11 +281,11 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
                 onTap: () => unawaited(_list(parent)),
               ),
             if (_failed)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.all(8),
                 child: Text(
                   'Эту папку не открыть.',
-                  style: TextStyle(color: AssistantColors.danger),
+                  style: TextStyle(color: context.colors.danger),
                 ),
               ),
             Expanded(

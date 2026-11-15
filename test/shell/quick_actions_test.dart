@@ -46,18 +46,29 @@ Future<List<String>> _pump(
 }
 
 void main() {
-  testWidgets('пустая сессия: круглые кнопки 52 px с подписями',
+  testWidgets('пустая сессия: плитки не ниже 72 с подписями, без рамок',
       (tester) async {
     final calls = await _pump(tester, big: true, onPassword: () {});
     for (final label in <String>['Задача', 'Напомнить', 'Пароль']) {
       expect(find.byKey(Key('quick-$label')), findsOneWidget, reason: label);
       expect(find.text(label), findsOneWidget);
+      final tile = tester.getSize(find.byKey(Key('quick-$label')));
+      expect(tile.height, greaterThanOrEqualTo(72), reason: label);
     }
-    final circle = find.descendant(
-      of: find.byKey(const Key('quick-Задача')),
-      matching: find.byType(Container),
-    );
-    expect(tester.getSize(circle.first), const Size(52, 52));
+    // Плитка — заливкой (ADR-027): ни одной рамки внутри.
+    final borders = tester
+        .widgetList<Container>(
+          find.descendant(
+            of: find.byKey(const Key('quick-Задача')),
+            matching: find.byType(Container),
+          ),
+        )
+        .where(
+          (Container c) =>
+              c.decoration is BoxDecoration &&
+              (c.decoration! as BoxDecoration).border != null,
+        );
+    expect(borders, isEmpty);
     await tester.tap(find.byKey(const Key('quick-Задача')));
     await tester.tap(find.byKey(const Key('quick-Напомнить')));
     expect(calls, <String>[

@@ -9,6 +9,7 @@ import '../../core/models/task.dart';
 import '../assistant_theme.dart';
 import '../shell/relay_drawer.dart';
 import '../shell/session_hold_menu.dart';
+import '../widgets/grouped.dart';
 import '../widgets/task_tile.dart';
 
 /// Действие с самим проектом из меню «⋯» на его экране.
@@ -86,18 +87,21 @@ final class ProjectScreen extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.only(top: 2, right: 10),
-                      child: Icon(
-                        Icons.folder_outlined,
-                        color: AssistantColors.icon,
+                      child: IconTile(
+                        icon: Icons.folder_outlined,
+                        color: context.colors.tileAmber,
                       ),
                     ),
                     Expanded(
                       child: Text(
                         project.name,
                         key: const Key('project-title'),
-                        style: projectNameStyle(fontSize: 26),
+                        style: projectNameStyle(
+                          fontSize: 26,
+                          color: context.colors.textStrong,
+                        ),
                       ),
                     ),
                     _ProjectMenu(pinned: project.pinned, onAction: onAction),
@@ -108,7 +112,10 @@ final class ProjectScreen extends StatelessWidget {
                   Text(
                     project.description!,
                     key: const Key('project-description'),
-                    style: const TextStyle(color: AssistantColors.muted),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyLarge!
+                        .copyWith(color: context.colors.muted),
                   ),
                 ],
                 if (tag != null) ...<Widget>[
@@ -117,7 +124,7 @@ final class ProjectScreen extends StatelessWidget {
                     'Метка задач: #$tag — новая задача из сессий проекта '
                     'получает её, если в команде нет своей.',
                     key: const Key('project-tag'),
-                    style: metaTextStyle,
+                    style: metaStyle(context),
                   ),
                 ],
                 const SizedBox(height: 16),
@@ -133,58 +140,67 @@ final class ProjectScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 SectionLabel('Сессии · ${sessions.length}'),
                 if (sessions.isEmpty)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                     child: Text(
                       'В проекте пока нет сессий. Начните новую или '
                       'перенесите готовую: долгое нажатие на сессию → '
                       '«В проект…».',
                       key: Key('project-empty'),
-                      style: metaTextStyle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium!
+                          .copyWith(color: context.colors.muted),
                     ),
                   )
                 else
-                  for (final entry in sessions)
-                    _ProjectSessionRow(
-                      entry: entry,
-                      reduceMotion: reduceMotion,
-                      onTap: () => onOpenSession(entry.id),
-                      onAction: onSessionAction == null
-                          ? null
-                          : (SessionAction action) =>
-                              onSessionAction!(entry.id, action),
-                    ),
+                  InsetGroup(
+                    margin: EdgeInsets.zero,
+                    children: <Widget>[
+                      for (final entry in sessions)
+                        _ProjectSessionRow(
+                          entry: entry,
+                          reduceMotion: reduceMotion,
+                          onTap: () => onOpenSession(entry.id),
+                          onAction: onSessionAction == null
+                              ? null
+                              : (SessionAction action) =>
+                                  onSessionAction!(entry.id, action),
+                        ),
+                    ],
+                  ),
                 if (tag != null) ...<Widget>[
                   const SizedBox(height: 16),
                   SectionLabel('Задачи #$tag · ${tasks.length}'),
                   if (tasks.isEmpty)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.symmetric(
                         horizontal: 4,
                         vertical: 8,
                       ),
                       child: Text(
                         'Активных задач с этой меткой нет.',
-                        style: metaTextStyle,
+                        style: metaStyle(context),
                       ),
                     )
                   else
-                    for (final (group, list)
-                        in groupTasks(tasks, now)) ...<Widget>[
-                      SectionLabel(
-                        '${group.title} · ${list.length}',
-                        danger: group == TaskGroup.overdue,
+                    for (final (group, list) in groupTasks(tasks, now))
+                      InsetGroup(
+                        header: '${group.title} · ${list.length}',
+                        headerDanger: group == TaskGroup.overdue,
+                        margin: const EdgeInsets.only(top: 12),
+                        children: <Widget>[
+                          for (final task in list)
+                            TaskTile(
+                              task: task,
+                              now: now,
+                              selected: task.id == selectedTaskId,
+                              showProject: false,
+                              onTap: () => onOpenTask?.call(task),
+                              onToggleDone: () => onToggleDone?.call(task),
+                            ),
+                        ],
                       ),
-                      for (final task in list)
-                        TaskTile(
-                          task: task,
-                          now: now,
-                          selected: task.id == selectedTaskId,
-                          showProject: false,
-                          onTap: () => onOpenTask?.call(task),
-                          onToggleDone: () => onToggleDone?.call(task),
-                        ),
-                    ],
                 ],
               ],
             ),
@@ -218,14 +234,14 @@ final class _ProjectMenu extends StatelessWidget {
               Icon(
                 icon,
                 size: 20,
-                color: danger ? AssistantColors.danger : AssistantColors.icon,
+                color: danger ? context.colors.danger : context.colors.icon,
               ),
               const SizedBox(width: 12),
               Flexible(
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: danger ? AssistantColors.danger : null,
+                    color: danger ? context.colors.danger : null,
                   ),
                 ),
               ),
@@ -235,8 +251,7 @@ final class _ProjectMenu extends StatelessWidget {
     return PopupMenuButton<ProjectAction>(
       key: const Key('project-menu'),
       tooltip: 'Действия с проектом',
-      color: AssistantColors.raised,
-      icon: const Icon(Icons.more_horiz, color: AssistantColors.icon),
+      icon: Icon(Icons.more_horiz, color: context.colors.accent),
       onSelected: onAction,
       itemBuilder: (BuildContext context) => <PopupMenuEntry<ProjectAction>>[
         item(

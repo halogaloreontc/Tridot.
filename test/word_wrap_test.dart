@@ -9,6 +9,7 @@
 // Пароли — только канарейки (D24).
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -69,7 +70,7 @@ const Set<String> _allow = <String>{};
 /// не текст пользователя, а подсказки и заголовки самого приложения.
 const Set<String> _whole = <String>{
   'Новая сессия',
-  'Спросить, найти или поручить…',
+  'История команд',
   'Поиск по задачам…',
   'Поиск по сессиям',
   'Новый проект',
@@ -155,7 +156,7 @@ Future<TaskService> _pumpHome(
   );
   await tester.pumpWidget(
     MaterialApp(
-      theme: AssistantTheme.dark(),
+      theme: _theme(),
       home: HomePage(
         assistant: assistant,
         tasks: tasks,
@@ -179,7 +180,12 @@ Future<void> _say(WidgetTester tester, String text) async {
   await tester.pumpAndSettle();
 }
 
-/// Тест [name] на каждой ширине и каждом масштабе.
+/// Тема текущего теста: тёмная, а в проверках светлой темы — светлая
+/// (ADR-027). Шкала текста у тем общая, цвета — свои.
+ThemeData Function() _theme = AssistantTheme.dark;
+
+/// Тест [name] на каждой ширине и каждом масштабе в тёмной теме и ещё раз
+/// в светлой — на самом тесном варианте (320 px и наибольший масштаб).
 void _phones(
   String name,
   Future<void> Function(WidgetTester tester, String label) body, {
@@ -191,12 +197,23 @@ void _phones(
       for (final height in heights) {
         final label = '${width.toInt()}x${height.toInt()} ×$scale';
         testWidgets('$name: $label', (WidgetTester tester) async {
+          _theme = AssistantTheme.dark;
           setPhone(tester, width: width, height: height, scale: scale);
           await body(tester, '$name $label');
         });
       }
     }
   }
+  final scale = scales.reduce(math.max);
+  final width = _widths.reduce(math.min);
+  final height = heights.first;
+  final label = 'светлая ${width.toInt()}x${height.toInt()} ×$scale';
+  testWidgets('$name: $label', (WidgetTester tester) async {
+    _theme = AssistantTheme.light;
+    addTearDown(() => _theme = AssistantTheme.dark);
+    setPhone(tester, width: width, height: height, scale: scale);
+    await body(tester, '$name $label');
+  });
 }
 
 /// Открывает [show] кнопкой в пустом экране: диалоги и листы.
@@ -206,7 +223,7 @@ Future<void> _pumpLauncher(
 ) async {
   await tester.pumpWidget(
     MaterialApp(
-      theme: AssistantTheme.dark(),
+      theme: _theme(),
       home: Scaffold(
         body: Builder(
           builder: (BuildContext context) => Center(
@@ -263,7 +280,7 @@ void main() {
     Future<void> pumpBox(WidgetTester tester, double width, Widget child) =>
         tester.pumpWidget(
           MaterialApp(
-            theme: AssistantTheme.dark(),
+            theme: _theme(),
             home: Scaffold(
               body: Align(
                 alignment: Alignment.topLeft,
@@ -298,7 +315,7 @@ void main() {
       // из нескольких слов многоточием резать можно, если он не в [whole].
       await pumpBox(tester, 76, const Text('Купить молоко'));
       expect(midWordBreaks(tester), isEmpty);
-      await pumpBox(tester, 70, const Text('сине-зелёный'));
+      await pumpBox(tester, 80, const Text('сине-зелёный'));
       expect(midWordBreaks(tester), isEmpty);
       await pumpBox(tester, 70, const Text('canary.z5@example.org'));
       expect(midWordBreaks(tester), isEmpty);
@@ -369,6 +386,29 @@ void main() {
       expect(find.text('Напомнить'), findsOneWidget);
     });
 
+    testWidgets('WholeWordText с «…» не сжимает длинное превью', (
+      tester,
+    ) async {
+      setPhone(tester, width: 320, scale: 1);
+      // Две строки и многоточие: обрезается, а не уменьшается до 7–9 px.
+      await pumpBox(
+        tester,
+        200,
+        const WholeWordText(
+          'сконвертируй видео в mp3 320 и положи рядом с исходным файлом '
+          'в той же папке, а потом покажи результат',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.byType(RichText).last,
+      );
+      expect(paragraph.textScaler.scale(10), 10);
+      expect(paragraph.didExceedMaxLines, isTrue);
+      expect(midWordBreaks(tester), isEmpty);
+    });
+
     testWidgets('WholeWordText в AlertDialog (своя ширина) — без ошибок', (
       tester,
     ) async {
@@ -406,6 +446,16 @@ void main() {
       await _say(tester, 'Добавь задачу купить молоко завтра в 10');
       await _say(tester, 'Покажи задачи');
       await _checkScrolling(tester, '$label: сессия');
+      // «⋯ → История команд» — шторкой (ADR-027).
+      // На узком экране с задачей в фокусе «⋯» нет — сначала «назад».
+      if (find.byKey(const Key('task-back')).evaluate().isNotEmpty) {
+        await tester.tap(find.byKey(const Key('task-back')));
+        await tester.pumpAndSettle();
+      }
+      await openCommandHistory(tester);
+      await _checkScrolling(tester, '$label: история команд');
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
       await openDrawerIfNeeded(tester);
       await _checkScrolling(tester, '$label: меню');
     });
@@ -431,6 +481,31 @@ void main() {
       _expectWhole(tester, '$label: переименование');
       await tester.tap(find.byKey(const Key('rename-cancel')));
       await tester.pumpAndSettle();
+    });
+
+    _phones('набор в поле и лист «+»', (tester, label) async {
+      await _pumpHome(tester);
+      // Набранная фраза в капсуле — целыми словами и при шрифте 200 %.
+      await tester.enterText(
+        find.byKey(const Key('assistant-input')),
+        'позвонить маме завтра вечером',
+      );
+      await tester.pumpAndSettle();
+      _expectWhole(tester, '$label: набор');
+      // При крупном шрифте капсула — отдельной строкой во всю ширину (было
+      // ~110 px между двумя кругами).
+      if (tester.platformDispatcher.textScaleFactor > 1.3) {
+        final screen =
+            tester.view.physicalSize.width / tester.view.devicePixelRatio;
+        expect(
+          tester.getSize(find.byKey(const Key('assistant-input'))).width,
+          greaterThan(screen * 0.75),
+          reason: label,
+        );
+      }
+      await tester.tap(find.byKey(const Key('templates-button')));
+      await tester.pumpAndSettle();
+      await _checkScrolling(tester, '$label: лист «+»');
     });
 
     _phones('разделы меню', (tester, label) async {
@@ -469,6 +544,18 @@ void main() {
       await tester.tap(storage);
       await tester.pumpAndSettle();
       await _checkScrolling(tester, '$label: данные');
+    });
+
+    _phones('оформление', (tester, label) async {
+      await _pumpHome(tester);
+      await openMyRelay(tester, 'settings');
+      final row = find.byKey(const ValueKey<String>('setting-appearance'));
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      _expectWhole(tester, '$label: строка');
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      await _checkScrolling(tester, '$label: оформление');
     });
   });
 
@@ -532,8 +619,7 @@ void main() {
       kit.dispose();
     }
 
-    Widget app(Widget home) =>
-        MaterialApp(theme: AssistantTheme.dark(), home: home);
+    Widget app(Widget home) => MaterialApp(theme: _theme(), home: home);
 
     _phones('пустая сессия с «Паролем»', (tester, label) async {
       final (kit, vault, _) = await makeKit();
@@ -721,7 +807,7 @@ void main() {
         );
 
     Widget phoneCard(Widget card) => MaterialApp(
-          theme: AssistantTheme.dark(),
+          theme: _theme(),
           home: Scaffold(
             body: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -888,7 +974,7 @@ void main() {
         addTearDown(progress.dispose);
         await tester.pumpWidget(
           MaterialApp(
-            theme: AssistantTheme.dark(),
+            theme: _theme(),
             home: Scaffold(
               body: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -978,7 +1064,7 @@ void main() {
             : ExtensionForms.converter;
         await tester.pumpWidget(
           MaterialApp(
-            theme: AssistantTheme.dark(),
+            theme: _theme(),
             home: Scaffold(
               body: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 16),

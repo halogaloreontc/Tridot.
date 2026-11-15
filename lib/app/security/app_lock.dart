@@ -242,7 +242,7 @@ class _LockScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       key: const ValueKey<String>('app-lock'),
-      color: AssistantColors.workspace,
+      color: context.colors.workspace,
       child: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -252,32 +252,32 @@ class _LockScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  const Icon(
+                  Icon(
                     Icons.fingerprint,
                     size: 48,
-                    color: AssistantColors.muted,
+                    color: context.colors.muted,
                   ),
                   const SizedBox(height: 16),
-                  const WholeWordText(
+                  WholeWordText(
                     'Tridot закрыт',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 18,
-                      color: AssistantColors.textStrong,
+                      color: context.colors.textStrong,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const WholeWordText(
+                  WholeWordText(
                     'Откройте так же, как разблокируете устройство.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AssistantColors.muted),
+                    style: TextStyle(color: context.colors.muted),
                   ),
                   if (message != null) ...<Widget>[
                     const SizedBox(height: 12),
                     WholeWordText(
                       message!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: AssistantColors.warning),
+                      style: TextStyle(color: context.colors.warning),
                     ),
                   ],
                   const SizedBox(height: 20),

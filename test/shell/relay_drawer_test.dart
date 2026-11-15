@@ -160,7 +160,7 @@ Future<_Calls> _pump(
                   id: 'warehouse',
                   title: 'Склад',
                   status: 'на связи',
-                  statusColor: AssistantColors.success,
+                  statusColor: AppPalette.dark.success,
                   dot: true,
                   onTap: () => calls.log.add('warehouse'),
                 ),
@@ -188,33 +188,42 @@ Future<_Calls> _pump(
 void main() {
   testWidgets('знак приложения — три точки цветами Связной, Лиорио и Ноды',
       (tester) async {
+    // В шапке меню знака нет: он в «Настройки → О приложении» (ADR-027).
     await _pump(tester);
-    final glyph = find.byKey(const ValueKey<String>('app-glyph'));
-    expect(glyph, findsOneWidget);
-    // Знак — слева от названия на плашке.
-    expect(
-      tester.getRect(glyph).right,
-      lessThanOrEqualTo(
-        tester.getRect(find.byKey(const ValueKey<String>('app-name'))).left,
+    expect(find.byKey(const ValueKey<String>('app-glyph')), findsNothing);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AssistantTheme.dark(),
+        home: const Scaffold(body: Center(child: RelayGlyph())),
       ),
     );
+    final glyph = find.byKey(const ValueKey<String>('app-glyph'));
+    expect(glyph, findsOneWidget);
     final paint = tester.widget<CustomPaint>(
       find.descendant(of: glyph, matching: find.byType(CustomPaint)),
     );
     expect(paint.painter, isA<RelayGlyphPainter>());
-    expect(RelayGlyphPainter.colors, <Color>[
-      AssistantColors.sado,
-      AssistantColors.liorio,
-      AssistantColors.noda,
+    expect((paint.painter! as RelayGlyphPainter).colors, <Color>[
+      AppPalette.dark.sado,
+      AppPalette.dark.liorio,
+      AppPalette.dark.noda,
     ]);
     // Три закрашенные точки на сетке 24: (5,12), (12,12), (19,12), r = 3.
     final recorder = _CircleCanvas();
     const RelayGlyphPainter().paint(recorder, const Size(24, 24));
     expect(recorder.circles, <(Offset, double, int)>[
-      (const Offset(5, 12), 3, AssistantColors.sado.toARGB32()),
-      (const Offset(12, 12), 3, AssistantColors.liorio.toARGB32()),
-      (const Offset(19, 12), 3, AssistantColors.noda.toARGB32()),
+      (const Offset(5, 12), 3, AppPalette.dark.sado.toARGB32()),
+      (const Offset(12, 12), 3, AppPalette.dark.liorio.toARGB32()),
+      (const Offset(19, 12), 3, AppPalette.dark.noda.toARGB32()),
     ]);
+    // Светлая палитра — свои точки; смена палитры перерисовывает знак.
+    const light = RelayGlyphPainter(palette: AppPalette.light);
+    expect(light.colors.first, AppPalette.light.sado);
+    expect(light.shouldRepaint(const RelayGlyphPainter()), isTrue);
+    expect(
+      const RelayGlyphPainter().shouldRepaint(const RelayGlyphPainter()),
+      isFalse,
+    );
   });
 
   testWidgets('знаки на карточке «Мой …» — только активные помощники',
@@ -294,21 +303,22 @@ void main() {
     );
   });
 
-  testWidgets('«Мой Tridot»: телефон — 88 px и 18/600, компьютер — 72 и 16',
+  testWidgets('«Мой Tridot»: телефон — 68 px и 18/600, компьютер — 60 и 17',
       (tester) async {
     for (final wide in <bool>[false, true]) {
       await _pump(tester, wide: wide, size: Size(wide ? 312 : 360, 900));
       final card = find.byKey(const Key('drawer-my-relay'));
+      // Первая строка сгруппированной панели разделов (ADR-027).
       expect(
         tester.getSize(card).height,
-        greaterThanOrEqualTo(wide ? 72 : 88),
+        greaterThanOrEqualTo(wide ? 60 : 68),
       );
       final title = tester.widget<Text>(
         find.descendant(of: card, matching: find.text(AppInfo.hubName)),
       );
       // «Мой» — Inter, само «Tridot» — шрифтом названия (ADR-021).
       final style = title.textSpan!.style!;
-      expect(style.fontSize, wide ? 16 : 18);
+      expect(style.fontSize, wide ? 17 : 18);
       expect(style.fontWeight, FontWeight.w600);
     }
   });
@@ -325,20 +335,19 @@ void main() {
     expect(find.text('Расширения'), findsNothing);
   });
 
-  testWidgets('шапка «Tridot» с версией — и на телефоне', (tester) async {
+  testWidgets('шапка «Tridot» крупно, без версии — и на телефоне',
+      (tester) async {
     await _pump(tester);
     expect(find.byKey(const ValueKey<String>('app-name')), findsOneWidget);
     expect(find.text(AppInfo.name), findsOneWidget);
-    final version = find.byKey(const ValueKey<String>('app-version'));
-    expect(tester.widget<Text>(version).data, AppInfo.version);
-    expect(find.bySemanticsLabel('Версия ${AppInfo.version}'), findsOneWidget);
-    // Версия — рядом с названием, в той же строке, над «Мой Tridot».
-    final name = tester.getRect(find.byKey(const ValueKey<String>('app-name')));
-    final ver = tester.getRect(version);
-    expect(ver.left, greaterThan(name.right));
-    expect(ver.center.dy, moreOrLessEquals(name.center.dy, epsilon: 4));
+    // Версия — в «Настройки → О приложении» (ADR-027).
+    expect(find.byKey(const ValueKey<String>('app-version')), findsNothing);
+    final name = tester.widget<Text>(
+      find.byKey(const ValueKey<String>('app-name')),
+    );
+    expect(name.style!.fontSize, 30);
     expect(
-      name.bottom,
+      tester.getRect(find.byKey(const ValueKey<String>('app-name'))).bottom,
       lessThanOrEqualTo(
         tester.getRect(find.byKey(const Key('drawer-my-relay'))).top,
       ),
@@ -347,17 +356,16 @@ void main() {
     expect(find.byKey(const Key('sidebar-collapse')), findsNothing);
     var collapsed = 0;
     await _pump(tester, wide: true, onCollapse: () => collapsed++);
-    expect(find.byKey(const ValueKey<String>('app-version')), findsOneWidget);
     await tester.tap(find.byKey(const Key('sidebar-collapse')));
     expect(collapsed, 1);
   });
 
-  testWidgets('«+» — новая сессия: только значок, треть строки',
+  testWidgets('«+» — новая сессия: только значок, кнопка 48 тональная',
       (tester) async {
     final calls = await _pump(tester);
     final button = find.byKey(const Key('new-session'));
     expect(
-      find.descendant(of: button, matching: find.byIcon(Icons.add)),
+      find.descendant(of: button, matching: find.byIcon(Icons.edit_square)),
       findsOneWidget,
     );
     expect(
@@ -369,9 +377,19 @@ void main() {
     expect(find.bySemanticsLabel('Новая сессия'), findsOneWidget);
     final row = tester.getRect(find.byKey(const Key('session-search-box')));
     final rect = tester.getRect(button);
-    // Поле — две трети, «+» — треть за промежутком 8.
-    expect(rect.width, moreOrLessEquals(row.width / 2, epsilon: 1));
+    // «+» — квадратная кнопка 48, поиск забирает остальное (ADR-027).
+    expect(rect.width, moreOrLessEquals(48, epsilon: 1));
+    expect(row.width, greaterThan(rect.width * 3));
     expect(rect.height, row.height);
+    // Тональная: заливка листа, значок акцентом — не сплошной акцент.
+    expect(
+      tester
+          .widget<Material>(
+            find.ancestor(of: button, matching: find.byType(Material)).first,
+          )
+          .color,
+      AppPalette.dark.workspace,
+    );
     expect(rect.height, greaterThanOrEqualTo(44));
     await tester.tap(button);
     expect(calls.log, <String>['new']);
@@ -472,15 +490,16 @@ void main() {
     expect(open.right - cancel.right, lessThan(12), reason: '«Отмена» справа');
     expect(
       tester.getSize(find.byKey(const Key('session-search'))).width,
-      greaterThan(open.width * 0.6),
+      greaterThan(open.width * 0.5),
       reason: 'поле забирает почти всю строку',
     );
+    // Поиск — заливкой листа (ADR-027); в фокусе — рамка 1.5 акцентом,
+    // чтобы фокус был виден и с клавиатуры.
     final decoration =
         tester.widget<AnimatedContainer>(box).decoration! as BoxDecoration;
-    expect(
-      (decoration.border! as Border).top.color,
-      AssistantColors.borderFocus,
-    );
+    expect((decoration.border! as Border).top.color, AppPalette.dark.accent);
+    expect((decoration.border! as Border).top.width, 1.5);
+    expect(decoration.color, AppPalette.dark.workspace);
     expect(tester.takeException(), isNull);
   });
 
@@ -551,8 +570,8 @@ void main() {
     });
     expect(match, isNotNull, reason: 'совпадение — отдельным куском');
     // Подсветка — цвета Ноды, как `mark` в макете.
-    expect(match!.style!.backgroundColor, AssistantColors.markBg);
-    expect(match!.style!.color, AssistantColors.mark);
+    expect(match!.style!.backgroundColor, AppPalette.dark.markBg);
+    expect(match!.style!.color, AppPalette.dark.mark);
     expect(find.textContaining('CANARY', findRichText: true), findsNothing);
 
     await tester.enterText(find.byKey(const Key('session-search')), 'CANARY');
@@ -606,7 +625,7 @@ void main() {
       expect(find.text('$n $word'), findsOneWidget, reason: '$n');
       final alert =
           tester.widget<Text>(find.byKey(const Key('nav-tasks-alert')));
-      expect(alert.style!.color, AssistantColors.danger);
+      expect(alert.style!.color, AppPalette.dark.danger);
     }
     expect(
       find.descendant(
@@ -623,9 +642,9 @@ void main() {
     expect(find.byKey(const Key('nav-tasks-alert')), findsNothing);
     expect(find.byKey(const Key('nav-projects-count')), findsNothing);
     expect(find.byKey(const Key('nav-planning-count')), findsNothing);
-    // Строки разделов — во всю ширину и не ниже 56.
+    // Строки разделов — во всю ширину и не ниже 52.
     final row = tester.getRect(find.byKey(const Key('nav-tasks')));
-    expect(row.height, greaterThanOrEqualTo(56));
+    expect(row.height, greaterThanOrEqualTo(52));
     expect(
       tester.getRect(find.byKey(const Key('nav-projects'))).top,
       greaterThan(row.bottom - 1),
@@ -647,12 +666,12 @@ void main() {
     }
     expect(find.text('Закреплённые'), findsOneWidget);
     expect(find.text('Сводка за неделю готова'), findsOneWidget);
-    // Знак того, кто ответил последним.
+    // Точка того, кто ответил последним (ADR-027).
     final mark = find.descendant(
       of: find.byKey(const Key('chat-session:p')),
-      matching: find.byType(PersonaMark),
+      matching: find.byType(PersonaDot),
     );
-    expect(tester.widget<PersonaMark>(mark).persona, Personas.noda);
+    expect(tester.widget<PersonaDot>(mark).persona, Personas.noda);
     // Порядок: «Мой Tridot», разделы, закреплённые, дни, «Расширения».
     double top(String key) => tester.getRect(find.byKey(Key(key))).top;
     expect(top('drawer-my-relay'), lessThan(top('nav-tasks')));
@@ -744,7 +763,7 @@ void main() {
         matching: find.text('Удалить'),
       ),
     );
-    expect(delete.style!.color, AssistantColors.danger);
+    expect(delete.style!.color, AppPalette.dark.danger);
     expect(
       find.bySemanticsLabel('Действия с сессией «Отметить приход 318»'),
       findsOneWidget,
@@ -853,7 +872,11 @@ void main() {
       for (final id in data.customSemanticsActionIds!)
         CustomSemanticsAction.getAction(id)!.label!,
     ];
-    expect(labels, <String>['Переименовать', 'Закрепить', 'Удалить']);
+    // Порядок идентификаторов — порядок их первой регистрации в процессе.
+    expect(
+      labels,
+      unorderedEquals(<String>['Переименовать', 'Закрепить', 'Удалить']),
+    );
     final owner = node.owner!;
     final delete = data.customSemanticsActionIds!.firstWhere(
       (int id) => CustomSemanticsAction.getAction(id)!.label == 'Удалить',

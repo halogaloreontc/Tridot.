@@ -246,8 +246,9 @@ void main() {
     // Цвета, которыми полоса рисуется: свои у виджета или из темы.
     final fill = bar.color ?? theme.color;
     final track = bar.backgroundColor ?? theme.linearTrackColor;
-    expect(fill, AssistantColors.primary);
-    expect(track, AssistantColors.borderSoft);
+    // Акцент на мягкой дорожке (ADR-027).
+    expect(fill, AppPalette.dark.accent);
+    expect(track, AppPalette.dark.bubble);
     expect(fill, isNot(track));
     expect(bar.minHeight ?? theme.linearMinHeight, 4);
     progress.value = null;

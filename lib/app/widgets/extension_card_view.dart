@@ -87,36 +87,41 @@ final class ExtensionCardView extends StatelessWidget {
   final Widget Function(Widget child)? dropTarget;
 
   static const ButtonStyle _outlined = ButtonStyle(
-    minimumSize: WidgetStatePropertyAll<Size>(Size(0, 40)),
+    minimumSize: WidgetStatePropertyAll<Size>(Size(0, 48)),
   );
+
+  /// Подпись над полем — 15 вторичным (ADR-027).
+  /// Подпись поля — 15 полужирным основным цветом: над подсказкой 15
+  /// приглушённой видна иерархия «что» → «что сделать».
+  static TextStyle _labelStyle(BuildContext context) => Theme.of(context)
+      .textTheme
+      .bodyMedium!
+      .copyWith(color: context.colors.text, fontWeight: FontWeight.w600);
 
   @override
   Widget build(BuildContext context) {
     final fields = ExtensionForms.of(card.extensionId);
     final body = Material(
-      color: AssistantColors.raised,
+      color: context.colors.raised,
       clipBehavior: Clip.antiAlias,
+      // Карточка заливкой без рамки (ADR-027): форму видно по заголовку и
+      // активной основной кнопке.
       shape: RoundedRectangleBorder(
-        side: BorderSide(
-          color: card.state == CardState.form
-              ? AssistantColors.border
-              : AssistantColors.borderSoft,
-        ),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            _header(),
+            _header(context),
             const SizedBox(height: 6),
             if (fields == null)
-              const Text(
+              Text(
                 'Расширение недоступно в этой версии приложения',
                 key: Key('ext-card-unavailable'),
-                style: metaTextStyle,
+                style: metaStyle(context),
               )
             else
               ..._body(context, fields),
@@ -129,7 +134,7 @@ final class ExtensionCardView extends StatelessWidget {
         : body;
     return Padding(
       key: ValueKey<String>('ext-card-${card.id}'),
-      padding: const EdgeInsets.only(top: 8),
+      padding: EdgeInsets.zero,
       child: FocusTraversalGroup(
         policy: WidgetOrderTraversalPolicy(),
         child: wrapped,
@@ -137,7 +142,7 @@ final class ExtensionCardView extends StatelessWidget {
     );
   }
 
-  Widget _header() => Row(
+  Widget _header(BuildContext context) => Row(
         children: <Widget>[
           Icon(
             switch (card.extensionId) {
@@ -145,19 +150,18 @@ final class ExtensionCardView extends StatelessWidget {
               ExtensionForms.ytdl => Icons.download_outlined,
               _ => Icons.folder_zip_outlined,
             },
-            size: 18,
-            color: AssistantColors.textStrong,
+            size: 22,
+            color: context.colors.icon,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               ExtensionForms.title(card.extensionId),
               key: const Key('ext-card-title'),
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AssistantColors.textStrong,
-              ),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium!
+                  .copyWith(color: context.colors.textStrong),
             ),
           ),
         ],
@@ -165,24 +169,24 @@ final class ExtensionCardView extends StatelessWidget {
 
   List<Widget> _body(BuildContext context, List<FieldSpec> fields) =>
       switch (card.state) {
-        CardState.form => _form(fields),
+        CardState.form => _form(context, fields),
         CardState.running => _running(),
-        CardState.done => _done(),
+        CardState.done => _done(context),
         CardState.failed => _retry(
             JobCodes.message(card.errorCode),
-            AssistantColors.danger,
+            context.colors.danger,
             'ext-card-error',
           ),
         CardState.cancelled =>
-          _retry('Отменено', AssistantColors.muted, 'ext-card-cancelled'),
+          _retry('Отменено', context.colors.muted, 'ext-card-cancelled'),
         CardState.interrupted => _retry(
             'Прервано: приложение закрывали во время работы',
-            AssistantColors.warning,
+            context.colors.warning,
             'ext-card-interrupted',
           ),
       };
 
-  List<Widget> _form(List<FieldSpec> fields) {
+  List<Widget> _form(BuildContext context, List<FieldSpec> fields) {
     final blocker = ExtensionForms.blocker(
       card,
       platform,
@@ -191,38 +195,40 @@ final class ExtensionCardView extends StatelessWidget {
     );
     final repeated = blocker != null && _saidAbove(fields, blocker);
     return <Widget>[
-      for (final field in fields)
-        ...switch (field.kind) {
-          FieldKind.files || FieldKind.file => _filesField(field),
-          FieldKind.choice => _choiceField(field),
-          FieldKind.url => _urlField(field),
-          FieldKind.folder => const <Widget>[],
-        },
+      // Между полями — воздух (ADR-027); скрытое поле места не занимает.
+      for (final (i, part) in <List<Widget>>[
+        for (final field in fields)
+          switch (field.kind) {
+            FieldKind.files || FieldKind.file => _filesField(context, field),
+            FieldKind.choice => _choiceField(context, field),
+            FieldKind.url => _urlField(context, field),
+            FieldKind.folder => const <Widget>[],
+          },
+      ].where((List<Widget> p) => p.isNotEmpty).indexed) ...<Widget>[
+        if (i > 0) const SizedBox(height: 12),
+        ...part,
+      ],
       if (blocker != null && !repeated)
         Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(
             blocker,
             key: const Key('ext-card-blocker'),
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
         ),
-      const SizedBox(height: 8),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton.icon(
-          key: const Key('ext-card-run'),
-          onPressed: blocker == null && !busy ? onRun : null,
-          style: FilledButton.styleFrom(
-            backgroundColor: AssistantColors.textStrong,
-            foregroundColor: AssistantColors.workspace,
-            disabledBackgroundColor: AssistantColors.bubble,
-            disabledForegroundColor: AssistantColors.muted,
-            minimumSize: const Size(0, 40),
-          ),
-          icon: const Icon(Icons.play_arrow, size: 18),
-          label: Text(ExtensionForms.runLabel(card.extensionId)),
+      const SizedBox(height: 12),
+      // Основное действие — во всю ширину, акцентом.
+      FilledButton.icon(
+        key: const Key('ext-card-run'),
+        onPressed: blocker == null && !busy ? onRun : null,
+        style: FilledButton.styleFrom(
+          disabledBackgroundColor: context.colors.bubble,
+          disabledForegroundColor: context.colors.muted,
+          minimumSize: const Size.fromHeight(50),
         ),
+        icon: const Icon(Icons.play_arrow, size: 20),
+        label: Text(ExtensionForms.runLabel(card.extensionId)),
       ),
     ];
   }
@@ -253,14 +259,14 @@ final class ExtensionCardView extends StatelessWidget {
     return false;
   }
 
-  List<Widget> _filesField(FieldSpec field) {
+  List<Widget> _filesField(BuildContext context, FieldSpec field) {
     final files = card.files(field.code);
     final addable = <JobFile>[
       for (final file in sessionFiles)
         if (!files.contains(file)) file,
     ];
     return <Widget>[
-      Text(field.label, style: metaTextStyle),
+      Text(field.label, style: _labelStyle(context)),
       const SizedBox(height: 4),
       if (files.isEmpty)
         Text(
@@ -270,7 +276,7 @@ final class ExtensionCardView extends StatelessWidget {
                   ? 'Выберите файлы или папку'
                   : 'Выберите файлы',
           key: const Key('ext-card-files-empty'),
-          style: const TextStyle(fontSize: 13, color: AssistantColors.muted),
+          style: TextStyle(fontSize: 15, color: context.colors.muted),
         ),
       for (final (i, file) in files.indexed)
         Row(
@@ -281,7 +287,7 @@ final class ExtensionCardView extends StatelessWidget {
                   ? Icons.folder_outlined
                   : Icons.insert_drive_file_outlined,
               size: 16,
-              color: AssistantColors.muted,
+              color: context.colors.muted,
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -289,7 +295,7 @@ final class ExtensionCardView extends StatelessWidget {
                 file.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13),
+                style: const TextStyle(fontSize: 17),
               ),
             ),
             IconButton(
@@ -360,7 +366,7 @@ final class ExtensionCardView extends StatelessWidget {
     ];
   }
 
-  List<Widget> _choiceField(FieldSpec field) {
+  List<Widget> _choiceField(BuildContext context, FieldSpec field) {
     final options =
         field.options?.call(card, platform, tools) ?? const <Choice>[];
     final value = card.choice(field.code);
@@ -371,12 +377,12 @@ final class ExtensionCardView extends StatelessWidget {
       final hint = field.emptyHint;
       if (hint == null) return const <Widget>[];
       return <Widget>[
-        Text(field.label, style: metaTextStyle),
+        Text(field.label, style: _labelStyle(context)),
         const SizedBox(height: 4),
         Text(
           hint,
           key: ValueKey<String>('ext-card-empty-${field.code}'),
-          style: const TextStyle(fontSize: 13, color: AssistantColors.muted),
+          style: TextStyle(fontSize: 15, color: context.colors.muted),
         ),
       ];
     }
@@ -396,18 +402,17 @@ final class ExtensionCardView extends StatelessWidget {
           child: Text(
             reason,
             key: const Key('ext-card-choice-reason'),
-            style:
-                const TextStyle(fontSize: 12, color: AssistantColors.warning),
+            style: TextStyle(fontSize: 13, color: context.colors.warning),
           ),
         ),
       const SizedBox(height: 10),
     ];
   }
 
-  List<Widget> _urlField(FieldSpec field) {
+  List<Widget> _urlField(BuildContext context, FieldSpec field) {
     final value = card.values[field.code];
     return <Widget>[
-      Text(field.label, style: metaTextStyle),
+      Text(field.label, style: _labelStyle(context)),
       const SizedBox(height: 4),
       _UrlField(
         key: ValueKey<String>('ext-card-url-${card.id}'),
@@ -435,7 +440,7 @@ final class ExtensionCardView extends StatelessWidget {
                         : '${tick?.stage ?? 'Работаю'}: '
                             '${(value * 100).clamp(0, 100).round()}%',
                     key: const Key('ext-card-stage'),
-                    style: const TextStyle(fontSize: 13),
+                    style: const TextStyle(fontSize: 15),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -459,7 +464,7 @@ final class ExtensionCardView extends StatelessWidget {
         ),
       ];
 
-  List<Widget> _done() {
+  List<Widget> _done(BuildContext context) {
     final outputs = card.outputs;
     final name = outputs.isEmpty ? null : p.basename(outputs.first);
     return <Widget>[
@@ -470,7 +475,7 @@ final class ExtensionCardView extends StatelessWidget {
           key: const Key('ext-card-done'),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 13, color: AssistantColors.success),
+          style: TextStyle(fontSize: 15, color: context.colors.success),
         ),
       ),
       if (card.listing.isNotEmpty) ...<Widget>[
@@ -486,13 +491,13 @@ final class ExtensionCardView extends StatelessWidget {
                   line,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13),
+                  style: const TextStyle(fontSize: 15),
                 ),
               if (card.listingMore > 0)
                 Text(
                   'и ещё ${card.listingMore}',
                   key: const Key('ext-card-listing-more'),
-                  style: metaTextStyle,
+                  style: metaStyle(context),
                 ),
             ],
           ),
@@ -500,10 +505,10 @@ final class ExtensionCardView extends StatelessWidget {
       ],
       if (temporary) ...<Widget>[
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Результат во временной папке и удалится при выходе',
           key: Key('ext-card-temporary'),
-          style: TextStyle(fontSize: 12, color: AssistantColors.warning),
+          style: TextStyle(fontSize: 13, color: context.colors.warning),
         ),
       ],
       if (!canReveal)
@@ -533,9 +538,7 @@ final class ExtensionCardView extends StatelessWidget {
                 key: const Key('ext-card-open'),
                 onPressed: onOpen == null ? null : () => onOpen!(outputs.first),
                 style: FilledButton.styleFrom(
-                  backgroundColor: AssistantColors.textStrong,
-                  foregroundColor: AssistantColors.workspace,
-                  minimumSize: const Size(0, 40),
+                  minimumSize: const Size(0, 48),
                 ),
                 icon: const Icon(Icons.open_in_new, size: 18),
                 label: const Text('Открыть'),
@@ -605,7 +608,7 @@ final class ExtensionCardView extends StatelessWidget {
           child: Text(
             text,
             key: Key(key),
-            style: TextStyle(fontSize: 13, color: color),
+            style: TextStyle(fontSize: 15, color: color),
           ),
         ),
         const SizedBox(height: 8),
@@ -655,8 +658,14 @@ final class _ChoiceDropdown extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(label, style: metaTextStyle),
-          const SizedBox(height: 4),
+          Text(
+            label,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium!
+                .copyWith(color: context.colors.muted),
+          ),
+          const SizedBox(height: 6),
           DropdownButtonFormField<String>(
             // Поле помнит начальное значение: сменилось снаружи (новый
             // файл, значение по умолчанию) — новое поле.
@@ -670,22 +679,34 @@ final class _ChoiceDropdown extends StatelessWidget {
             // обрезается снизу.
             isDense: false,
             itemHeight: null,
-            dropdownColor: AssistantColors.raised,
-            borderRadius: BorderRadius.circular(8),
+            dropdownColor: context.colors.raised,
+            borderRadius: BorderRadius.circular(12),
+            icon: Icon(Icons.unfold_more, color: context.colors.icon),
             hint:
-                const WholeWordText('Выберите', style: TextStyle(fontSize: 13)),
+                const WholeWordText('Выберите', style: TextStyle(fontSize: 17)),
             // style заменяет стиль темы целиком (не дополняет): без
             // fontFamily выбранное значение и пункты списка ушли бы в
             // системный шрифт, а не Inter.
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: AppFonts.text,
-              fontSize: 13,
-              color: AssistantColors.textStrong,
+              fontSize: 17,
+              color: context.colors.textStrong,
             ),
-            decoration: const InputDecoration(
+            // Поле внутри карточки — на уровень контрастнее карточки, без
+            // рамки, строка не ниже 48.
+            decoration: InputDecoration(
               isDense: true,
-              contentPadding: EdgeInsets.fromLTRB(10, 0, 10, 0),
-              border: OutlineInputBorder(),
+              fillColor: context.colors.fieldOnRaised,
+              constraints: const BoxConstraints(minHeight: 48),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.fromLTRB(14, 4, 10, 4),
             ),
             selectedItemBuilder: (BuildContext context) => <Widget>[
               for (final option in options)
@@ -695,7 +716,7 @@ final class _ChoiceDropdown extends StatelessWidget {
                     option.label,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13),
+                    style: const TextStyle(fontSize: 17),
                   ),
                 ),
             ],
@@ -714,18 +735,18 @@ final class _ChoiceDropdown extends StatelessWidget {
                         WholeWordText(
                           option.label,
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 17,
                             color: option.enabled
-                                ? AssistantColors.textStrong
-                                : AssistantColors.muted,
+                                ? context.colors.textStrong
+                                : context.colors.muted,
                           ),
                         ),
                         if (option.disabledReason case final String reason)
                           WholeWordText(
                             reason,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AssistantColors.muted,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: context.colors.muted,
                             ),
                           ),
                       ],
@@ -791,12 +812,14 @@ final class _UrlFieldState extends State<_UrlField> {
         enableSuggestions: false,
         maxLines: 1,
         maxLength: YtdlUrl.maxLength,
-        style: const TextStyle(fontSize: 13),
-        decoration: const InputDecoration(
+        style: const TextStyle(fontSize: 17),
+        decoration: InputDecoration(
           isDense: true,
+          fillColor: context.colors.fieldOnRaised,
           hintText: 'https://…',
+          // На поле в карточке — вторичным, а не «тише» (ADR-027).
+          hintStyle: TextStyle(color: context.colors.muted),
           counterText: '',
-          border: OutlineInputBorder(),
         ),
         onChanged: widget.onChanged,
       );

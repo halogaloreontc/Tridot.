@@ -292,9 +292,9 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
       _Step.done => _doneView(),
     };
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: context.colors.workspace,
       appBar: AppBar(
-        backgroundColor: AssistantColors.workspace,
+        backgroundColor: context.colors.workspace,
         title: const Text('Импорт из браузера'),
       ),
       body: SafeArea(child: body),
@@ -311,16 +311,16 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
               child: Text(
                 _message!,
                 key: const ValueKey<String>('import-message'),
-                style: const TextStyle(color: AssistantColors.danger),
+                style: TextStyle(color: context.colors.danger),
               ),
             ),
         ],
       );
 
   Widget _pickView() => _page(<Widget>[
-        const Text(
+        Text(
           'Сохраните пароли из браузера или менеджера паролей в файл CSV:',
-          style: TextStyle(color: AssistantColors.textStrong),
+          style: TextStyle(color: context.colors.textStrong),
         ),
         const SizedBox(height: 8),
         const _Hint(
@@ -332,14 +332,14 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
         ),
         const _Hint('Bitwarden, KeePassXC, Safari — «Экспорт» в формате CSV.'),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Файл CSV — открытый текст. После импорта его лучше удалить.',
-          style: TextStyle(color: AssistantColors.warning),
+          style: TextStyle(color: context.colors.warning),
         ),
         const SizedBox(height: 4),
         Text(
           kit.files.placeNote,
-          style: const TextStyle(color: AssistantColors.muted),
+          style: TextStyle(color: context.colors.muted),
         ),
         const SizedBox(height: 16),
         FilledButton.icon(
@@ -358,22 +358,22 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Text(
                 '${c.title}: ${c.sample}',
-                style: const TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
             ),
         ],
       );
 
   Widget _encodingView() => _page(<Widget>[
-        const Text(
+        Text(
           'Файл не в UTF-8. Прочитать как Windows-1251?',
-          style: TextStyle(color: AssistantColors.textStrong),
+          style: TextStyle(color: context.colors.textStrong),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Так бывает, если файл пересохраняли в Excel. Колонки (примеры — '
           'в маске, у пароля — без примера):',
-          style: TextStyle(color: AssistantColors.muted),
+          style: TextStyle(color: context.colors.muted),
         ),
         const SizedBox(height: 8),
         _columnsTable(),
@@ -407,14 +407,14 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
   };
 
   Widget _mappingView() => _page(<Widget>[
-        const Text(
+        Text(
           'Какая колонка что значит? Примеры показаны в маске.',
-          style: TextStyle(color: AssistantColors.textStrong),
+          style: TextStyle(color: context.colors.textStrong),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Подсказки и отметку «Важный» из файла не берём.',
-          style: TextStyle(color: AssistantColors.muted),
+          style: TextStyle(color: context.colors.muted),
         ),
         const SizedBox(height: 12),
         for (final MapEntry(key: role, value: title) in _roleTitles.entries)
@@ -427,13 +427,13 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
               children: <Widget>[
                 Text(
                   title,
-                  style: const TextStyle(color: AssistantColors.text),
+                  style: TextStyle(color: context.colors.text),
                 ),
                 DropdownButton<int?>(
                   key: ValueKey<String>('import-role-$role'),
                   isExpanded: true,
                   value: _roles[role],
-                  dropdownColor: AssistantColors.raised,
+                  dropdownColor: context.colors.raised,
                   items: <DropdownMenuItem<int?>>[
                     const DropdownMenuItem<int?>(child: Text('— нет —')),
                     for (var i = 0; i < _columns.length; i++)
@@ -488,7 +488,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
             'Нашёл ${plan.records.length}: новых $fresh, дублей $same, '
             'с другим паролем $conflict.',
             key: const ValueKey<String>('import-summary'),
-            style: const TextStyle(color: AssistantColors.textStrong),
+            style: TextStyle(color: context.colors.textStrong),
           ),
           if (plan.skippedTotal > 0)
             Text(
@@ -496,36 +496,36 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
               '${skipped[CsvSkip.noPassword]}, служебные '
               '${skipped[CsvSkip.service]}, с ошибками '
               '${skipped[CsvSkip.invalid]}.',
-              style: const TextStyle(color: AssistantColors.muted),
+              style: TextStyle(color: context.colors.muted),
             ),
           if (plan.merged > 0)
             Text(
               'Одинаковых строк склеено: ${plan.merged}.',
-              style: const TextStyle(color: AssistantColors.muted),
+              style: TextStyle(color: context.colors.muted),
             ),
           if (plan.otpDropped > 0)
             Text(
               'Одноразовые коды (${plan.otpDropped}) не переносятся — '
               'они остаются в прежнем приложении.',
-              style: const TextStyle(color: AssistantColors.warning),
+              style: TextStyle(color: context.colors.warning),
             ),
           if (plan.badUrls > 0)
             Text(
               'Отброшено адресов с недопустимой схемой: ${plan.badUrls}.',
-              style: const TextStyle(color: AssistantColors.warning),
+              style: TextStyle(color: context.colors.warning),
             ),
           if (plan.excelWarning)
-            const Text(
+            Text(
               'Если файл открывали в Excel, часть паролей могла '
               'измениться; проверьте важные через «Проверить себя».',
-              style: TextStyle(color: AssistantColors.warning),
+              style: TextStyle(color: context.colors.warning),
             ),
           if (plan.errors.isNotEmpty)
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
               title: Text(
                 'Строки с замечаниями (${plan.errors.length})',
-                style: const TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
               children: <Widget>[
                 for (final e in plan.errors)
@@ -533,9 +533,9 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       e,
-                      style: const TextStyle(
-                        color: AssistantColors.muted,
-                        fontSize: 12,
+                      style: TextStyle(
+                        color: context.colors.muted,
+                        fontSize: 13,
                       ),
                     ),
                   ),
@@ -560,7 +560,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               _message!,
-              style: const TextStyle(color: AssistantColors.danger),
+              style: TextStyle(color: context.colors.danger),
             ),
           ),
         Padding(
@@ -608,14 +608,14 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
             dense: true,
             title: Text(
               item.service,
-              style: const TextStyle(color: AssistantColors.textStrong),
+              style: TextStyle(color: context.colors.textStrong),
             ),
             subtitle: Text(
               details,
               style: TextStyle(
                 color: match.status == ImportStatus.conflict
-                    ? AssistantColors.warning
-                    : AssistantColors.muted,
+                    ? context.colors.warning
+                    : context.colors.muted,
               ),
             ),
             onChanged: (bool? on) => setState(() {
@@ -630,7 +630,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
                 key: ValueKey<String>('import-choice-$i'),
                 isExpanded: true,
                 value: _choices[i],
-                dropdownColor: AssistantColors.raised,
+                dropdownColor: context.colors.raised,
                 items: const <DropdownMenuItem<ImportChoice>>[
                   DropdownMenuItem<ImportChoice>(
                     value: ImportChoice.keepBoth,
@@ -660,7 +660,7 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
                 key: ValueKey<String>('import-variant-$i'),
                 isExpanded: true,
                 value: record.selected,
-                dropdownColor: AssistantColors.raised,
+                dropdownColor: context.colors.raised,
                 items: <DropdownMenuItem<int>>[
                   for (var v = 0; v < record.variants.length; v++)
                     DropdownMenuItem<int>(
@@ -691,22 +691,22 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
       Text(
         'Импортировано: новых ${result.added}, заменено ${result.replaced}.',
         key: const ValueKey<String>('import-done'),
-        style: const TextStyle(color: AssistantColors.textStrong, fontSize: 16),
+        style: TextStyle(color: context.colors.textStrong, fontSize: 17),
       ),
       if (_excel)
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 6),
           child: Text(
             'Если файл открывали в Excel, часть паролей могла измениться; '
             'проверьте важные через «Проверить себя».',
-            style: TextStyle(color: AssistantColors.warning),
+            style: TextStyle(color: context.colors.warning),
           ),
         ),
       const SizedBox(height: 12),
-      const Text(
+      Text(
         'Дальше: проверьте надёжность, отметьте важные записи и добавьте '
         'к ним подсказки — в списке «Пароли».',
-        style: TextStyle(color: AssistantColors.text),
+        style: TextStyle(color: context.colors.text),
       ),
       const SizedBox(height: 8),
       OutlinedButton.icon(
@@ -722,17 +722,17 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
         label: const Text('Проверить пароли'),
       ),
       const SizedBox(height: 16),
-      const Text(
+      Text(
         'Файл CSV лежит открытым текстом. Удалим его?',
-        style: TextStyle(color: AssistantColors.warning),
+        style: TextStyle(color: context.colors.warning),
       ),
       const SizedBox(height: 6),
       if (_deleted)
-        const Text(
+        Text(
           'Файл удалён. Честно: на SSD удалённое иногда можно восстановить '
           'специальными программами.',
           key: ValueKey<String>('import-deleted'),
-          style: TextStyle(color: AssistantColors.muted),
+          style: TextStyle(color: context.colors.muted),
         )
       else if (kit.files.canDelete)
         OutlinedButton.icon(
@@ -742,11 +742,11 @@ class _CsvImportScreenState extends State<CsvImportScreen> {
           label: const Text('Удалить CSV-файл'),
         )
       else
-        const Text(
+        Text(
           'Удалите файл в «Файлах» (или в файловом менеджере), а также из '
           '«Загрузок» браузера и корзины. На флеш-памяти удалённое иногда '
           'восстановимо.',
-          style: TextStyle(color: AssistantColors.muted),
+          style: TextStyle(color: context.colors.muted),
         ),
       const SizedBox(height: 16),
       FilledButton(
@@ -776,7 +776,7 @@ class _Hint extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 4),
         child: Text(
           '• $text',
-          style: const TextStyle(color: AssistantColors.text),
+          style: TextStyle(color: context.colors.text),
         ),
       );
 }

@@ -103,6 +103,15 @@ void main() {
     await tester.tap(find.byKey(const Key('today-all-tasks')));
     await tester.tap(find.byKey(const Key('today-section-projects')));
     expect(log, <String>['open:a', 'done:b', 'pending', 'all', 'projects']);
+    // Цели нажатия — не меньше 48 (§3): кружок «готово» и разделы.
+    for (final key in <Key>[
+      const ValueKey<String>('today-done-a'),
+      const Key('today-section-projects'),
+    ]) {
+      final size = tester.getSize(find.byKey(key));
+      expect(size.height, greaterThanOrEqualTo(48), reason: '$key');
+      expect(size.width, greaterThanOrEqualTo(48), reason: '$key');
+    }
     expect(
       tester
           .widget<Container>(
@@ -117,7 +126,7 @@ void main() {
       isA<BoxDecoration>().having(
         (BoxDecoration d) => (d.border! as Border).top.color,
         'рамка',
-        AssistantColors.danger,
+        AppPalette.dark.danger,
       ),
     );
   });

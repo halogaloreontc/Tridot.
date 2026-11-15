@@ -411,6 +411,8 @@ void main() {
       await tester.tap(find.byKey(const Key('quick-Где лежит…')));
       await tester.pumpAndSettle();
       expect(_input(tester), 'Где лежит ');
+      // Поле-капсула выросло под шаблон (ADR-027): строка кнопок — над ним.
+      final row = tester.getRect(find.byKey(const Key('quick-Где лежит…'))).top;
       // До остальных — прокруткой строки.
       for (final label in <String>['Без фото', 'Напомнить']) {
         await tester.dragUntilVisible(
@@ -428,7 +430,7 @@ void main() {
           findsOneWidget,
           reason: label,
         );
-        expect(tester.getRect(find.byKey(Key('quick-$label'))).top, first.top);
+        expect(tester.getRect(find.byKey(Key('quick-$label'))).top, row);
       }
       await tester.ensureVisible(find.byKey(const Key('quick-Без фото')));
       await tester.pumpAndSettle();

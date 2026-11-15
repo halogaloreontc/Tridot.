@@ -41,19 +41,23 @@ final class TaskChatHeader extends StatelessWidget {
   /// Меньше — название и меню действий.
   static const double mediumWidth = 320;
 
-  static const TextStyle _titleStyle = TextStyle(
-    fontSize: 16,
-    fontWeight: FontWeight.w600,
-    color: AssistantColors.textStrong,
-  );
+  static TextStyle _titleStyleOf(BuildContext context) => TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.w600,
+        color: context.colors.textStrong,
+      );
 
   /// «В работе», «Выполнена», «Просрочена».
-  static (String, Color) statusOf(Task task, DateTime now) {
+  static (String, Color) statusOf(
+    Task task,
+    DateTime now,
+    AppPalette colors,
+  ) {
     if (task.status == TaskStatus.done) {
-      return ('Выполнена', AssistantColors.success);
+      return ('Выполнена', colors.success);
     }
-    if (isOverdue(task, now)) return ('Просрочена', AssistantColors.danger);
-    return ('В работе', AssistantColors.muted);
+    if (isOverdue(task, now)) return ('Просрочена', colors.danger);
+    return ('В работе', colors.muted);
   }
 
   @override
@@ -65,26 +69,32 @@ final class TaskChatHeader extends StatelessWidget {
   Widget _build(BuildContext context, double width) {
     final task = this.task;
     if (task == null) {
-      return const Text(
+      return Text(
         'Задача',
         key: Key('task-chat-header'),
-        style: _titleStyle,
+        style: _titleStyleOf(context),
       );
     }
     final done = task.status == TaskStatus.done;
     final due = task.dueAt;
-    final (status, statusColor) = statusOf(task, now);
+    final (status, statusColor) = statusOf(task, now, context.colors);
     final title = Text(
       task.title,
       key: const Key('task-chat-title'),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: _titleStyle,
+      style: _titleStyleOf(context),
     );
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
     final compact = narrow || largeText || width < mediumWidth;
     if (!compact && width < _fullWidth(context, task, status, done: done)) {
-      return _medium(task, done: done, status: status, color: statusColor);
+      return _medium(
+        context,
+        task,
+        done: done,
+        status: status,
+        color: statusColor,
+      );
     }
     if (compact) {
       return Row(
@@ -102,7 +112,8 @@ final class TaskChatHeader extends StatelessWidget {
           PopupMenuButton<String>(
             key: const Key('task-chat-menu'),
             tooltip: 'Действия с задачей',
-            icon: const Icon(Icons.more_vert, size: 20),
+            icon:
+                Icon(Icons.more_horiz, size: 22, color: context.colors.accent),
             onSelected: (String value) => switch (value) {
               'done' => onDone(),
               'reopen' => onReopen(),
@@ -115,7 +126,7 @@ final class TaskChatHeader extends StatelessWidget {
                 child: Text(
                   status,
                   key: const Key('task-chat-status'),
-                  style: metaTextStyle.copyWith(color: statusColor),
+                  style: metaStyle(context).copyWith(color: statusColor),
                 ),
               ),
               if (done)
@@ -146,8 +157,7 @@ final class TaskChatHeader extends StatelessWidget {
       );
     }
     final buttonStyle = OutlinedButton.styleFrom(
-      foregroundColor: AssistantColors.text,
-      side: const BorderSide(color: AssistantColors.border),
+      foregroundColor: context.colors.text,
       minimumSize: const Size(0, 32),
       visualDensity: VisualDensity.standard,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -161,14 +171,14 @@ final class TaskChatHeader extends StatelessWidget {
           const SizedBox(width: 10),
           Text(
             formatDue(due, task.duePrecision, now),
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
         ],
         const SizedBox(width: 10),
         Text(
           status,
           key: const Key('task-chat-status'),
-          style: metaTextStyle.copyWith(color: statusColor),
+          style: metaStyle(context).copyWith(color: statusColor),
         ),
         const SizedBox(width: 12),
         if (done)
@@ -179,7 +189,7 @@ final class TaskChatHeader extends StatelessWidget {
             icon: const Icon(Icons.replay, size: 16),
             label: const Text(
               'Вернуть в работу',
-              style: TextStyle(fontSize: 12),
+              style: TextStyle(fontSize: 13),
             ),
           )
         else
@@ -188,7 +198,7 @@ final class TaskChatHeader extends StatelessWidget {
             onPressed: onDone,
             style: buttonStyle,
             icon: const Icon(Icons.check, size: 16),
-            label: const Text('Выполнено', style: TextStyle(fontSize: 12)),
+            label: const Text('Выполнено', style: TextStyle(fontSize: 13)),
           ),
         IconButton(
           key: const Key('task-chat-reschedule'),
@@ -234,17 +244,17 @@ final class TaskChatHeader extends StatelessWidget {
     final label = Theme.of(context)
         .textTheme
         .labelLarge
-        ?.merge(const TextStyle(fontSize: 12));
+        ?.merge(const TextStyle(fontSize: 13));
     return minTitleWidth +
         (due == null
             ? 0
             : 10 +
                 measure(
                   formatDue(due, task.duePrecision, now),
-                  metaTextStyle,
+                  metaStyle(context),
                 )) +
         10 +
-        measure(status, metaTextStyle) +
+        measure(status, metaStyle(context)) +
         12 +
         // Кнопка: отступы 12 + значок 16 + промежуток 8 + подпись.
         12 +
@@ -252,7 +262,7 @@ final class TaskChatHeader extends StatelessWidget {
         8 +
         measure(
           done ? 'Вернуть в работу' : 'Выполнено',
-          label ?? const TextStyle(fontSize: 12),
+          label ?? const TextStyle(fontSize: 13),
         ) +
         12 +
         // Два значка по 48 и запас на округление.
@@ -263,6 +273,7 @@ final class TaskChatHeader extends StatelessWidget {
   /// Средняя ширина: название, под ним срок и статус; действия — значки с
   /// подсказками.
   Widget _medium(
+    BuildContext context,
     Task task, {
     required bool done,
     required String status,
@@ -282,7 +293,7 @@ final class TaskChatHeader extends StatelessWidget {
                 key: const Key('task-chat-title'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: _titleStyle.copyWith(height: 1.25),
+                style: _titleStyleOf(context).copyWith(height: 1.25),
               ),
               Row(
                 children: <Widget>[
@@ -292,7 +303,7 @@ final class TaskChatHeader extends StatelessWidget {
                         formatDue(due, task.duePrecision, now),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: metaTextStyle.copyWith(height: 1.2),
+                        style: metaStyle(context).copyWith(height: 1.2),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -301,7 +312,7 @@ final class TaskChatHeader extends StatelessWidget {
                     status,
                     key: const Key('task-chat-status'),
                     maxLines: 1,
-                    style: metaTextStyle.copyWith(
+                    style: metaStyle(context).copyWith(
                       color: color,
                       height: 1.2,
                     ),

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/voice/voice_recognizer.dart';
 import '../assistant_theme.dart';
-import '../widgets/task_tile.dart';
+import '../widgets/grouped.dart';
 import 'voice_kit.dart';
 import '../widgets/whole_word_text.dart';
 
@@ -29,7 +29,6 @@ Future<bool> showVoiceOffer(BuildContext context, VoiceKit voice) async {
     context: context,
     builder: (BuildContext context) => AlertDialog(
       scrollable: true,
-      backgroundColor: AssistantColors.raised,
       title: const WholeWordText('Включить голосовой ввод?'),
       content: Text(
         'Один раз скачается модель распознавания (${voiceModelSize(voice)}) '
@@ -60,7 +59,6 @@ Future<bool> showVoiceRationale(BuildContext context) async {
     context: context,
     builder: (BuildContext context) => AlertDialog(
       scrollable: true,
-      backgroundColor: AssistantColors.raised,
       title: const WholeWordText('Доступ к микрофону'),
       content: const Text(
         'Микрофон нужен, чтобы распознать речь прямо на телефоне. Звук не '
@@ -75,7 +73,7 @@ Future<bool> showVoiceRationale(BuildContext context) async {
         FilledButton(
           key: const Key('voice-rationale-continue'),
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Продолжить'),
+          child: const WholeWordText('Продолжить'),
         ),
       ],
     ),
@@ -103,7 +101,6 @@ Future<VoiceInstallOutcome> showVoiceInstallSheet(
     context: context,
     isDismissible: false,
     enableDrag: false,
-    backgroundColor: AssistantColors.raised,
     constraints: const BoxConstraints(maxWidth: 560),
     builder: (BuildContext context) => _VoiceInstallSheet(voice: voice),
   );
@@ -160,10 +157,10 @@ final class _VoiceInstallSheetState extends State<_VoiceInstallSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Text(
+            Text(
               'Модель голосового ввода',
               style: TextStyle(
-                color: AssistantColors.textStrong,
+                color: context.colors.textStrong,
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
               ),
@@ -204,12 +201,6 @@ final class _VoiceInstallSheetState extends State<_VoiceInstallSheet> {
   }
 }
 
-/// Полоса загрузки: светлая заливка на тёмной дорожке. Цвета по умолчанию
-/// здесь совпадают (дорожка — из `secondary`), и полоса не видна. Те же
-/// цвета задаёт всем полосам `progressIndicatorTheme` в [AssistantTheme].
-const Color voiceProgressColor = AssistantColors.primary;
-const Color voiceProgressTrack = AssistantColors.borderSoft;
-
 /// Ход установки модели: полоса загрузки с «Отменой», проверка,
 /// распаковка или ошибка с «Повторить». Пусто, если ничего не идёт.
 final class VoiceInstallStatus extends StatelessWidget {
@@ -237,8 +228,8 @@ final class VoiceInstallStatus extends StatelessWidget {
               value: total > 0
                   ? (voice.received / total).clamp(0.0, 1.0).toDouble()
                   : null,
-              color: voiceProgressColor,
-              backgroundColor: voiceProgressTrack,
+              color: context.colors.accent,
+              backgroundColor: context.colors.bubble,
               minHeight: 4,
               borderRadius: BorderRadius.circular(2),
             ),
@@ -246,10 +237,10 @@ final class VoiceInstallStatus extends StatelessWidget {
             Row(
               children: <Widget>[
                 Expanded(
-                  child: Text(
+                  child: WholeWordText(
                     'Скачивается: ${voiceProgressText(voice)}',
                     key: const Key('voice-progress'),
-                    style: metaTextStyle,
+                    style: metaStyle(context),
                   ),
                 ),
                 TextButton(
@@ -269,8 +260,8 @@ final class VoiceInstallStatus extends StatelessWidget {
           children: <Widget>[
             LinearProgressIndicator(
               key: const Key('voice-progress-bar'),
-              color: voiceProgressColor,
-              backgroundColor: voiceProgressTrack,
+              color: context.colors.accent,
+              backgroundColor: context.colors.bubble,
               minHeight: 4,
               borderRadius: BorderRadius.circular(2),
             ),
@@ -280,7 +271,7 @@ final class VoiceInstallStatus extends StatelessWidget {
                   ? 'Проверка…'
                   : 'Распаковка…',
               key: const Key('voice-progress'),
-              style: metaTextStyle,
+              style: metaStyle(context),
             ),
           ],
         );
@@ -291,7 +282,7 @@ final class VoiceInstallStatus extends StatelessWidget {
             Text(
               voice.error?.message ?? 'Не удалось установить модель',
               key: const Key('voice-error'),
-              style: const TextStyle(color: AssistantColors.danger),
+              style: TextStyle(color: context.colors.danger),
             ),
             const SizedBox(height: 4),
             TextButton(
@@ -328,23 +319,20 @@ final class VoiceSettingsSection extends StatelessWidget {
   /// `null` или без движка — на этой платформе голосового ввода нет.
   final VoiceKit? voice;
 
-  static const _title = TextStyle(color: AssistantColors.text);
-
   @override
   Widget build(BuildContext context) {
     final voice = this.voice;
     if (voice == null || voice.support == VoiceSupport.unsupported) {
-      return const Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      return InsetGroup(
+        header: 'Голос',
         children: <Widget>[
-          SectionLabel('Голосовой ввод'),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              'На этой платформе пока недоступен — сейчас только Android',
-              key: Key('voice-unsupported'),
-              style: metaTextStyle,
-            ),
+          GroupedRow(
+            key: const Key('voice-unsupported'),
+            icon: Icons.mic_none,
+            tile: context.colors.tileGray,
+            title: 'Голосовой ввод',
+            subtitle:
+                'На этой платформе пока недоступен — сейчас только Android',
           ),
         ],
       );
@@ -358,69 +346,53 @@ final class VoiceSettingsSection extends StatelessWidget {
   Widget _build(BuildContext context, VoiceKit voice) {
     final installed = voice.isInstalled;
     final enabled = settings.voiceInput;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final showStatus = voice.isBusy || voice.phase == VoiceKitPhase.error;
+    return InsetGroup(
+      header: 'Голос',
       children: <Widget>[
-        const SectionLabel('Голосовой ввод'),
-        SwitchListTile(
+        GroupedSwitchRow(
           key: const Key('setting-voice'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          title: const WholeWordText('Голосовой ввод', style: _title),
-          subtitle: Text(
-            installed
-                ? 'Модель скачана. Звук не сохраняется и никуда не '
-                    'отправляется'
-                : 'Модель ${voiceModelSize(voice)} скачается один раз с сайта '
-                    '${voice.spec.uri.host}. Звук не сохраняется и никуда не '
-                    'отправляется',
-            style: metaTextStyle,
+          secondary: IconTile(
+            icon: Icons.mic_none,
+            color: context.colors.tileBlue,
           ),
+          title: 'Голосовой ввод',
+          subtitle: installed
+              ? 'Модель скачана. Звук не сохраняется и никуда не '
+                  'отправляется'
+              : 'Модель ${voiceModelSize(voice)} скачается один раз с сайта '
+                  '${voice.spec.uri.host}. Звук не сохраняется и никуда не '
+                  'отправляется',
           value: enabled,
           onChanged: (bool value) =>
               unawaited(_toggle(context, voice, value: value)),
         ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-            8,
-            voice.isBusy || voice.phase == VoiceKitPhase.error ? 8 : 0,
-            8,
-            0,
-          ),
-          child: VoiceInstallStatus(
-            voice: voice,
-            onCancel: () {
-              voice.cancel();
-              onChanged(settings.copyWith(voiceInput: false));
-            },
-            onRetry: () => unawaited(voice.install()),
-          ),
-        ),
-        if (enabled && voice.phase == VoiceKitPhase.notInstalled)
+        if (showStatus)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                key: const Key('voice-download'),
-                style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
-                onPressed: () => unawaited(voice.install()),
-                child: Text(
-                  voice.hasPartial
-                      ? 'Продолжить загрузку модели'
-                      : 'Скачать модель (${voiceModelSize(voice)})',
-                ),
-              ),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: VoiceInstallStatus(
+              voice: voice,
+              onCancel: () {
+                voice.cancel();
+                onChanged(settings.copyWith(voiceInput: false));
+              },
+              onRetry: () => unawaited(voice.install()),
             ),
           ),
-        SwitchListTile(
-          key: const Key('setting-voice-send-now'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          title: const WholeWordText('Отправлять сразу', style: _title),
-          subtitle: const WholeWordText(
-            'Без правки в поле ввода. Похожее на пароль не отправляется '
-            'автоматически',
-            style: metaTextStyle,
+        if (enabled && voice.phase == VoiceKitPhase.notInstalled)
+          GroupedRow(
+            key: const Key('voice-download'),
+            accent: true,
+            title: voice.hasPartial
+                ? 'Продолжить загрузку модели'
+                : 'Скачать модель (${voiceModelSize(voice)})',
+            onTap: () => unawaited(voice.install()),
           ),
+        GroupedSwitchRow(
+          key: const Key('setting-voice-send-now'),
+          title: 'Отправлять сразу',
+          subtitle: 'Без правки в поле ввода. Похожее на пароль не '
+              'отправляется автоматически',
           value: settings.voiceSendImmediately,
           onChanged: enabled && installed
               ? (bool value) =>
@@ -428,27 +400,13 @@ final class VoiceSettingsSection extends StatelessWidget {
               : null,
         ),
         if (installed || (voice.hasPartial && !voice.isBusy))
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                key: const Key('voice-delete'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(40, 44),
-                  foregroundColor: AssistantColors.danger,
-                  side: const BorderSide(color: AssistantColors.border),
-                ),
-                onPressed: () => unawaited(_confirmDelete(context, voice)),
-                icon: const Icon(Icons.delete_outline, size: 18),
-                label: Text(
-                  installed
-                      ? 'Удалить модель (${voiceMegabytes(voice.installedBytes)}'
-                          ' МБ)'
-                      : 'Удалить недокачанную модель',
-                ),
-              ),
-            ),
+          GroupedRow(
+            key: const Key('voice-delete'),
+            destructive: true,
+            title: installed
+                ? 'Удалить модель (${voiceMegabytes(voice.installedBytes)} МБ)'
+                : 'Удалить недокачанную модель',
+            onTap: () => unawaited(_confirmDelete(context, voice)),
           ),
       ],
     );
@@ -482,7 +440,6 @@ final class VoiceSettingsSection extends StatelessWidget {
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
         scrollable: true,
-        backgroundColor: AssistantColors.raised,
         title: const WholeWordText('Удалить модель распознавания?'),
         content: const Text(
           'Место освободится, голосовой ввод выключится. Чтобы снова '
@@ -497,7 +454,7 @@ final class VoiceSettingsSection extends StatelessWidget {
           TextButton(
             key: const Key('voice-delete-confirm'),
             style: TextButton.styleFrom(
-              foregroundColor: AssistantColors.danger,
+              foregroundColor: context.colors.danger,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Удалить'),

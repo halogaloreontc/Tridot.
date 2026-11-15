@@ -75,7 +75,6 @@ final class _ProjectDialogState extends State<_ProjectDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AssistantColors.raised,
       scrollable: true,
       title: WholeWordText(widget.title),
       content: Column(
@@ -157,7 +156,6 @@ Future<ProjectMove?> showMoveToProjectSheet(
 }) {
   return showModalBottomSheet<ProjectMove>(
     context: context,
-    backgroundColor: AssistantColors.raised,
     isScrollControlled: true,
     showDragHandle: true,
     builder: (BuildContext context) => SafeArea(
@@ -170,32 +168,32 @@ Future<ProjectMove?> showMoveToProjectSheet(
           shrinkWrap: true,
           padding: const EdgeInsets.only(bottom: 12),
           children: <Widget>[
-            const Padding(
+            Padding(
               padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: Text(
                 'В проект',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: AssistantColors.textStrong,
+                  color: context.colors.textStrong,
                 ),
               ),
             ),
             for (final project in projects)
               ListTile(
                 key: Key('move-to-${project.id}'),
-                leading: const Icon(
+                leading: Icon(
                   Icons.folder_outlined,
-                  color: AssistantColors.icon,
+                  color: context.colors.icon,
                 ),
                 title: Text(
                   project.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: projectNameStyle(),
+                  style: projectNameStyle(color: context.colors.textStrong),
                 ),
                 trailing: project.id == currentProjectId
-                    ? const Icon(Icons.check, color: AssistantColors.icon)
+                    ? Icon(Icons.check, color: context.colors.icon)
                     : null,
                 onTap: () => Navigator.of(context).pop<ProjectMove>(
                   MoveToProject(project.id),
@@ -203,9 +201,9 @@ Future<ProjectMove?> showMoveToProjectSheet(
               ),
             ListTile(
               key: const Key('move-new-project'),
-              leading: const Icon(
+              leading: Icon(
                 Icons.create_new_folder_outlined,
-                color: AssistantColors.icon,
+                color: context.colors.icon,
               ),
               title: const WholeWordText('Новый проект…'),
               onTap: () => Navigator.of(context)
@@ -214,9 +212,9 @@ Future<ProjectMove?> showMoveToProjectSheet(
             if (currentProjectId != null)
               ListTile(
                 key: const Key('move-out'),
-                leading: const Icon(
+                leading: Icon(
                   Icons.folder_off_outlined,
-                  color: AssistantColors.icon,
+                  color: context.colors.icon,
                 ),
                 title: const WholeWordText('Убрать из проекта'),
                 onTap: () => Navigator.of(context)
@@ -251,7 +249,6 @@ Future<ProjectDeleteChoice?> showDeleteProjectDialog(
   return showDialog<ProjectDeleteChoice>(
     context: context,
     builder: (BuildContext context) => AlertDialog(
-      backgroundColor: AssistantColors.raised,
       scrollable: true,
       title: const WholeWordText('Удалить проект?'),
       content: Text(
@@ -273,7 +270,7 @@ Future<ProjectDeleteChoice?> showDeleteProjectDialog(
             onPressed: () =>
                 Navigator.of(context).pop(ProjectDeleteChoice.deleteSessions),
             style: TextButton.styleFrom(
-              foregroundColor: AssistantColors.danger,
+              foregroundColor: context.colors.danger,
             ),
             child: Text('Удалить вместе с сессиями ($sessions)'),
           ),
@@ -291,7 +288,7 @@ Future<ProjectDeleteChoice?> showDeleteProjectDialog(
             onPressed: () =>
                 Navigator.of(context).pop(ProjectDeleteChoice.moveOut),
             style: TextButton.styleFrom(
-              foregroundColor: AssistantColors.danger,
+              foregroundColor: context.colors.danger,
             ),
             child: const Text('Удалить'),
           ),
@@ -348,17 +345,16 @@ final class _TagDialogState extends State<_TagDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AssistantColors.raised,
       scrollable: true,
       title: const WholeWordText('Метка задач'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const Text(
+          Text(
             'Задачи с этой меткой видны в проекте, а новая задача из его '
             'сессий получает её, если в команде нет своей метки.',
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
           const SizedBox(height: 8),
           TextField(

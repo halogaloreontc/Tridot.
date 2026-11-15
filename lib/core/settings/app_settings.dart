@@ -9,11 +9,35 @@ import '../personas/persona.dart';
 
 export '../personas/persona.dart';
 
+/// Оформление (ADR-027): как в системе, светлое или тёмное.
+enum AppAppearance {
+  system('system', 'Как в системе'),
+  light('light', 'Светлое'),
+  dark('dark', 'Тёмное');
+
+  const AppAppearance(this.id, this.title);
+
+  /// Значение в settings.json.
+  final String id;
+
+  /// Подпись в настройках.
+  final String title;
+
+  /// Неизвестное или битое значение — [system].
+  static AppAppearance parse(Object? value) {
+    for (final appearance in values) {
+      if (appearance.id == value) return appearance;
+    }
+    return system;
+  }
+}
+
 /// Пользовательские настройки интерфейса.
 final class AppSettings {
   const AppSettings({
+    this.appearance = AppAppearance.system,
     this.reduceMotion = false,
-    this.showTimestamps = true,
+    this.showTimestamps = false,
     this.disabledExtensions = const <String>{},
     this.enabledExtensions = const <String>{},
     this.disabledRoles = const <String>{},
@@ -39,15 +63,20 @@ final class AppSettings {
   /// умолчанию: битые настройки не должны мешать запуску.
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     final reduceMotion = json['reduce_motion'];
-    final showTimestamps = json['show_timestamps'];
+    // Время у каждого сообщения (ADR-027, S2): по умолчанию выключено.
+    // Прежние версии писали `show_timestamps` всегда, и `true` в них —
+    // это прежнее значение по умолчанию, а не выбор: явный выбор пишется
+    // в `message_times`. Явное «выключено» старых файлов сохраняется.
+    final messageTimes = json['message_times'];
     final enabledExtensions = _ids(json['enabled_extensions']);
     // Настройки до ролей: подключение, которое включали сами, включает
     // свою роль (Roles.migratedFrom) — склад продолжает отвечать.
     final legacy = !json.containsKey('enabled_roles') &&
         !json.containsKey('disabled_roles');
     return AppSettings(
+      appearance: AppAppearance.parse(json['appearance']),
       reduceMotion: reduceMotion is bool && reduceMotion,
-      showTimestamps: showTimestamps is! bool || showTimestamps,
+      showTimestamps: messageTimes is bool && messageTimes,
       disabledExtensions: _ids(json['disabled_extensions']),
       enabledExtensions: enabledExtensions,
       disabledRoles: _ids(json['disabled_roles']),
@@ -160,7 +189,11 @@ final class AppSettings {
   /// Не анимировать кубик и переходы, даже если система разрешает.
   final bool reduceMotion;
 
-  /// Показывать время под сообщениями чата.
+  /// Оформление: как в системе (по умолчанию), светлое или тёмное.
+  final AppAppearance appearance;
+
+  /// Время у каждого сообщения чата; выключено — время видно меткой над
+  /// группой сообщений и в меню сообщения.
   final bool showTimestamps;
 
   /// Выключенные расширения из включённых по умолчанию
@@ -264,6 +297,7 @@ final class AppSettings {
   final Map<String, String> formDefaults;
 
   AppSettings copyWith({
+    AppAppearance? appearance,
     bool? reduceMotion,
     bool? showTimestamps,
     Set<String>? disabledExtensions,
@@ -287,6 +321,7 @@ final class AppSettings {
     Map<String, String>? formDefaults,
   }) =>
       AppSettings(
+        appearance: appearance ?? this.appearance,
         reduceMotion: reduceMotion ?? this.reduceMotion,
         showTimestamps: showTimestamps ?? this.showTimestamps,
         disabledExtensions: disabledExtensions ?? this.disabledExtensions,
@@ -312,8 +347,11 @@ final class AppSettings {
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
+        if (appearance != AppAppearance.system) 'appearance': appearance.id,
         'reduce_motion': reduceMotion,
+        // `show_timestamps` — для прежних версий после отката.
         'show_timestamps': showTimestamps,
+        'message_times': showTimestamps,
         'disabled_extensions': disabledExtensions.toList()..sort(),
         'enabled_extensions': enabledExtensions.toList()..sort(),
         'disabled_roles': disabledRoles.toList()..sort(),

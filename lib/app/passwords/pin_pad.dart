@@ -201,7 +201,7 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
   /// крупным шрифтом «0» и «стереть» иначе уходят за край), но не меньше
   /// 48 — палец должен попадать.
   static double keySize(BuildContext context) =>
-      (MediaQuery.sizeOf(context).height * 0.08).clamp(48.0, 64.0);
+      (MediaQuery.sizeOf(context).height * 0.085).clamp(48.0, 72.0);
 
   @override
   Widget build(BuildContext context) {
@@ -238,18 +238,18 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
                 children: <Widget>[
                   for (var i = 0; i < VaultPin.length; i++)
                     Container(
-                      width: 14,
-                      height: 14,
-                      margin: const EdgeInsets.symmetric(horizontal: 7),
+                      width: 12,
+                      height: 12,
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: i < _count
-                            ? AssistantColors.textStrong
+                            ? context.colors.textStrong
                             : Colors.transparent,
                         border: Border.all(
                           color: error != null
-                              ? AssistantColors.danger
-                              : AssistantColors.muted,
+                              ? context.colors.danger
+                              : context.colors.muted,
                           width: 1.5,
                         ),
                       ),
@@ -272,7 +272,7 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
                         error,
                         key: const ValueKey<String>('pin-error'),
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: AssistantColors.danger),
+                        style: TextStyle(color: context.colors.danger),
                       ),
               ),
             ),
@@ -306,9 +306,10 @@ class _PinPadState extends State<PinPad> with SingleTickerProviderStateMixin {
                                 onTap: _active ? () => _add(cell) : null,
                                 child: Text(
                                   '$cell',
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    color: AssistantColors.textStrong,
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w400,
+                                    color: context.colors.textStrong,
                                   ),
                                 ),
                               ),
@@ -341,13 +342,11 @@ class _Key extends StatelessWidget {
       button: true,
       label: label,
       excludeSemantics: true,
-      // Заливка светлее и окна сейфа, и диалога (там фон — raised): иначе
-      // в диалоге цифры висят без видимых кнопок.
+      // Заливка контрастнее и фона сейфа, и листа диалога, без рамки
+      // (ADR-027): иначе цифры висят без видимых кнопок.
       child: Material(
-        color: onTap == null ? AssistantColors.raised : AssistantColors.bubble,
-        shape: const CircleBorder(
-          side: BorderSide(color: AssistantColors.borderSoft),
-        ),
+        color: onTap == null ? context.colors.raised : context.colors.bubble,
+        shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,

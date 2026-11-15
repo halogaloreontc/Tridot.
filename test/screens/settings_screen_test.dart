@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/screens/settings_screen.dart';
 import 'package:local_assistant/app/voice/voice_kit.dart';
+import 'package:local_assistant/app/widgets/grouped.dart';
 import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
@@ -98,7 +99,7 @@ void main() {
     expect(find.text('Настройки'), findsOneWidget);
     expect(find.text('Уменьшить анимацию'), findsOneWidget);
     expect(find.text('Кубик и переходы без движения'), findsOneWidget);
-    expect(find.text('Время под сообщениями'), findsOneWidget);
+    expect(find.text('Время у каждого сообщения'), findsOneWidget);
     expect(
       find.text(
         '${AppInfo.name} · приложение с помощниками, локально, без интернета и '
@@ -113,33 +114,36 @@ void main() {
       find.byKey(const ValueKey<String>('setting-timestamps')),
     );
     expect(reduce.value, isFalse);
-    expect(stamps.value, isTrue);
+    // Время у каждого сообщения по умолчанию выключено (ADR-027).
+    expect(stamps.value, isFalse);
   });
 
   testWidgets('switches report updated settings', (tester) async {
     final changes = <AppSettings>[];
     await tester.pumpWidget(host(onChanged: changes.add));
     await tester.tap(find.text('Уменьшить анимацию'));
-    await tester.tap(find.text('Время под сообщениями'));
+    await tester.tap(find.text('Время у каждого сообщения'));
     await tester.pump();
     expect(changes, hasLength(2));
     expect(changes[0].reduceMotion, isTrue);
-    expect(changes[0].showTimestamps, isTrue);
+    expect(changes[0].showTimestamps, isFalse);
     expect(changes[1].reduceMotion, isFalse);
-    expect(changes[1].showTimestamps, isFalse);
+    expect(changes[1].showTimestamps, isTrue);
   });
 
   testWidgets('clear chat is disabled without messages', (tester) async {
     await tester.pumpWidget(host(messageCount: 0));
-    final button = tester.widget<ButtonStyleButton>(find.byKey(clearKey));
-    expect(button.onPressed, isNull);
+    // Строка-действие цветом ошибки в группе «Сессии» (ADR-027).
+    final row = tester.widget<GroupedRow>(find.byKey(clearKey));
+    expect(row.onTap, isNull);
+    expect(row.destructive, isTrue);
   });
 
   testWidgets('clear chat is enabled from the first message', (tester) async {
     // Приветствия-сообщения нет: одно сообщение — уже история.
     await tester.pumpWidget(host(messageCount: 1));
-    final button = tester.widget<ButtonStyleButton>(find.byKey(clearKey));
-    expect(button.onPressed, isNotNull);
+    final row = tester.widget<GroupedRow>(find.byKey(clearKey));
+    expect(row.onTap, isNotNull);
   });
 
   testWidgets('clear chat asks for confirmation; cancel keeps history',
@@ -223,12 +227,19 @@ void main() {
       expect(find.text('Калькулятор'), findsOneWidget);
       expect(find.text('Задачи'), findsOneWidget);
       expect(find.text('Мои шутки'), findsOneWidget);
-      expect(find.text('v1.2.0 · Я'), findsOneWidget);
-      expect(find.text('встроено'), findsNWidgets(3));
-      expect(find.text('всегда включено'), findsOneWidget);
+      // Версия и автор — только у пака не из поставки; «встроено» не
+      // пишется, обязательное — тихой подписью (ADR-027).
+      expect(find.text('v1.2.0 · Я'), findsNothing);
+      expect(find.textContaining('встроено'), findsNothing);
+      expect(find.text('Всегда включено'), findsOneWidget);
       final tasks = tester.widget<SwitchListTile>(tile('tasks'));
       expect(tasks.value, isTrue);
       expect(tasks.onChanged, isNull);
+      // Название обязательного — не «выключенным» серым.
+      final title = tester.widget<Text>(
+        find.descendant(of: tile('tasks'), matching: find.text('Задачи')),
+      );
+      expect(title.style?.color, AppPalette.dark.textStrong);
       final calc = tester.widget<SwitchListTile>(tile('calc'));
       expect(calc.value, isTrue);
       expect(calc.onChanged, isNotNull);
@@ -253,6 +264,8 @@ void main() {
       await tester.tap(tile('jokes.basic'));
       await tester.pumpAndSettle();
       expect(changes.last.disabledExtensions, <String>{'calc', 'jokes.basic'});
+      await tester.ensureVisible(tile('calc'));
+      await tester.pumpAndSettle();
       await tester.tap(tile('calc'));
       await tester.pumpAndSettle();
       expect(changes.last.disabledExtensions, <String>{'jokes.basic'});
@@ -562,7 +575,7 @@ void main() {
       await tap(tester, 'jokes-off');
       expect(changes.last.personas.jokes, JokeFrequency.off);
       // Остальное не тронуто.
-      expect(changes.last.showTimestamps, isTrue);
+      expect(changes.last.showTimestamps, isFalse);
       expect(changes.last.disabledExtensions, isEmpty);
     });
 

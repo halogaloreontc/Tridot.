@@ -14,7 +14,6 @@ Future<bool> showYtdlWarning(BuildContext context) async {
     context: context,
     builder: (BuildContext context) => AlertDialog(
       scrollable: true,
-      backgroundColor: AssistantColors.raised,
       title: const WholeWordText('Включить загрузчик видео?'),
       content: const Text(
         'Правила YouTube и других площадок запрещают скачивание без '
@@ -101,10 +100,10 @@ final class _YtdlFolderSettingState extends State<YtdlFolderSetting> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
+          Text(
             'Папка загрузок',
             style: TextStyle(
-              color: AssistantColors.textStrong,
+              color: context.colors.textStrong,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -112,7 +111,7 @@ final class _YtdlFolderSettingState extends State<YtdlFolderSetting> {
           Text(
             _folder ?? 'Папка загрузок не найдена — выберите её',
             key: const ValueKey<String>('ytdl-folder'),
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -137,12 +136,12 @@ final class _YtdlFolderSettingState extends State<YtdlFolderSetting> {
             ],
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'Для «Только звук (mp3)» и качества выше цельного файла нужен '
             'ffmpeg: Настройки → Расширения → Конвертер → Настроить. Полная '
             'поддержка YouTube требует JavaScript-движка deno — приложение '
             'его не ставит, поэтому часть роликов YouTube может не скачаться.',
-            style: metaTextStyle,
+            style: metaStyle(context),
           ),
         ],
       ),

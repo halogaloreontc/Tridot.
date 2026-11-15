@@ -47,7 +47,6 @@ Future<CommandEntry?> showCommandFinder(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: AssistantColors.raised,
       constraints: const BoxConstraints(maxWidth: 640),
       builder: (BuildContext context) => CommandFinderSheet(catalog: catalog),
     );
@@ -96,17 +95,21 @@ final class _CommandFinderSheetState extends State<CommandFinderSheet> {
                   controller: _query,
                   autofocus: false,
                   onChanged: (_) => setState(() {}),
-                  style: const TextStyle(color: AssistantColors.textStrong),
-                  decoration: const InputDecoration(
+                  style: TextStyle(color: context.colors.textStrong),
+                  // Шторка — на фоне (`background`), поле — на уровень
+                  // контрастнее (листом): в светлой теме заливка `raised`
+                  // совпала бы с шторкой и поля не было бы видно.
+                  decoration: InputDecoration(
                     hintText: 'Найти команду',
-                    prefixIcon: Icon(Icons.search),
+                    prefixIcon: const Icon(Icons.search),
                     isDense: true,
+                    fillColor: context.colors.workspace,
                   ),
                 ),
               ),
               Expanded(
                 child: found.isEmpty
-                    ? const Center(
+                    ? Center(
                         key: Key('command-empty'),
                         child: Padding(
                           padding: EdgeInsets.all(24),
@@ -114,7 +117,7 @@ final class _CommandFinderSheetState extends State<CommandFinderSheet> {
                             'Такой команды нет. Возможно, нужный навык '
                             'выключен в «Расширениях».',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: AssistantColors.muted),
+                            style: TextStyle(color: context.colors.muted),
                           ),
                         ),
                       )
@@ -129,10 +132,10 @@ final class _CommandFinderSheetState extends State<CommandFinderSheet> {
                               padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
                               child: Text(
                                 key.label,
-                                style: const TextStyle(
-                                  fontSize: 13,
+                                style: TextStyle(
+                                  fontSize: 15,
                                   fontWeight: FontWeight.w600,
-                                  color: AssistantColors.muted,
+                                  color: context.colors.muted,
                                 ),
                               ),
                             ),
@@ -154,20 +157,20 @@ final class _CommandFinderSheetState extends State<CommandFinderSheet> {
         leading: Icon(
           commandIcon(entry.iconName),
           size: 20,
-          color: AssistantColors.textStrong,
+          color: context.colors.textStrong,
         ),
         title: Text(
           entry.label,
-          style: const TextStyle(
-            fontSize: 15,
-            color: AssistantColors.textStrong,
+          style: TextStyle(
+            fontSize: 17,
+            color: context.colors.textStrong,
           ),
         ),
         subtitle: Text(
           entry.kind == CommandKind.action ? 'Открыть' : entry.preview,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: metaTextStyle,
+          style: metaStyle(context),
         ),
         onTap: () => Navigator.of(context).pop(entry),
       );

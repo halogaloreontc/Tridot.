@@ -180,6 +180,7 @@ final class _RenderWholeWords extends RenderProxyBox {
                     scaler: _base,
                     textDirection: paragraph.textDirection,
                     maxLines: paragraph.maxLines,
+                    ellipsis: paragraph.overflow == TextOverflow.ellipsis,
                   );
       });
     }
@@ -193,8 +194,10 @@ bool _isWordChar(String text, int index) =>
     index >= 0 && index < text.length && _wordChar.hasMatch(text[index]);
 
 /// Кончается ли какая-нибудь строка разложенного [painter] внутри слова.
-bool breaksInsideWord(TextPainter painter, String plain) {
-  for (final line in painter.computeLineMetrics().skip(1)) {
+/// [lines] — сколько первых переносов проверять (`null` — все).
+bool breaksInsideWord(TextPainter painter, String plain, {int? lines}) {
+  final metrics = painter.computeLineMetrics().skip(1);
+  for (final line in lines == null ? metrics : metrics.take(lines)) {
     final position = painter.getPositionForOffset(
       Offset(line.left + 0.5, line.baseline - line.ascent / 2),
     );
@@ -209,29 +212,38 @@ bool breaksInsideWord(TextPainter painter, String plain) {
 /// Масштаб шрифта для [span] шириной [width]: обычный [scaler], если
 /// слова и так встают целиком и в [maxLines] строк, иначе — меньше,
 /// шагами по 8 %, но не меньше [WholeWordText.minShrink] от обычного.
+///
+/// С [ellipsis] лишние строки не повод сжимать: текст обрежется «…».
+/// Проверяются только видимые переносы и перенос в первую скрытую
+/// строку — он не должен приходиться посреди слова.
 TextScaler wholeWordScaler(
   InlineSpan span, {
   required double width,
   required TextScaler scaler,
   TextDirection textDirection = TextDirection.ltr,
   int? maxLines,
+  bool ellipsis = false,
 }) {
   final plain = span.toPlainText(includeSemanticsLabels: false);
   const probe = 14.0;
   final current = scaler.scale(probe) / probe;
   var factor = 1.0;
   var effective = scaler;
+  final cut = ellipsis && maxLines != null;
   final painter = TextPainter(
     text: span,
     textDirection: textDirection,
-    maxLines: maxLines,
+    maxLines: cut ? null : maxLines,
   );
   try {
     while (true) {
       painter
         ..textScaler = effective
         ..layout(maxWidth: width);
-      if (!breaksInsideWord(painter, plain) && !painter.didExceedMaxLines) {
+      final fits = cut
+          ? !breaksInsideWord(painter, plain, lines: maxLines)
+          : !breaksInsideWord(painter, plain) && !painter.didExceedMaxLines;
+      if (fits) {
         return effective;
       }
       if (factor <= WholeWordText.minShrink) return effective;

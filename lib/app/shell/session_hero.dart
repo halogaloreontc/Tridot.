@@ -97,15 +97,13 @@ final class SessionHero extends StatelessWidget {
             const SizedBox(height: 12),
             Semantics(
               header: true,
-              child: const Text(
+              child: Text(
                 'Что сделать?',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 22,
-                  height: 1.3,
-                  fontWeight: FontWeight.w600,
-                  color: AssistantColors.textStrong,
-                ),
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium!
+                    .copyWith(color: context.colors.textStrong),
               ),
             ),
             if (projectName != null) ...<Widget>[
@@ -114,24 +112,27 @@ final class SessionHero extends StatelessWidget {
                 key: const Key('hero-project'),
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  const Icon(
+                  Icon(
                     Icons.folder_outlined,
                     size: 16,
-                    color: AssistantColors.muted,
+                    color: context.colors.muted,
                   ),
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text.rich(
                       TextSpan(
-                        style: metaTextStyle,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyLarge!
+                            .copyWith(color: context.colors.muted),
                         children: <InlineSpan>[
                           const TextSpan(text: 'Проект «'),
                           // Название проекта — шрифтом названия (ADR-021).
                           TextSpan(
                             text: projectName,
                             style: projectNameStyle(
-                              fontSize: 15,
-                              color: AssistantColors.muted,
+                              fontSize: 17,
+                              color: context.colors.muted,
                             ),
                           ),
                           const TextSpan(text: '»'),
@@ -151,7 +152,10 @@ final class SessionHero extends StatelessWidget {
                 note!,
                 key: const Key('session-hero-note'),
                 textAlign: TextAlign.center,
-                style: metaTextStyle,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyLarge!
+                    .copyWith(color: context.colors.muted),
               ),
             ],
             if (onSadoGender != null) ...<Widget>[
@@ -164,7 +168,7 @@ final class SessionHero extends StatelessWidget {
                 key: const Key('session-hero-overdue'),
                 persona: notifier,
                 text: overdueLabel(overdue),
-                color: AssistantColors.danger,
+                color: context.colors.danger,
                 semantics: '${overdueLabel(overdue)}. Открыть «Сводку»',
                 onTap: onOverdue,
               ),
@@ -173,7 +177,7 @@ final class SessionHero extends StatelessWidget {
                 key: const Key('session-hero-training'),
                 persona: notifier,
                 text: 'Пора потренировать пароль',
-                color: AssistantColors.text,
+                color: context.colors.text,
                 semantics: 'Пора потренировать пароль. Начать',
                 onTap: onTraining,
               ),
@@ -214,50 +218,107 @@ final class _GenderChoice extends StatelessWidget {
           : '${pronoun[0].toUpperCase()}${pronoun.substring(1)}';
     }
 
+    // Карточка заливкой без рамки, выбор — двумя тональными кнопками
+    // (ADR-027).
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 360),
+      constraints: const BoxConstraints(maxWidth: 400),
       child: DecoratedBox(
         key: const Key('sado-gender-choice'),
         decoration: BoxDecoration(
-          color: AssistantColors.raised,
-          border: Border.all(color: AssistantColors.borderSoft),
+          color: context.colors.raised,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Text(
                 question,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AssistantColors.textStrong),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium!
+                    .copyWith(color: context.colors.textStrong),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 4),
               Text(
                 hint,
                 textAlign: TextAlign.center,
-                style: metaTextStyle,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium!
+                    .copyWith(color: context.colors.muted),
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: <Widget>[
-                  for (final gender in const <ReplyGender>[
+              const SizedBox(height: 12),
+              // Две кнопки в одну строку, если подписи помещаются целиком;
+              // иначе — короткие подписи («Связной» / «Связная»), а при
+              // совсем крупном шрифте — стопкой во всю ширину. Стопка
+              // узких кнопок уходила под быстрые действия.
+              LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints box) {
+                  final style = Theme.of(context).textTheme.labelLarge!;
+                  final scaler = MediaQuery.textScalerOf(context);
+                  const pad = 16.0;
+                  final half = (box.maxWidth - 8) / 2;
+                  bool fits(String Function(ReplyGender) text) => <ReplyGender>[
+                        ReplyGender.male,
+                        ReplyGender.female,
+                      ].every((ReplyGender g) {
+                        final painter = TextPainter(
+                          text: TextSpan(text: text(g), style: style),
+                          textDirection: TextDirection.ltr,
+                          textScaler: scaler,
+                          maxLines: 1,
+                        )..layout();
+                        final w = painter.width;
+                        painter.dispose();
+                        return w + pad <= half;
+                      });
+                  String short(ReplyGender g) =>
+                      builtin ? Personas.sado.defaultNameFor(g) : label(g);
+                  final String Function(ReplyGender)? inRow = fits(label)
+                      ? label
+                      : fits(short)
+                          ? short
+                          : null;
+                  Widget button(ReplyGender gender, String text) =>
+                      FilledButton.tonal(
+                        key: ValueKey<String>('sado-gender-${gender.name}'),
+                        onPressed: () => onChosen(gender),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: context.colors.bubble,
+                          foregroundColor: context.colors.accent,
+                          minimumSize: const Size(48, 48),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: pad / 2,
+                            vertical: 10,
+                          ),
+                        ),
+                        child: Text(text, textAlign: TextAlign.center),
+                      );
+                  const genders = <ReplyGender>[
                     ReplyGender.male,
                     ReplyGender.female,
-                  ])
-                    ActionChip(
-                      key: ValueKey<String>('sado-gender-${gender.name}'),
-                      label: Text(label(gender)),
-                      onPressed: () => onChosen(gender),
-                      labelStyle: const TextStyle(color: AssistantColors.text),
-                      backgroundColor: AssistantColors.workspace,
-                      side: const BorderSide(color: AssistantColors.sado),
-                    ),
-                ],
+                  ];
+                  if (inRow != null) {
+                    return Row(
+                      children: <Widget>[
+                        Expanded(child: button(genders[0], inRow(genders[0]))),
+                        const SizedBox(width: 8),
+                        Expanded(child: button(genders[1], inRow(genders[1]))),
+                      ],
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      button(genders[0], label(genders[0])),
+                      const SizedBox(height: 8),
+                      button(genders[1], label(genders[1])),
+                    ],
+                  );
+                },
               ),
             ],
           ),
@@ -296,7 +357,7 @@ final class _HeroLine extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44),
+          constraints: const BoxConstraints(minHeight: 48),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Row(
@@ -310,11 +371,14 @@ final class _HeroLine extends StatelessWidget {
                   child: Text(
                     text,
                     textAlign: TextAlign.center,
-                    style: metaTextStyle.copyWith(color: color),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium!
+                        .copyWith(color: color),
                   ),
                 ),
                 const SizedBox(width: 4),
-                Icon(Icons.chevron_right, size: 16, color: color),
+                Icon(Icons.chevron_right, size: 18, color: color),
               ],
             ),
           ),

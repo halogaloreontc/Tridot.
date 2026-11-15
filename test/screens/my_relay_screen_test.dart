@@ -109,10 +109,10 @@ void main() {
           ((tester.widget<Container>(find.byKey(Key(key))).decoration!
                   as BoxDecoration)
               .color)!;
-      expect(colorOf('activity-2026-11-9'), AssistantColors.heat3);
-      expect(colorOf('activity-2026-11-8'), AssistantColors.heat2);
-      expect(colorOf('activity-2026-11-7'), AssistantColors.heat1);
-      expect(colorOf('activity-2026-11-6'), AssistantColors.heat0);
+      expect(colorOf('activity-2026-11-9'), AppPalette.dark.heat3);
+      expect(colorOf('activity-2026-11-8'), AppPalette.dark.heat2);
+      expect(colorOf('activity-2026-11-7'), AppPalette.dark.heat1);
+      expect(colorOf('activity-2026-11-6'), AppPalette.dark.heat0);
       expect(find.text('52 недели · 3 дня'), findsOneWidget);
     });
 
@@ -277,7 +277,7 @@ void main() {
         'next-pending-card-1',
       ]);
       final late = tester.widget<Text>(find.text('11:00, просрочено'));
-      expect(late.style?.color, AssistantColors.danger);
+      expect(late.style?.color, AppPalette.dark.danger);
 
       await tester.tap(find.byKey(const Key('next-task-today')));
       expect(opened.single.id, 'today');

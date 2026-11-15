@@ -3,13 +3,11 @@
 // совпадают, хроника команд стоит поверх ленты под шапкой по центру (шапка
 // — одна строка 56) и ширину у поля ввода не отнимает, карточка хроники не залезает на панель задач, кубик
 // состояния стоит в строке автора ответа.
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
 import 'package:local_assistant/app/shell/session_header.dart';
-import 'package:local_assistant/app/widgets/history_rail.dart';
 import 'package:local_assistant/app/widgets/status_cube.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
@@ -115,9 +113,19 @@ void main() {
       final composer = tester.getRect(
         find.byKey(const Key('assistant-composer')),
       );
-      final rail = tester.getRect(find.byKey(const Key('history-rail')));
       _expectInside(composer, window, 'поле ввода');
-      _expectInside(rail, window, 'хроника');
+      // Хроники поверх ленты нет: история команд — в «⋯» шапки
+      // (ADR-027).
+      expect(find.byKey(const Key('history-rail')), findsNothing);
+      // На узком экране с задачей в фокусе в шапке «назад», задача и меню
+      // сессии — «⋯» там нет.
+      if (find.byKey(const Key('task-back')).evaluate().isEmpty ||
+          size.width >= narrowBreakpoint) {
+        final more = tester.getRect(find.byKey(const Key('session-more')));
+        _expectInside(more, window, '«⋯» шапки');
+      } else {
+        expect(find.byKey(const Key('session-more')), findsNothing);
+      }
       expect(find.byKey(const Key('addressee-switch')), findsNothing);
       // «Задача» и «Напомнить» — только в новой сессии.
       expect(find.byKey(const Key('quick-Задача')), findsNothing);
@@ -143,36 +151,22 @@ void main() {
           epsilon: 2,
         ),
       );
-      // Хроника — поверх ленты под шапкой, по центру той же колонки; шапка
-      // — одна строка.
+      // Шапка — одна строка.
       final header = tester.getRect(find.byType(SessionHeader));
       expect(header.height, 56);
-      expect(rail.center.dx, moreOrLessEquals(centre, epsilon: 1));
-      expect(
-        rail.top,
-        greaterThanOrEqualTo(header.bottom + HistoryRail.overlayTop - 1),
-      );
-      expect(
-        rail.bottom,
-        lessThanOrEqualTo(
-          header.bottom + 1 + HistoryRail.overlayTop + HistoryRail.height + 1,
-        ),
-      );
-      final pill = tester.getRect(find.byKey(const Key('history-rail-pill')));
-      expect(
-        pill.overlaps(tester.getRect(find.byKey(const Key('chat-list')))),
-        isTrue,
-        reason: 'хроника — поверх ленты, а не над ней',
-      );
 
-      // Текст ответа начинается там же; кубик — в строке автора, а не
-      // отдельным значком левее текста.
-      final author = find.byKey(const ValueKey<String>('message-author-sado'));
-      final cube = find.byType(StatusCube);
-      expect(cube, findsOneWidget);
-      final cubeRow = find.ancestor(of: cube, matching: author);
-      expect(cubeRow, findsOneWidget);
-      expect(tester.getRect(cubeRow).left, moreOrLessEquals(composer.left));
+      // Ответ начинается у левого края колонки — там же, где поле ввода;
+      // кубика в ленте нет (он в шапке, пока помощник работает).
+      final author =
+          find.byKey(const ValueKey<String>('message-author-sado')).first;
+      expect(tester.getRect(author).left, moreOrLessEquals(composer.left));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('chat-list')),
+          matching: find.byType(StatusCube),
+        ),
+        findsNothing,
+      );
 
       // Пузырь последней команды кончается у правого края поля ввода.
       final bubble = find
@@ -201,37 +195,6 @@ void main() {
         reason: '$width',
       );
       expect(tester.takeException(), isNull);
-    }
-  });
-
-  testWidgets('карточка хроники при наведении — под хроникой, над лентой',
-      (tester) async {
-    for (final size in <Size>[const Size(1280, 800), const Size(1728, 1117)]) {
-      await _pump(tester, size);
-      for (final line in _script) {
-        await _say(tester, line);
-      }
-      final mark = find.byKey(const Key('history-3'));
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.addPointer(location: Offset.zero);
-      await gesture.moveTo(tester.getCenter(mark));
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pumpAndSettle();
-
-      final card = tester.getRect(
-        find.textContaining('Нажмите, чтобы перейти', findRichText: true),
-      );
-      final rail = tester.getRect(find.byKey(const Key('history-rail')));
-      final panel = tester.getRect(find.byKey(const Key('today-panel')));
-      final sidebar = tester.getRect(find.byKey(const Key('app-sidebar')));
-      expect(card.width, greaterThan(100), reason: 'карточка не схлопнулась');
-      expect(card.width, lessThanOrEqualTo(340));
-      expect(card.top, greaterThanOrEqualTo(rail.bottom - 4));
-      expect(card.right, lessThan(panel.left));
-      expect(card.left, greaterThan(sidebar.right));
-
-      await gesture.removePointer();
-      await tester.pumpAndSettle();
     }
   });
 
@@ -270,11 +233,8 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('working-message')), findsNothing);
-    expect(find.byType(StatusCube), findsOneWidget);
-    expect(
-      tester.widget<StatusCube>(find.byType(StatusCube)).state,
-      CubeState.idle,
-    );
+    // Помощник ждёт — кубика нет ни в ленте, ни в шапке (ADR-027).
+    expect(find.byType(StatusCube), findsNothing);
   });
 
   testWidgets('крупный шрифт: заголовок панели не рассыпается по буквам',

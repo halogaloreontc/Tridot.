@@ -251,6 +251,8 @@ void main() {
       find.byKey(const ValueKey<String>('settings-storage')),
       findsWidgets,
     );
+    // Статистика — только в «Сводке»: над другими вкладками её нет.
+    expect(stats.hitTestable(), findsNothing);
   });
 
   testWidgets('Ctrl+K сразу после запуска и после Esc ставит курсор в поиск',

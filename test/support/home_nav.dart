@@ -145,3 +145,22 @@ Future<void> expandDrawerGroups(WidgetTester tester) async {
     await tester.pumpAndSettle();
   }
 }
+
+/// «⋯ → История команд» в шапке сессии (ADR-027): открывает шторку со
+/// списком команд.
+Future<void> openCommandHistory(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('session-more')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('menu-history')));
+  await tester.pumpAndSettle();
+}
+
+/// Выбирает команду [index] в «История команд» — лента переходит к ней.
+Future<void> pickCommand(WidgetTester tester, int index) async {
+  await openCommandHistory(tester);
+  final item = find.byKey(Key('history-item-$index'));
+  await tester.ensureVisible(item);
+  await tester.pumpAndSettle();
+  await tester.tap(item);
+  await tester.pumpAndSettle();
+}

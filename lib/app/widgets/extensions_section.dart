@@ -17,7 +17,7 @@ import '../extensions/ytdl_settings.dart';
 import '../passwords/passwords_kit.dart';
 import '../passwords/passwords_screen.dart';
 import 'connection_screen.dart';
-import 'task_tile.dart';
+import 'grouped.dart';
 import 'whole_word_text.dart';
 
 /// Раздел «Расширения» в настройках: навыки, подключения и паки.
@@ -342,7 +342,6 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
         // Длинное название при крупном шрифте на узком экране не должно
         // уводить кнопки за край.
         scrollable: true,
-        backgroundColor: AssistantColors.raised,
         title: WholeWordText('Удалить пак «${info.title}»?'),
         content: const Text(
           'Его записи пропадут. Задачи и история сессий останутся.',
@@ -356,7 +355,7 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
           TextButton(
             key: const ValueKey<String>('pack-remove-confirm'),
             style: TextButton.styleFrom(
-              foregroundColor: AssistantColors.danger,
+              foregroundColor: context.colors.danger,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Удалить'),
@@ -388,24 +387,20 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
     final choice = _choice;
     Widget group(ExtensionKind kind, String empty) {
       final items = registry.ofKind(kind);
-      return Column(
+      return InsetGroup(
         key: ValueKey<String>('extensions-${kind.name}'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        header: kind.groupTitle,
         children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 12, 8, 2),
-            child: Text(
-              kind.groupTitle,
-              style: const TextStyle(
-                color: AssistantColors.textStrong,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
           if (items.isEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
-              child: Text(empty, style: metaTextStyle),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Text(
+                empty,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium!
+                    .copyWith(color: context.colors.muted),
+              ),
             ),
           for (final info in items)
             if (_connection(info.id) case final ConnectionService service)
@@ -478,12 +473,24 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
             if (missing.kind == kind && missing.description.isNotEmpty)
               Padding(
                 key: ValueKey<String>('extension-unavailable-${missing.id}'),
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 child: Text(
                   '${missing.title} — ${missing.description}',
-                  style: metaTextStyle,
+                  style: metaStyle(context),
                 ),
               ),
+          if (kind == ExtensionKind.pack)
+            GroupedRow(
+              key: const ValueKey<String>('pack-add'),
+              icon: Icons.add,
+              tile: context.colors.tileViolet,
+              accent: true,
+              title: 'Добавить пак',
+              onTap: _addPack,
+            ),
         ],
       );
     }
@@ -491,35 +498,32 @@ class _ExtensionsSectionState extends State<ExtensionsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const SectionLabel('Расширения'),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8),
-          child: Text(
-            'Настройте ${AppInfo.name} под себя: включайте только нужное. '
-            'Изменения применяются сразу, задачи и сессии не сбрасываются.',
-            style: metaTextStyle,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(32, 0, 32, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              WholeWordText(
+                'Расширения',
+                style: Theme.of(context).textTheme.titleMedium!.copyWith(
+                      color: context.colors.textStrong,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              WholeWordText(
+                'Настройте ${AppInfo.name} под себя: включайте только нужное. '
+                'Изменения применяются сразу, задачи и сессии не '
+                'сбрасываются.',
+                style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                      color: context.colors.muted,
+                    ),
+              ),
+            ],
           ),
         ),
         group(ExtensionKind.skill, 'Навыков нет'),
         group(ExtensionKind.connector, 'Подключений пока нет'),
         group(ExtensionKind.pack, 'Паков пока нет'),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              key: const ValueKey<String>('pack-add'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(40, 44),
-                foregroundColor: AssistantColors.text,
-                side: const BorderSide(color: AssistantColors.border),
-              ),
-              onPressed: _addPack,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Добавить пак'),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -583,12 +587,13 @@ class _ExtensionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return SwitchListTile(
       key: ValueKey<String>('extension-${info.id}'),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
       value: enabled,
       onChanged: onChanged,
+      // Название — обычным цветом и у обязательного расширения: его
+      // переключатель недоступен, но строка не «выключена».
       title: Text(
         info.title,
-        style: const TextStyle(color: AssistantColors.text),
+        style: TextStyle(color: context.colors.textStrong),
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -596,10 +601,7 @@ class _ExtensionTile extends StatelessWidget {
           if (info.description.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                info.description,
-                style: const TextStyle(color: AssistantColors.muted),
-              ),
+              child: Text(info.description),
             ),
           if (status case final String text)
             Padding(
@@ -607,64 +609,60 @@ class _ExtensionTile extends StatelessWidget {
               child: Text(
                 text,
                 key: ValueKey<String>('extension-status-${info.id}'),
-                style: const TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
             ),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: <Widget>[
-              Text(
-                'v${info.version} · ${info.author}',
-                style: metaTextStyle,
+          // Без «паспорта» в списке: версия и автор — только у
+          // поставленных пользователем паков, «встроено» не пишется,
+          // «всегда включено» — тихой подписью, а не значком.
+          if (info.required)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'Всегда включено',
+                key: ValueKey<String>('extension-required-${info.id}'),
+                style: metaStyle(context),
               ),
-              if (info.builtIn) const _Badge('встроено'),
-              if (info.required) const _Badge('всегда включено'),
-              if (onConfigure != null)
-                TextButton(
-                  key: ValueKey<String>('extension-configure-${info.id}'),
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(40, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+            )
+          else if (!info.builtIn)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'v${info.version} · ${info.author}',
+                style: metaStyle(context),
+              ),
+            ),
+          if (onConfigure != null || onRemove != null)
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: <Widget>[
+                if (onConfigure != null)
+                  TextButton(
+                    key: ValueKey<String>('extension-configure-${info.id}'),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(40, 36),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    onPressed: onConfigure,
+                    child: const Text('Настроить'),
                   ),
-                  onPressed: onConfigure,
-                  child: const Text('Настроить'),
-                ),
-              if (onRemove != null)
-                TextButton(
-                  key: ValueKey<String>('extension-remove-${info.id}'),
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(40, 36),
-                    foregroundColor: AssistantColors.danger,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                if (onRemove != null)
+                  TextButton(
+                    key: ValueKey<String>('extension-remove-${info.id}'),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(40, 36),
+                      foregroundColor: context.colors.danger,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    onPressed: onRemove,
+                    child: const Text('Удалить'),
                   ),
-                  onPressed: onRemove,
-                  child: const Text('Удалить'),
-                ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration: BoxDecoration(
-        border: Border.all(color: AssistantColors.border),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(text, style: metaTextStyle),
     );
   }
 }
@@ -713,7 +711,6 @@ class _PackImportDialogState extends State<_PackImportDialog> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           scrollable: true,
-          backgroundColor: AssistantColors.raised,
           title: const WholeWordText('Заменить пак?'),
           content: const Text(
             'Пак с таким id уже установлен. Заменить его новой версией?',
@@ -751,7 +748,6 @@ class _PackImportDialogState extends State<_PackImportDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AssistantColors.raised,
       title: const WholeWordText('Добавить пак'),
       content: SizedBox(
         width: 520,
@@ -760,11 +756,11 @@ class _PackImportDialogState extends State<_PackImportDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              const Text(
+              Text(
                 'Вставьте содержимое файла пака (JSON, формат '
                 '${PackFormat.format}). Пак — только тексты, он ничего '
                 'не выполняет.',
-                style: TextStyle(color: AssistantColors.muted),
+                style: TextStyle(color: context.colors.muted),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -773,12 +769,11 @@ class _PackImportDialogState extends State<_PackImportDialog> {
                 minLines: 5,
                 maxLines: 10,
                 keyboardType: TextInputType.multiline,
-                style: metaTextStyle.copyWith(
-                  color: AssistantColors.text,
+                style: metaStyle(context).copyWith(
+                  color: context.colors.text,
                 ),
                 decoration: const InputDecoration(
                   hintText: '{"format": "assistant-pack/1", …}',
-                  border: OutlineInputBorder(),
                 ),
               ),
               if (_errors.isNotEmpty) ...<Widget>[
@@ -792,8 +787,8 @@ class _PackImportDialogState extends State<_PackImportDialog> {
                         padding: const EdgeInsets.only(bottom: 2),
                         child: Text(
                           error,
-                          style: const TextStyle(
-                            color: AssistantColors.danger,
+                          style: TextStyle(
+                            color: context.colors.danger,
                           ),
                         ),
                       ),

@@ -519,11 +519,11 @@ void main() {
     await tester.ensureVisible(status);
     await tester.pumpAndSettle();
     expect(tester.widget<Text>(status).data, 'открыт');
-    expect(dot(), AssistantColors.warning);
+    expect(dot(), AppPalette.dark.warning);
     vault.lock();
     await tester.pump();
     expect(tester.widget<Text>(status).data, 'заперт');
-    expect(dot(), AssistantColors.faint);
+    expect(dot(), AppPalette.dark.faint);
     await finish(tester);
   });
 

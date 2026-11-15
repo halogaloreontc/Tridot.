@@ -94,7 +94,7 @@ void main() {
     expect(find.text('активных: 2'), findsOneWidget);
     expect(find.text('активных: 1'), findsNWidgets(2));
     final overdue = tester.widget<Text>(find.text('просрочено: 1'));
-    expect(overdue.style?.color, AssistantColors.danger);
+    expect(overdue.style?.color, AppPalette.dark.danger);
     expect(find.byType(TaskTile), findsNothing);
   });
 
@@ -123,12 +123,17 @@ void main() {
     );
     expect(label.danger, isTrue);
 
+    // Текст крупнее (ADR-027): карточка «Без проекта» ниже края экрана.
+    await tester.ensureVisible(find.byKey(const ValueKey<String>('tag-none')));
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey<String>('tag-none')));
     await tester.pump();
     expect(find.text('Отчёт'), findsNothing);
     expect(find.text('Позвонить маме'), findsOneWidget);
     expect(find.text('Без срока · 1'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const ValueKey<String>('tag-none')));
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey<String>('tag-none')));
     await tester.pump();
     expect(find.byType(TaskTile), findsNothing);
@@ -149,6 +154,9 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.text('Отчёт'));
+    // Строки задач — 17/15, как в ленте (ADR-027): вторая ниже края.
+    await tester.ensureVisible(find.byKey(const ValueKey<String>('toggle-b')));
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey<String>('toggle-b')));
     expect(opened, <String>['a']);
     expect(toggled, <String>['b']);

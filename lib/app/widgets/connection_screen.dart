@@ -151,7 +151,6 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         scrollable: true,
-        backgroundColor: AssistantColors.raised,
         title: WholeWordText('Выйти из «${_service.slot.title}»?'),
         content: const Text(
           'Пароль склада и личный ключ будут удалены с устройства. Адрес '
@@ -166,7 +165,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           TextButton(
             key: const ValueKey<String>('connection-logout-confirm'),
             style: TextButton.styleFrom(
-              foregroundColor: AssistantColors.danger,
+              foregroundColor: context.colors.danger,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Выйти'),
@@ -202,7 +201,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
         result.message,
         key: const ValueKey<String>('connection-message'),
         style: TextStyle(
-          color: result.ok ? AssistantColors.success : AssistantColors.danger,
+          color: result.ok ? context.colors.success : context.colors.danger,
         ),
       ),
     );
@@ -214,9 +213,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     final description = _service.description;
     final connected = record.connected;
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: context.colors.workspace,
       appBar: AppBar(
-        backgroundColor: AssistantColors.panel,
+        backgroundColor: context.colors.workspace,
         title: Text(_service.slot.title),
       ),
       body: SafeArea(
@@ -253,7 +252,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                         alignment: Alignment.centerLeft,
                         child: OutlinedButton.icon(
                           key: const ValueKey<String>('connection-logout'),
-                          style: _outlined(AssistantColors.danger),
+                          style: _outlined(context, context.colors.danger),
                           onPressed: _busy ? null : _logout,
                           icon: const Icon(Icons.logout, size: 18),
                           label: const Text('Выйти'),
@@ -272,11 +271,10 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     );
   }
 
-  ButtonStyle _outlined([Color color = AssistantColors.text]) =>
+  ButtonStyle _outlined(BuildContext context, [Color? color]) =>
       OutlinedButton.styleFrom(
-        minimumSize: const Size(40, 44),
-        foregroundColor: color,
-        side: const BorderSide(color: AssistantColors.border),
+        minimumSize: const Size(48, 48),
+        foregroundColor: color ?? context.colors.accent,
       );
 
   Widget _status(ConnectionRecord record) {
@@ -296,8 +294,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           child: Text(
             connectionStatus(_service),
             key: const ValueKey<String>('connection-status'),
-            style: const TextStyle(
-              color: AssistantColors.textStrong,
+            style: TextStyle(
+              color: context.colors.textStrong,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -305,14 +303,14 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
         if (record.baseUri case final Uri base)
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-            child: Text('Адрес: $base', style: metaTextStyle),
+            child: Text('Адрес: $base', style: metaStyle(context)),
           ),
         if (record.connected)
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
             child: Text(
               'Последний ответ: ${_moment(record.lastOk)}',
-              style: metaTextStyle,
+              style: metaStyle(context),
             ),
           ),
         if (record.connected && failure != null)
@@ -320,7 +318,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
             padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
             child: Text(
               'Сейчас: $failure',
-              style: const TextStyle(color: AssistantColors.warning),
+              style: TextStyle(color: context.colors.warning),
             ),
           ),
       ],
@@ -348,7 +346,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               child: Text(
                 label,
                 key: ValueKey<String>('$key-label'),
-                style: const TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
             ),
             TextField(
@@ -358,10 +356,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               enableSuggestions: !secret,
               autocorrect: false,
               keyboardType: keyboard,
-              style: const TextStyle(color: AssistantColors.text),
+              style: TextStyle(color: context.colors.text),
               decoration: InputDecoration(
                 hintText: hint,
-                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
@@ -375,7 +372,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           alignment: Alignment.centerLeft,
           child: OutlinedButton(
             key: ValueKey<String>(key),
-            style: _outlined(),
+            style: _outlined(context),
             onPressed: _busy ? null : onPressed,
             child: Text(label),
           ),
@@ -385,7 +382,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   Widget _linkSection() => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               'В складе: «Профиль» → «Войти на телефоне» → «Скопировать '
@@ -394,7 +391,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               'живёт две минуты и сработает только один раз.\n'
               'Кнопка «Скопировать ссылку» есть в складе с версии 1.4.56. '
               'Если её нет — склад старше: подключите его вручную (ниже).',
-              style: TextStyle(color: AssistantColors.muted),
+              style: TextStyle(color: context.colors.muted),
             ),
           ),
           _field(
@@ -420,13 +417,13 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   Widget _manualSection() => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               'Адрес склада и пароль склада. Логин и пароль сотрудника — '
               'по желанию: без них видны только остатки и ячейки. Пароль '
               'сотрудника не сохраняется — только личный ключ.',
-              style: TextStyle(color: AssistantColors.muted),
+              style: TextStyle(color: context.colors.muted),
             ),
           ),
           _field(
@@ -465,12 +462,12 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   Widget _staffSection() => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               'Приходы видны только под своим логином. Можно и по ссылке '
               'выше.',
-              style: TextStyle(color: AssistantColors.muted),
+              style: TextStyle(color: context.colors.muted),
             ),
           ),
           _field('connection-staff-login', _staffLogin, 'Логин сотрудника'),
@@ -523,24 +520,24 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                     ? 'Описания нет'
                     : '${description.appTitle} · команд: '
                         '${description.commands.length}',
-                style: const TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
               Text(
                 'Версия описания: $version',
                 key: const ValueKey<String>('connection-manifest-version'),
-                style: metaTextStyle,
+                style: metaStyle(context),
               ),
               Text(
                 record.connected
                     ? 'Проверено: ${_moment(meta.fetchedAt)}'
                     : 'Встроенная копия — до подключения',
-                style: metaTextStyle,
+                style: metaStyle(context),
               ),
               // «Наше описание главное» (ADR-012): какое в работе и почему.
               Text(
                 'В работе: ${_service.descriptionReason}',
                 key: const ValueKey<String>('connection-manifest-origin'),
-                style: metaTextStyle,
+                style: metaStyle(context),
               ),
               if (_service.manifestError case final String error)
                 Padding(
@@ -548,7 +545,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                   child: Text(
                     error,
                     key: const ValueKey<String>('connection-manifest-error'),
-                    style: const TextStyle(color: AssistantColors.danger),
+                    style: TextStyle(color: context.colors.danger),
                   ),
                 ),
             ],
@@ -567,9 +564,9 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
             child: ExpansionTile(
               key: const ValueKey<String>('connection-examples'),
               tilePadding: const EdgeInsets.symmetric(horizontal: 8),
-              title: const Text(
+              title: Text(
                 'Что понимает',
-                style: TextStyle(color: AssistantColors.text),
+                style: TextStyle(color: context.colors.text),
               ),
               children: <Widget>[
                 for (final example in examples)
@@ -579,7 +576,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         example,
-                        style: const TextStyle(color: AssistantColors.muted),
+                        style: TextStyle(color: context.colors.muted),
                       ),
                     ),
                   ),

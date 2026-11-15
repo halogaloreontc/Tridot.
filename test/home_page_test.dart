@@ -234,7 +234,8 @@ void main() {
 
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
-    expect(_cube(tester), CubeState.idle);
+    // Помощник ждёт — кубик уходит из шапки (ADR-027).
+    expect(find.byType(StatusCube), findsNothing);
     expect(StatusCube.label(CubeState.idle), 'Помощник ждёт команду');
   });
 
@@ -335,17 +336,19 @@ void main() {
     expect(find.textContaining('Сохранено'), findsOneWidget);
   });
 
-  testWidgets('полоса истории ведёт к команде', (tester) async {
+  testWidgets('«⋯ → История команд» ведёт к команде', (tester) async {
     await _pump(tester);
     await _say(tester, 'Покажи задачи');
     await _say(tester, 'Привет');
 
-    expect(find.byKey(const Key('history-0')), findsOneWidget);
-    expect(find.byKey(const Key('history-1')), findsOneWidget);
-    expect(find.byKey(const Key('history-2')), findsNothing);
+    await openCommandHistory(tester);
+    expect(find.byKey(const Key('history-item-0')), findsOneWidget);
+    expect(find.byKey(const Key('history-item-1')), findsOneWidget);
+    expect(find.byKey(const Key('history-item-2')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('history-0')));
+    await tester.tap(find.byKey(const Key('history-item-0')));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('history-sheet')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -368,8 +371,10 @@ void main() {
     expect(field.controller!.text, contains('\n'));
   });
 
-  testWidgets('настройки скрывают время сообщений', (tester) async {
+  testWidgets('время у каждого сообщения — только по настройке',
+      (tester) async {
     final store = InMemorySettingsStore();
+    await store.save(const AppSettings(showTimestamps: true));
     await _pump(tester, settings: store);
     Finder time() => find.descendant(
           of: find.byKey(const Key('chat-list')),
@@ -378,12 +383,20 @@ void main() {
     await _say(tester, 'Покажи задачи');
     expect(time(), findsWidgets);
 
-    await store.save(const AppSettings(showTimestamps: false));
+    // По умолчанию — только метка над группой (ADR-027).
+    await store.save(const AppSettings());
     await tester.pumpWidget(const SizedBox());
     await _pump(tester, settings: store);
     await _say(tester, 'Покажи задачи');
     expect(find.byKey(const Key('chat-list')), findsOneWidget);
     expect(time(), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('chat-list')),
+        matching: find.text('Сегодня, 12:00'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('нет переполнения на узком экране и крупном шрифте',
@@ -604,8 +617,7 @@ void main() {
         );
     expect(first(), findsNothing);
 
-    await tester.tap(find.byKey(const Key('history-0')));
-    await tester.pumpAndSettle();
+    await pickCommand(tester, 0);
     expect(first(), findsOneWidget);
   });
 
@@ -713,38 +725,18 @@ void main() {
     expect(find.byKey(const Key('mode-document')), findsOneWidget);
   });
 
-  testWidgets('последняя полоса хроники выделена цветом успеха',
-      (tester) async {
-    await _pump(tester);
-    await _say(tester, 'Покажи задачи');
-    await _say(tester, 'Привет');
-
-    Color colorOf(String key) {
-      final box = tester.widget<AnimatedContainer>(
-        find.descendant(
-          of: find.byKey(Key(key)),
-          matching: find.byType(AnimatedContainer),
-        ),
-      );
-      return (box.decoration! as BoxDecoration).color!;
-    }
-
-    expect(colorOf('history-1'), AssistantColors.success);
-    expect(colorOf('history-0'), isNot(AssistantColors.success));
-  });
-
-  testWidgets('на телефоне хроника открывает список команд', (tester) async {
+  testWidgets('на телефоне «История команд» — шторкой из «⋯»', (tester) async {
     await _pump(tester, size: _phone);
+    expect(find.byKey(const Key('session-more')), findsNothing);
     await _say(tester, 'Покажи задачи');
     await _say(tester, 'Привет');
 
-    await tester.tap(find.byKey(const Key('history-rail-open')));
-    await tester.pumpAndSettle();
-    expect(find.text('Хроника команд'), findsOneWidget);
+    await openCommandHistory(tester);
+    expect(find.text('История команд'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('history-item-0')));
     await tester.pumpAndSettle();
-    expect(find.text('Хроника команд'), findsNothing);
+    expect(find.text('История команд'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -785,7 +777,7 @@ void main() {
     expect(h.assistant.selectedTaskId, isNull);
     expect(find.byKey(const Key('selected-task-strip')), findsNothing);
     expect(find.byKey(const Key('task-back')), findsNothing);
-    expect(find.byKey(const Key('history-rail')), findsOneWidget);
+    expect(find.byKey(const Key('session-more')), findsOneWidget);
     final field = tester.widget<TextField>(
       find.byKey(const Key('assistant-input')),
     );
@@ -798,39 +790,35 @@ void main() {
     expect(find.byKey(const Key('menu-button')), findsOneWidget);
     await _say(tester, 'Добавь задачу «Отчёт» на завтра');
     expect(find.byKey(const Key('menu-button')), findsNothing);
-    expect(find.text('Задачи › «её»'), findsOneWidget);
+    // «Задача» над названием — без местоимения-якоря (ADR-027).
+    expect(find.text('Задача'), findsOneWidget);
+    expect(find.text('Задачи › «её»'), findsNothing);
 
     await tester.tap(find.byKey(const Key('task-back')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('menu-button')), findsOneWidget);
   });
 
-  testWidgets('хроника — под шапкой, по центру колонки сессии', (tester) async {
+  testWidgets('«⋯» — в шапке справа, у края колонки сессии', (tester) async {
     for (final size in <Size>[_desktop, _laptop, _phone]) {
       await tester.pumpWidget(const SizedBox());
       await _pump(tester, size: size);
       await _say(tester, 'Покажи задачи');
       await _say(tester, 'Привет');
-      await _say(tester, 'Покажи задачи');
 
-      final rail = tester.getRect(find.byKey(const Key('history-rail')));
-      final persona = tester.getRect(find.byKey(const Key('session-title')));
+      final more = tester.getRect(find.byKey(const Key('session-more')));
+      final title = tester.getRect(find.byKey(const Key('session-title')));
       final composer =
           tester.getRect(find.byKey(const Key('assistant-composer')));
-      // Под строкой шапки, над лентой.
-      expect(
-        rail.top,
-        greaterThanOrEqualTo(persona.bottom),
-        reason: 'ширина ${size.width}',
-      );
-      expect(rail.bottom, lessThan(140), reason: 'ширина ${size.width}');
-      // По центру колонки сессии (между меню и «Сегодня»): там же, где
-      // центр поля ввода.
-      expect(
-        (rail.center.dx - composer.center.dx).abs(),
-        lessThan(2),
-        reason: 'ширина ${size.width}',
-      );
+      expect(more.width, greaterThanOrEqualTo(48), reason: '${size.width}');
+      expect(more.height, greaterThanOrEqualTo(48), reason: '${size.width}');
+      // В одной строке с названием, справа от него и не дальше правого
+      // края колонки.
+      expect(more.center.dy, moreOrLessEquals(title.center.dy, epsilon: 2));
+      expect(more.left, greaterThan(title.right - 1));
+      expect(more.right, lessThanOrEqualTo(composer.right + chatInset + 12));
+      // Ленту ничего не перекрывает: хроники поверх неё нет.
+      expect(find.byKey(const Key('history-rail')), findsNothing);
     }
   });
 

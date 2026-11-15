@@ -42,9 +42,9 @@ final class AttachmentChip extends StatelessWidget {
       button: onTap != null,
       excludeSemantics: onRemove == null,
       child: Material(
-        color: AssistantColors.raised,
+        color: context.colors.raised,
+        // Заливкой без рамки (ADR-027).
         shape: RoundedRectangleBorder(
-          side: const BorderSide(color: AssistantColors.borderSoft),
           borderRadius: BorderRadius.circular(10),
         ),
         clipBehavior: Clip.antiAlias,
@@ -62,7 +62,7 @@ final class AttachmentChip extends StatelessWidget {
                         ? Icons.broken_image_outlined
                         : attachmentIcon(kind),
                     size: 18,
-                    color: AssistantColors.icon,
+                    color: context.colors.icon,
                   ),
                   const SizedBox(width: 8),
                   Flexible(
@@ -74,17 +74,17 @@ final class AttachmentChip extends StatelessWidget {
                           name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AssistantColors.textStrong,
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: context.colors.textStrong,
                           ),
                         ),
                         Text(
                           detail,
-                          style: metaTextStyle.copyWith(
+                          style: metaStyle(context).copyWith(
                             color: missing
-                                ? AssistantColors.warning
-                                : AssistantColors.faint,
+                                ? context.colors.warning
+                                : context.colors.faint,
                           ),
                         ),
                       ],
@@ -225,7 +225,6 @@ Future<void> showAttachmentInfo(
   final path = store.pathOf(attachment);
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AssistantColors.raised,
     builder: (BuildContext context) => SafeArea(
       child: Padding(
         key: const Key('attachment-info'),
@@ -241,9 +240,9 @@ Future<void> showAttachmentInfo(
                 Expanded(
                   child: Text(
                     attachment.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: AssistantColors.textStrong,
+                    style: TextStyle(
+                      fontSize: 17,
+                      color: context.colors.textStrong,
                     ),
                   ),
                 ),
@@ -253,7 +252,7 @@ Future<void> showAttachmentInfo(
             Text(
               '${attachment.kind.label} · '
               '${ChatAttachment.sizeLabel(attachment.size)}',
-              style: metaTextStyle,
+              style: metaStyle(context),
             ),
             const SizedBox(height: 12),
             Text(
@@ -263,11 +262,11 @@ Future<void> showAttachmentInfo(
                       '«распакуй архив» (расширение «Архиватор»), сменить '
                       'формат — «сконвертируй файл» (расширение «Конвертер»).'
                   : 'Файла больше нет на устройстве.',
-              style: const TextStyle(fontSize: 14, height: 1.4),
+              style: const TextStyle(fontSize: 15, height: 1.4),
             ),
             if (exists && path != null) ...<Widget>[
               const SizedBox(height: 8),
-              SelectableText(path, style: metaTextStyle),
+              SelectableText(path, style: metaStyle(context)),
             ],
           ],
         ),

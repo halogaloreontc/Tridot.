@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/passwords/secret_bytes.dart';
 import '../../core/passwords/vault_codes.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
 import '../widgets/whole_word_text.dart';
 import 'passwords_kit.dart';
 import 'pin_pad.dart';
@@ -108,25 +109,25 @@ class _RecoveryCodeViewState extends State<RecoveryCodeView> {
               key: const ValueKey<String>('recovery-code-view'),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: <Widget>[
-                const WholeWordText(
+                WholeWordText(
                   'Код восстановления',
                   style: TextStyle(
                     fontSize: 18,
-                    color: AssistantColors.textStrong,
+                    color: context.colors.textStrong,
                   ),
                 ),
                 const SizedBox(height: 10),
-                const WholeWordText(
+                WholeWordText(
                   'Сохраните его: без него при смене телефона или сбросе '
                   'блокировки экрана пароли не восстановить.',
-                  style: TextStyle(color: AssistantColors.textStrong),
+                  style: TextStyle(color: context.colors.textStrong),
                 ),
                 const SizedBox(height: 8),
-                const WholeWordText(
+                WholeWordText(
                   'Код показывается один раз — запишите на бумаге. Нужна ещё '
                   'резервная копия сейфа: на новом телефоне пароли вернёт '
                   'копия вместе с этим кодом.',
-                  style: TextStyle(color: AssistantColors.text),
+                  style: TextStyle(color: context.colors.text),
                 ),
                 const SizedBox(height: 16),
                 // Пока проверяем запись, кода на экране нет: иначе
@@ -137,10 +138,11 @@ class _RecoveryCodeViewState extends State<RecoveryCodeView> {
                       horizontal: 12,
                       vertical: 14,
                     ),
+                    // Заливкой без рамки: видна и на фоне экрана, и на
+                    // листе диалога (ADR-027).
                     decoration: BoxDecoration(
-                      color: AssistantColors.raised,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AssistantColors.borderSoft),
+                      color: context.colors.bubble,
+                      borderRadius: BorderRadius.circular(AppRadius.group),
                     ),
                     child: Semantics(
                       label: 'Код восстановления: ${groups.join(', ')}',
@@ -173,10 +175,10 @@ class _RecoveryCodeViewState extends State<RecoveryCodeView> {
                     child: const Text('Я сохранил'),
                   )
                 else ...<Widget>[
-                  const WholeWordText(
+                  WholeWordText(
                     'Проверим запись: введите последнюю группу кода — пять '
                     'знаков после последнего дефиса.',
-                    style: TextStyle(color: AssistantColors.text),
+                    style: TextStyle(color: context.colors.text),
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -193,7 +195,6 @@ class _RecoveryCodeViewState extends State<RecoveryCodeView> {
                       labelText: 'Последняя группа',
                       errorText: _error,
                       errorMaxLines: 3,
-                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -235,17 +236,18 @@ class _CodeRows extends StatelessWidget {
 
   final List<String> groups;
 
-  static final TextStyle _style = monoTextStyle.copyWith(
-    fontSize: 20,
-    letterSpacing: 2,
-    color: AssistantColors.textStrong,
-  );
+  static TextStyle _styleOf(AppPalette colors) => monoTextStyle.copyWith(
+        fontSize: 20,
+        letterSpacing: 2,
+        color: colors.textStrong,
+      );
 
   @override
   Widget build(BuildContext context) {
+    final style = _styleOf(context.colors);
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final chunk = lineWidth(context, 'XXXXX-', style: _style);
+        final chunk = lineWidth(context, 'XXXXX-', style: style);
         final fit = constraints.maxWidth.isFinite
             ? (constraints.maxWidth / chunk).floor()
             : groups.length;
@@ -265,7 +267,7 @@ class _CodeRows extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text(row, style: _style, maxLines: 1, softWrap: false),
+                  child: Text(row, style: style, maxLines: 1, softWrap: false),
                 ),
               ),
           ],
@@ -285,9 +287,9 @@ Future<void> showRecoveryCode(
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (BuildContext context) => Scaffold(
-          backgroundColor: AssistantColors.workspace,
+          backgroundColor: context.colors.workspace,
           appBar: AppBar(
-            backgroundColor: AssistantColors.workspace,
+            backgroundColor: context.colors.workspace,
             automaticallyImplyLeading: false,
             title: const Text('Сейф'),
           ),

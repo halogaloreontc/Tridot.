@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -9,6 +10,8 @@ import '../../core/chats/chat_search.dart';
 import '../../core/formatting/plural.dart';
 import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
+import '../widgets/grouped.dart';
 import '../widgets/app_name_text.dart';
 import '../widgets/personas_section.dart';
 import '../widgets/whole_word_text.dart';
@@ -141,7 +144,7 @@ final class ExtensionEntry {
     required this.title,
     required this.status,
     required this.onTap,
-    this.statusColor = AssistantColors.muted,
+    this.statusColor,
     this.dot = false,
     this.dotColor,
     this.icon,
@@ -150,7 +153,9 @@ final class ExtensionEntry {
   final String id;
   final String title;
   final String status;
-  final Color statusColor;
+
+  /// Цвет состояния; `null` — приглушённый.
+  final Color? statusColor;
 
   /// Точка состояния перед подписью.
   final bool dot;
@@ -394,7 +399,11 @@ final class _RelayDrawerState extends State<RelayDrawer> {
   }
 
   void _onFocus() {
-    if (_focus.hasFocus && !_searching) setState(() => _searching = true);
+    // Перерисовка и на потерю фокуса: рамка фокуса у поля поиска.
+    if (!mounted) return;
+    setState(() {
+      if (_focus.hasFocus) _searching = true;
+    });
   }
 
   void _onQuery() {
@@ -454,11 +463,6 @@ final class _RelayDrawerState extends State<RelayDrawer> {
       children: <Widget>[
         if (roomy) ...<Widget>[
           _TitlePlate(onCollapse: widget.onCollapse),
-          const Divider(
-            height: 1,
-            thickness: 1,
-            color: AssistantColors.divider,
-          ),
         ],
         Expanded(
           child: Stack(
@@ -469,31 +473,40 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
                   children: <Widget>[
                     if (roomy) ...<Widget>[
-                      _MyRelayCard(
-                        onTap: widget.onOpenMyRelay,
-                        wide: widget.wide,
-                        assistants: widget.assistants,
-                      ),
-                      const SizedBox(height: 8),
-                      _Sections(
-                        active: widget.activeSection,
-                        counts: widget.counts,
-                        wide: widget.wide,
-                        onTasks: widget.onTasks,
-                        onProjects: widget.onProjects,
-                        onPlanning: widget.onPlanning,
-                        projects: widget.projects,
-                        onOpenProject: widget.onOpenProject,
-                        onNewProject: widget.onNewProject,
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(10, 6, 10, 0),
-                        child: Divider(
-                          height: 1,
-                          thickness: 1,
-                          color: AssistantColors.divider,
+                      // «Мой Tridot» и разделы — одной сгруппированной
+                      // панелью на заливке листа (ADR-027).
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadius.group),
+                        child: Material(
+                          color: context.colors.workspace,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: <Widget>[
+                              _MyRelayCard(
+                                onTap: widget.onOpenMyRelay,
+                                wide: widget.wide,
+                                assistants: widget.assistants,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 16),
+                                child: Divider(color: context.colors.divider),
+                              ),
+                              _Sections(
+                                active: widget.activeSection,
+                                counts: widget.counts,
+                                wide: widget.wide,
+                                onTasks: widget.onTasks,
+                                onProjects: widget.onProjects,
+                                onPlanning: widget.onPlanning,
+                                projects: widget.projects,
+                                onOpenProject: widget.onOpenProject,
+                                onNewProject: widget.onNewProject,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+                      const SizedBox(height: 8),
                     ],
                     if (showHits)
                       ..._buildHits()
@@ -527,20 +540,15 @@ final class _RelayDrawerState extends State<RelayDrawer> {
             ],
           ),
         ),
-        DecoratedBox(
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: AssistantColors.divider)),
-          ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(12, 10, 12, 12 + inset),
-            child: _buildBottomRow(context),
-          ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + inset),
+          child: _buildBottomRow(context),
         ),
       ],
     );
     return Material(
       key: const Key('app-sidebar'),
-      color: AssistantColors.sidebar,
+      color: context.colors.sidebar,
       child: body,
     );
   }
@@ -620,15 +628,15 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Row(
                   children: <Widget>[
-                    const Expanded(
-                      child: Text('Расширения', style: _groupStyle),
+                    Expanded(
+                      child: Text('Расширения', style: _groupStyle(context)),
                     ),
                     Icon(
                       _extensionsOpen
                           ? Icons.keyboard_arrow_down
                           : Icons.keyboard_arrow_right,
                       size: 18,
-                      color: AssistantColors.icon,
+                      color: context.colors.icon,
                     ),
                   ],
                 ),
@@ -639,13 +647,13 @@ final class _RelayDrawerState extends State<RelayDrawer> {
         if (_extensionsOpen)
           Stack(
             children: <Widget>[
-              const Positioned(
+              Positioned(
                 left: 19,
                 top: 6,
                 bottom: 6,
                 child: SizedBox(
                   width: 1,
-                  child: ColoredBox(color: AssistantColors.borderSoft),
+                  child: ColoredBox(color: context.colors.borderSoft),
                 ),
               ),
               Padding(
@@ -697,8 +705,11 @@ final class _RelayDrawerState extends State<RelayDrawer> {
         builder: (BuildContext context, BoxConstraints constraints) {
           const gap = 8.0;
           final full = constraints.maxWidth;
-          final field = (full - gap) * 2 / 3;
-          final button = full - gap - field;
+          // «Новая сессия» — квадратной кнопкой 48 (ADR-027): поиск
+          // забирает остальное, его подсказке не тесно.
+          final button =
+              math.min(AppSize.minTap * scale.clamp(1.0, 1.5), full / 3);
+          final field = full - gap - button;
           return Stack(
             children: <Widget>[
               Positioned(
@@ -737,18 +748,23 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                   curve: const Cubic(.2, .8, .2, 1),
                   width: _searching ? full : field,
                   height: height,
-                  padding: const EdgeInsets.only(left: 12, right: 4),
+                  padding: const EdgeInsets.only(left: 10, right: 4),
+                  // Поиск — заливкой листа (ADR-027); рамка 1.5 акцентом —
+                  // только в фокусе, чтобы его было видно с клавиатуры.
                   decoration: BoxDecoration(
-                    color: AssistantColors.raised,
+                    color: context.colors.workspace,
+                    borderRadius: BorderRadius.circular(AppRadius.search),
                     border: Border.all(
-                      color: _searching
-                          ? AssistantColors.borderFocus
-                          : AssistantColors.border,
+                      color: _focus.hasFocus
+                          ? context.colors.accent
+                          : Colors.transparent,
+                      width: 1.5,
                     ),
-                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: <Widget>[
+                      Icon(Icons.search, size: 20, color: context.colors.muted),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: CallbackShortcuts(
                           bindings: <ShortcutActivator, VoidCallback>{
@@ -771,21 +787,26 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                               }
                             },
                             textInputAction: TextInputAction.search,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              color: AssistantColors.textStrong,
+                            style: TextStyle(
+                              fontSize: 17,
+                              color: context.colors.textStrong,
                             ),
                             decoration: InputDecoration(
                               isDense: true,
                               border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              filled: false,
                               contentPadding: EdgeInsets.zero,
                               // Подсказка целиком: не помещается —
                               // уменьшается, а не режется (ADR-021).
+                              // Крупный шрифт — короче: «Поиск по сессиям»
+                              // иначе сжимался до 11 px.
                               hint: fitSingleWord(
-                                'Поиск по сессиям',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: AssistantColors.muted,
+                                scale > 1.3 ? 'Поиск' : 'Поиск по сессиям',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: context.colors.muted,
                                 ),
                               ),
                               semanticCounterText: '',
@@ -795,7 +816,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                                   widget.wide && !_searching && field >= 200
                                       ? 'Ctrl K'
                                       : null,
-                              suffixStyle: metaTextStyle,
+                              suffixStyle: metaStyle(context),
                             ),
                           ),
                         ),
@@ -810,7 +831,6 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                             onPressed: _cancel,
                             style: TextButton.styleFrom(
                               minimumSize: const Size(44, 44),
-                              foregroundColor: AssistantColors.text,
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 10),
                             ),
@@ -819,7 +839,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 15,
+                                fontSize: 17,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -847,8 +867,8 @@ final class _Fade extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = <Color>[
-      AssistantColors.sidebar,
-      AssistantColors.sidebar.withAlpha(0),
+      context.colors.sidebar,
+      context.colors.sidebar.withAlpha(0),
     ];
     return IgnorePointer(
       child: DecoratedBox(
@@ -879,18 +899,20 @@ final class _NewSessionButton extends StatelessWidget {
         label: 'Новая сессия',
         onTap: onTap,
         excludeSemantics: true,
+        // Тональная кнопка: заливка листа и значок акцентом, а не
+        // сплошной блок акцента на треть строки.
         child: Material(
-          color: AssistantColors.primary,
-          borderRadius: BorderRadius.circular(12),
+          color: context.colors.workspace,
+          borderRadius: BorderRadius.circular(AppRadius.field),
           child: InkWell(
             key: const Key('new-session'),
             onTap: onTap,
-            borderRadius: BorderRadius.circular(12),
-            child: const Center(
+            borderRadius: BorderRadius.circular(AppRadius.field),
+            child: Center(
               child: Icon(
-                Icons.add,
-                size: 22,
-                color: AssistantColors.onPrimary,
+                Icons.edit_square,
+                size: 24,
+                color: context.colors.accent,
               ),
             ),
           ),
@@ -901,16 +923,20 @@ final class _NewSessionButton extends StatelessWidget {
 }
 
 /// Знак приложения: три точки цветами помощников — Связной, Лиорио и Нода
-/// (ADR-016).
-final class _RelayGlyph extends StatelessWidget {
-  const _RelayGlyph();
+/// (ADR-016). Виден в «Настройки → О приложении» (ADR-027).
+final class RelayGlyph extends StatelessWidget {
+  const RelayGlyph({super.key, this.size = 22});
+
+  final double size;
 
   @override
-  Widget build(BuildContext context) => const ExcludeSemantics(
+  Widget build(BuildContext context) => ExcludeSemantics(
         child: SizedBox.square(
-          key: ValueKey<String>('app-glyph'),
-          dimension: 22,
-          child: CustomPaint(painter: RelayGlyphPainter()),
+          key: const ValueKey<String>('app-glyph'),
+          dimension: size,
+          child: CustomPaint(
+            painter: RelayGlyphPainter(palette: context.colors),
+          ),
         ),
       );
 }
@@ -918,14 +944,13 @@ final class _RelayGlyph extends StatelessWidget {
 /// Рисует знак приложения на сетке 24: точки в (5,12), (12,12), (19,12),
 /// радиус 3.
 final class RelayGlyphPainter extends CustomPainter {
-  const RelayGlyphPainter();
+  const RelayGlyphPainter({this.palette = AppPalette.dark});
+
+  /// Палитра темы: точки перекрашиваются со сменой темы.
+  final AppPalette palette;
 
   /// Цвета точек слева направо: Связной, Лиорио, Нода.
-  static const List<Color> colors = <Color>[
-    AssistantColors.sado,
-    AssistantColors.liorio,
-    AssistantColors.noda,
-  ];
+  List<Color> get colors => <Color>[palette.sado, palette.liorio, palette.noda];
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -940,7 +965,8 @@ final class RelayGlyphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(RelayGlyphPainter oldDelegate) => false;
+  bool shouldRepaint(RelayGlyphPainter oldDelegate) =>
+      oldDelegate.palette != palette;
 }
 
 /// Шапка панели: знак, название приложения и версия; на компьютере справа —
@@ -953,52 +979,34 @@ final class _TitlePlate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 4, onCollapse == null ? 20 : 8, 4),
+      padding: EdgeInsets.fromLTRB(20, 8, onCollapse == null ? 20 : 8, 8),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 52),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            const _RelayGlyph(),
-            const SizedBox(width: 10),
-            // Название сжимается последним: версия — своей ширины рядом.
+            // Название приложения — шрифтом названия (ADR-021) крупно;
+            // знак и версия — в «Настройки → О приложении» (ADR-027).
             Expanded(
-              child: Row(
-                children: <Widget>[
-                  Flexible(
-                    child: Semantics(
-                      header: true,
-                      // Название приложения — шрифтом названия (ADR-021).
-                      child: Text(
-                        AppInfo.name,
-                        key: const ValueKey<String>('app-name'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: displayTextStyle.copyWith(
-                          fontSize: 23,
-                          height: 1.1,
-                        ),
-                      ),
+              child: Semantics(
+                header: true,
+                // Узко и крупный шрифт — название уменьшается целиком, а
+                // не режется многоточием.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    AppInfo.name,
+                    key: const ValueKey<String>('app-name'),
+                    maxLines: 1,
+                    softWrap: false,
+                    style: displayTextStyle.copyWith(
+                      fontSize: 30,
+                      height: 1.1,
+                      color: context.colors.textStrong,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 3),
-                    child: Semantics(
-                      label: 'Версия ${AppInfo.version}',
-                      excludeSemantics: true,
-                      child: Text(
-                        AppInfo.version,
-                        key: const ValueKey<String>('app-version'),
-                        maxLines: 1,
-                        style: metaTextStyle.copyWith(
-                          fontSize: 13,
-                          color: AssistantColors.faint,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
             if (onCollapse != null)
@@ -1006,7 +1014,7 @@ final class _TitlePlate extends StatelessWidget {
                 key: const Key('sidebar-collapse'),
                 tooltip: 'Свернуть панель',
                 onPressed: onCollapse,
-                color: AssistantColors.icon,
+                color: context.colors.icon,
                 icon: const Icon(Icons.view_sidebar_outlined, size: 20),
               ),
           ],
@@ -1037,21 +1045,16 @@ final class _MyRelayCard extends StatelessWidget {
       onTap: onTap,
       excludeSemantics: true,
       child: Material(
-        color: AssistantColors.raised,
-        shape: RoundedRectangleBorder(
-          side: const BorderSide(color: AssistantColors.borderSoft),
-          borderRadius: BorderRadius.circular(16),
-        ),
+        type: MaterialType.transparency,
         child: InkWell(
           key: const Key('drawer-my-relay'),
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: wide ? 72 : 88),
+            constraints: BoxConstraints(minHeight: wide ? 60 : 68),
             child: Padding(
               padding: EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: wide ? 10 : 12,
+                horizontal: 16,
+                vertical: wide ? 8 : 10,
               ),
               child: Row(
                 children: <Widget>[
@@ -1064,10 +1067,10 @@ final class _MyRelayCard extends StatelessWidget {
                       appNameSpan(
                         AppInfo.hubName,
                         TextStyle(
-                          fontSize: wide ? 16 : 18,
+                          fontSize: wide ? 17 : 18,
                           fontWeight: FontWeight.w600,
                           height: 1.3,
-                          color: AssistantColors.textStrong,
+                          color: context.colors.textStrong,
                         ),
                       ),
                       maxLines: 2,
@@ -1076,8 +1079,8 @@ final class _MyRelayCard extends StatelessWidget {
                   ),
                   Icon(
                     Icons.chevron_right,
-                    size: wide ? 18 : 20,
-                    color: AssistantColors.icon,
+                    size: 20,
+                    color: context.colors.faint,
                   ),
                 ],
               ),
@@ -1096,14 +1099,16 @@ final class RelayAvatars extends StatelessWidget {
     super.key,
     this.personas,
     this.size = 36,
-    this.ring = AssistantColors.raised,
+    this.ring,
   });
 
   /// Кого показать; `null` — активные по текущему составу
   /// ([PersonaCast.current]).
   final List<Persona>? personas;
   final double size;
-  final Color ring;
+
+  /// Обводка знаков; `null` — цвет карточки.
+  final Color? ring;
 
   @override
   Widget build(BuildContext context) {
@@ -1123,7 +1128,7 @@ final class RelayAvatars extends StatelessWidget {
                 persona: persona,
                 size: size,
                 round: true,
-                ring: ring,
+                ring: ring ?? context.colors.workspace,
               ),
             ),
         ],
@@ -1253,7 +1258,7 @@ final class _Sections extends StatelessWidget {
                     tooltip: 'Новый проект',
                     onPressed: onNewProject,
                     iconSize: 20,
-                    color: AssistantColors.icon,
+                    color: context.colors.icon,
                     style: IconButton.styleFrom(
                       minimumSize: const Size(44, 44),
                     ),
@@ -1318,15 +1323,12 @@ final class _ProjectRow extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: const EdgeInsets.fromLTRB(28, 4, 10, 4),
-          decoration: BoxDecoration(
-            color: selected ? AssistantColors.raised : null,
-            borderRadius: BorderRadius.circular(10),
-          ),
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.fromLTRB(56, 4, 16, 4),
+          color: selected ? context.colors.bubble : null,
           child: Row(
             children: <Widget>[
-              Icon(icon, size: wide ? 18 : 20, color: AssistantColors.icon),
+              Icon(icon, size: wide ? 18 : 20, color: context.colors.icon),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -1335,12 +1337,12 @@ final class _ProjectRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: projectName
                       ? projectNameStyle(
-                          fontSize: wide ? 16 : 17,
-                          color: AssistantColors.text,
+                          fontSize: 17,
+                          color: context.colors.text,
                         )
                       : TextStyle(
-                          fontSize: wide ? 14 : 15,
-                          color: AssistantColors.text,
+                          fontSize: 15,
+                          color: context.colors.text,
                         ),
                 ),
               ),
@@ -1348,8 +1350,9 @@ final class _ProjectRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   '$count',
-                  style: metaTextStyle.copyWith(
-                    color: AssistantColors.faint,
+                  style: metaNumTextStyle.copyWith(
+                    fontSize: 15,
+                    color: context.colors.muted,
                   ),
                 ),
               ],
@@ -1386,7 +1389,6 @@ final class _SectionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final box = wide ? 32.0 : 36.0;
     final semantics = <String>[
       label,
       if (count != null) '$count',
@@ -1395,10 +1397,10 @@ final class _SectionRow extends StatelessWidget {
     // Просрочка — счётчик заметнее (рамка и текст ярче).
     final loud = alert != null;
     final labelStyle = TextStyle(
-      fontSize: wide ? 15 : 16,
-      fontWeight: FontWeight.w500,
+      fontSize: 17,
+      fontWeight: FontWeight.w400,
       height: 1.35,
-      color: AssistantColors.textStrong,
+      color: context.colors.textStrong,
     );
     return Semantics(
       button: true,
@@ -1409,31 +1411,14 @@ final class _SectionRow extends StatelessWidget {
       child: InkWell(
         key: Key('nav-$id'),
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
         child: Container(
-          constraints: BoxConstraints(minHeight: wide ? 50 : 56),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: selected ? AssistantColors.raised : null,
-            borderRadius: BorderRadius.circular(12),
-          ),
+          constraints: const BoxConstraints(minHeight: AppSize.rowMin),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          color: selected ? context.colors.bubble : null,
           child: Row(
             children: <Widget>[
-              Container(
-                width: box,
-                height: box,
-                decoration: BoxDecoration(
-                  color: AssistantColors.raised,
-                  border: Border.all(color: AssistantColors.borderSoft),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  icon,
-                  size: wide ? 18 : 20,
-                  color: AssistantColors.icon,
-                ),
-              ),
-              const SizedBox(width: 14),
+              IconTile(icon: icon, color: tile(context)),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1456,10 +1441,10 @@ final class _SectionRow extends StatelessWidget {
                         key: Key('nav-$id-alert'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
+                        style: TextStyle(
+                          fontSize: 15,
                           height: 1.3,
-                          color: AssistantColors.danger,
+                          color: context.colors.danger,
                         ),
                       ),
                   ],
@@ -1467,42 +1452,26 @@ final class _SectionRow extends StatelessWidget {
               ),
               if (count != null) ...<Widget>[
                 const SizedBox(width: 10),
-                DecoratedBox(
+                // Счётчик — значением 17 приглушённым, без рамки.
+                KeyedSubtree(
                   key: Key('nav-$id-count'),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: loud
-                          ? AssistantColors.border
-                          : AssistantColors.borderSoft,
-                    ),
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: SizedBox(
-                    height: 26,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: 28),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Center(
-                          widthFactor: 1,
-                          child: MediaQuery.withNoTextScaling(
-                            child: Text(
-                              '$count',
-                              maxLines: 1,
-                              style: metaTextStyle.copyWith(
-                                fontSize: 13,
-                                height: 1.2,
-                                fontWeight: FontWeight.w500,
-                                color: loud
-                                    ? AssistantColors.textStrong
-                                    : AssistantColors.muted,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                  child: Text(
+                    '$count',
+                    maxLines: 1,
+                    style: metaNumTextStyle.copyWith(
+                      fontSize: 17,
+                      height: 1.2,
+                      fontWeight: loud ? FontWeight.w600 : FontWeight.w400,
+                      color:
+                          loud ? context.colors.danger : context.colors.muted,
                     ),
                   ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: context.colors.faint,
                 ),
               ],
             ],
@@ -1511,15 +1480,22 @@ final class _SectionRow extends StatelessWidget {
       ),
     );
   }
+
+  /// Цвет плитки раздела — из проверенного набора палитры.
+  Color tile(BuildContext context) => switch (id) {
+        'tasks' => context.colors.tileBlue,
+        'projects' => context.colors.tileAmber,
+        'planning' => context.colors.tileRed,
+        _ => context.colors.tileGray,
+      };
 }
 
-const TextStyle _groupStyle = TextStyle(
-  fontSize: 14,
-  fontWeight: FontWeight.w600,
-  height: 1.3,
-  letterSpacing: .14,
-  color: AssistantColors.muted,
-);
+TextStyle _groupStyle(BuildContext context) => TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+      height: 1.33,
+      color: context.colors.muted,
+    );
 
 final class _ListHeader extends StatelessWidget {
   const _ListHeader(
@@ -1545,10 +1521,10 @@ final class _ListHeader extends StatelessWidget {
         child: Row(
           children: <Widget>[
             if (icon != null) ...<Widget>[
-              Icon(icon, size: 14, color: AssistantColors.muted),
+              Icon(icon, size: 14, color: context.colors.muted),
               const SizedBox(width: 6),
             ],
-            Flexible(child: Text(text, style: _groupStyle)),
+            Flexible(child: Text(text, style: _groupStyle(context))),
           ],
         ),
       ),
@@ -1591,20 +1567,20 @@ final class _GroupToggle extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Row(
                 children: <Widget>[
-                  Expanded(child: Text(label, style: _groupStyle)),
+                  Expanded(child: Text(label, style: _groupStyle(context))),
                   const SizedBox(width: 8),
                   Text(
                     '$count',
-                    style: metaTextStyle.copyWith(
-                      fontSize: 13,
-                      color: AssistantColors.faint,
+                    style: metaNumStyle(context).copyWith(
+                      fontSize: 15,
+                      color: context.colors.faint,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Icon(
                     open ? Icons.keyboard_arrow_down : Icons.chevron_right,
                     size: 16,
-                    color: AssistantColors.icon,
+                    color: context.colors.icon,
                   ),
                 ],
               ),
@@ -1643,18 +1619,18 @@ final class _ShowMoreRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Row(
                 children: <Widget>[
-                  const Icon(
+                  Icon(
                     Icons.expand_more,
                     size: 16,
-                    color: AssistantColors.icon,
+                    color: context.colors.icon,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       label,
-                      style: metaTextStyle.copyWith(
-                        fontSize: 13,
-                        color: AssistantColors.muted,
+                      style: metaStyle(context).copyWith(
+                        fontSize: 15,
+                        color: context.colors.muted,
                       ),
                     ),
                   ),
@@ -1697,7 +1673,7 @@ final class _ExtensionRow extends StatelessWidget {
                 return Row(
                   children: <Widget>[
                     if (entry.icon != null) ...<Widget>[
-                      Icon(entry.icon, size: 18, color: AssistantColors.icon),
+                      Icon(entry.icon, size: 18, color: context.colors.icon),
                       const SizedBox(width: 12),
                     ],
                     Expanded(
@@ -1707,9 +1683,9 @@ final class _ExtensionRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         firstWordOnly: true,
                         style: TextStyle(
-                          fontSize: wide ? 15 : 16,
+                          fontSize: 17,
                           height: 1.35,
-                          color: AssistantColors.textStrong,
+                          color: context.colors.textStrong,
                         ),
                       ),
                     ),
@@ -1729,7 +1705,9 @@ final class _ExtensionRow extends StatelessWidget {
                               height: 8,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: entry.dotColor ?? entry.statusColor,
+                                color: entry.dotColor ??
+                                    entry.statusColor ??
+                                    context.colors.muted,
                               ),
                             ),
                             const SizedBox(width: 7),
@@ -1740,9 +1718,10 @@ final class _ExtensionRow extends StatelessWidget {
                               key: Key('drawer-extension-status-${entry.id}'),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: metaTextStyle.copyWith(
-                                fontSize: 13,
-                                color: entry.statusColor,
+                              style: metaStyle(context).copyWith(
+                                fontSize: 15,
+                                color:
+                                    entry.statusColor ?? context.colors.muted,
                               ),
                             ),
                           ),
@@ -1850,8 +1829,8 @@ final class _SessionRowState extends State<_SessionRow> {
       borderRadius: BorderRadius.circular(12),
       child: Container(
         decoration: BoxDecoration(
-          color: entry.active ? AssistantColors.raised : null,
-          borderRadius: BorderRadius.circular(12),
+          color: entry.active ? context.colors.bubble : null,
+          borderRadius: BorderRadius.circular(AppRadius.field),
         ),
         child: Opacity(
           // Строка «поднята» в меню действий: на месте — пусто.
@@ -1926,12 +1905,12 @@ final class _SessionRowState extends State<_SessionRow> {
                         tooltip: 'Действия с сессией',
                         onPressed: _openMenu,
                         iconSize: 20,
-                        color: AssistantColors.icon,
+                        color: context.colors.icon,
                         style: IconButton.styleFrom(
                           minimumSize: const Size(44, 44),
                           backgroundColor: entry.active
-                              ? AssistantColors.raised
-                              : AssistantColors.sidebar,
+                              ? context.colors.bubble
+                              : context.colors.sidebar,
                         ),
                         icon: const Icon(Icons.more_horiz),
                       ),
@@ -1967,13 +1946,13 @@ final class SessionRowBody extends StatelessWidget {
     final mark = wide ? 26.0 : 28.0;
     final persona = entry.persona;
     final titleColor =
-        entry.muted ? AssistantColors.muted : AssistantColors.textStrong;
+        entry.muted ? context.colors.muted : context.colors.textStrong;
     final time = Text(
       entry.time,
       maxLines: 1,
-      style: metaTextStyle.copyWith(
-        fontSize: 13,
-        color: AssistantColors.faint,
+      style: metaStyle(context).copyWith(
+        fontSize: 15,
+        color: context.colors.muted,
       ),
     );
     return ConstrainedBox(
@@ -1982,8 +1961,14 @@ final class SessionRowBody extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: 10, vertical: wide ? 7 : 8),
         child: Row(
           children: <Widget>[
+            // Тот, кто ответил последним, — тихой точкой его цвета
+            // (ADR-027), а не знаком с буквой.
             if (persona != null)
-              PersonaMark(persona: persona, size: mark)
+              SizedBox(
+                width: mark,
+                height: mark,
+                child: Center(child: PersonaDot(persona: persona, size: 10)),
+              )
             else
               // Ещё никто не отвечал (новая сессия): вместо пустой рамки —
               // тихий знак «новое», ширина колонки та же.
@@ -1993,7 +1978,7 @@ final class SessionRowBody extends StatelessWidget {
                 child: Icon(
                   Icons.edit_outlined,
                   size: mark * 0.7,
-                  color: AssistantColors.faint,
+                  color: context.colors.faint,
                 ),
               ),
             const SizedBox(width: 12),
@@ -2012,7 +1997,7 @@ final class SessionRowBody extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           firstWordOnly: true,
                           style: TextStyle(
-                            fontSize: wide ? 15 : 16,
+                            fontSize: 17,
                             fontWeight: FontWeight.w500,
                             height: 1.35,
                             color: titleColor,
@@ -2025,8 +2010,8 @@ final class SessionRowBody extends StatelessWidget {
                           key: entry.dotKey,
                           width: 8,
                           height: 8,
-                          decoration: const BoxDecoration(
-                            color: AssistantColors.textStrong,
+                          decoration: BoxDecoration(
+                            color: context.colors.textStrong,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -2058,14 +2043,14 @@ final class SessionRowBody extends StatelessWidget {
                                   Icons.folder_outlined,
                                   key: Key('chat-project-${entry.id}'),
                                   size: wide ? 13 : 14,
-                                  color: AssistantColors.faint,
+                                  color: context.colors.faint,
                                 ),
                               ),
                             ),
                             TextSpan(
                               text: entry.projectName,
-                              style: const TextStyle(
-                                color: AssistantColors.faint,
+                              style: TextStyle(
+                                color: context.colors.faint,
                               ),
                             ),
                             if (entry.preview != null)
@@ -2078,9 +2063,9 @@ final class SessionRowBody extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: wide ? 13 : 14,
+                        fontSize: 15,
                         height: 1.4,
-                        color: AssistantColors.muted,
+                        color: context.colors.muted,
                       ),
                     ),
                   ],
@@ -2132,7 +2117,7 @@ final class _HitRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       firstWordOnly: true,
-                      style: const TextStyle(color: AssistantColors.textStrong),
+                      style: TextStyle(color: context.colors.textStrong),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -2143,15 +2128,15 @@ final class _HitRow extends StatelessWidget {
                         key: Key('search-project-${hit.chatId}'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: metaTextStyle.copyWith(
-                          color: AssistantColors.faint,
+                        style: metaStyle(context).copyWith(
+                          color: context.colors.faint,
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
                   ],
                   // Время сессии, как в списке сессий (12:40, вчера).
-                  Text(time, style: metaTextStyle),
+                  Text(time, style: metaNumStyle(context)),
                 ],
               ),
               Text.rich(
@@ -2160,9 +2145,9 @@ final class _HitRow extends StatelessWidget {
                     TextSpan(text: snippet.substring(0, start)),
                     TextSpan(
                       text: snippet.substring(start, end),
-                      style: const TextStyle(
-                        color: AssistantColors.mark,
-                        backgroundColor: AssistantColors.markBg,
+                      style: TextStyle(
+                        color: context.colors.mark,
+                        backgroundColor: context.colors.markBg,
                       ),
                     ),
                     TextSpan(text: snippet.substring(end)),
@@ -2171,10 +2156,10 @@ final class _HitRow extends StatelessWidget {
                 key: Key('search-snippet-${hit.chatId}'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13,
+                style: TextStyle(
+                  fontSize: 15,
                   height: 1.4,
-                  color: AssistantColors.muted,
+                  color: context.colors.muted,
                 ),
               ),
             ],

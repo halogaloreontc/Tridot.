@@ -12,6 +12,8 @@ import '../../core/passwords/vault_facade.dart';
 import '../../core/passwords/vault_format.dart';
 import '../../core/passwords/vault_prefs.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
+import '../widgets/grouped.dart';
 import 'generator_view.dart';
 import 'passwords_kit.dart';
 import 'secret_widgets.dart';
@@ -197,7 +199,6 @@ class _EntryScreenState extends State<EntryScreen>
       context: context,
       builder: (BuildContext context) => AlertDialog(
         scrollable: true,
-        backgroundColor: AssistantColors.raised,
         title: WholeWordText('Удалить «${entry.service}»?'),
         content: const Text(
           'Вернуть запись можно будет только из резервной копии.',
@@ -209,8 +210,7 @@ class _EntryScreenState extends State<EntryScreen>
           ),
           TextButton(
             key: const ValueKey<String>('entry-delete-confirm'),
-            style:
-                TextButton.styleFrom(foregroundColor: AssistantColors.danger),
+            style: TextButton.styleFrom(foregroundColor: context.colors.danger),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Удалить'),
           ),
@@ -241,7 +241,6 @@ class _EntryScreenState extends State<EntryScreen>
       context: context,
       builder: (BuildContext context) => AlertDialog(
         scrollable: true,
-        backgroundColor: AssistantColors.raised,
         title: WholeWordText(
           meta == null
               ? 'Очистить хронологию «${entry.service}»?'
@@ -259,8 +258,7 @@ class _EntryScreenState extends State<EntryScreen>
           ),
           TextButton(
             key: const ValueKey<String>('entry-history-confirm'),
-            style:
-                TextButton.styleFrom(foregroundColor: AssistantColors.danger),
+            style: TextButton.styleFrom(foregroundColor: context.colors.danger),
             onPressed: () => Navigator.of(context).pop(true),
             child: Text(meta == null ? 'Очистить' : 'Удалить'),
           ),
@@ -296,31 +294,31 @@ class _EntryScreenState extends State<EntryScreen>
   Widget _history(VaultEntry entry) {
     final items = entry.history;
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: EdgeInsets.zero,
       child: ExpansionTile(
         key: const ValueKey<String>('entry-history'),
         tilePadding: EdgeInsets.zero,
         childrenPadding: EdgeInsets.zero,
         title: Text(
           'Прежние пароли (${items.length})',
-          style: metaTextStyle,
+          style: metaStyle(context),
         ),
         children: <Widget>[
           if (items.isEmpty)
-            const Align(
+            Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 'Пока пусто: прежний пароль появится здесь после смены.',
-                style: TextStyle(color: AssistantColors.muted),
+                style: TextStyle(color: context.colors.muted),
               ),
             ),
           if (!kit.historyEnabled && items.isNotEmpty)
-            const Align(
+            Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 'Хронология выключена: при смене пароля старый больше не '
                 'сохраняется.',
-                style: metaTextStyle,
+                style: metaStyle(context),
               ),
             ),
           for (final meta in items)
@@ -336,12 +334,12 @@ class _EntryScreenState extends State<EntryScreen>
                       children: <Widget>[
                         Text(
                           historyPeriodText(meta),
-                          style: metaTextStyle,
+                          style: metaStyle(context),
                         ),
                         if (meta.looksLikeTypo)
-                          const Text(
+                          Text(
                             'Использовался меньше часа — похоже на опечатку.',
-                            style: TextStyle(color: AssistantColors.warning),
+                            style: TextStyle(color: context.colors.warning),
                           ),
                         SecretRevealText(
                           key: ValueKey<String>('entry-history-reveal-'
@@ -375,7 +373,7 @@ class _EntryScreenState extends State<EntryScreen>
               child: TextButton(
                 key: const ValueKey<String>('entry-history-clear'),
                 style: TextButton.styleFrom(
-                  foregroundColor: AssistantColors.danger,
+                  foregroundColor: context.colors.danger,
                 ),
                 onPressed: () => unawaited(_dropHistory(entry, null)),
                 child: const Text('Очистить хронологию'),
@@ -389,17 +387,21 @@ class _EntryScreenState extends State<EntryScreen>
   @override
   Widget build(BuildContext context) {
     final entry = kit.vault.entry(widget.id);
+    final text = Theme.of(context).textTheme;
+    final value = text.bodyLarge!.copyWith(color: context.colors.textStrong);
+    // Запись — сгруппированным экраном: «Логин / Пароль», «Подсказка /
+    // Заметка», удаление отдельной группой (ADR-027).
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
-        backgroundColor: AssistantColors.workspace,
+        backgroundColor: context.colors.background,
         title: Text(entry?.service ?? 'Запись'),
       ),
       body: entry == null
-          ? const Center(
+          ? Center(
               child: Text(
                 'Этой записи уже нет.',
-                style: TextStyle(color: AssistantColors.muted),
+                style: TextStyle(color: context.colors.muted),
               ),
             )
           : Align(
@@ -407,138 +409,137 @@ class _EntryScreenState extends State<EntryScreen>
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 560),
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                  padding: const EdgeInsets.fromLTRB(0, 8, 0, 32),
                   children: <Widget>[
-                    for (final url in entry.urls)
-                      _Field(
-                        label: 'Адрес',
-                        child: Text(
-                          VaultFacade.hostOf(url),
-                          style: const TextStyle(color: AssistantColors.text),
-                        ),
-                      ),
-                    if (entry.login.isNotEmpty)
-                      _Field(
-                        label: 'Логин',
-                        child: Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: Text(
-                                entry.login,
-                                key: const ValueKey<String>('entry-login'),
-                                style: const TextStyle(
-                                  color: AssistantColors.textStrong,
-                                ),
-                              ),
-                            ),
-                            IconButton(
+                    InsetGroup(
+                      footer: kit.canCopySecrets
+                          ? null
+                          : (kit.platform.copyNote ?? ''),
+                      footerKey: const ValueKey<String>('entry-copy-note'),
+                      children: <Widget>[
+                        for (final url in entry.urls)
+                          _Field(
+                            label: 'Адрес',
+                            child: Text(VaultFacade.hostOf(url), style: value),
+                          ),
+                        if (entry.login.isNotEmpty)
+                          _Field(
+                            label: 'Логин',
+                            trailing: IconButton(
                               key: const ValueKey<String>('entry-copy-login'),
                               tooltip: 'Скопировать логин',
-                              icon: const Icon(Icons.copy_outlined, size: 18),
+                              color: context.colors.accent,
+                              icon: const Icon(Icons.copy_outlined, size: 22),
                               onPressed: () => fireAndForget(
                                 kit.clipboard.copyText(entry.login),
                               ),
                             ),
-                          ],
+                            child: Text(
+                              entry.login,
+                              key: const ValueKey<String>('entry-login'),
+                              style: value,
+                            ),
+                          ),
+                        _Field(
+                          label: 'Пароль',
+                          child: SecretRevealText(
+                            key: ValueKey<String>('entry-password-${entry.id}'),
+                            load: () => loadPassword(context, kit, entry.id),
+                            seconds: kit.revealSeconds,
+                            hide: kit.hideTicks,
+                          ),
                         ),
-                      ),
-                    _Field(
-                      label: 'Пароль',
-                      child: SecretRevealText(
-                        key: ValueKey<String>('entry-password-${entry.id}'),
-                        load: () => loadPassword(context, kit, entry.id),
-                        seconds: kit.revealSeconds,
-                        hide: kit.hideTicks,
-                      ),
+                        if (kit.canCopySecrets)
+                          GroupedRow(
+                            key: const ValueKey<String>('entry-copy-password'),
+                            icon: Icons.copy_outlined,
+                            accent: true,
+                            title: 'Скопировать — очистится через '
+                                '${kit.clipboardSeconds} с',
+                            onTap: () => fireAndForget(
+                              copyPassword(context, kit, entry.id),
+                            ),
+                          ),
+                      ],
                     ),
-                    if (kit.canCopySecrets)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: OutlinedButton.icon(
-                          key: const ValueKey<String>('entry-copy-password'),
-                          onPressed: () => fireAndForget(
-                            copyPassword(context, kit, entry.id),
-                          ),
-                          icon: const Icon(Icons.copy_outlined, size: 16),
-                          label: Text(
-                            'Скопировать — очистится через '
-                            '${kit.clipboardSeconds} с',
-                          ),
-                        ),
-                      )
-                    else
-                      Text(
-                        kit.platform.copyNote ?? '',
-                        key: const ValueKey<String>('entry-copy-note'),
-                        style: metaTextStyle,
-                      ),
                     if (kit.historyEnabled || entry.history.isNotEmpty)
-                      _history(entry),
-                    _Field(
-                      label: 'Подсказка',
-                      child: Text(
-                        entry.hint.isEmpty ? 'Нет подсказки' : entry.hint,
-                        style: TextStyle(
-                          color: entry.hint.isEmpty
-                              ? AssistantColors.muted
-                              : AssistantColors.text,
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                        child: Material(
+                          color: context.colors.workspace,
+                          borderRadius: BorderRadius.circular(AppRadius.group),
+                          clipBehavior: Clip.antiAlias,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            child: _history(entry),
+                          ),
                         ),
                       ),
-                    ),
-                    _Field(
-                      label: 'Заметка',
-                      child: SecretRevealText(
-                        key: ValueKey<String>('entry-note-${entry.id}'),
-                        load: () => loadNote(context, kit, entry.id),
-                        seconds: kit.revealSeconds,
-                        hide: kit.hideTicks,
-                        kind: 'Заметка',
-                        compact: true,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: <Widget>[
-                        if (entry.important)
-                          const Chip(
-                            avatar: Icon(Icons.star_outline, size: 16),
-                            label: Text('Важный'),
+                    InsetGroup(
+                      footer: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: <Widget>[
+                          if (entry.important)
+                            const Chip(
+                              avatar: Icon(Icons.star_outline, size: 16),
+                              label: Text('Важный'),
+                            ),
+                          Text(
+                            'Изменён ${agoText(entry.changed, widget.now())}',
+                            style: metaStyle(context),
                           ),
-                        Text(
-                          'Изменён ${agoText(entry.changed, widget.now())}',
-                          style: metaTextStyle,
+                        ],
+                      ),
+                      children: <Widget>[
+                        _Field(
+                          label: 'Подсказка',
+                          child: Text(
+                            entry.hint.isEmpty ? 'Нет подсказки' : entry.hint,
+                            style: value.copyWith(
+                              color: entry.hint.isEmpty
+                                  ? context.colors.muted
+                                  : context.colors.textStrong,
+                            ),
+                          ),
+                        ),
+                        _Field(
+                          label: 'Заметка',
+                          child: SecretRevealText(
+                            key: ValueKey<String>('entry-note-${entry.id}'),
+                            load: () => loadNote(context, kit, entry.id),
+                            seconds: kit.revealSeconds,
+                            hide: kit.hideTicks,
+                            kind: 'Заметка',
+                            compact: true,
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: <Widget>[
-                        FilledButton.icon(
-                          key: const ValueKey<String>('entry-edit'),
-                          onPressed: () => unawaited(
-                            Navigator.of(context).push<void>(
-                              MaterialPageRoute<void>(
-                                builder: (BuildContext context) =>
-                                    EntryEditorScreen(kit: kit, id: entry.id),
-                              ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      child: FilledButton.icon(
+                        key: const ValueKey<String>('entry-edit'),
+                        onPressed: () => unawaited(
+                          Navigator.of(context).push<void>(
+                            MaterialPageRoute<void>(
+                              builder: (BuildContext context) =>
+                                  EntryEditorScreen(kit: kit, id: entry.id),
                             ),
                           ),
-                          icon: const Icon(Icons.edit_outlined, size: 16),
-                          label: const Text('Изменить'),
                         ),
-                        OutlinedButton.icon(
+                        icon: const Icon(Icons.edit_outlined, size: 20),
+                        label: const Text('Изменить'),
+                      ),
+                    ),
+                    InsetGroup(
+                      children: <Widget>[
+                        GroupedRow(
                           key: const ValueKey<String>('entry-delete'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AssistantColors.danger,
-                          ),
-                          onPressed: () => unawaited(_delete(entry)),
-                          icon: const Icon(Icons.delete_outline, size: 16),
-                          label: const Text('Удалить'),
+                          destructive: true,
+                          title: 'Удалить',
+                          onTap: () => unawaited(_delete(entry)),
                         ),
                       ],
                     ),
@@ -572,23 +573,35 @@ String historyPeriodText(HistoryMeta meta) {
   return 'с ${dayText(from)} по ${dayText(to)}';
 }
 
+/// Поле записи строкой группы: подпись 13 приглушённым, значение 17.
 class _Field extends StatelessWidget {
-  const _Field({required this.label, required this.child});
+  const _Field({required this.label, required this.child, this.trailing});
 
   final String label;
   final Widget child;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Text(label, style: metaTextStyle),
-          const SizedBox(height: 4),
-          child,
-        ],
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: AppSize.rowMin),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 10, trailing == null ? 16 : 4, 10),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Text(label, style: metaStyle(context)),
+                  const SizedBox(height: 2),
+                  child,
+                ],
+              ),
+            ),
+            if (trailing != null) trailing!,
+          ],
+        ),
       ),
     );
   }
@@ -1054,9 +1067,9 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AssistantColors.workspace,
+      backgroundColor: context.colors.workspace,
       appBar: AppBar(
-        backgroundColor: AssistantColors.workspace,
+        backgroundColor: context.colors.workspace,
         title: Text(_isNew ? 'Новая запись' : 'Изменить запись'),
       ),
       body: Align(
@@ -1073,7 +1086,6 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
                 decoration: InputDecoration(
                   labelText: 'Сервис',
                   errorText: _serviceError,
-                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -1087,7 +1099,6 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
                 autocorrect: false,
                 decoration: const InputDecoration(
                   labelText: 'Адреса (по одному в строке)',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -1099,7 +1110,6 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
                 enableSuggestions: false,
                 decoration: const InputDecoration(
                   labelText: 'Логин',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -1144,7 +1154,6 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
                   helperMaxLines: 12,
                   errorText: _hintError,
                   errorMaxLines: 4,
-                  border: const OutlineInputBorder(),
                 ),
               ),
               if (_structure != null && _hint.text.trim().isEmpty)
@@ -1187,7 +1196,7 @@ class _EntryEditorScreenState extends State<EntryEditorScreen>
                   padding: const EdgeInsets.only(top: 4, bottom: 8),
                   child: Text(
                     _failure!,
-                    style: const TextStyle(color: AssistantColors.danger),
+                    style: TextStyle(color: context.colors.danger),
                   ),
                 ),
               const SizedBox(height: 8),

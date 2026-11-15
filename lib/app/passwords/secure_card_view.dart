@@ -156,14 +156,14 @@ class _SecureCardViewState extends State<SecureCardView> {
       key: ValueKey<String>('secure-card-${card.kind.name}'),
       padding: const EdgeInsets.only(top: 8),
       child: Material(
-        color: AssistantColors.raised,
+        // Карточка ленты заливкой, без рамки (ADR-027).
+        color: context.colors.raised,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: const BorderSide(color: AssistantColors.border),
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
           child: body,
         ),
       ),
@@ -258,26 +258,26 @@ class _SecureCardViewState extends State<SecureCardView> {
 
   Widget _title(VaultEntry entry) => Row(
         children: <Widget>[
-          const Icon(
+          Icon(
             Icons.key_outlined,
             size: 16,
-            color: AssistantColors.muted,
+            color: context.colors.muted,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               entry.service,
-              style: const TextStyle(
-                color: AssistantColors.textStrong,
+              style: TextStyle(
+                color: context.colors.textStrong,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ),
           if (entry.important)
-            const Icon(
+            Icon(
               Icons.star_outline,
               size: 16,
-              color: AssistantColors.warning,
+              color: context.colors.warning,
             ),
         ],
       );
@@ -289,12 +289,12 @@ class _SecureCardViewState extends State<SecureCardView> {
 
   Widget _loginRow(VaultEntry entry) => Row(
         children: <Widget>[
-          const Text('Логин: ', style: metaTextStyle),
+          Text('Логин: ', style: metaStyle(context)),
           Expanded(
             child: Text(
               entry.login,
               key: const ValueKey<String>('secure-card-login'),
-              style: const TextStyle(color: AssistantColors.text),
+              style: TextStyle(color: context.colors.text),
             ),
           ),
           IconButton(
@@ -419,7 +419,7 @@ class _SecureCardViewState extends State<SecureCardView> {
       children: <Widget>[
         Text(
           choose ? 'Какую запись?' : 'Записи сейфа',
-          style: metaTextStyle,
+          style: metaStyle(context),
         ),
         for (final entry in entries.take(choose ? 12 : 50))
           EntryTile(
@@ -492,7 +492,7 @@ class _SecureCardViewState extends State<SecureCardView> {
       children: <Widget>[
         _title(entry),
         if (entry.login.isNotEmpty)
-          Text(VaultFacade.maskLogin(entry.login), style: metaTextStyle),
+          Text(VaultFacade.maskLogin(entry.login), style: metaStyle(context)),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -500,8 +500,8 @@ class _SecureCardViewState extends State<SecureCardView> {
             FilledButton.icon(
               key: const ValueKey<String>('secure-card-delete'),
               style: FilledButton.styleFrom(
-                backgroundColor: AssistantColors.danger,
-                foregroundColor: AssistantColors.background,
+                backgroundColor: context.colors.danger,
+                foregroundColor: context.colors.background,
               ),
               onPressed: widget.busy ? null : () => _confirmDelete(entry.id),
               icon: const Icon(Icons.delete_outline, size: 16),
@@ -556,11 +556,10 @@ class _Line extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Icon(icon, size: 16, color: AssistantColors.muted),
+        Icon(icon, size: 16, color: context.colors.muted),
         const SizedBox(width: 8),
         Expanded(
-          child:
-              Text(text, style: const TextStyle(color: AssistantColors.text)),
+          child: Text(text, style: TextStyle(color: context.colors.text)),
         ),
       ],
     );

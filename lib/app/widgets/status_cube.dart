@@ -63,18 +63,18 @@ final class StatusCube extends StatelessWidget {
         CubeState.failed => 'Ошибка',
       };
 
-  Color _cellColor(int index) {
+  Color _cellColor(BuildContext context, int index) {
     switch (state) {
       case CubeState.completed when _success.contains(index):
-        return AssistantColors.success;
+        return context.colors.success;
       case CubeState.failed when _failure.contains(index):
-        return AssistantColors.danger;
+        return context.colors.danger;
       case CubeState.clarification when _clarification.contains(index):
-        return AssistantColors.warning;
+        return context.colors.warning;
       case CubeState.working:
-        return AssistantColors.cubeIdle;
+        return context.colors.cubeIdle;
       default:
-        return AssistantColors.borderSoft;
+        return context.colors.borderSoft;
     }
   }
 
@@ -103,6 +103,7 @@ final class StatusCube extends StatelessWidget {
                         if (column > 0) SizedBox(width: size * .06),
                         Expanded(
                           child: _cell(
+                            context,
                             row * 3 + column,
                             still,
                             duration,
@@ -120,14 +121,19 @@ final class StatusCube extends StatelessWidget {
     );
   }
 
-  Widget _cell(int index, bool still, Duration duration) {
+  Widget _cell(
+    BuildContext context,
+    int index,
+    bool still,
+    Duration duration,
+  ) {
     final offset =
         state == CubeState.working && !still ? _scatter[index] : Offset.zero;
     return AnimatedContainer(
       duration: duration,
       curve: Curves.easeOutCubic,
       transform: Matrix4.translationValues(offset.dx, offset.dy, 0),
-      color: _cellColor(index),
+      color: _cellColor(context, index),
     );
   }
 }

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/models/task.dart';
 import '../../core/storage/storage_info.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
+import '../widgets/grouped.dart';
 import '../widgets/task_tile.dart';
 
 /// Размер в байтах по-русски: «512 Б», «12,4 КБ», «3,0 МБ».
@@ -136,19 +138,19 @@ class _StorageScreenState extends State<StorageScreen> {
             children: <Widget>[
               Text(
                 'Данные',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  color: AssistantColors.textStrong,
+                style: theme.textTheme.displaySmall?.copyWith(
+                  color: context.colors.textStrong,
                 ),
               ),
               const SizedBox(height: 16),
+              // Сведения — сгруппированной панелью листа (ADR-027).
               DecoratedBox(
                 decoration: BoxDecoration(
-                  color: AssistantColors.panel,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AssistantColors.borderSoft),
+                  color: context.colors.workspace,
+                  borderRadius: BorderRadius.circular(AppRadius.group),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
@@ -156,21 +158,21 @@ class _StorageScreenState extends State<StorageScreen> {
                         label: 'Где',
                         child: Text(
                           info.label,
-                          style: const TextStyle(color: AssistantColors.text),
+                          style: TextStyle(color: context.colors.text),
                         ),
                       ),
                       _InfoRow(
                         label: 'Файл',
                         child: location == null
-                            ? const Text(
+                            ? Text(
                                 'только в памяти',
-                                style: TextStyle(color: AssistantColors.muted),
+                                style: TextStyle(color: context.colors.muted),
                               )
                             : SelectableText(
                                 location,
                                 key: const ValueKey<String>('storage-location'),
-                                style: metaTextStyle.copyWith(
-                                  color: AssistantColors.text,
+                                style: metaStyle(context).copyWith(
+                                  color: context.colors.text,
                                 ),
                               ),
                       ),
@@ -184,8 +186,8 @@ class _StorageScreenState extends State<StorageScreen> {
                             return Text(
                               bytes == null ? '—' : formatBytes(bytes),
                               key: const ValueKey<String>('storage-size'),
-                              style: const TextStyle(
-                                color: AssistantColors.text,
+                              style: TextStyle(
+                                color: context.colors.text,
                               ),
                             );
                           },
@@ -197,7 +199,7 @@ class _StorageScreenState extends State<StorageScreen> {
                           'активных: ${widget.activeCount} · '
                           'выполненных: ${completed.length}',
                           key: const ValueKey<String>('storage-counts'),
-                          style: const TextStyle(color: AssistantColors.text),
+                          style: TextStyle(color: context.colors.text),
                         ),
                       ),
                       _InfoRow(
@@ -206,7 +208,7 @@ class _StorageScreenState extends State<StorageScreen> {
                           '${widget.chatCount} · '
                           '${info.chatsLocation ?? 'только в памяти'}',
                           key: const ValueKey<String>('storage-chats'),
-                          style: const TextStyle(color: AssistantColors.text),
+                          style: TextStyle(color: context.colors.text),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -215,20 +217,16 @@ class _StorageScreenState extends State<StorageScreen> {
                         child: OutlinedButton.icon(
                           key: const ValueKey<String>('storage-backup'),
                           style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(40, 44),
-                            foregroundColor: AssistantColors.textStrong,
-                            side: const BorderSide(
-                              color: AssistantColors.border,
-                            ),
+                            minimumSize: const Size(40, 48),
                           ),
                           onPressed:
                               info.canBackup && !_backingUp ? _backup : null,
                           icon: _backingUp
-                              ? const SizedBox.square(
+                              ? SizedBox.square(
                                   dimension: 16,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: AssistantColors.muted,
+                                    color: context.colors.muted,
                                   ),
                                 )
                               : const Icon(Icons.save_outlined, size: 18),
@@ -240,52 +238,48 @@ class _StorageScreenState extends State<StorageScreen> {
                         ),
                       ),
                       if (!info.canBackup)
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.only(top: 6),
                           child: Text(
                             'Данные только в памяти — копия недоступна',
-                            style: metaTextStyle,
+                            style: metaStyle(context),
                           ),
                         ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
-              SectionLabel('Архив выполненных · ${completed.length}'),
-              if (completed.isEmpty)
+              const SizedBox(height: 24),
+              if (completed.isEmpty) ...<Widget>[
+                SectionLabel('Архив выполненных · ${completed.length}'),
                 const EmptyState(
                   icon: Icons.inventory_2_outlined,
                   title: 'Выполненных задач пока нет',
                   hint: 'Завершённые задачи появятся здесь',
-                )
-              else ...<Widget>[
-                for (final task in shown)
-                  TaskTile(
-                    key: ValueKey<String>('archive-${task.id}'),
-                    task: task,
-                    now: widget.now,
-                    onToggleDone: () => _reopen(task),
-                  ),
-                if (hidden > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: TextButton(
+                ),
+              ] else
+                InsetGroup(
+                  header: 'Архив выполненных · ${completed.length}',
+                  margin: EdgeInsets.zero,
+                  children: <Widget>[
+                    for (final task in shown)
+                      TaskTile(
+                        key: ValueKey<String>('archive-${task.id}'),
+                        task: task,
+                        now: widget.now,
+                        onToggleDone: () => _reopen(task),
+                      ),
+                    if (hidden > 0)
+                      GroupedRow(
                         key: const ValueKey<String>('archive-more'),
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(40, 44),
-                          foregroundColor: AssistantColors.text,
-                        ),
-                        onPressed: () => setState(
+                        accent: true,
+                        title: 'Показать ещё · $hidden',
+                        onTap: () => setState(
                           () => _visible += StorageScreen.pageSize,
                         ),
-                        child: Text('Показать ещё · $hidden'),
                       ),
-                    ),
-                  ),
-              ],
+                  ],
+                ),
             ],
           ),
         ),
@@ -307,7 +301,7 @@ class _InfoRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(label, style: metaTextStyle),
+          Text(label, style: metaStyle(context)),
           const SizedBox(height: 2),
           child,
         ],

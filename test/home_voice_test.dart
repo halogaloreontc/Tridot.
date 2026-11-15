@@ -287,7 +287,7 @@ void main() {
     await tester.pump();
     final partial = tester.widget<Text>(find.byKey(const Key('voice-partial')));
     expect(partial.data, 'Покажи');
-    expect(partial.style?.color, AssistantColors.muted);
+    expect(partial.style?.color, AppPalette.dark.muted);
     // Промежуточное — не в поле.
     expect(_inputText(tester), isEmpty);
 
@@ -347,7 +347,7 @@ void main() {
     );
     expect(
       (circle.decoration! as BoxDecoration).color,
-      AssistantColors.danger,
+      AppPalette.dark.danger,
     );
     await _tapMic(tester);
     expect(find.byIcon(Icons.mic_none), findsOneWidget);
@@ -653,7 +653,9 @@ void main() {
       final rig = await _pump(tester, installed: true, settings: _ready);
       await tester.enterText(find.byKey(_inputKey), 'покажи задачи');
       await tester.pump();
-      await tester.longPress(find.byKey(_inputKey));
+      // Поле — капсулой в одну строку: палец — на первом слове.
+      final field = tester.getRect(find.byKey(_inputKey));
+      await tester.longPressAt(Offset(field.left + 36, field.center.dy));
       await tester.pumpAndSettle();
       expect(rig.recognizer.startCalls, 0);
       // Слово под пальцем выделено, меню поля открыто.
