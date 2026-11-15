@@ -46,7 +46,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/fonts/Inter-OFL.txt
+    - assets/fonts/GolosText-OFL.txt
     - assets/fonts/JetBrainsMono-OFL.txt
     - assets/fonts/CormorantUnicase-OFL.txt
     # Встроенные паки (docs/EXTENSIONS.md): только данные, без кода.
@@ -67,9 +67,10 @@ flutter:
     # Конвертер (ADR-024): лицензии скачиваемого ffmpeg (LGPL, libmp3lame).
     - assets/extensions/NOTICE.txt
   fonts:
-    - family: Inter
+    # Весь текст интерфейса (ADR-021): переменный, ось wght 400–900.
+    - family: Golos Text
       fonts:
-        - asset: assets/fonts/InterVariable.ttf
+        - asset: assets/fonts/GolosText-Variable.ttf
     - family: JetBrains Mono
       fonts:
         - asset: assets/fonts/JetBrainsMonoVariable.ttf

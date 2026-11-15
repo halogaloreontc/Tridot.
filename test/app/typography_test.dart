@@ -1,4 +1,4 @@
-// Шрифты и шкала текста (ADR-021, ADR-027): Inter — весь текст, шкала
+// Шрифты и шкала текста (ADR-021, ADR-027): Golos Text — весь текст, шкала
 // 17/15/13, ничего мельче 13; JetBrains Mono — только пароли и коды
 // восстановления; Cormorant Unicase — «Tridot» и названия проектов. Команды
 // в ленте — обычный текст, в поле ввода выделен только глагол.
@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
-import 'package:local_assistant/app/widgets/app_name_text.dart';
 import 'package:local_assistant/app/widgets/command_highlight.dart';
 import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/chats/chat_store.dart';
@@ -107,7 +106,7 @@ Future<void> _say(WidgetTester tester, String text) async {
 
 void main() {
   group('стили', () {
-    test('уведомления (SnackBar) — Inter, а не системный шрифт', () {
+    test('уведомления (SnackBar) — шрифт приложения, а не системный', () {
       final theme = AssistantTheme.dark();
       expect(
         theme.snackBarTheme.contentTextStyle?.fontFamily,
@@ -116,12 +115,12 @@ void main() {
     });
 
     test(
-        'метаданные — Inter 13, цвет из темы; табличные цифры только у '
+        'метаданные — 13, шрифт приложения, цвет из темы; табличные цифры только у '
         'времени и счётчиков', () {
       expect(metaTextStyle.fontFamily, AppFonts.text);
       expect(metaTextStyle.fontSize, 13);
       expect(metaTextStyle.color, isNull);
-      // Табличные цифры в Inter расширяют «-» и «–»: в подписях их нет.
+      // В подписях цифры пропорциональные, табличные — только у времени.
       expect(metaTextStyle.fontFeatures, isNull);
       for (final theme in <ThemeData>[
         AssistantTheme.dark(),
@@ -141,10 +140,10 @@ void main() {
       ('тёмная', AssistantTheme.dark()),
       ('светлая', AssistantTheme.light()),
     ]) {
-      test('шкала 17/15/13 и Inter в каждом стиле: $name', () {
+      test('шкала 17/15/13 и Golos Text в каждом стиле: $name', () {
         final t = theme.textTheme;
         expect(t.bodyLarge!.fontSize, 17);
-        expect(t.bodyLarge!.height, closeTo(1.41, 0.001));
+        expect(t.bodyLarge!.height, closeTo(1.45, 0.001));
         expect(t.bodyMedium!.fontSize, 15);
         expect(t.bodySmall!.fontSize, 13);
         expect(t.titleMedium!.fontSize, 17);
@@ -203,6 +202,32 @@ void main() {
       expect(main, contains("<String>['Cormorant Unicase']"));
     });
 
+    test('шрифт текста — Golos Text: pubspec, файлы, лицензия; Inter нет', () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      expect(pubspec, contains('family: Golos Text'));
+      expect(pubspec, contains('assets/fonts/GolosText-Variable.ttf'));
+      expect(pubspec, contains('assets/fonts/GolosText-OFL.txt'));
+      expect(File('assets/fonts/GolosText-Variable.ttf').existsSync(), isTrue);
+      expect(
+        File('assets/fonts/GolosText-OFL.txt').readAsStringSync(),
+        contains('SIL OPEN FONT LICENSE'),
+      );
+      final main = File('lib/main.dart').readAsStringSync();
+      expect(main, contains("'assets/fonts/GolosText-OFL.txt'"));
+      expect(main, contains("<String>['Golos Text']"));
+      // Прежний шрифт убран целиком: ни семейства, ни файлов.
+      expect(pubspec, isNot(contains('family: Inter')));
+      expect(pubspec, isNot(contains('assets/fonts/Inter')));
+      expect(main, isNot(contains('Inter')));
+      expect(
+        Directory('assets/fonts')
+            .listSync()
+            .map((FileSystemEntity e) => e.uri.pathSegments.last)
+            .where((String name) => name.startsWith('Inter')),
+        isEmpty,
+      );
+    });
+
     test('JetBrains Mono — только пароли и коды восстановления', () {
       const allowed = <String>{
         'lib/app/assistant_theme.dart',
@@ -228,16 +253,19 @@ void main() {
       );
     });
 
-    test('appNameSpan: только слово «Tridot» шрифтом названия', () {
-      final parts = _flatten(
-        appNameSpan(AppInfo.hubName, const TextStyle(fontSize: 18)),
+    test('«Мой Связной» — без шрифта названия и без имени из настроек', () {
+      // Раздел зовётся одинаково при любом имени и роде главного
+      // помощника; шрифт названия (ADR-021) — только у «Tridot».
+      expect(AppInfo.hubName, 'Мой Связной');
+      expect(AppInfo.hubName, isNot(contains(AppInfo.name)));
+      expect(
+        Directory('lib').listSync(recursive: true).whereType<File>().where(
+              (File f) =>
+                  f.path.endsWith('.dart') &&
+                  f.readAsStringSync().contains('appNameSpan'),
+            ),
+        isEmpty,
       );
-      expect(parts.map(((String, TextStyle) p) => p.$1).join(), 'Мой Tridot');
-      final name = parts.singleWhere(
-        ((String, TextStyle) p) => p.$2.fontFamily == AppFonts.display,
-      );
-      expect(name.$1, AppInfo.name);
-      expect(name.$2.fontSize, closeTo(18 * displayScale, 0.01));
     });
   });
 
@@ -419,7 +447,8 @@ void main() {
       expect(_tinted(span, AppPalette.dark.cmdTint), isEmpty);
     });
 
-    testWidgets('отправленная команда в ленте — обычный текст Inter 17',
+    testWidgets(
+        'отправленная команда в ленте — обычный текст 17 шрифтом приложения',
         (tester) async {
       await _pump(tester);
       await _say(tester, 'Добавь задачу купить хлеб на завтра #дом');

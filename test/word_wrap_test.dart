@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
+import 'package:local_assistant/app/files/file_opener.dart';
 import 'package:local_assistant/app/home_page.dart';
 import 'package:local_assistant/app/jobs/job_hub.dart';
 import 'package:local_assistant/app/passwords/backup_screens.dart';
@@ -27,13 +28,17 @@ import 'package:local_assistant/app/passwords/passwords_platform.dart';
 import 'package:local_assistant/app/passwords/passwords_screen.dart';
 import 'package:local_assistant/app/passwords/passwords_settings_screen.dart';
 import 'package:local_assistant/app/passwords/recall_views.dart';
+import 'package:local_assistant/app/screens/my_relay_screen.dart';
 import 'package:local_assistant/app/shell/project_dialogs.dart';
+import 'package:local_assistant/app/shell/session_files_panel.dart';
 import 'package:local_assistant/app/voice/voice_kit.dart';
 import 'package:local_assistant/app/widgets/action_card_view.dart';
 import 'package:local_assistant/app/widgets/extension_card_view.dart';
 import 'package:local_assistant/app/widgets/whole_word_text.dart';
+import 'package:local_assistant/core/chats/attachments.dart';
 import 'package:local_assistant/core/chats/chat_projects.dart';
 import 'package:local_assistant/core/chats/chat_store.dart';
+import 'package:local_assistant/core/chats/session_files.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/extensions/extension_registry.dart';
@@ -74,7 +79,7 @@ const Set<String> _whole = <String>{
   'Поиск по задачам…',
   'Поиск по сессиям',
   'Новый проект',
-  'Мой Tridot',
+  'Мой Связной',
 };
 
 /// Ширина × масштаб: узкий и обычный телефон, обычный, крупный и самый
@@ -294,7 +299,7 @@ void main() {
         (tester) async {
       setPhone(tester, width: 360, scale: 1.15);
       await pumpBox(tester, 76, const Text('Напомнить'));
-      expect(midWordBreaks(tester).single, startsWith('BREAK «Напомни'));
+      expect(midWordBreaks(tester).single, startsWith('BREAK «Напомн'));
       await pumpBox(
         tester,
         60,
@@ -517,15 +522,10 @@ void main() {
       }
     });
 
-    _phones('Мой Tridot', (tester, label) async {
+    _phones('Мой Связной', (tester, label) async {
       await _pumpHome(tester);
       await _say(tester, 'Добавь задачу купить молоко завтра в 10');
-      for (final tab in <String>[
-        'summary',
-        'activity',
-        'assistants',
-        'settings',
-      ]) {
+      for (final tab in <String>['summary', 'assistants', 'settings']) {
         await openMyRelay(tester, tab);
         await _checkScrolling(tester, '$label: $tab');
       }
@@ -1022,11 +1022,11 @@ void main() {
     }
   });
 
-  group('выпадающие списки: выбранное видно целиком и в Inter', () {
+  group('выпадающие списки: выбранное видно целиком и шрифтом приложения', () {
     // Регрессия: у плотного DropdownButtonFormField кнопка высотой в одну
     // строку — подпись в две строки («Экономное — меньше файл» на 320 px
     // и шрифте 200 %) срезалась снизу, а проверка слов этого не видит.
-    // И style без fontFamily заменял шрифт темы: Inter терялся.
+    // И style без fontFamily заменял шрифт темы: шрифт приложения терялся.
     for (final (name, values, platform) in <(
       String,
       Map<String, Object?>,
@@ -1131,6 +1131,172 @@ void main() {
     }
   });
 
+  group('«Файлы сессии»', () {
+    // Правая панель (ADR-028) шириной выдвижной: экран − 30. Имена файлов
+    // — данные (до трёх строк с «…»), подписи и пустое состояние — целиком;
+    // размер («70 Б») не расходится по строкам, строка не кончается «·».
+    final now = DateTime(2026, 11, 4, 15);
+    SessionFile attachment(String id, String name, int size, DateTime at) {
+      final a = ChatAttachment(
+        id: id,
+        kind: AttachmentKind.of(name),
+        name: name,
+        path: 'files/session-1/$id.bin',
+        size: size,
+        addedAt: at,
+      );
+      return SessionFile(
+        id: 'att:$id',
+        source: SessionFileSource.attachment,
+        name: name,
+        kind: a.kind,
+        size: size,
+        at: at,
+        messageId: 'm1',
+        attachment: a,
+      );
+    }
+
+    SessionFile output(String card, String name, String ext, DateTime at) =>
+        SessionFile(
+          id: 'out:$card:0',
+          source: SessionFileSource.output,
+          name: name,
+          kind: AttachmentKind.of(name),
+          archive: SessionFile.isArchiveName(name),
+          at: at,
+          messageId: 'm2',
+          extensionId: ext,
+          absolute: '/out/$card/$name',
+        );
+
+    for (final empty in <bool>[true, false]) {
+      _phones(empty ? 'файлы сессии: пусто' : 'файлы сессии', (
+        tester,
+        label,
+      ) async {
+        final width = tester.view.physicalSize.width - 30;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: _theme(),
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: width,
+                  child: SessionFilesPanel(
+                    outputs: empty
+                        ? const <SessionFile>[]
+                        : <SessionFile>[
+                            output(
+                              'j1',
+                              'Запись встречи с поставщиком.mp3',
+                              ExtensionForms.converter,
+                              DateTime(2026, 11, 4, 14, 5),
+                            ),
+                            output(
+                              'j2',
+                              'Фотографии дачи.zip',
+                              ExtensionForms.archiver,
+                              DateTime(2026, 11, 3, 9),
+                            ),
+                            output(
+                              'j3',
+                              'Видео с презентации.mp4',
+                              ExtensionForms.ytdl,
+                              DateTime(2026, 10, 28, 9),
+                            ),
+                          ],
+                    attachments: empty
+                        ? const <SessionFile>[]
+                        : <SessionFile>[
+                            attachment(
+                              'm1-0',
+                              'Отчёт за ноябрь для бухгалтерии.pdf',
+                              2516582,
+                              now,
+                            ),
+                            attachment(
+                              'm0-0',
+                              'IMG_20261103_181512.jpg',
+                              849920,
+                              DateTime(2026, 11, 3, 18),
+                            ),
+                          ],
+                    store: InMemoryAttachmentStore(),
+                    opener: FileOpener(platform: JobPlatform.android),
+                    now: now,
+                    stat: (String path) => path.endsWith('.zip')
+                        ? (exists: false, folder: false, size: null)
+                        : (exists: true, folder: false, size: 2516582),
+                    onShowInMessage: (String id) {},
+                    onClose: () {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(tester.takeException(), isNull, reason: label);
+        await _checkScrolling(tester, label);
+        if (!empty) _expectSizesWhole(tester, label);
+      });
+    }
+  });
+
+  group('строка статистики «Мой Связной»', () {
+    // Пары фраз через «·»: пара не входит — фразы на своих строках, и
+    // ни одна строка не кончается и не начинается голой «·».
+    _phones('статистика', (tester, label) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: _theme(),
+          home: const Scaffold(
+            body: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: RelayStatsLine(
+                key: Key('stats'),
+                stats: 'Вместе 299 дней · сессий 180 · задач закрыто 50 · '
+                    'серия 12 дней',
+                pairs: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull, reason: label);
+      var checked = 0;
+      for (final paragraph in tester.renderObjectList<RenderParagraph>(
+        find.descendant(
+          of: find.byKey(const Key('stats')),
+          matching: find.byType(RichText),
+        ),
+      )) {
+        checked++;
+        final text = paragraph.text.toPlainText();
+        final painter = TextPainter(
+          text: paragraph.text,
+          textDirection: TextDirection.ltr,
+          textScaler: paragraph.textScaler,
+        )..layout(maxWidth: paragraph.size.width);
+        for (final line in painter.computeLineMetrics()) {
+          final at = painter.getPositionForOffset(
+            Offset(1, line.baseline - line.ascent / 2),
+          );
+          final range = painter.getLineBoundary(at);
+          final shown = text.substring(range.start, range.end).trim();
+          expect(shown.endsWith('·'), isFalse, reason: '$label: «$shown»');
+          expect(shown.startsWith('·'), isFalse, reason: '$label: «$shown»');
+        }
+        painter.dispose();
+      }
+      expect(checked, greaterThan(0), reason: label);
+      _expectWhole(tester, label);
+    });
+  });
+
   group('диалоги проектов', () {
     final projects = <ChatProject>[
       ChatProject(
@@ -1187,4 +1353,55 @@ void main() {
       _expectWhole(tester, label);
     });
   });
+}
+
+/// Подписи «Файлов сессии»: число и единица размера на одной строке, ни
+/// одна строка не кончается и не начинается голой «·» — переносы только
+/// между частями, без точки (metaLines).
+void _expectSizesWhole(WidgetTester tester, String label) {
+  final unit = RegExp(r'^(Б|КБ|МБ)(\s|$)');
+  var checked = 0;
+  for (final paragraph in tester.renderObjectList<RenderParagraph>(
+    find.descendant(
+      of: find.byKey(const Key('session-files-list')),
+      matching: find.byType(RichText),
+    ),
+  )) {
+    final text = paragraph.text.toPlainText();
+    if (!text.contains('·') && !text.contains('\n')) continue;
+    checked++;
+    final painter = TextPainter(
+      text: paragraph.text,
+      textDirection: TextDirection.ltr,
+      textScaler: paragraph.textScaler,
+      maxLines: paragraph.maxLines,
+    )..layout(maxWidth: paragraph.size.width);
+    final lines = <String>[];
+    for (final line in painter.computeLineMetrics()) {
+      final at = painter.getPositionForOffset(
+        Offset(1, line.baseline - line.ascent / 2),
+      );
+      final range = painter.getLineBoundary(at);
+      lines.add(text.substring(range.start, range.end));
+    }
+    painter.dispose();
+    for (var i = 0; i < lines.length; i++) {
+      expect(
+        lines[i].trimRight().endsWith('·'),
+        isFalse,
+        reason: '$label: строка кончается «·» в «$text»: $lines',
+      );
+      expect(
+        lines[i].trimLeft().startsWith('·'),
+        isFalse,
+        reason: '$label: строка начинается с «·» в «$text»: $lines',
+      );
+      expect(
+        unit.hasMatch(lines[i].trimLeft()),
+        isFalse,
+        reason: '$label: единица размера оторвана от числа в «$text»',
+      );
+    }
+  }
+  expect(checked, greaterThan(0), reason: label);
 }

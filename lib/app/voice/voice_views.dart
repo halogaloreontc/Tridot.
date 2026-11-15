@@ -332,7 +332,7 @@ final class VoiceSettingsSection extends StatelessWidget {
             tile: context.colors.tileGray,
             title: 'Голосовой ввод',
             subtitle:
-                'На этой платформе пока недоступен — сейчас только Android',
+                'На этой платформе пока недоступен\u00A0— сейчас только Android',
           ),
         ],
       );

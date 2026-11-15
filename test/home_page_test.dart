@@ -152,7 +152,7 @@ void main() {
     ]) {
       expect(find.text(title), findsWidgets, reason: title);
     }
-    // Шестерёнки настроек в меню нет: настройки — в «Мой Tridot».
+    // Шестерёнки настроек в меню нет: настройки — в «Мой Связной».
     expect(find.byKey(const Key('nav-settings')), findsNothing);
 
     for (final (key, chat) in <(String, bool)>[
@@ -291,6 +291,10 @@ void main() {
   testWidgets('на ноутбуке «Сегодня» открывается кнопкой в шапке',
       (tester) async {
     await _pump(tester, size: _laptop);
+    // В сессии справа — «Файлы сессии» (ADR-028); «Сегодня» — у разделов
+    // задач.
+    expect(find.byKey(const Key('today-show')), findsNothing);
+    await tapInDrawer(tester, const Key('nav-tasks'));
     expect(find.byKey(const Key('today-panel')), findsNothing);
     expect(find.byKey(const Key('today-button')), findsNothing);
 
@@ -306,9 +310,21 @@ void main() {
 
   testWidgets('ошибка загрузки задач видна и даёт повторить', (tester) async {
     await _pump(tester, repository: _BrokenRepository());
+    // «Сегодня» — колонкой у разделов задач (ADR-028).
+    await tapInDrawer(tester, const Key('nav-tasks'));
 
-    expect(find.text('Не удалось загрузить задачи'), findsOneWidget);
-    expect(find.text('Повторить'), findsOneWidget);
+    // Одна ошибка в колонке «Сегодня» и одна в самих «Задачах» — не больше.
+    for (final text in <String>['Не удалось загрузить задачи', 'Повторить']) {
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('today-panel')),
+          matching: find.text(text),
+        ),
+        findsOneWidget,
+        reason: text,
+      );
+      expect(find.text(text), findsNWidgets(2), reason: text);
+    }
     expect(tester.takeException(), isNull);
   });
 
@@ -744,6 +760,13 @@ void main() {
       '«Сегодня» — колонкой у правого края только на компьютере, «Мой '
       'Tridot» в меню', (tester) async {
     await _pump(tester, size: _desktop);
+    // В сессии справа — «Файлы сессии» (ADR-028), «Сегодня» — у задач.
+    expect(
+      tester.getRect(find.byKey(const Key('session-files-panel'))).right,
+      _desktop.width,
+    );
+    expect(find.byKey(const Key('today-panel')), findsNothing);
+    await tapInDrawer(tester, const Key('nav-tasks'));
     final panel = tester.getRect(find.byKey(const Key('today-panel')));
     expect(panel.right, _desktop.width);
     expect(find.byKey(const Key('today-button')), findsNothing);
@@ -817,8 +840,9 @@ void main() {
       expect(more.center.dy, moreOrLessEquals(title.center.dy, epsilon: 2));
       expect(more.left, greaterThan(title.right - 1));
       expect(more.right, lessThanOrEqualTo(composer.right + chatInset + 12));
-      // Ленту ничего не перекрывает: хроники поверх неё нет.
-      expect(find.byKey(const Key('history-rail')), findsNothing);
+      // Хроника — под шапкой, не на её строке (ADR-027, поправка).
+      final pill = tester.getRect(find.byKey(const Key('history-rail-pill')));
+      expect(pill.top, greaterThanOrEqualTo(title.bottom));
     }
   });
 

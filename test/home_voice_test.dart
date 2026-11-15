@@ -544,6 +544,24 @@ void main() {
     expect(find.text('Активных задач пока нет.'), findsOneWidget);
   });
 
+  testWidgets('«Отправлять сразу»: после ответа клавиатура сама не открывается',
+      (tester) async {
+    final rig = await _pump(
+      tester,
+      installed: true,
+      settings: _ready.copyWith(voiceSendImmediately: true),
+    );
+    await _tapMic(tester);
+    rig.recognizer.finalText = 'покажи задачи';
+    await _tapMic(tester);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.text('Активных задач пока нет.'), findsOneWidget);
+    final field = tester.widget<TextField>(find.byKey(_inputKey));
+    expect(field.focusNode!.hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
   testWidgets('«Отправлять сразу»: фраза о сейфе остаётся в поле',
       (tester) async {
     final rig = await _pump(

@@ -36,6 +36,9 @@ final class TalkConnector implements Connector, ConnectorHealth {
   static const String rudeCommand = 'talk.rude';
   static const String settingCommand = 'talk.setting';
 
+  /// «Открой мой Связной»: оболочка открывает раздел по этому intent.
+  static const String openHubCommand = 'talk.openHub';
+
   /// Ответ «да» на «Передать жалобу администратору?».
   static const String complaintCommand = 'talk.complaint';
 
@@ -51,6 +54,7 @@ final class TalkConnector implements Connector, ConnectorHealth {
     reactionCommand,
     rudeCommand,
     settingCommand,
+    openHubCommand,
   ];
 
   /// Уверенность беседы. Ниже явных команд других навыков, а флаг
@@ -77,6 +81,7 @@ final class TalkConnector implements Connector, ConnectorHealth {
     TalkTopic.reaction.name: reactionCommand,
     TalkTopic.rude.name: rudeCommand,
     TalkTopic.setting.name: settingCommand,
+    TalkTopic.openHub.name: openHubCommand,
   };
 
   final TaskService? _tasks;
@@ -193,6 +198,8 @@ final class TalkConnector implements Connector, ConnectorHealth {
         return _say(session, 'talk.rude', command: command);
       case TalkTopic.setting:
         return _setting(request, session, command);
+      case TalkTopic.openHub:
+        return _say(session, 'talk.openHub', command: command);
     }
   }
 

@@ -157,7 +157,7 @@ final class InsetGroup extends StatelessWidget {
 }
 
 /// Боковые поля групп внутри: 0 там, где страница уже даёт свои 16
-/// («Мой Tridot → Помощники»), иначе — 16 от края экрана.
+/// («Мой Связной → Помощники»), иначе — 16 от края экрана.
 final class InsetGroupScope extends InheritedWidget {
   const InsetGroupScope({super.key, required this.side, required super.child});
 

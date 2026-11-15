@@ -1,4 +1,4 @@
-// «Мой Tridot» (макет «Д»): шапка со строкой статистики, вкладки,
+// «Мой Связной» (макет «Д»): шапка со строкой статистики, вкладки,
 // сетка активности 16/52 недели, «Сейчас и дальше», карточки помощников.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -153,7 +153,6 @@ void main() {
             onBack: () => back++,
             stats: 'Вместе 2 дня · сессий 3 · задач закрыто 1 · серия 1 день',
             summary: const Text('сводка'),
-            activity: const Text('активность'),
             assistants: const Text('помощники'),
             settings: const Text('настройки'),
           ),
@@ -179,6 +178,46 @@ void main() {
       expect(back, 1);
     });
 
+    testWidgets('вкладка, выбранная из кода, выезжает в полосу', (
+      tester,
+    ) async {
+      // «Настройки → Помощники и роли» меняет вкладку без касания полосы.
+      var tab = MyRelayTab.settings;
+      late StateSetter update;
+      await pumpBox(
+        tester,
+        StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            update = setState;
+            return MyRelayScreen(
+              tab: tab,
+              onTabChanged: (MyRelayTab t) => setState(() => tab = t),
+              onBack: () {},
+              summary: const Text('сводка'),
+              assistants: const Text('помощники'),
+              settings: const Text('настройки'),
+            );
+          },
+        ),
+        size: const Size(320, 700),
+        textScale: 2,
+      );
+      final strip = tester.getRect(find.byKey(const Key('my-relay-tabs')));
+      void expectInside(MyRelayTab t) {
+        final rect = tester.getRect(find.byKey(Key('my-relay-tab-${t.name}')));
+        expect(rect.left, greaterThanOrEqualTo(strip.left), reason: t.name);
+        expect(rect.right, lessThanOrEqualTo(strip.right), reason: t.name);
+      }
+
+      expectInside(MyRelayTab.settings);
+      update(() => tab = MyRelayTab.summary);
+      await tester.pumpAndSettle();
+      expectInside(MyRelayTab.summary);
+      update(() => tab = MyRelayTab.settings);
+      await tester.pumpAndSettle();
+      expectInside(MyRelayTab.settings);
+    });
+
     testWidgets('320 px и шрифт ×2 — без переполнений', (tester) async {
       await pumpBox(
         tester,
@@ -196,7 +235,6 @@ void main() {
             onOpenTask: (_) {},
             onAllTasks: () {},
           ),
-          activity: const SizedBox(),
           assistants: const SizedBox(),
           settings: const SizedBox(),
         ),
@@ -205,11 +243,18 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(find.byKey(const Key('activity-grid')), findsOneWidget);
+      // «Все задачи» перенеслась под «Сейчас и дальше» — текст ровно под
+      // заголовком, без лишнего отступа кнопки.
+      final heading = tester.getRect(find.text('Сейчас и дальше'));
+      final all = tester.getRect(find.text('Все задачи'));
+      expect(all.top, greaterThan(heading.bottom));
+      expect(all.left, heading.left);
     });
   });
 
   group('Сводка', () {
-    testWidgets('телефон — 16 недель, компьютер — 52', (tester) async {
+    testWidgets('телефон — недели во всю ширину, компьютер — год',
+        (tester) async {
       Widget summary() => RelaySummary(
             activity: const <DateTime, int>{},
             tasks: const <Task>[],
@@ -219,11 +264,23 @@ void main() {
             onAllTasks: () {},
           );
       await pumpBox(tester, summary());
+      // 390: (326 − 28 + 4) / 18 — 16 недель, без прокрутки вбок.
+      expect(fitWeeks(390 - 64, cell: 14, gap: 4), 16);
       expect(cellCount(), 15 * 7 + 1);
+      expect(find.text('Активность'), findsOneWidget);
+      final scroll = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const Key('activity-scroll')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(scroll.position.maxScrollExtent, 0);
       expect(find.byKey(const Key('summary-next-empty')), findsOneWidget);
+      expect(find.byKey(const Key('summary-done-empty')), findsOneWidget);
 
       await pumpBox(tester, summary(), size: const Size(1440, 900));
       expect(cellCount(), 51 * 7 + 1);
+      expect(find.text('Активность за год'), findsOneWidget);
     });
 
     testWidgets('«Сейчас и дальше»: просроченные первыми, ждущие карточки',
@@ -288,34 +345,61 @@ void main() {
     });
   });
 
-  testWidgets('Активность: год и «Вернуть» у выполненных', (tester) async {
+  testWidgets('Сводка: выполненные с «Вернуть» — под «Сейчас и дальше»',
+      (tester) async {
     final reopened = <Task>[];
-    final done = task(
-      'd1',
-      status: TaskStatus.done,
-      completedAt: DateTime(2026, 11, 8, 10),
-    );
+    final done = <Task>[
+      for (var i = 0; i < RelaySummary.pageSize + 3; i++)
+        task(
+          'd$i',
+          status: TaskStatus.done,
+          completedAt: DateTime(2026, 11, 8, 10),
+        ),
+    ];
     await pumpBox(
       tester,
-      RelayActivity(
+      RelaySummary(
         activity: <DateTime, int>{DateTime(2026, 11, 8): 1},
-        completed: <Task>[done],
+        tasks: <Task>[task('a', dueAt: DateTime(2026, 11, 9, 16))],
         now: now,
+        pending: const <TodayPending>[],
+        onOpenTask: (_) {},
+        onAllTasks: () {},
+        completed: done,
         onReopen: reopened.add,
       ),
+      size: const Size(390, 3000),
     );
-    expect(cellCount(), 51 * 7 + 1);
+    // Одна сетка на вкладке: «Активность» больше не повторяет её.
+    expect(find.byKey(const Key('activity-grid')), findsOneWidget);
+    final first = find.byKey(const ValueKey<String>('activity-done-d0'));
+    expect(first, findsOneWidget);
     expect(
-      find.byKey(const ValueKey<String>('activity-done-d1')),
-      findsOneWidget,
+      tester.getRect(first).top,
+      greaterThan(tester.getRect(find.byKey(const Key('summary-next'))).bottom),
     );
+    expect(find.text('Выполненные · ${done.length}'), findsOneWidget);
     await tester.tap(
       find.descendant(
-        of: find.byKey(const ValueKey<String>('activity-done-d1')),
+        of: first,
         matching: find.byTooltip('Вернуть в работу'),
       ),
     );
-    expect(reopened.single.id, 'd1');
+    expect(reopened.single.id, 'd0');
+    expect(
+      find.byKey(
+        ValueKey<String>('activity-done-d${RelaySummary.pageSize}'),
+      ),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const Key('activity-more')));
+    await tester.pump();
+    expect(
+      find.byKey(
+        ValueKey<String>('activity-done-d${RelaySummary.pageSize}'),
+      ),
+      findsOneWidget,
+    );
   });
 
   group('Помощники', () {
@@ -350,7 +434,7 @@ void main() {
               settings = s;
             }),
             registry: registry,
-            onOpenRoles: onOpenRoles ?? () {},
+            onOpenRoles: onOpenRoles,
           ),
         ),
         size: size,
@@ -383,6 +467,16 @@ void main() {
       expect(
         find.byKey(const ValueKey<String>('personas-section')),
         findsOneWidget,
+      );
+      // Строка о журнале — в самом конце, а не между карточками и их
+      // настройками.
+      expect(
+        tester.getRect(find.byKey(const Key('assistants-journal-planned'))).top,
+        greaterThan(
+          tester
+              .getRect(find.byKey(const ValueKey<String>('personas-section')))
+              .bottom,
+        ),
       );
     });
 
@@ -504,12 +598,85 @@ void main() {
         tester.getSemantics(find.bySemanticsLabel('Ведёт: Кладовщик')),
         isSemantics(
           label: 'Ведёт: Кладовщик',
-          hint: 'Открыть роли в настройках',
+          hint: 'Перейти к ролям',
           isButton: true,
           hasTapAction: true,
         ),
       );
       handle.dispose();
+    });
+
+    testWidgets('роли — на этой же вкладке: «Ведёт» прокручивает к ним',
+        (tester) async {
+      await pumpAssistants(
+        tester,
+        const AppSettings(
+          enabledRoles: <String>{'storekeeper'},
+          personas: PersonaSettings(dutyExtensions: 'noda'),
+        ),
+      );
+      final role = find.byKey(const ValueKey<String>('role-storekeeper'));
+      expect(role, findsOneWidget);
+      expect(tester.getRect(role).top, greaterThan(844));
+      final row = find.byKey(const Key('persona-roles-noda'));
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(tester.getRect(role).top, lessThan(844));
+      // Настройки помощников — здесь же, под карточками.
+      expect(
+        find.byKey(const ValueKey<String>('personas-section')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'компактно: без второго заголовка «Помощники», имя и стиль — по '
+        '«Изменить», «Как говорят» свёрнуто', (tester) async {
+      await pumpAssistants(tester, const AppSettings());
+      final section = find.byKey(const ValueKey<String>('personas-section'));
+      expect(
+        find.descendant(of: section, matching: find.text('Помощники')),
+        findsNothing,
+        reason: 'вкладка и так «Помощники»',
+      );
+      expect(
+        find.byKey(const ValueKey<String>('assistant-mode-trio')),
+        findsOneWidget,
+      );
+      for (final id in <String>['sado', 'rio', 'noda']) {
+        expect(find.byKey(ValueKey<String>('persona-group-$id')), findsNothing);
+      }
+      expect(find.byKey(const ValueKey<String>('address-ty')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('setting-emoji')), findsNothing);
+
+      // «Изменить» у Лиорио — только его блок, и он на экране.
+      await tester.tap(find.byKey(const Key('persona-edit-rio')));
+      await tester.pumpAndSettle();
+      final group = find.byKey(const ValueKey<String>('persona-group-rio'));
+      expect(group, findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('persona-group-noda')),
+        findsNothing,
+      );
+      expect(tester.getRect(group).top, lessThan(844));
+      final done = find.byKey(const ValueKey<String>('persona-done-rio'));
+      await tester.ensureVisible(done);
+      await tester.pumpAndSettle();
+      await tester.tap(done);
+      await tester.pumpAndSettle();
+      expect(group, findsNothing);
+
+      // «Как говорят» раскрывается строкой.
+      final toggle =
+          find.byKey(const ValueKey<String>('personas-speech-toggle'));
+      await tester.ensureVisible(toggle);
+      await tester.pumpAndSettle();
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey<String>('address-ty')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('jokes-off')), findsOneWidget);
     });
 
     testWidgets('320 px и шрифт ×2 — без переполнений', (tester) async {

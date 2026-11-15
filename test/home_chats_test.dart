@@ -615,7 +615,11 @@ void main() {
       final input = tester.widget<TextField>(
         find.byKey(const Key('assistant-input')),
       );
-      expect(input.focusNode!.hasFocus, isTrue);
+      expect(
+        input.focusNode!.hasFocus,
+        isFalse,
+        reason: 'на телефоне клавиатура сама не выскакивает',
+      );
       await _say(tester, 'Покажи задачи');
       expect(headerTitle(), 'Покажи задачи');
       final store = h.chats as InMemoryChatStore;

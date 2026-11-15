@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
-import 'package:local_assistant/app/screens/settings_screen.dart';
+import 'package:local_assistant/app/widgets/extensions_section.dart';
+import 'package:local_assistant/app/widgets/roles_section.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/http_transport.dart';
 import 'package:local_assistant/core/connectors/manifest/connection.dart';
@@ -90,16 +91,34 @@ final class _Harness {
         theme: AssistantTheme.dark(),
         home: StatefulBuilder(
           builder: (context, setState) => Scaffold(
-            body: SettingsScreen(
-              settings: settings,
-              onChanged: (AppSettings value) => setState(() {
-                settings = value;
-                registry.apply(value.extensionChoice);
-              }),
-              onClearChat: () {},
-              messageCount: 1,
-              extensions: registry,
-              connections: <ConnectionService>[service],
+            // «Роли» — во вкладке «Помощники», «Расширения» — в «Настройках»;
+            // здесь они рядом: роль включает навыки расширений.
+            body: Builder(
+              builder: (BuildContext context) {
+                void onChanged(AppSettings value) => setState(() {
+                      settings = value;
+                      registry.apply(value.extensionChoice);
+                    });
+                return SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      RolesSection(
+                        registry: registry,
+                        settings: settings,
+                        onChanged: onChanged,
+                        connections: <ConnectionService>[service],
+                      ),
+                      ExtensionsSection(
+                        registry: registry,
+                        settings: settings,
+                        onChanged: onChanged,
+                        connections: <ConnectionService>[service],
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         ),

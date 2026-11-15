@@ -19,7 +19,7 @@ enum CommandSpanMode {
   subtle,
 }
 
-/// Стиль распознанной части фразы (ADR-027): только Inter, без
+/// Стиль распознанной части фразы (ADR-027): только шрифт текста, без
 /// моноширинного шрифта. В режиме [CommandSpanMode.subtle] выделен лишь
 /// глагол команды.
 TextStyle commandSpanStyle(

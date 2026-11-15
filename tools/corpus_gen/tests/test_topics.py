@@ -416,6 +416,7 @@ def test_builtin_talk_topics_load() -> None:
         "talk.reaction",
         "talk.rude",
         "talk.setting",
+        "talk.openHub",
         "unknown",
     }
     assert set(talk.topics) == {"social", "jokes", "style", "tricky"}

@@ -12,7 +12,6 @@ import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
 import '../layout.dart';
 import '../widgets/grouped.dart';
-import '../widgets/app_name_text.dart';
 import '../widgets/personas_section.dart';
 import '../widgets/whole_word_text.dart';
 import 'session_hold_menu.dart';
@@ -247,7 +246,7 @@ String _dayMonth(DateTime at) {
 
 /// Левая панель (макет «Ж1»): сверху — «Tridot» с версией, внизу — поиск
 /// по сессиям и «+» (новая сессия); между ними прокручиваются «Мой
-/// Tridot», разделы со счётчиками, закреплённые сессии, сессии по дням и
+/// Связной», разделы со счётчиками, закреплённые сессии, сессии по дням и
 /// «Расширения». Края прокрутки мягко гаснут.
 ///
 /// Долгое нажатие на сессию (на компьютере — «⋯» и правая кнопка) — меню
@@ -256,7 +255,7 @@ String _dayMonth(DateTime at) {
 /// На телефоне — содержимое выдвижной панели, на широком экране —
 /// постоянная колонка ([wide]) с «Свернуть панель»; там «Вчера», «На
 /// неделе» и «Ранее» свёрнуты в заголовки со счётом. Настроек здесь нет:
-/// они в «Мой Tridot».
+/// они в «Мой Связной».
 final class RelayDrawer extends StatefulWidget {
   const RelayDrawer({
     super.key,
@@ -454,7 +453,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
     // клавиатуру, поэтому отступ снизу — на высоту клавиатуры, и поиск с
     // «Отменой» стоит прямо над ней. Колонка на компьютере — без отступа.
     final inset = widget.wide ? 0.0 : MediaQuery.viewInsetsOf(context).bottom;
-    // Клавиатура открыта для поиска: шапка, «Мой Tridot» и разделы
+    // Клавиатура открыта для поиска: шапка, «Мой Связной» и разделы
     // уступают место результатам.
     final roomy = !(_searching && inset > 0);
     final showHits = _searching && _query.text.trim().isNotEmpty;
@@ -465,78 +464,58 @@ final class _RelayDrawerState extends State<RelayDrawer> {
           _TitlePlate(onCollapse: widget.onCollapse),
         ],
         Expanded(
-          child: Stack(
+          child: ListView(
+            key: const Key('drawer-scroll'),
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
             children: <Widget>[
-              Positioned.fill(
-                child: ListView(
-                  key: const Key('drawer-scroll'),
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
-                  children: <Widget>[
-                    if (roomy) ...<Widget>[
-                      // «Мой Tridot» и разделы — одной сгруппированной
-                      // панелью на заливке листа (ADR-027).
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(AppRadius.group),
-                        child: Material(
-                          color: context.colors.workspace,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: <Widget>[
-                              _MyRelayCard(
-                                onTap: widget.onOpenMyRelay,
-                                wide: widget.wide,
-                                assistants: widget.assistants,
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(left: 16),
-                                child: Divider(color: context.colors.divider),
-                              ),
-                              _Sections(
-                                active: widget.activeSection,
-                                counts: widget.counts,
-                                wide: widget.wide,
-                                onTasks: widget.onTasks,
-                                onProjects: widget.onProjects,
-                                onPlanning: widget.onPlanning,
-                                projects: widget.projects,
-                                onOpenProject: widget.onOpenProject,
-                                onNewProject: widget.onNewProject,
-                              ),
-                            ],
-                          ),
+              if (roomy) ...<Widget>[
+                // «Мой Связной» и разделы — одной сгруппированной
+                // панелью на заливке листа (ADR-027).
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.group),
+                  child: Material(
+                    color: context.colors.workspace,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        _MyRelayCard(
+                          onTap: widget.onOpenMyRelay,
+                          wide: widget.wide,
+                          assistants: widget.assistants,
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                    if (showHits)
-                      ..._buildHits()
-                    else ...<Widget>[
-                      ..._buildGroups(),
-                      if (widget.hiddenSessions > 0 &&
-                          widget.onShowMoreSessions != null)
-                        _ShowMoreRow(
-                          count: widget.hiddenSessions,
-                          onTap: widget.onShowMoreSessions!,
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16),
+                          child: Divider(color: context.colors.divider),
                         ),
-                      if (widget.extensions.isNotEmpty) _buildExtensions(),
-                    ],
-                  ],
+                        _Sections(
+                          active: widget.activeSection,
+                          counts: widget.counts,
+                          wide: widget.wide,
+                          onTasks: widget.onTasks,
+                          onProjects: widget.onProjects,
+                          onPlanning: widget.onPlanning,
+                          projects: widget.projects,
+                          onOpenProject: widget.onOpenProject,
+                          onNewProject: widget.onNewProject,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              const Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
-                height: 14,
-                child: _Fade(key: Key('drawer-fade-top'), down: true),
-              ),
-              const Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: 24,
-                child: _Fade(key: Key('drawer-fade-bottom'), down: false),
-              ),
+                const SizedBox(height: 8),
+              ],
+              if (showHits)
+                ..._buildHits()
+              else ...<Widget>[
+                ..._buildGroups(),
+                if (widget.hiddenSessions > 0 &&
+                    widget.onShowMoreSessions != null)
+                  _ShowMoreRow(
+                    count: widget.hiddenSessions,
+                    onTap: widget.onShowMoreSessions!,
+                  ),
+                if (widget.extensions.isNotEmpty) _buildExtensions(),
+              ],
             ],
           ),
         ),
@@ -857,33 +836,6 @@ final class _RelayDrawerState extends State<RelayDrawer> {
   }
 }
 
-/// Мягкий край прокрутки: цвет панели → прозрачный.
-final class _Fade extends StatelessWidget {
-  const _Fade({super.key, required this.down});
-
-  /// Сверху вниз (верхний край) или снизу вверх (нижний).
-  final bool down;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = <Color>[
-      context.colors.sidebar,
-      context.colors.sidebar.withAlpha(0),
-    ];
-    return IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: down ? Alignment.topCenter : Alignment.bottomCenter,
-            end: down ? Alignment.bottomCenter : Alignment.topCenter,
-            colors: colors,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// «+» — новая сессия: та же треть строки и высота, что у поиска.
 final class _NewSessionButton extends StatelessWidget {
   const _NewSessionButton({required this.onTap});
@@ -1024,7 +976,7 @@ final class _TitlePlate extends StatelessWidget {
   }
 }
 
-/// Карточка «Мой Tridot»: знаки помощников внахлёст, название, шеврон.
+/// Карточка «Мой Связной»: знаки помощников внахлёст, название, шеврон.
 final class _MyRelayCard extends StatelessWidget {
   const _MyRelayCard({
     required this.onTap,
@@ -1061,12 +1013,12 @@ final class _MyRelayCard extends StatelessWidget {
                   RelayAvatars(personas: assistants, size: size),
                   const SizedBox(width: 12),
                   Expanded(
-                    // «Мой» / «Tridot» на узком меню с крупным шрифтом:
+                    // «Мой» / «Связной» на узком меню с крупным шрифтом:
                     // слово не рвётся и не режется (ADR-021).
                     child: WholeWordText.rich(
-                      appNameSpan(
-                        AppInfo.hubName,
-                        TextStyle(
+                      TextSpan(
+                        text: AppInfo.hubName,
+                        style: TextStyle(
                           fontSize: wide ? 17 : 18,
                           fontWeight: FontWeight.w600,
                           height: 1.3,

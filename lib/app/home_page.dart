@@ -15,6 +15,7 @@ import '../core/chats/chat_models.dart';
 import '../core/chats/chat_projects.dart';
 import '../core/chats/chat_search.dart';
 import '../core/chats/chat_store.dart';
+import '../core/chats/session_files.dart';
 import '../core/cloud/cloud_disk.dart';
 import '../core/commands/command_catalog.dart';
 import '../core/commands/command_suggest.dart';
@@ -44,6 +45,7 @@ import '../core/skills/converter/platform_media_job.dart';
 import '../core/skills/ytdl/ytdl_formats.dart';
 import '../core/skills/ytdl/ytdl_job.dart';
 import '../core/skills/passwords/passwords_phrases.dart';
+import '../core/skills/talk/talk_connector.dart';
 import '../core/stats/relay_stats.dart';
 import '../core/storage/storage_info.dart';
 import '../core/voice/voice_recognizer.dart';
@@ -75,6 +77,7 @@ import 'shell/project_dialogs.dart';
 import 'shell/quick_actions.dart';
 import 'shell/relay_drawer.dart';
 import 'shell/session_hold_menu.dart';
+import 'shell/session_files_panel.dart';
 import 'shell/session_header.dart';
 import 'shell/session_hero.dart';
 import 'shell/today_panel.dart';
@@ -98,7 +101,7 @@ import 'widgets/task_tile.dart';
 import 'widgets/whole_word_text.dart';
 
 /// Разделы оболочки «Д»: сессия (главный экран), задачи, проекты,
-/// экран одного проекта-папки, планирование и «Мой Tridot».
+/// экран одного проекта-папки, планирование и «Мой Связной».
 enum AppSection { session, tasks, projects, project, planning, myRelay }
 
 extension AppSectionInfo on AppSection {
@@ -115,7 +118,7 @@ extension AppSectionInfo on AppSection {
 /// Ширина, начиная с которой меню стоит постоянной колонкой слева, а
 /// «Сегодня» — колонкой справа (три колонки, макет D-Desk). Уже — меню
 /// выдвигается (кнопкой в шапке и свайпом вправо), а «Сегодня» отдельно
-/// нет: всё оттуда — в «Мой Tridot» → «Сводка».
+/// нет: всё оттуда — в «Мой Связной» → «Сводка».
 const double wideBreakpoint = 1000;
 
 /// Ширина, начиная с которой колонка «Сегодня» открыта сразу; уже — она
@@ -438,7 +441,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   MyRelayTab _myRelayTab = MyRelayTab.summary;
 
   /// Сообщения непрочитанных чатов для точной активности в «Мой
-  /// Tridot»: читаются один раз при первом открытии. `null` — ещё нет.
+  /// Связной»: читаются один раз при первом открытии. `null` — ещё нет.
   Map<String, List<ChatMessage>>? _storedChats;
   bool _readingStored = false;
   AssistantViewMode _mode = AssistantViewMode.dialogue;
@@ -494,6 +497,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// Колонка «Сегодня» на широком экране: `null` — пользователь не
   /// выбирал (открыта от [todayOpenBreakpoint]).
   bool? _todayOpen;
+
+  /// Колонка «Файлы сессии» на компьютере: `null` — пока не выбирал
+  /// (открыта от [todayOpenBreakpoint]).
+  bool? _filesOpen;
 
   /// Меню колонкой слева на широком экране («Свернуть панель»).
   bool _sidebarOpen = true;
@@ -1111,6 +1118,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ? List<_PendingFile>.of(_pendingFiles)
         : const <_PendingFile>[];
     if (text.isEmpty && files.isEmpty) return;
+    // Клавиатура после ответа остаётся, только если человек печатал:
+    // быстрая кнопка, голос и ответ, пришедший в другом разделе или под
+    // открытым экраном, её не открывают.
+    final refocus = _inputFocus.hasFocus;
     if (_sending) {
       // Ответ готовится в другой сессии: текст остаётся в поле, а не
       // пропадает молча.
@@ -1188,7 +1199,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return;
       }
       if (text.isEmpty) {
-        _sendFilesOnly(chatId, commandId, attachments);
+        _sendFilesOnly(chatId, commandId, attachments, refocus: refocus);
         return;
       }
     }
@@ -1289,8 +1300,34 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _announceReply(reply, response);
     }
     _scrollToLatest();
-    _inputFocus.requestFocus();
+    // «Открой мой Связной»: ответ остаётся в сессии, а раздел открывается —
+    // если человек всё ещё в этой сессии и никуда не ушёл, пока ждал.
+    if (response.intent == TalkConnector.openHubCommand &&
+        _section == AppSection.session &&
+        chatId == _book.currentId) {
+      _openMyRelay(MyRelayTab.summary);
+    }
+    _refocusInput(refocus, chatId);
     await _refresh();
+  }
+
+  /// Вернуть фокус полю после ответа — только тому, кто печатал, и только
+  /// если он всё ещё в этой сессии, без меню и экранов поверх. Иначе
+  /// клавиатура выскочила бы сама: по возвращении из «Мой Связной» или
+  /// поверх формы на другом экране, у которой поле отнял бы фокус.
+  void _refocusInput(bool refocus, String chatId) {
+    if (!refocus ||
+        !mounted ||
+        _section != AppSection.session ||
+        chatId != _book.currentId ||
+        (_scaffoldKey.currentState?.isDrawerOpen ?? false) ||
+        // «Файлы сессии» справа — тоже не маршрут: клавиатура закрыла бы
+        // открытую панель.
+        (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) ||
+        !(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return;
+    }
+    _inputFocus.requestFocus();
   }
 
   /// Сообщение только из файлов: в помощника команда не идёт, он честно
@@ -1298,8 +1335,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _sendFilesOnly(
     String chatId,
     String commandId,
-    List<ChatAttachment> attachments,
-  ) {
+    List<ChatAttachment> attachments, {
+    required bool refocus,
+  }) {
     final command = ChatMessage(
       id: commandId,
       author: ChatAuthor.user,
@@ -1318,7 +1356,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mounted && !_sending) setState(() => _cube = CubeState.idle);
     });
     _scrollToLatest();
-    _inputFocus.requestFocus();
+    _refocusInput(refocus, chatId);
   }
 
   /// Что не прикрепилось: слишком большие файлы и сбои копирования.
@@ -1405,7 +1443,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
     }
     setState(() => _pendingFiles.addAll(chosen.take(room)));
-    _inputFocus.requestFocus();
+    // После системного выбора файлов клавиатура сама не выскакивает: на
+    // телефоне она закрыла бы чипы вложений над полем.
+    _focusInputWithKeyboard();
   }
 
   /// «+» → «Облачный диск» → «Подключить диск»: дисков ещё нет, честное
@@ -1904,6 +1944,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final scaffold = _scaffoldKey.currentState;
     if (scaffold == null) return;
     if (scaffold.isDrawerOpen) scaffold.closeDrawer();
+    if (scaffold.isEndDrawerOpen) scaffold.closeEndDrawer();
   }
 
   /// «Выполнено» / «Вернуть в работу» в шапке чата задачи: строка об этом
@@ -2515,6 +2556,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _todayShown(double width) =>
       width >= wideBreakpoint && (_todayOpen ?? width >= todayOpenBreakpoint);
 
+  /// Колонка «Файлы сессии» открыта на широком экране — по тому же
+  /// правилу, что «Сегодня».
+  bool _filesShown(double width) =>
+      width >= wideBreakpoint && (_filesOpen ?? width >= todayOpenBreakpoint);
+
   /// Меню стоит колонкой слева.
   bool _sidebarShown(double width) => width >= wideBreakpoint && _sidebarOpen;
 
@@ -2526,9 +2572,14 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         final narrow = width < narrowBreakpoint;
         final wide = width >= wideBreakpoint;
         final sidebar = _sidebarShown(width);
-        // В «Мой Tridot» колонки «Сегодня» нет (D-Desk-Summary): году
+        // В «Мой Связной» колонки «Сегодня» нет (D-Desk-Summary): году
         // активности нужна ширина. Выбор пользователя не меняется.
-        final today = _section != AppSection.myRelay && _todayShown(width);
+        // В сессии справа — «Файлы сессии» (ADR-028), в разделах задач —
+        // «Сегодня».
+        final inSession = _section == AppSection.session;
+        final today =
+            _section != AppSection.myRelay && !inSession && _todayShown(width);
+        final files = inSession && _filesShown(width);
         // Выдвижное меню (макет «Ж1»): до 360, справа остаётся полоса
         // затемнения не уже 30 — по ней меню закрывается.
         final drawerWidth = math.max(240.0, math.min(360.0, width - 30));
@@ -2537,24 +2588,31 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // перестал бы возвращать в сессию. Держим его ещё кадр и закрываем
         // как обычно.
         final keepDrawer = sidebar && _drawerOpen;
-        if (keepDrawer) {
+        // То же с правой панелью: окно стало широким — файлы уходят в
+        // колонку, а выдвижная панель закрывается своим порядком.
+        final keepEnd = wide && _endDrawerOpen;
+        if (keepDrawer || keepEnd) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final scaffold = _scaffoldKey.currentState;
-            if (scaffold != null && scaffold.isDrawerOpen) {
-              scaffold.closeDrawer();
+            if (scaffold == null) return;
+            if (keepDrawer && scaffold.isDrawerOpen) scaffold.closeDrawer();
+            if (keepEnd && scaffold.isEndDrawerOpen) {
+              scaffold.closeEndDrawer();
             }
           });
         }
         return PopScope(
-          // «Назад» на телефоне из разделов и «Мой Tridot» — в сессию.
+          // «Назад» на телефоне из разделов и «Мой Связной» — в сессию.
           // Открытое меню «назад» только закрывает.
-          canPop: _section == AppSection.session || _drawerOpen,
+          canPop:
+              _section == AppSection.session || _drawerOpen || _endDrawerOpen,
           onPopInvokedWithResult: (bool didPop, Object? _) {
             if (!didPop) _goTo(AppSection.session);
           },
           child: Scaffold(
             key: _scaffoldKey,
-            onDrawerChanged: (bool open) => setState(() => _drawerOpen = open),
+            onDrawerChanged: _onDrawerChanged,
+            onEndDrawerChanged: _onEndDrawerChanged,
             backgroundColor: context.colors.background,
             drawerEdgeDragWidth: DrawerSwipe.edge,
             drawer: sidebar && !keepDrawer
@@ -2564,6 +2622,18 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     backgroundColor: context.colors.sidebar,
                     child: SafeArea(child: _buildDrawer(wide: false)),
                   ),
+            // «Файлы сессии» на телефоне — выдвижная панель справа, только
+            // в сессии (ADR-028).
+            endDrawer: inSession && (!wide || keepEnd)
+                ? Drawer(
+                    width: drawerWidth,
+                    backgroundColor: context.colors.background,
+                    semanticLabel: 'Файлы сессии',
+                    child: SafeArea(
+                      child: _buildSessionFilesPanel(drawer: true),
+                    ),
+                  )
+                : null,
             body: SafeArea(
               child: Row(
                 children: <Widget>[
@@ -2579,7 +2649,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       narrow: narrow,
                       wide: wide,
                       sidebar: sidebar,
-                      today: today,
+                      today: today || files,
                     ),
                   ),
                   if (today) ...<Widget>[
@@ -2587,6 +2657,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     SizedBox(
                       width: todayWidth,
                       child: _buildTodayPanel(),
+                    ),
+                  ],
+                  if (files) ...<Widget>[
+                    const VerticalDivider(width: 1),
+                    SizedBox(
+                      width: todayWidth,
+                      child: _buildSessionFilesPanel(drawer: false),
                     ),
                   ],
                 ],
@@ -2600,6 +2677,24 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// Меню на телефоне открыто: «назад» закрывает его.
   bool _drawerOpen = false;
+
+  /// Меню открылось или закрылось. Поле ввода отпускает фокус: иначе после
+  /// закрытия меню экран вернул бы его полю, и клавиатура выскочила бы
+  /// сама.
+  void _onDrawerChanged(bool open) {
+    if (open) _inputFocus.unfocus();
+    setState(() => _drawerOpen = open);
+  }
+
+  /// «Файлы сессии» на телефоне открыты: «назад» закрывает их.
+  bool _endDrawerOpen = false;
+
+  /// Правая панель открылась или закрылась — с полем ввода так же, как у
+  /// меню: закрытие не возвращает клавиатуру.
+  void _onEndDrawerChanged(bool open) {
+    if (open) _inputFocus.unfocus();
+    setState(() => _endDrawerOpen = open);
+  }
 
   /// Ctrl/Cmd+K — поиск по сессиям, где бы ни был фокус: обработчик
   /// клавиатуры, а не CallbackShortcuts, которые срабатывают только при
@@ -2916,7 +3011,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       () => _book.newSession(projectId: projectId),
       mode: AssistantViewMode.dialogue,
     );
-    _inputFocus.requestFocus();
+    _focusInputWithKeyboard();
   }
 
   /// Меню «⋯» на экране проекта.
@@ -3106,13 +3201,14 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       );
 
-  /// «+» в меню: новая пустая сессия, режим «Диалог», курсор в поле ввода.
+  /// «+» в меню: новая пустая сессия, режим «Диалог»; на компьютере —
+  /// курсор в поле ввода.
   void _newSession() {
     unawaited(_saveDocument());
     // Выбор («её») прежнего чата сохраняется за ним, новая сессия
     // начинается без выбора (AssistantController.enterChat).
     _switchChat(_book.newSession, mode: AssistantViewMode.dialogue);
-    _inputFocus.requestFocus();
+    _focusInputWithKeyboard();
   }
 
   void _openMyRelay(MyRelayTab tab) {
@@ -3153,7 +3249,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // ------------------------------------------------------------ «Сегодня»
 
   /// Колонка «Сегодня» — только на компьютере. На телефоне её нет: дела
-  /// на сегодня, просроченные и ждущие отметки карточки — в «Мой Tridot»
+  /// на сегодня, просроченные и ждущие отметки карточки — в «Мой Связной»
   /// → «Сводка».
   Widget _buildTodayPanel() {
     final now = _now;
@@ -3260,14 +3356,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void _goTo(AppSection section) {
     unawaited(_saveDocument());
     setState(() => _section = section);
-    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+    final scaffold = _scaffoldKey.currentState;
+    if ((scaffold?.isDrawerOpen ?? false) ||
+        (scaffold?.isEndDrawerOpen ?? false)) {
       Navigator.of(context).pop();
     }
     if (section != AppSection.session) unawaited(_refresh());
   }
 
   /// Выход из выбранной задачи в сессии: выбор снимается, режим —
-  /// «Диалог», курсор в поле ввода — можно сразу создавать новую задачу.
+  /// «Диалог», на компьютере — курсор в поле ввода: можно сразу создавать
+  /// новую задачу.
   void _exitTask() {
     unawaited(_saveDocument());
     setState(() {
@@ -3275,7 +3374,24 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _mode = AssistantViewMode.dialogue;
     });
     unawaited(_syncDocument());
-    _inputFocus.requestFocus();
+    _focusInputWithKeyboard();
+  }
+
+  /// Курсор в поле ввода без нажатия на него — только там, где клавиатура
+  /// физическая (компьютер). На телефоне и планшете фокус открыл бы
+  /// экранную клавиатуру, о которой не просили («Новая сессия», выход из
+  /// задачи, возврат из выбора файлов): там поле ждёт нажатия.
+  void _focusInputWithKeyboard() {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+      case TargetPlatform.iOS:
+      case TargetPlatform.fuchsia:
+        return;
+      case TargetPlatform.linux:
+      case TargetPlatform.macOS:
+      case TargetPlatform.windows:
+        _inputFocus.requestFocus();
+    }
   }
 
   Widget _buildWorkspace({
@@ -3284,7 +3400,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     required bool sidebar,
     required bool today,
   }) {
-    if (_section == AppSection.myRelay) return _buildMyRelay();
+    if (_section == AppSection.myRelay) {
+      return _drawerSwipe(_buildMyRelay(), wide: wide, sidebar: sidebar);
+    }
     final selected = _selectedTask;
     final inSession = _section == AppSection.session;
     final chatTaskId = inSession ? _book.current.taskId : null;
@@ -3393,9 +3511,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             projectName: _book.projectOf(current.id)?.name,
             reduceMotion: _settings.reduceMotion,
             // «Сегодня» — колонкой справа на компьютере; свёрнута — кнопка
-            // в шапке. На телефоне кнопки нет: это «Мой Tridot» → «Сводка».
+            // в шапке. На телефоне кнопки нет: это «Мой Связной» → «Сводка».
             // Задача в фокусе на узком экране: в шапке и так «назад»,
-            // задача, её сессия и меню — «⋯» не помещается.
+            // задача, её сессия и меню — «⋯» не помещается; «Файлы
+            // сессии» остаются.
             trailing: _headerTrailing(
               wide: wide,
               today: today,
@@ -3426,14 +3545,33 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ],
       ),
     );
-    // Свайп вправо по сессии открывает меню (телефон). Поле ввода внизу —
-    // вне жеста: там выделяют текст и двигают курсор.
+    return _drawerSwipe(
+      workspace,
+      wide: wide,
+      sidebar: sidebar,
+      // Свайп влево по сессии на телефоне — «Файлы сессии».
+      onOpenEnd: inSession && !wide ? () => _openSessionFiles(wide) : null,
+    );
+  }
+
+  /// Свайп вправо по рабочей области открывает меню (телефон) — в сессии,
+  /// разделах и «Мой Связной». Одной полосы у края мало: на Android с
+  /// жестовой навигацией там свайп забирает система как «Назад», и из
+  /// раздела он вёл бы в сессию, а не в меню. Поле ввода внизу — вне
+  /// жеста: там выделяют текст и двигают курсор.
+  Widget _drawerSwipe(
+    Widget child, {
+    required bool wide,
+    required bool sidebar,
+    VoidCallback? onOpenEnd,
+  }) {
     return DrawerSwipe(
-      enabled: !sidebar && inSession,
+      enabled: !sidebar,
+      onOpenEnd: onOpenEnd,
       onOpen: wide
           ? () => setState(() => _sidebarOpen = true)
           : () => _scaffoldKey.currentState?.openDrawer(),
-      child: workspace,
+      child: child,
     );
   }
 
@@ -3458,18 +3596,34 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return false;
   }
 
-  /// Справа в шапке: «⋯» сессии и, на компьютере со свёрнутой колонкой,
-  /// «Показать «Сегодня»».
+  /// Справа в шапке: «⋯» сессии ([more]), «Файлы сессии» и, на
+  /// компьютере со свёрнутой колонкой, «Показать «Сегодня»».
   Widget? _headerTrailing({
     required bool wide,
     required bool today,
     bool more = true,
   }) {
+    final inSession = _section == AppSection.session;
     final menu = more ? _sessionMoreButton() : null;
-    final show = wide && !today ? _todayShowButton() : null;
+    // В сессии справа — «Файлы сессии»: на телефоне кнопка, когда файлы
+    // есть, а без «⋯» (задача в фокусе, [more] нет) — всегда: «⋯ → Файлы
+    // сессии» тогда нет, и панель открывается из шапки, а не только
+    // свайпом; на компьютере — пока колонка свёрнута. В разделах —
+    // «Показать «Сегодня»».
+    final Widget? show;
+    if (inSession) {
+      show = (wide ? !today : _filesOfSession.any || !more)
+          ? _filesShowButton(wide)
+          : null;
+    } else {
+      show = wide && !today ? _todayShowButton() : null;
+    }
     if (menu == null) return show;
     if (show == null) return menu;
-    return Row(mainAxisSize: MainAxisSize.min, children: <Widget>[menu, show]);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: inSession ? <Widget>[show, menu] : <Widget>[menu, show],
+    );
   }
 
   /// Выбор в «История команд»: в «Документе» сначала «Диалог», потом
@@ -3510,19 +3664,14 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         onOpenTask: (Task task) =>
             _openTaskChat(task, mode: AssistantViewMode.dialogue),
         onAllTasks: () => _goTo(AppSection.tasks),
-      ),
-      activity: RelayActivity(
-        activity: stats.activityByDay,
-        approximate: approximate,
         completed: _completed,
-        now: now,
-        onReopen: (Task task) => unawaited(_reopenFromActivity(task)),
+        onReopen: (Task task) => unawaited(_reopenFromSummary(task)),
       ),
       assistants: RelayAssistants(
         settings: _settings,
         onChanged: _changeSettings,
         registry: widget.assistant.extensions,
-        onOpenRoles: () => setState(() => _myRelayTab = MyRelayTab.settings),
+        connections: widget.connections,
       ),
       settings: SettingsScreen(
         settings: _settings,
@@ -3538,7 +3687,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ytdl: widget.ytdl,
         appLock: widget.appLock,
         showTitle: false,
-        includePersonas: false,
+        onOpenAssistants: () =>
+            setState(() => _myRelayTab = MyRelayTab.assistants),
         onOpenStorage: () => unawaited(
           Navigator.of(context).push<void>(
             MaterialPageRoute<void>(
@@ -3563,7 +3713,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _reopenFromActivity(Task task) async {
+  Future<void> _reopenFromSummary(Task task) async {
     String message;
     try {
       await widget.tasks.reopen(task.id);
@@ -3757,11 +3907,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         current.isSession &&
         current.messageCount == 0 &&
         !(_sending && _workingChatId == current.id);
+    final history = hero ? const <HistoryEntry>[] : _historyEntries;
+    // Совсем низкое окно (телефон боком с клавиатурой) — без полосы
+    // хроники: место нужнее ленте, список команд остаётся в «⋯».
+    final rail = history.isNotEmpty && height >= HistoryRail.minColumnHeight;
     final now = _now;
     final overdue =
         hero ? _active.where((Task t) => isOverdue(t, now)).length : 0;
-    // История команд — в «⋯» шапки (ADR-027): лента и документ — листы
-    // для чтения, поверх них ничего не лежит.
     final Widget content = hero
         ? _sessionHero(overdue)
         : _mode == AssistantViewMode.dialogue
@@ -3787,6 +3939,33 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               );
     return Column(
       children: <Widget>[
+        // Хроника команд — своей полосой под шапкой, по центру, над лентой
+        // (или документом): шапка остаётся одной строкой, ширину ленты и
+        // поля ввода хроника не занимает, а сообщения и метка даты под неё
+        // не заходят — ни у начала ленты, ни при прокрутке.
+        if (rail)
+          Padding(
+            key: const Key('history-rail-strip'),
+            padding: const EdgeInsets.only(
+              top: HistoryRail.stripTop,
+              bottom: HistoryRail.stripBottom,
+            ),
+            child: Center(
+              child: HistoryRailPill(
+                entries: history,
+                activeIndex: _highlightedCommand,
+                onSelect: _selectCommand,
+                // Полосы по одной — только на широком окне (мышь); на
+                // телефоне и планшете (палец) — одна кнопка списка.
+                compact: !wide,
+                // Колесо и перетаскивание над хроникой двигают ленту под
+                // ней: у полосы нет «мёртвой» зоны.
+                scrollController: _mode == AssistantViewMode.dialogue
+                    ? _chatScroll
+                    : _docScroll,
+              ),
+            ),
+          ),
         Expanded(child: content),
         // Свайп вправо по полю ввода и кнопкам меню не открывает.
         DrawerSwipeBlocker(child: _buildBottomArea(height)),
@@ -3794,37 +3973,159 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// «⋯» в шапке сессии: «История команд» (ADR-027). Пусто, пока команд
-  /// нет.
+  /// «⋯» в шапке сессии: «История команд» — тот же список, что у хроники
+  /// над лентой (ADR-027), и «Файлы сессии» (ADR-028). Пусто, пока нет ни
+  /// команд, ни файлов.
   Widget? _sessionMoreButton() {
     if (_section != AppSection.session) return null;
     final history = _historyEntries;
-    if (history.isEmpty) return null;
+    if (history.isEmpty && !_filesOfSession.any) return null;
+    final wide = MediaQuery.sizeOf(context).width >= wideBreakpoint;
     return PopupMenuButton<String>(
       key: const Key('session-more'),
       tooltip: 'Ещё',
       icon: Icon(Icons.more_horiz, color: context.colors.accent),
       style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
       onSelected: (String value) async {
+        if (value == 'files') {
+          _openSessionFiles(wide);
+          return;
+        }
         if (value != 'history') return;
         final index = await showCommandHistory(context, entries: history);
         if (index != null && mounted) _selectCommand(index);
       },
       itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+        if (history.isNotEmpty)
+          PopupMenuItem<String>(
+            key: const Key('menu-history'),
+            value: 'history',
+            child: Row(
+              children: <Widget>[
+                const Expanded(child: Text('История команд')),
+                const SizedBox(width: AppSpace.s),
+                Icon(Icons.history, size: 20, color: context.colors.icon),
+              ],
+            ),
+          ),
         PopupMenuItem<String>(
-          key: const Key('menu-history'),
-          value: 'history',
+          key: const Key('menu-files'),
+          value: 'files',
           child: Row(
             children: <Widget>[
-              const Expanded(child: Text('История команд')),
+              const Expanded(child: Text('Файлы сессии')),
               const SizedBox(width: AppSpace.s),
-              Icon(Icons.history, size: 20, color: context.colors.icon),
+              Icon(
+                Icons.folder_open_outlined,
+                size: 20,
+                color: context.colors.icon,
+              ),
             ],
           ),
         ),
       ],
     );
   }
+
+  // ------------------------------------------------------ «Файлы сессии»
+
+  /// Файлы открытого чата (ADR-028): проекция его сообщений, без своего
+  /// хранения — готовая карточка или новое вложение видны сразу.
+  ///
+  ///
+  /// Шапка, «⋯» и сама панель читают её в одной перестройке не раз:
+  /// проекция пересчитывается, только когда изменился чат, его сообщения
+  /// (сообщения неизменяемы — сравнение по ссылке) или состояние карточки
+  /// расширения (она меняется на месте). Тот же список между
+  /// перестройками — панель не перепроверяет диск зря.
+  _SessionFileLists get _filesOfSession {
+    final thread = _book.current;
+    final memo = _filesMemo;
+    if (memo != null &&
+        identical(memo.thread, thread) &&
+        _sameFilesKey(memo.key, thread.messages)) {
+      return memo.lists;
+    }
+    final lists = _SessionFileLists(SessionFiles.of(thread));
+    _filesMemo = (
+      thread: thread,
+      key: <Object?>[
+        for (final m in thread.messages) ...<Object?>[
+          m,
+          m.job?.state,
+          m.job?.outputs,
+        ],
+      ],
+      lists: lists,
+    );
+    return lists;
+  }
+
+  ({ChatThread thread, List<Object?> key, _SessionFileLists lists})? _filesMemo;
+
+  static bool _sameFilesKey(List<Object?> key, List<ChatMessage> messages) {
+    if (key.length != messages.length * 3) return false;
+    for (var i = 0; i < messages.length; i++) {
+      final m = messages[i];
+      if (!identical(key[3 * i], m) ||
+          key[3 * i + 1] != m.job?.state ||
+          !identical(key[3 * i + 2], m.job?.outputs)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Открыть «Файлы сессии»: на телефоне — выдвижная панель справа, на
+  /// компьютере — колонка. Поле ввода отпускает фокус заранее: закрытая
+  /// панель вернула бы его полю, и клавиатура выскочила бы сама.
+  void _openSessionFiles(bool wide) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (wide) {
+      setState(() => _filesOpen = true);
+      return;
+    }
+    _scaffoldKey.currentState?.openEndDrawer();
+  }
+
+  /// «Показать в сообщении»: панель на телефоне закрывается, лента — к
+  /// сообщению с подсветкой (в «Документе» — сначала «Диалог»).
+  void _showFileInMessage(String messageId) {
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold != null && scaffold.isEndDrawerOpen) {
+      scaffold.closeEndDrawer();
+    }
+    unawaited(_jumpToMessage(messageId));
+  }
+
+  Widget _buildSessionFilesPanel({required bool drawer}) {
+    final lists = _filesOfSession;
+    return SessionFilesPanel(
+      outputs: lists.files.outputs,
+      attachments: lists.files.attachments,
+      store: _book.store.attachments,
+      opener: _jobCards.opener,
+      now: _now,
+      onShowInMessage: _showFileInMessage,
+      onMessage: _announce,
+      closeTooltip: drawer ? 'Закрыть' : 'Свернуть «Файлы сессии»',
+      onClose: drawer
+          ? () => _scaffoldKey.currentState?.closeEndDrawer()
+          : () => setState(() => _filesOpen = false),
+    );
+  }
+
+  /// «Файлы сессии» в шапке: на телефоне — пока файлы есть, на компьютере
+  /// — пока колонка свёрнута.
+  Widget _filesShowButton(bool wide) => IconButton(
+        key: const Key('session-files'),
+        tooltip: 'Файлы сессии',
+        onPressed: () => _openSessionFiles(wide),
+        style: IconButton.styleFrom(
+          minimumSize: const Size(AppSize.minTap - 4, AppSize.minTap - 4),
+        ),
+        icon: Icon(Icons.folder_open_outlined, color: context.colors.text),
+      );
 
   /// Документ и, если есть, уведомление об ответе над его низом.
   Widget _withDocToast(Widget document) {
@@ -4314,7 +4615,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   /// Колонка чата: не шире [chatColumnWidth], по центру. Одна и та же для
   /// ленты сообщений и нижней части, поэтому их края совпадают. Хроника
-  /// команд — поверх ленты сверху по центру и ширину не занимает.
+  /// команд — своей полосой над лентой по центру и ширину не занимает.
   Widget _chatColumn({
     required AlignmentGeometry alignment,
     required Widget child,
@@ -5024,6 +5325,15 @@ final class _MessageRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Файлы сессии: результаты и вложения ([SessionFiles.of]).
+final class _SessionFileLists {
+  const _SessionFileLists(this.files);
+
+  final ({List<SessionFile> outputs, List<SessionFile> attachments}) files;
+
+  bool get any => files.outputs.isNotEmpty || files.attachments.isNotEmpty;
 }
 
 final class _SectionTitle extends StatelessWidget {

@@ -254,7 +254,7 @@ void main() {
   });
 
   testWidgets(
-      'телефон: ждущая карточка склада — в «Мой Tridot» → «Сводка», '
+      'телефон: ждущая карточка склада — в «Мой Связной» → «Сводка», '
       'нажатие ведёт в сессию с ней', (tester) async {
     final h = _Harness();
     await h.pump(tester, _allowed, size: const Size(390, 844));

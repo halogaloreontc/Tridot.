@@ -36,6 +36,8 @@ class MainActivity : FlutterActivity() {
                     return@setMethodCallHandler
                 }
                 val path = call.argument<String>("path")
+                // Имя для показа (вложение: на диске оно `<id>-<n>.ext`).
+                val name = call.argument<String>("name")
                 if (path == null) {
                     result.success(false)
                     return@setMethodCallHandler
@@ -43,7 +45,7 @@ class MainActivity : FlutterActivity() {
                 val main = Handler(Looper.getMainLooper())
                 Thread {
                     val uri = try {
-                        shareCopy(path)
+                        shareCopy(path, name)
                     } catch (error: Exception) {
                         null
                     }
@@ -64,8 +66,12 @@ class MainActivity : FlutterActivity() {
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
-    /** Копия [path] в cache/tridot-open и её адрес для других приложений. */
-    private fun shareCopy(path: String): Pair<android.net.Uri, String>? {
+    /**
+     * Копия [path] в cache/tridot-open и её адрес для других приложений.
+     * [name] — имя копии для показа (без папок и запрещённых знаков);
+     * нет или пустое — имя исходного файла.
+     */
+    private fun shareCopy(path: String, name: String?): Pair<android.net.Uri, String>? {
         val source = File(path).canonicalFile
         // Только папка помощника (getApplicationDocumentsDirectory() +
         // assistant: вложения и результаты карточек) и временная папка —
@@ -81,7 +87,12 @@ class MainActivity : FlutterActivity() {
         shared.deleteRecursively()
         val folder = File(shared, UUID.randomUUID().toString())
         if (!folder.mkdirs()) return null
-        val copy = File(folder, source.name)
+        val shown = name?.let { File(it).name }
+            ?.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_")
+            ?.trim()
+            ?.take(120)
+            ?.takeIf { it.isNotEmpty() && it != "." && it != ".." }
+        val copy = File(folder, shown ?: source.name)
         source.copyTo(copy, overwrite = true)
         val extension = source.extension.lowercase()
         val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)

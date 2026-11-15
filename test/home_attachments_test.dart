@@ -126,6 +126,35 @@ void main() {
     picker = _Picker();
   });
 
+  testWidgets('телефон: после выбора фото клавиатура сама не открывается',
+      (WidgetTester tester) async {
+    await _pump(tester, store: store, picker: picker);
+    picker.next = <AttachmentSource>[
+      _Source('кот.png', _png, mimeType: 'image/png'),
+    ];
+    await _attach(tester, PickKind.photo);
+    expect(find.byKey(const Key('pending-attachment-0')), findsOneWidget);
+    final input = tester.widget<TextField>(
+      find.byKey(const Key('assistant-input')),
+    );
+    expect(input.focusNode!.hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
+  testWidgets(
+    'компьютер: после выбора файла курсор в поле',
+    (WidgetTester tester) async {
+      await _pump(tester, store: store, picker: picker);
+      picker.next = <AttachmentSource>[_Source('отчёт.pdf', Uint8List(2048))];
+      await _attach(tester, PickKind.document);
+      final input = tester.widget<TextField>(
+        find.byKey(const Key('assistant-input')),
+      );
+      expect(input.focusNode!.hasFocus, isTrue);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
+
   testWidgets('фото без текста: чип, отправка, ответ, перезапуск, удаление',
       (WidgetTester tester) async {
     await _pump(tester, store: store, picker: picker);

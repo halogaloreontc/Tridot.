@@ -13,7 +13,7 @@ String _read(String path) => File(path).readAsStringSync();
 void main() {
   test('название Tridot и служебное латинское Relay (ADR-016)', () {
     expect(AppInfo.name, 'Tridot');
-    expect(AppInfo.hubName, 'Мой Tridot');
+    expect(AppInfo.hubName, 'Мой Связной');
     expect(AppInfo.latinName, 'Relay');
     expect(AppInfo.latinName, matches(RegExp(r'^[A-Za-z]+$')));
   });

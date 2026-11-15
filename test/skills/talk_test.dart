@@ -246,6 +246,14 @@ void main() {
       'будь помягче пожалуйста': TalkTopic.setting,
       'Пусть теперь всё говорит Нода': TalkTopic.setting,
       'Лио, ты основной?': TalkTopic.whoAreYou,
+      // Раздел «Мой Связной»: «связной» здесь — не обращение.
+      'мой Связной': TalkTopic.openHub,
+      'открой мой Связной': TalkTopic.openHub,
+      'Открой, пожалуйста, мой связной': TalkTopic.openHub,
+      'перейди в мой Связной': TalkTopic.openHub,
+      'открой раздел «Мой Связной»': TalkTopic.openHub,
+      'мой Tridot': TalkTopic.openHub,
+      'открой мой тридот': TalkTopic.openHub,
     };
     for (final MapEntry(key: text, value: topic) in talk.entries) {
       test('«$text» — ${topic.name}', () {
@@ -286,6 +294,8 @@ void main() {
       'что смешного',
       'тупая шутка',
       'хорошая шутка',
+      'мой связной не отвечает',
+      'открой мой связной и добавь задачу',
       '',
     ];
     for (final text in notTalk) {

@@ -1,7 +1,7 @@
 // Оболочка «Д»: регрессии после ревью — свой выбор («её») у каждой сессии,
 // живой архив в «Данных», шапка и «пилюли» на широком экране, подпись
 // «Сегодня» и «Диалог / Документ» на телефоне, год активности без
-// обрезки, строка статистики и вкладки «Мой Tridot», Ctrl+K, «назад» при
+// обрезки, строка статистики и вкладки «Мой Связной», Ctrl+K, «назад» при
 // открытом меню, кнопки для диктора.
 import 'package:flutter/material.dart';
 import 'dart:ui' show Tristate;
@@ -155,21 +155,24 @@ void main() {
   });
 
   testWidgets(
-      'широкий экран: колонка «Сегодня» у правого края, свёрнута — кнопка '
-      'в шапке; «пилюли» ролей по тексту', (tester) async {
+      'широкий экран: колонка «Файлы сессии» у правого края, свёрнута — '
+      'кнопка в шапке; «пилюли» ролей по тексту', (tester) async {
     await _pump(tester, size: const Size(1440, 900));
     await _say(tester, 'привет');
     expect(find.byKey(const Key('today-button')), findsNothing);
     expect(
-      tester.getRect(find.byKey(const Key('today-panel'))).right,
+      tester.getRect(find.byKey(const Key('session-files-panel'))).right,
       1440,
     );
-    await tester.tap(find.byKey(const Key('today-collapse')));
+    await tester.tap(find.byKey(const Key('session-files-close')));
     await tester.pumpAndSettle();
     final header = tester.getRect(find.byKey(const Key('session-title')));
-    final show = tester.getRect(find.byKey(const Key('today-show')));
+    final show = tester.getRect(find.byKey(const Key('session-files')));
     expect(show.left, greaterThan(header.right));
-    expect(show.right, greaterThan(1440 - 24), reason: 'прижата вправо');
+    // Рядом с «⋯»: справа — меню сессии, прижатое вправо.
+    final more = tester.getRect(find.byKey(const Key('session-more')));
+    expect(show.right, lessThanOrEqualTo(more.left + 0.5));
+    expect(more.right, greaterThan(1440 - 24), reason: 'прижата вправо');
     expect(show.height, greaterThanOrEqualTo(44));
     // Основных кнопок после команды нет, поле ввода — на свою колонку.
     expect(find.byKey(const Key('quick-Задача')), findsNothing);
@@ -191,13 +194,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('«Мой Tridot» на компьютере: без «Сегодня», год целиком',
+  testWidgets('«Мой Связной» на компьютере: без «Сегодня», год целиком',
       (tester) async {
     await _pump(tester, size: const Size(1440, 900));
+    await tester.tap(find.byKey(const Key('nav-tasks')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('today-panel')), findsOneWidget);
     await tester.tap(find.byKey(const Key('drawer-my-relay')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('today-panel')), findsNothing);
+    expect(find.byKey(const Key('session-files-panel')), findsNothing);
     final scroll = tester.state<ScrollableState>(
       find.descendant(
         of: find.byKey(const Key('activity-scroll')),
@@ -208,12 +214,12 @@ void main() {
     // «Ср» не обрезана клеткой 12: подпись своей высоты.
     final label = find.byKey(const Key('activity-weekday-2'));
     expect(tester.getSize(label).height, greaterThan(12));
-    // Вернулись в сессию — колонка «Сегодня» снова на месте.
+    // Вернулись в сессию — справа снова «Файлы сессии».
     await backToSession(tester);
-    expect(find.byKey(const Key('today-panel')), findsOneWidget);
+    expect(find.byKey(const Key('session-files-panel')), findsOneWidget);
   });
 
-  testWidgets('«Мой Tridot» на телефоне: статистика парами, вкладки-сегменты',
+  testWidgets('«Мой Связной» на телефоне: статистика парами, вкладки-сегменты',
       (tester) async {
     await _pump(tester);
     await tapInDrawer(tester, const Key('drawer-my-relay'));
@@ -236,14 +242,18 @@ void main() {
     );
     final first = tester.getRect(find.byKey(const Key('my-relay-tab-summary')));
     expect(first.left, greaterThanOrEqualTo(16), reason: 'отступ слева');
-    // Не поместились — прокручиваются, и последняя тоже с отступом 16.
-    await tester.drag(
-      find.byKey(const Key('my-relay-tabs')),
-      const Offset(-400, 0),
+    // На 390 все три помещаются и делят строку: ни одна не за краем,
+    // прокручивать нечего.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('my-relay-tabs')),
+        matching: find.byType(Scrollable),
+      ),
+      findsNothing,
     );
-    await tester.pumpAndSettle();
     final last = tester.getRect(find.byKey(const Key('my-relay-tab-settings')));
     expect(last.right, lessThanOrEqualTo(390 - 16 + 0.5));
+    expect(last.right, greaterThan(390 - 16 - 4), reason: 'во всю строку');
     expect(first.height, 44);
     await tester.tap(find.byKey(const Key('my-relay-tab-settings')));
     await tester.pumpAndSettle();
@@ -327,12 +337,22 @@ void main() {
     expect(_buttonsWithoutTap(tester), isEmpty, reason: 'меню');
     await tester.tap(find.byKey(const Key('drawer-my-relay')));
     await tester.pumpAndSettle();
-    expect(_buttonsWithoutTap(tester), isEmpty, reason: '«Мой Tridot»');
+    expect(_buttonsWithoutTap(tester), isEmpty, reason: '«Мой Связной»');
     await tester.tap(find.byKey(const Key('my-relay-back')));
     await tester.pumpAndSettle();
     // Колонка «Сегодня» на компьютере: «Свернуть» и «Показать».
     await tester.pumpWidget(const SizedBox());
     await _pump(tester, size: const Size(1440, 900));
+    expect(_buttonsWithoutTap(tester), isEmpty, reason: '«Файлы сессии»');
+    await tester.tap(find.byKey(const Key('session-files-close')));
+    await tester.pumpAndSettle();
+    expect(
+      _buttonsWithoutTap(tester),
+      isEmpty,
+      reason: '«Файлы сессии» в шапке',
+    );
+    await tester.tap(find.byKey(const Key('nav-tasks')));
+    await tester.pumpAndSettle();
     expect(_buttonsWithoutTap(tester), isEmpty, reason: '«Сегодня»');
     await tester.tap(find.byKey(const Key('today-collapse')));
     await tester.pumpAndSettle();

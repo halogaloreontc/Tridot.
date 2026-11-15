@@ -443,7 +443,7 @@ void main() {
     expect(b.pendingCards(clock.value.add(const Duration(hours: 1))), isEmpty);
   });
 
-  group('активность сессий для «Мой Tridot»', () {
+  group('активность сессий для «Мой Связной»', () {
     test('сессия только с ответами помощника не считается и после перезапуска',
         () async {
       final b = await book();

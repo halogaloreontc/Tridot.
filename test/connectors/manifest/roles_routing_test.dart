@@ -145,7 +145,8 @@ void main() {
   });
 
   group('склад не подключён', () {
-    test('фраза склада — подсказка «Настройки → Роли», не «не понял»',
+    test(
+        'фраза склада — подсказка «Мой Связной → Помощники → Роли», не «не понял»',
         () async {
       final s = _Setup(connected: false);
       for (final text in <String>['где лежит 64115', '64115', 'без фото']) {
@@ -154,7 +155,7 @@ void main() {
         expect(response.status, AssistantStatus.noAction);
         expect(
           response.message,
-          'Склад ещё не подключён — Настройки → Роли → Кладовщик → '
+          'Склад ещё не подключён — Мой Связной → Помощники → Роли → Кладовщик → '
           'Подключить склад.',
         );
       }
@@ -221,7 +222,10 @@ void main() {
       final response = await s.say('64115');
       expect(response.personaId, 'noda');
       expect(response.replyId, 'role.notConnected');
-      expect(response.message, contains('загляните в Настройки → Роли'));
+      expect(
+        response.message,
+        contains('загляните в Мой Связной → Помощники → Роли'),
+      );
     });
 
     test('дуэт с Нодой — склад у Связной, зона Лиорио вернулась к нему',
@@ -516,7 +520,7 @@ void main() {
       expect(
         response.message,
         endsWith(
-          'Склад ещё не подключён — Настройки → Роли → Кладовщик → '
+          'Склад ещё не подключён — Мой Связной → Помощники → Роли → Кладовщик → '
           'Подключить склад.',
         ),
       );
@@ -645,10 +649,10 @@ void main() {
           final can = await s.say('что ты умеешь');
           expect(can.replyId, 'talk.capabilities.roles');
           expect(can.message, contains('с задачами и со складом'));
-          expect(can.message, contains('«Настройки → Роли»'));
+          expect(can.message, contains('«Мой Связной → Помощники → Роли»'));
           expect(can.message, contains('«Настройки → Расширения»'));
           expect(
-            can.message.indexOf('«Настройки → Роли»'),
+            can.message.indexOf('«Мой Связной → Помощники → Роли»'),
             lessThan(can.message.indexOf('«Настройки → Расширения»')),
             reason: 'сначала роли, расширения — для точной настройки',
           );
@@ -673,7 +677,7 @@ void main() {
         );
         final can = await s.say('что ты умеешь');
         expect(can.replyId, 'talk.capabilities');
-        expect(can.message, contains('«Настройки → Роли»'));
+        expect(can.message, contains('«Мой Связной → Помощники → Роли»'));
         expect(can.message, contains('«Настройки → Расширения»'));
         expect(emoji.allMatches(can.message).length, lessThanOrEqualTo(1));
         final first = starts(can.message);

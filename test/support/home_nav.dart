@@ -1,4 +1,4 @@
-// Переходы по оболочке «Д» в тестах главного экрана: меню, «Мой Tridot»
+// Переходы по оболочке «Д» в тестах главного экрана: меню, «Мой Связной»
 // и его вкладки, «Сегодня» (компьютер) и «Сводка» (телефон), возврат в
 // сессию.
 import 'package:flutter/material.dart';
@@ -35,7 +35,7 @@ Future<void> tapInDrawer(WidgetTester tester, Key key) async {
   await tester.pumpAndSettle();
 }
 
-/// «Мой Tridot» на вкладке [tab]: summary, activity, assistants,
+/// «Мой Связной» на вкладке [tab]: summary, assistants,
 /// settings.
 Future<void> openMyRelay(WidgetTester tester, [String tab = 'summary']) async {
   await tapInDrawer(tester, const Key('drawer-my-relay'));
@@ -46,7 +46,7 @@ Future<void> openMyRelay(WidgetTester tester, [String tab = 'summary']) async {
   await tester.pumpAndSettle();
 }
 
-/// Экран настроек: «Мой Tridot» → «Настройки».
+/// Экран настроек: «Мой Связной» → «Настройки».
 Future<void> openSettings(WidgetTester tester) =>
     openMyRelay(tester, 'settings');
 
@@ -74,7 +74,7 @@ Future<void> openSessionTitled(WidgetTester tester, String title) async {
   await tester.pumpAndSettle();
 }
 
-/// Обратно в сессию: «назад» из «Мой Tridot», иначе самая свежая сессия в
+/// Обратно в сессию: «назад» из «Мой Связной», иначе самая свежая сессия в
 /// меню (обычно та, где писали команды).
 Future<void> backToSession(WidgetTester tester) async {
   final back = find.byKey(const Key('my-relay-back'));
@@ -103,7 +103,7 @@ Future<void> openToday(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// «Мой Tridot» → «Сводка»: на телефоне здесь всё, что было в «Сегодня».
+/// «Мой Связной» → «Сводка»: на телефоне здесь всё, что было в «Сегодня».
 Future<void> openSummary(WidgetTester tester) => openMyRelay(tester);
 
 /// То же, что [finder], но без меню: в меню у сессии вторая строка —
@@ -162,5 +162,23 @@ Future<void> pickCommand(WidgetTester tester, int index) async {
   await tester.ensureVisible(item);
   await tester.pumpAndSettle();
   await tester.tap(item);
+  await tester.pumpAndSettle();
+}
+
+/// Вкладка «Помощники» компактна: имя, род и стиль помощника — под его
+/// «Изменить» на карточке, обращение, эмодзи и шутки — под свёрнутой
+/// строкой. Раскрывает то, где лежит настройка [key], если её не видно.
+Future<void> revealAssistantSetting(WidgetTester tester, String key) async {
+  if (find.byKey(ValueKey<String>(key)).evaluate().isNotEmpty) return;
+  final persona = RegExp(r'^(?:style|persona-name|persona-gender)-([a-z]+)')
+      .firstMatch(key)
+      ?.group(1);
+  final opener = persona != null
+      ? find.byKey(Key('persona-edit-$persona'))
+      : find.byKey(const ValueKey<String>('personas-speech-toggle'));
+  if (opener.evaluate().isEmpty) return;
+  await tester.ensureVisible(opener);
+  await tester.pumpAndSettle();
+  await tester.tap(opener);
   await tester.pumpAndSettle();
 }

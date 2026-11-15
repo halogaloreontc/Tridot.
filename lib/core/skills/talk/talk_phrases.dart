@@ -35,6 +35,11 @@ enum TalkTopic {
 
   /// Просьба о стиле общения: «говори короче», «давай на ты».
   setting,
+
+  /// «Открой мой Связной», «мой Связной»: открыть раздел «Мой Связной»
+  /// (`AppInfo.hubName`). Название раздела не зависит от имени и рода
+  /// главного помощника; прежнее «Мой Tridot» — тоже он.
+  openHub,
 }
 
 /// Время суток для приветствия.
@@ -812,11 +817,76 @@ abstract final class TalkPhrases {
     if (_taskCommand.hasMatch(normalized)) return null;
     // Цифры — уже не беседа: «ок 15:00», «спасибо 2».
     if (words.any((String w) => RegExp(r'\d').hasMatch(w))) return null;
+    // «Открой мой Связной» — до имён помощников: «связной» здесь —
+    // название раздела, а не обращение.
+    if (isHubRequest(words)) return const TalkRequest(TalkTopic.openHub);
     _fixMisspelledNames(clauses);
     final fixed = <String>[for (final clause in clauses) ...clause];
     return _recognizeAll(fixed) ??
         _withoutRemarks(clauses) ??
         _recognizeWords(fixed, loose: true);
+  }
+
+  /// Названия раздела «Мой Связной» словами: так его зовут всегда, при
+  /// любом имени и роде главного помощника; «мой Tridot» — прежнее имя.
+  /// «Открой моего связного» — винительный падеж, «мой связный» — так
+  /// слово пишет голосовой ввод.
+  static const Set<String> _hubNames = <String>{
+    'мой связной',
+    'моя связная',
+    'моего связного',
+    'мою связную',
+    'мой связный',
+    'мой tridot',
+    'мой тридот',
+  };
+
+  /// Глаголы перед названием раздела: «открой мой Связной», «перейди в
+  /// мой Связной».
+  static const Set<String> _hubVerbs = <String>{
+    'открой',
+    'откройте',
+    'открыть',
+    'покажи',
+    'покажите',
+    'показать',
+    'перейди в',
+    'перейдите в',
+    'перейти в',
+    'зайди в',
+    'зайдите в',
+    'зайти в',
+    'иди в',
+    'вернись в',
+    'вернуться в',
+    'раздел',
+  };
+
+  /// [words] — просьба открыть раздел «Мой Связной»: его название, перед
+  /// ним — глагол из [_hubVerbs] или ничего («мой Связной»), вокруг —
+  /// только слова-паразиты ([_fillers]). Глагол бывает и после названия:
+  /// «Мой Связной открой».
+  static bool isHubRequest(List<String> words) {
+    final kept = <String>[
+      for (final word in words)
+        if (!_fillers.contains(word)) word,
+    ];
+    if (kept.length < 2) return false;
+    if (kept.length == 3 &&
+        _hubNames.contains(kept.take(2).join(' ')) &&
+        _hubVerbs.contains(kept.last) &&
+        kept.last != 'раздел') {
+      return true;
+    }
+    final name = kept.sublist(kept.length - 2).join(' ');
+    if (!_hubNames.contains(name)) return false;
+    final lead = kept.sublist(0, kept.length - 2);
+    if (lead.isEmpty) return true;
+    final verb = lead.join(' ');
+    return _hubVerbs.contains(verb) ||
+        (lead.length > 1 &&
+            lead.last == 'раздел' &&
+            _hubVerbs.contains(lead.sublist(0, lead.length - 1).join(' ')));
   }
 
   /// Реплика без хвоста-замечания: «говори короче, задолбал», «пусть

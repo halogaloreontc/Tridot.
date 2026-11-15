@@ -686,7 +686,7 @@ final class _ChoiceDropdown extends StatelessWidget {
                 const WholeWordText('Выберите', style: TextStyle(fontSize: 17)),
             // style заменяет стиль темы целиком (не дополняет): без
             // fontFamily выбранное значение и пункты списка ушли бы в
-            // системный шрифт, а не Inter.
+            // системный шрифт, а не шрифт приложения.
             style: TextStyle(
               fontFamily: AppFonts.text,
               fontSize: 17,
@@ -766,7 +766,7 @@ final class _ChoiceDropdown extends StatelessWidget {
   }
 }
 
-/// Поле ссылки загрузчика: Inter, одна строка, без автоисправлений.
+/// Поле ссылки загрузчика: шрифт текста, одна строка, без автоисправлений.
 final class _UrlField extends StatefulWidget {
   const _UrlField({
     super.key,

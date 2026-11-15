@@ -164,3 +164,16 @@
 {"id": "talk-164", "text": "включи дуэт со Связным", "connector": "talk", "intent": "talk.setting", "note": "«со» перед именем — как «с» (ADR-017); главный в дуэте всегда, помощник не выбран", "source": "manual"}
 {"id": "talk-165", "text": "Связная, привет", "connector": "talk", "intent": "talk.greet", "note": "обращение к главному в женском роде работает при любом выбранном роде (ADR-017)", "source": "manual"}
 {"id": "talk-166", "text": "Связная, добавь задачу молоко", "connector": "tasks", "intent": "createTask", "title": "Молоко", "note": "обращение к главной по имени не попадает в название (ADR-017)", "source": "manual"}
+{"id": "talk-167", "text": "мой связной", "connector": "talk", "intent": "talk.openHub", "source": "manual"}
+{"id": "talk-168", "text": "Открой мой Связной", "connector": "talk", "intent": "talk.openHub", "source": "manual"}
+{"id": "talk-169", "text": "открой мой связной, пожалуйста", "connector": "talk", "intent": "talk.openHub", "source": "manual"}
+{"id": "talk-170", "text": "перейди в мой Связной", "connector": "talk", "intent": "talk.openHub", "source": "manual"}
+{"id": "talk-171", "text": "покажи мой связной", "connector": "talk", "intent": "talk.openHub", "source": "manual"}
+{"id": "talk-172", "text": "открой раздел «Мой Связной»", "connector": "talk", "intent": "talk.openHub", "source": "manual"}
+{"id": "talk-173", "text": "мой Tridot", "connector": "talk", "intent": "talk.openHub", "note": "прежнее название раздела", "source": "manual"}
+{"id": "talk-174", "text": "открой мой tridot", "connector": "talk", "intent": "talk.openHub", "note": "прежнее название раздела", "source": "manual"}
+{"id": "talk-175", "text": "мой связной не отвечает", "connector": null, "intent": "unknown", "note": "не просьба открыть раздел", "source": "manual"}
+{"id": "talk-176", "text": "открой моего связного", "connector": "talk", "intent": "talk.openHub", "note": "винительный падеж", "source": "manual"}
+{"id": "talk-177", "text": "открой мою связную", "connector": "talk", "intent": "talk.openHub", "note": "винительный падеж", "source": "manual"}
+{"id": "talk-178", "text": "Мой Связной открой", "connector": "talk", "intent": "talk.openHub", "note": "глагол после названия", "source": "manual"}
+{"id": "talk-179", "text": "открой мой связный", "connector": "talk", "intent": "talk.openHub", "note": "так пишет голосовой ввод", "source": "manual"}

@@ -51,7 +51,7 @@ final class WholeWordText extends StatelessWidget {
     this.firstWordOnly = false,
   }) : span = null;
 
-  /// То же для текста из частей разного стиля («Мой» + «Tridot»).
+  /// То же для текста из частей разного стиля («Мой» + «Связной»).
   const WholeWordText.rich(
     InlineSpan this.span, {
     super.key,

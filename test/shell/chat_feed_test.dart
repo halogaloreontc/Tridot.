@@ -217,7 +217,7 @@ void main() {
         expect(find.byKey(const Key('session-more')), findsNothing);
         await _say(tester, '2+2');
         await _say(tester, '3+3');
-        expect(find.byKey(const Key('history-rail')), findsNothing);
+        expect(find.byKey(const Key('history-rail')), findsOneWidget);
         await openCommandHistory(tester);
         expect(find.byKey(const Key('history-sheet')), findsOneWidget);
         // Новые — сверху.

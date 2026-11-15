@@ -1,5 +1,5 @@
 // Левое меню (макет «Д»): шапка «Tridot» с версией, карточка «Мой
-// Tridot», разделы, дерево расширений со статусами, недавние сессии,
+// Связной», разделы, дерево расширений со статусами, недавние сессии,
 // поиск по сессиям, который растягивается и прячет «+», «Отмена» и Esc,
 // встаёт над клавиатурой, подсветка совпадения. Секреты из карточек
 // «Паролей» поиск не находит.
@@ -303,7 +303,7 @@ void main() {
     );
   });
 
-  testWidgets('«Мой Tridot»: телефон — 68 px и 18/600, компьютер — 60 и 17',
+  testWidgets('«Мой Связной»: телефон — 68 px и 18/600, компьютер — 60 и 17',
       (tester) async {
     for (final wide in <bool>[false, true]) {
       await _pump(tester, wide: wide, size: Size(wide ? 312 : 360, 900));
@@ -316,7 +316,8 @@ void main() {
       final title = tester.widget<Text>(
         find.descendant(of: card, matching: find.text(AppInfo.hubName)),
       );
-      // «Мой» — Inter, само «Tridot» — шрифтом названия (ADR-021).
+      // «Мой Связной» целиком — шрифтом текста: шрифт названия — только
+      // у «Tridot» в шапке (ADR-021).
       final style = title.textSpan!.style!;
       expect(style.fontSize, wide ? 17 : 18);
       expect(style.fontWeight, FontWeight.w600);
@@ -429,7 +430,7 @@ void main() {
       tester.getRect(find.byKey(const Key('session-search-cancel'))).bottom,
       lessThanOrEqualTo(640 - 300),
     );
-    // Шапка, «Мой Tridot» и разделы уступили место результатам.
+    // Шапка, «Мой Связной» и разделы уступили место результатам.
     expect(find.byKey(const ValueKey<String>('app-name')), findsNothing);
     expect(find.byKey(const Key('drawer-my-relay')), findsNothing);
     final hit = find.byKey(const Key('search-hit-session:0'));
@@ -672,7 +673,7 @@ void main() {
       matching: find.byType(PersonaDot),
     );
     expect(tester.widget<PersonaDot>(mark).persona, Personas.noda);
-    // Порядок: «Мой Tridot», разделы, закреплённые, дни, «Расширения».
+    // Порядок: «Мой Связной», разделы, закреплённые, дни, «Расширения».
     double top(String key) => tester.getRect(find.byKey(Key(key))).top;
     expect(top('drawer-my-relay'), lessThan(top('nav-tasks')));
     expect(top('nav-planning'), lessThan(top('drawer-group-pinned')));
@@ -685,9 +686,21 @@ void main() {
       tester.getSize(find.byKey(const Key('chat-session:p'))).height,
       greaterThanOrEqualTo(60),
     );
-    // Края прокрутки гаснут.
-    expect(find.byKey(const Key('drawer-fade-top')), findsOneWidget);
-    expect(find.byKey(const Key('drawer-fade-bottom')), findsOneWidget);
+    // Края прокрутки — без затемнения-виньетки: список обрезается ровно.
+    expect(find.byKey(const Key('drawer-fade-top')), findsNothing);
+    expect(find.byKey(const Key('drawer-fade-bottom')), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(RelayDrawer),
+        matching: find.byWidgetPredicate(
+          (Widget w) =>
+              w is DecoratedBox &&
+              w.decoration is BoxDecoration &&
+              (w.decoration as BoxDecoration).gradient != null,
+        ),
+      ),
+      findsNothing,
+    );
 
     await _pump(tester);
     expect(find.text('Закреплённые'), findsNothing);

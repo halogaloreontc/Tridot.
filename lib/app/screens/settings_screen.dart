@@ -15,15 +15,14 @@ import '../shell/relay_drawer.dart';
 import '../voice/voice_kit.dart';
 import '../voice/voice_views.dart';
 import '../widgets/extensions_section.dart';
-import '../widgets/personas_section.dart';
-import '../widgets/roles_section.dart';
 import '../layout.dart';
 import '../widgets/grouped.dart';
 import '../widgets/whole_word_text.dart';
 
-/// Экран «Настройки»: поведение интерфейса, помощники, роли, расширения,
+/// Экран «Настройки»: поведение интерфейса, голос, защита, расширения,
 /// история сессий, данные, о приложении. В оболочке «Д» — вкладка
-/// «Мой Tridot → Настройки» (без заголовка, помощники — своей вкладкой).
+/// «Мой Связной → Настройки» (без заголовка). Помощники и их роли — во
+/// вкладке «Помощники»; здесь — только строка-переход к ней.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
     super.key,
@@ -35,7 +34,7 @@ class SettingsScreen extends StatelessWidget {
     this.connections = const <ConnectionService>[],
     this.passwords,
     this.showTitle = true,
-    this.includePersonas = true,
+    this.onOpenAssistants,
     this.onOpenStorage,
     this.voice,
     this.ffmpeg,
@@ -47,8 +46,8 @@ class SettingsScreen extends StatelessWidget {
   /// Заголовок «Настройки» над экраном.
   final bool showTitle;
 
-  /// Раздел «Помощники» на этом экране (иначе он своей вкладкой).
-  final bool includePersonas;
+  /// «Помощники и роли» → вкладка «Помощники»; `null` — строки нет.
+  final VoidCallback? onOpenAssistants;
 
   /// «Данные и резервная копия»; `null` — строки нет.
   final VoidCallback? onOpenStorage;
@@ -195,19 +194,19 @@ class SettingsScreen extends StatelessWidget {
                     lock: lock,
                     hasVault: passwords != null,
                   ),
-                if (includePersonas)
-                  PersonasSection(
-                    settings: settings,
-                    onChanged: onChanged,
-                    registry: extensions,
-                  ),
-                if (extensions case final ExtensionRegistry registry
-                    when registry.roles.isNotEmpty)
-                  RolesSection(
-                    registry: registry,
-                    settings: settings,
-                    onChanged: onChanged,
-                    connections: connections,
+                if (onOpenAssistants != null)
+                  InsetGroup(
+                    header: 'Помощники',
+                    children: <Widget>[
+                      GroupedRow(
+                        key: const ValueKey<String>('settings-assistants'),
+                        icon: Icons.people_outline,
+                        tile: colors.tileGreen,
+                        title: 'Помощники и роли',
+                        chevron: true,
+                        onTap: onOpenAssistants,
+                      ),
+                    ],
                   ),
                 if (extensions case final ExtensionRegistry registry)
                   ExtensionsSection(

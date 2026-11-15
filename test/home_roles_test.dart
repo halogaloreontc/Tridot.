@@ -101,7 +101,8 @@ Future<void> _say(WidgetTester tester, String text) async {
 }
 
 Future<void> _toggleStorekeeper(WidgetTester tester) async {
-  await openSettings(tester);
+  // Роли — во вкладке «Помощники»: их ведут помощники.
+  await openMyRelay(tester, 'assistants');
   final tile = find.byKey(const ValueKey<String>('role-storekeeper'));
   await tester.ensureVisible(tile);
   await tester.pumpAndSettle();
@@ -177,7 +178,7 @@ void main() {
     expect(
       outsideDrawer(
         find.text(
-          'Склад ещё не подключён — Настройки → Роли → Кладовщик → '
+          'Склад ещё не подключён — Мой Связной → Помощники → Роли → Кладовщик → '
           'Подключить склад.',
         ),
       ),

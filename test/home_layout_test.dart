@@ -103,20 +103,23 @@ void main() {
       expect(tester.takeException(), isNull);
 
       final window = Offset.zero & size;
-      final panel = find.byKey(const Key('today-panel'));
+      // Справа в сессии — «Файлы сессии» (ADR-028).
+      final panel = find.byKey(const Key('session-files-panel'));
       if (size.width >= todayOpenBreakpoint) {
-        _expectInside(tester.getRect(panel), window, 'панель задач');
+        _expectInside(tester.getRect(panel), window, 'файлы сессии');
       } else {
-        expect(panel, findsNothing, reason: 'узкое окно: «Сегодня» свёрнута');
+        expect(panel, findsNothing, reason: 'узкое окно: колонка свёрнута');
       }
 
       final composer = tester.getRect(
         find.byKey(const Key('assistant-composer')),
       );
       _expectInside(composer, window, 'поле ввода');
-      // Хроники поверх ленты нет: история команд — в «⋯» шапки
-      // (ADR-027).
-      expect(find.byKey(const Key('history-rail')), findsNothing);
+      // Хроника — над лентой под шапкой, в окне (ADR-027, поправка);
+      // история команд — ещё и в «⋯» шапки.
+      final pill = find.byKey(const Key('history-rail-pill'));
+      expect(pill, findsOneWidget);
+      _expectInside(tester.getRect(pill), window, 'хроника');
       // На узком экране с задачей в фокусе в шапке «назад», задача и меню
       // сессии — «⋯» там нет.
       if (find.byKey(const Key('task-back')).evaluate().isEmpty ||
@@ -130,7 +133,7 @@ void main() {
       // «Задача» и «Напомнить» — только в новой сессии.
       expect(find.byKey(const Key('quick-Задача')), findsNothing);
 
-      // Колонка сессии — между меню и «Сегодня».
+      // Колонка сессии — между меню и «Файлами сессии».
       final sidebar = find.byKey(const Key('app-sidebar'));
       final left =
           sidebar.evaluate().isEmpty ? 0.0 : tester.getRect(sidebar).right;
@@ -212,7 +215,13 @@ void main() {
 
   testWidgets('пустая панель подсказывает пример без кавычек', (tester) async {
     await _pump(tester, const Size(1440, 900));
-    final hint = find.text(emptyTasksHint);
+    // «Сегодня» — у разделов задач (ADR-028).
+    await tester.tap(find.byKey(const Key('nav-tasks')));
+    await tester.pumpAndSettle();
+    final hint = find.descendant(
+      of: find.byKey(const Key('today-panel')),
+      matching: find.text(emptyTasksHint),
+    );
     expect(hint, findsOneWidget);
     expect(emptyTasksHint, isNot(contains('«')));
     expect(emptyTasksHint, isNot(contains('…')));
@@ -249,6 +258,8 @@ void main() {
       ),
     );
     await _say(tester, 'Покажи задачи');
+    await tester.tap(find.byKey(const Key('nav-tasks')));
+    await tester.pumpAndSettle();
     final title = tester.getRect(
       find.descendant(
         of: find.byKey(const Key('today-panel')),

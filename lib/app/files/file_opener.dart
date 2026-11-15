@@ -92,13 +92,20 @@ final class FileOpener {
   }
 
   /// Открыть [path] в программе по умолчанию. `false` — не вышло.
-  Future<bool> open(String path) async {
+  ///
+  /// [name] — имя для показа: на Android копию для другого приложения
+  /// называют им (у вложения на диске имя `<id сообщения>-<номер>`). На
+  /// компьютере файл открывается на месте, и имя не нужно.
+  Future<bool> open(String path, {String? name}) async {
     if (!allowed(path)) return false;
     if (platform == JobPlatform.android) {
       try {
         return await _channel.invokeMethod<bool>(
               'open',
-              <String, Object?>{'path': path},
+              <String, Object?>{
+                'path': path,
+                if (name != null && name.isNotEmpty) 'name': name,
+              },
             ) ??
             false;
       } on Object {

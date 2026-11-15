@@ -257,13 +257,14 @@ void main() {
     await _say(tester, 'перенеси всё на выходные');
     await _tap(tester, find.byKey(ValueKey<String>('bulk-item-${h.ids[0]}')));
 
-    // Через «Мой Tridot → Помощники»: режим, обращение и эмодзи.
+    // Через «Мой Связной → Помощники»: режим, обращение и эмодзи.
     await openMyRelay(tester, 'assistants');
     for (final key in <String>[
       'assistant-mode-solo',
       'address-ty',
       'setting-emoji',
     ]) {
+      await revealAssistantSetting(tester, key);
       final control = find.byKey(ValueKey<String>(key));
       await tester.ensureVisible(control);
       await tester.pumpAndSettle();

@@ -16,35 +16,38 @@ final class AssistantTheme {
   /// Светлая тема: фон #F2F2F7, белый лист.
   static ThemeData light() => build(AppPalette.light);
 
-  /// Шкала текста (ADR-027). Цвет в стилях не задан — он приходит из
-  /// `DefaultTextStyle` или палитры; только у [TextTheme.bodySmall] и
-  /// [TextTheme.labelMedium] по умолчанию приглушённый. Семейство задано в
-  /// каждом стиле: `styleFrom(textStyle:)` иначе теряет Inter.
+  /// Шкала текста (ADR-027, ADR-021): Golos Text 17/15/13. Цвет в стилях
+  /// не задан — он приходит из `DefaultTextStyle` или палитры; только у
+  /// [TextTheme.bodySmall] и [TextTheme.labelMedium] по умолчанию
+  /// приглушённый. Семейство задано в каждом стиле: `styleFrom(textStyle:)`
+  /// иначе теряет шрифт приложения. Межбуквенный интервал у Golos мягче,
+  /// чем был у Inter: −0,1 у основного, 0 у второстепенного, +0,1 у подписей,
+  /// −0,2…−0,3 у заголовков.
   static TextTheme textTheme(AppPalette p) => TextTheme(
-        displayLarge: _inter(34, 1.18, FontWeight.w700, -0.4),
-        displayMedium: _inter(32, 1.18, FontWeight.w700, -0.4),
-        displaySmall: _inter(30, 1.2, FontWeight.w700, -0.4),
-        headlineLarge: _inter(30, 1.2, FontWeight.w700, -0.3),
-        headlineMedium: _inter(28, 1.2, FontWeight.w700, -0.3),
-        headlineSmall: _inter(22, 1.25, FontWeight.w600, -0.2),
-        titleLarge: _inter(22, 1.25, FontWeight.w600, -0.2),
-        titleMedium: _inter(17, 1.29, FontWeight.w600, -0.2),
-        titleSmall: _inter(15, 1.33, FontWeight.w600, 0),
-        bodyLarge: _inter(17, 1.41, FontWeight.w400, -0.2),
-        bodyMedium: _inter(15, 1.35, FontWeight.w400, -0.1),
-        // Без табличных цифр: в Inter они делают моноширинными и «-», «–»
-        // («мастер - паролем»). Табличные — только у [metaNumTextStyle].
-        bodySmall: _inter(13, 1.38, FontWeight.w400, 0).copyWith(
+        displayLarge: _text(34, 1.18, FontWeight.w700, -0.3),
+        displayMedium: _text(32, 1.18, FontWeight.w700, -0.3),
+        displaySmall: _text(30, 1.2, FontWeight.w700, -0.3),
+        headlineLarge: _text(30, 1.2, FontWeight.w700, -0.3),
+        headlineMedium: _text(28, 1.2, FontWeight.w700, -0.3),
+        headlineSmall: _text(22, 1.25, FontWeight.w600, -0.2),
+        titleLarge: _text(22, 1.25, FontWeight.w600, -0.2),
+        titleMedium: _text(17, 1.29, FontWeight.w600, -0.1),
+        titleSmall: _text(15, 1.33, FontWeight.w600, 0),
+        bodyLarge: _text(17, 1.45, FontWeight.w400, -0.1),
+        bodyMedium: _text(15, 1.4, FontWeight.w400, 0),
+        // Без табличных цифр: пропорциональные ровнее в тексте. Табличные —
+        // только у [metaNumTextStyle] (время и счётчики в столбик).
+        bodySmall: _text(13, 1.38, FontWeight.w400, 0.1).copyWith(
           color: p.muted,
         ),
-        labelLarge: _inter(17, 1.2, FontWeight.w600, -0.2),
-        labelMedium: _inter(15, 1.33, FontWeight.w600, 0).copyWith(
+        labelLarge: _text(17, 1.29, FontWeight.w600, -0.1),
+        labelMedium: _text(15, 1.33, FontWeight.w600, 0).copyWith(
           color: p.muted,
         ),
-        labelSmall: _inter(13, 1.38, FontWeight.w500, 0),
+        labelSmall: _text(13, 1.38, FontWeight.w500, 0.1),
       );
 
-  static TextStyle _inter(
+  static TextStyle _text(
     double size,
     double height,
     FontWeight weight,
@@ -434,7 +437,7 @@ final class AssistantTheme {
         elevation: 0,
         shape: const RoundedRectangleBorder(borderRadius: field),
         // Шрифт явно: без него SnackBar берёт системный (Roboto), а не
-        // Inter (ADR-021).
+        // шрифт приложения (ADR-021).
         contentTextStyle: texts.bodyMedium!.copyWith(
           fontFamily: AppFonts.text,
           color: light ? const Color(0xFFFFFFFF) : p.text,
@@ -531,22 +534,23 @@ class FilledFieldBorder extends OutlineInputBorder {
   int get hashCode => Object.hash(borderSide, borderRadius);
 }
 
-/// Шрифты приложения (ADR-021, ADR-027). Основной — Inter (тема);
+/// Шрифты приложения (ADR-021, ADR-027). Основной — Golos Text (тема);
 /// моноширинный JetBrains Mono — только пароли и коды восстановления;
 /// Cormorant Unicase SemiBold — название «Tridot» и названия проектов.
 abstract final class AppFonts {
-  static const String text = 'Inter';
+  static const String text = 'Golos Text';
   static const String mono = 'JetBrains Mono';
   static const String display = 'Cormorant Unicase';
 }
 
-/// Метаданные: подписи, футеры, версия. Inter 13 — минимум (ADR-027).
+/// Метаданные: подписи, футеры, версия. 13 — минимум (ADR-027).
 /// Цвета нет: он из палитры (`colors.muted`) или `bodySmall`. Табличных
-/// цифр нет: в Inter они расширяют и дефис с тире («16 – 19 ноября»).
+/// цифр нет: в подписи пропорциональные ровнее.
 const metaTextStyle = TextStyle(
   fontFamily: AppFonts.text,
   fontSize: 13,
   height: 1.38,
+  letterSpacing: 0.1,
 );
 
 /// [metaTextStyle] с табличными цифрами — только время и счётчики, где
@@ -555,6 +559,7 @@ const metaNumTextStyle = TextStyle(
   fontFamily: AppFonts.text,
   fontSize: 13,
   height: 1.38,
+  letterSpacing: 0.1,
   fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
 );
 
@@ -566,7 +571,7 @@ const monoTextStyle = TextStyle(
 );
 
 /// Название приложения и проектов: Cormorant Unicase SemiBold. Буквы у
-/// него одной высоты и мельче Inter того же кегля — размер задаёт место.
+/// него одной высоты и мельче Golos Text того же кегля — размер задаёт место.
 /// Цвета нет — он из палитры.
 const displayTextStyle = TextStyle(
   fontFamily: AppFonts.display,

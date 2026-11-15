@@ -1,4 +1,4 @@
-// Оболочка «Д» на главном экране: «Связной ▾» → «Мой Tridot · Помощники»,
+// Оболочка «Д» на главном экране: «Связной ▾» → «Мой Связной · Помощники»,
 // «+» (новая сессия), «Сегодня» — колонкой на компьютере и «Сводкой» на
 // телефоне, свайп вправо по сессии открывает меню, хроника команд под
 // шапкой, чистый «Документ», поиск по сессиям из меню, телефон и крупный
@@ -105,7 +105,7 @@ void main() {
   });
 
   testWidgets(
-      'телефон: кнопки и панели «Сегодня» нет — всё в «Мой Tridot» → '
+      'телефон: кнопки и панели «Сегодня» нет — всё в «Мой Связной» → '
       '«Сводка», сегодняшние не обрезаются', (tester) async {
     final tasks = await _pump(tester);
     await tasks.create(title: 'Позвонить', dueAt: DateTime(2026, 11, 9, 11));
@@ -190,6 +190,98 @@ void main() {
     await tester.pumpAndSettle();
     expect(scroll.position.pixels, greaterThan(0));
     expect(find.byKey(const Key('app-sidebar')), findsNothing);
+  });
+
+  testWidgets(
+      '«Мой Связной»: свайп вправо не от края открывает меню — край на '
+      'Android забирает «Назад»', (tester) async {
+    await _pump(tester);
+    Future<void> swipeOpens(Offset from) async {
+      await tester.dragFrom(from, const Offset(220, 0));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
+      await tester.tapAt(const Offset(380, 400));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('app-sidebar')), findsNothing);
+    }
+
+    await openMyRelay(tester);
+    // «Сводка» — первая вкладка: с середины экрана.
+    await swipeOpens(const Offset(150, 400));
+    for (final tab in <String>['assistants', 'settings']) {
+      await openMyRelay(tester, tab);
+      // Шапка с названием — на любой вкладке.
+      final header = tester.getCenter(find.byKey(const Key('my-relay-back')));
+      await swipeOpens(Offset(150, header.dy));
+    }
+    // На дальней вкладке вправо по телу — тоже меню: вкладки на телефоне
+    // листают сегменты, а не палец.
+    await openMyRelay(tester, 'settings');
+    await swipeOpens(const Offset(150, 500));
+  });
+
+  testWidgets('Задачи, Проекты, Планирование: свайп вправо открывает меню',
+      (tester) async {
+    await _pump(tester);
+    for (final section in <String>['tasks', 'projects', 'planning']) {
+      await tapInDrawer(tester, Key('nav-$section'));
+      expect(find.byKey(const Key('app-sidebar')), findsNothing);
+      await tester.dragFrom(const Offset(150, 400), const Offset(220, 0));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('app-sidebar')),
+        findsOneWidget,
+        reason: section,
+      );
+      await tester.tapAt(const Offset(380, 400));
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('«открой мой Связной» и прежнее «мой Tridot» открывают раздел',
+      (tester) async {
+    await _pump(tester);
+    for (final phrase in <String>['открой мой Связной', 'мой Tridot']) {
+      await _say(tester, phrase);
+      expect(find.byKey(const Key('my-relay')), findsOneWidget, reason: phrase);
+      expect(find.byKey(const Key('my-relay-summary')), findsOneWidget);
+      await backToSession(tester);
+      expect(find.byKey(const Key('my-relay')), findsNothing);
+      expect(find.textContaining('Открываю «Мой Связной»'), findsWidgets);
+    }
+  });
+
+  testWidgets('«Мой Связной»: свайп вправо с любой вкладки открывает меню',
+      (tester) async {
+    await _pump(tester);
+    await tapInDrawer(tester, const Key('drawer-my-relay'));
+    for (final tab in <String>['summary', 'assistants', 'settings']) {
+      await tester.ensureVisible(find.byKey(Key('my-relay-tab-$tab')));
+      await tester.tap(find.byKey(Key('my-relay-tab-$tab')));
+      await tester.pumpAndSettle();
+      // «Сводка»: сетка входит целиком и вбок не прокручивается — свайп
+      // и по ней открывает меню.
+      for (final y in <double>[250, 700]) {
+        await tester.dragFrom(Offset(150, y), const Offset(220, 0));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('app-sidebar')),
+          findsOneWidget,
+          reason: '$tab, y=$y',
+        );
+        await tester.tapAt(const Offset(380, 400));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('my-relay')), findsOneWidget);
+      }
+      // Выбранный сегмент — полужирный: вкладка свайпом не сменилась.
+      final label = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(Key('my-relay-tab-$tab')),
+          matching: find.byType(Text),
+        ),
+      );
+      expect(label.style!.fontWeight, FontWeight.w600, reason: tab);
+    }
   });
 
   testWidgets('палец задержали, потом повели — это выделение, а не свайп',
@@ -303,14 +395,14 @@ void main() {
   });
 
   testWidgets(
-      'история команд — в «⋯» шапки, лента без хроники, поле ввода — во всю '
-      'колонку', (tester) async {
+      'история команд — хроника над лентой и «⋯» шапки, поле ввода — во '
+      'всю колонку', (tester) async {
     await _pump(tester);
     expect(find.byKey(const Key('session-more')), findsNothing);
     for (final text in <String>['привет', '2+2', 'запомни: хлеб']) {
       await _say(tester, text);
     }
-    expect(find.byKey(const Key('history-rail')), findsNothing);
+    expect(find.byKey(const Key('history-rail')), findsOneWidget);
     final more = tester.getRect(find.byKey(const Key('session-more')));
     expect(more.bottom, lessThanOrEqualTo(56));
     expect(more.width, greaterThanOrEqualTo(48));
@@ -492,11 +584,14 @@ void main() {
     expect(find.text('запомни: приход 318 от поставщика'), findsWidgets);
   });
 
-  testWidgets('широкий экран: три колонки, «Сегодня» сворачивается',
-      (tester) async {
+  testWidgets(
+      'широкий экран: три колонки, справа «Файлы сессии», в задачах '
+      '«Сегодня»; обе сворачиваются', (tester) async {
     await _pump(tester, size: const Size(1440, 900));
     expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
-    expect(find.byKey(const Key('today-panel')), findsOneWidget);
+    // В сессии справа — «Файлы сессии» (ADR-028).
+    expect(find.byKey(const Key('session-files-panel')), findsOneWidget);
+    expect(find.byKey(const Key('today-panel')), findsNothing);
     expect(find.byKey(const Key('menu-button')), findsNothing);
     expect(
       find.descendant(
@@ -507,11 +602,28 @@ void main() {
       reason: 'пустая сессия — без меню',
     );
     expect(find.byKey(const Key('today-show')), findsNothing);
+    expect(find.byKey(const Key('session-files')), findsNothing);
+    await tester.tap(find.byKey(const Key('session-files-close')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session-files-panel')), findsNothing);
+    // Свёрнута — кнопка у правого края шапки.
+    final files = find.byKey(const Key('session-files'));
+    expect(tester.getRect(files).right, greaterThan(1440 - 24));
+    await tester.tap(files);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session-files-panel')), findsOneWidget);
+    expect(files, findsNothing);
+
+    // «Сегодня» — у разделов задач.
+    await tester.tap(find.byKey(const Key('nav-tasks')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('today-panel')), findsOneWidget);
+    expect(find.byKey(const Key('session-files-panel')), findsNothing);
+    expect(find.byKey(const Key('today-show')), findsNothing);
     expect(find.byKey(const Key('today-button')), findsNothing);
     await tester.tap(find.byKey(const Key('today-collapse')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('today-panel')), findsNothing);
-    // Свёрнута — маленькая кнопка у правого края шапки.
     final show = find.byKey(const Key('today-show'));
     expect(find.byTooltip('Показать «Сегодня»'), findsOneWidget);
     expect(tester.getRect(show).right, greaterThan(1440 - 24));
@@ -530,7 +642,7 @@ void main() {
   for (final size in const <Size>[Size(320, 640), Size(390, 844)]) {
     testWidgets(
         '${size.width.toInt()}x${size.height.toInt()}, шрифт 2x: шапка, '
-        'меню, «Мой Tridot» и «Сводка» без переполнений', (tester) async {
+        'меню, «Мой Связной» и «Сводка» без переполнений', (tester) async {
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       final tasks = await _pump(tester, size: size);
@@ -549,8 +661,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('drawer-my-relay')));
       await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull, reason: '«Мой Tridot»');
-      for (final tab in <String>['activity', 'assistants', 'settings']) {
+      expect(tester.takeException(), isNull, reason: '«Мой Связной»');
+      for (final tab in <String>['assistants', 'settings']) {
         final target = find.byKey(Key('my-relay-tab-$tab'));
         await tester.ensureVisible(target);
         await tester.pumpAndSettle();
@@ -571,7 +683,7 @@ void main() {
   }
 
   testWidgets(
-      '«Мой Tridot»: строка статистики из локальных данных, первый день '
+      '«Мой Связной»: строка статистики из локальных данных, первый день '
       'записан, «Настройки» — вкладкой', (tester) async {
     final store = InMemorySettingsStore();
     final tasks = await _pump(tester, settingsStore: store);

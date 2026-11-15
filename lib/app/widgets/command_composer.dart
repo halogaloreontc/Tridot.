@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -159,11 +160,42 @@ final class CommandComposer extends StatefulWidget {
   State<CommandComposer> createState() => _CommandComposerState();
 }
 
-final class _CommandComposerState extends State<CommandComposer> {
+final class _CommandComposerState extends State<CommandComposer>
+    with WidgetsBindingObserver {
+  /// Экранная клавиатура была открыта (нижний отступ окна больше нуля).
+  bool _keyboardShown = false;
+
   @override
   void initState() {
     super.initState();
     widget.focusNode.onKeyEvent = _onKey;
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Клавиатуру на телефоне закрыли («Назад», кнопка клавиатуры) — поле
+  /// теряет фокус. Иначе фокус остаётся «тихим», и после меню, листа или
+  /// диалога экран вернул бы его полю, а с ним и клавиатуру, о которой
+  /// никто не просил. Отступ берём у окна: у тела Scaffold его уже
+  /// вычли.
+  @override
+  void didChangeMetrics() {
+    final view = View.maybeOf(context);
+    if (view == null) return;
+    final shown = view.viewInsets.bottom > 0;
+    final closed = _keyboardShown && !shown;
+    _keyboardShown = shown;
+    if (!closed || !widget.focusNode.hasPrimaryFocus) return;
+    final mobile = switch (defaultTargetPlatform) {
+      TargetPlatform.android || TargetPlatform.iOS => true,
+      _ => false,
+    };
+    if (mobile) widget.focusNode.unfocus();
   }
 
   @override
@@ -354,94 +386,91 @@ final class _CommandComposerState extends State<CommandComposer> {
                       )
                     : const Icon(Icons.arrow_upward, size: 22),
               );
-        final stacked = MediaQuery.textScalerOf(context).scale(1) > 1.3;
-        final Widget capsule = Container(
-          constraints: const BoxConstraints(minHeight: 44),
-          decoration: BoxDecoration(
-            color: context.colors.raised,
-            borderRadius: BorderRadius.circular(22),
-          ),
-          alignment: Alignment.centerLeft,
-          child: // Обёртка есть всегда, меняется только набор жестов: если
-              // оборачивать поле по условию, оно пересоздаётся на первой
-              // букве и теряет фокус и клавиатуру.
-              RawGestureDetector(
-            key: const Key('assistant-input-gestures'),
-            behavior: HitTestBehavior.deferToChild,
-            gestures: longPressVoice
-                ? <Type, GestureRecognizerFactory>{
-                    LongPressGestureRecognizer:
-                        GestureRecognizerFactoryWithHandlers<
-                            LongPressGestureRecognizer>(
-                      () => LongPressGestureRecognizer(
-                        duration: voiceLongPressDuration,
-                        // Мышью долгое нажатие — обычное выделение.
-                        supportedDevices: const <PointerDeviceKind>{
-                          PointerDeviceKind.touch,
-                          PointerDeviceKind.stylus,
-                        },
-                        debugOwner: this,
-                      ),
-                      (LongPressGestureRecognizer recognizer) {
-                        recognizer.onLongPress = () {
-                          Feedback.forLongPress(context);
-                          widget.onVoiceLongPress?.call();
-                        };
+        // Поле ввода — одна панель заливкой без рамок (ADR-027): сверху
+        // текст во всю ширину, снизу «+», переключатель «Диалог /
+        // Документ» ровно посередине и отправка или микрофон. Текст во всю
+        // ширину не рвёт слова и при крупном шрифте.
+        final Widget input = RawGestureDetector(
+          key: const Key('assistant-input-gestures'),
+          behavior: HitTestBehavior.deferToChild,
+          gestures: longPressVoice
+              ? <Type, GestureRecognizerFactory>{
+                  LongPressGestureRecognizer:
+                      GestureRecognizerFactoryWithHandlers<
+                          LongPressGestureRecognizer>(
+                    () => LongPressGestureRecognizer(
+                      duration: voiceLongPressDuration,
+                      // Мышью долгое нажатие — обычное выделение.
+                      supportedDevices: const <PointerDeviceKind>{
+                        PointerDeviceKind.touch,
+                        PointerDeviceKind.stylus,
                       },
+                      debugOwner: this,
                     ),
-                  }
-                : const <Type, GestureRecognizerFactory>{},
-            // Тоже всегда на месте (меняется только подсказка): жест
-            // для экранного диктора.
-            child: Semantics(
-              key: const Key('assistant-input-semantics'),
-              hint: longPressVoice
-                  ? 'Долгое нажатие на пустое поле — голосовой ввод'
-                  : null,
-              child: TextField(
-                key: const Key('assistant-input'),
-                controller: widget.controller,
-                focusNode: widget.focusNode,
-                // Капсула в одну строку растёт до шести (ADR-027).
-                minLines: 1,
-                maxLines: 6,
-                textInputAction: TextInputAction.send,
-                textCapitalization: TextCapitalization.sentences,
-                onSubmitted: (_) {
-                  if (!widget.sending) widget.onSend();
-                },
-                style: TextStyle(
-                  fontSize: 17,
-                  color: context.colors.textStrong,
-                ),
-                decoration: InputDecoration(
-                  // Подсказка не рвёт слово: одно слово на узкой
-                  // капсуле с шрифтом 200 % уменьшается целиком,
-                  // фраза переносится по словам (до трёх строк).
-                  hint: hint.contains(' ')
-                      ? WholeWordText(
-                          hint,
-                          maxLines: 3,
-                          style: hintStyle,
-                        )
-                      : fitSingleWord(hint, style: hintStyle),
-                  // Ни рамки, ни рамки фокуса: капсула — заливкой.
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  errorBorder: InputBorder.none,
-                  focusedErrorBorder: InputBorder.none,
-                  filled: false,
-                  contentPadding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
-                  isDense: true,
-                ),
+                    (LongPressGestureRecognizer recognizer) {
+                      recognizer.onLongPress = () {
+                        Feedback.forLongPress(context);
+                        widget.onVoiceLongPress?.call();
+                      };
+                    },
+                  ),
+                }
+              : const <Type, GestureRecognizerFactory>{},
+          // Тоже всегда на месте (меняется только подсказка): жест
+          // для экранного диктора.
+          child: Semantics(
+            key: const Key('assistant-input-semantics'),
+            hint: longPressVoice
+                ? 'Долгое нажатие на пустое поле — голосовой ввод'
+                : null,
+            child: TextField(
+              key: const Key('assistant-input'),
+              controller: widget.controller,
+              focusNode: widget.focusNode,
+              // Одна строка растёт до шести (ADR-027).
+              minLines: 1,
+              maxLines: 6,
+              textInputAction: TextInputAction.send,
+              textCapitalization: TextCapitalization.sentences,
+              onSubmitted: (_) {
+                if (!widget.sending) widget.onSend();
+              },
+              style: TextStyle(
+                fontSize: 17,
+                color: context.colors.textStrong,
+              ),
+              decoration: InputDecoration(
+                // Подсказка не рвёт слово: одно слово на узкой
+                // капсуле с шрифтом 200 % уменьшается целиком,
+                // фраза переносится по словам (до трёх строк).
+                hint: hint.contains(' ')
+                    ? WholeWordText(
+                        hint,
+                        maxLines: 3,
+                        style: hintStyle,
+                      )
+                    : fitSingleWord(hint, style: hintStyle),
+                // Ни рамки, ни рамки фокуса: поле — заливкой.
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                filled: false,
+                contentPadding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                isDense: true,
               ),
             ),
           ),
         );
         return Container(
           key: const Key('assistant-composer'),
-          padding: const EdgeInsets.only(top: 8),
+          margin: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
+          decoration: BoxDecoration(
+            color: context.colors.raised,
+            borderRadius: BorderRadius.circular(AppRadius.bubble + 4),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
@@ -510,57 +539,40 @@ final class _CommandComposerState extends State<CommandComposer> {
                     ),
                   ),
                 ),
-              // Диалог или документ — тихим переключателем над полем.
-              // Крупный шрифт (> 130 %): капсула — во всю ширину отдельной
-              // строкой, под ней «+», переключатель и отправка. Иначе в
-              // узкой капсуле между двумя кругами слова рвутся посреди
-              // («позвони|ть маме»).
-              if (!stacked) ...<Widget>[
-                LayoutBuilder(
-                  builder: (BuildContext context, BoxConstraints c) => Align(
-                    alignment: Alignment.centerRight,
-                    child: _ModeSwitch(
-                      mode: widget.mode,
-                      onChanged: widget.onModeChanged,
-                      // Подписи — если помещаются целиком рядом с местом
-                      // под подсказки.
-                      labels: c.maxWidth >=
-                          120 +
-                              2 * (24 + 17 + 6) +
-                              _ModeSwitch.labelsWidth(context),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Поле — капсулой (ADR-027): слева «+», справа отправка
-                // или микрофон, без рамок.
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    left,
-                    const SizedBox(width: 8),
-                    Expanded(child: capsule),
-                    const SizedBox(width: 8),
-                    send,
-                  ],
-                ),
-              ] else ...<Widget>[
-                capsule,
-                const SizedBox(height: 8),
-                Row(
-                  children: <Widget>[
-                    left,
-                    const Spacer(),
-                    _ModeSwitch(
-                      mode: widget.mode,
-                      onChanged: widget.onModeChanged,
-                      labels: false,
-                    ),
-                    const SizedBox(width: 8),
-                    send,
-                  ],
-                ),
-              ],
+              input,
+              LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints c) {
+                  // Подписи — если помещаются целиком: «+» и отправка по
+                  // 44, зазоры, у каждого сегмента поля 12 + иконка 17 +
+                  // зазор 6 + подпись по её реальной ширине + 12.
+                  final labels = c.maxWidth >=
+                      2 * 44 +
+                          16 +
+                          2 * (24 + 17 + 6) +
+                          _ModeSwitch.labelsWidth(context);
+                  return Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: left,
+                        ),
+                      ),
+                      _ModeSwitch(
+                        mode: widget.mode,
+                        onChanged: widget.onModeChanged,
+                        labels: labels,
+                      ),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: send,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ],
           ),
         );
@@ -723,9 +735,12 @@ final class _ModeSwitch extends StatelessWidget {
           right: 0,
           child: Container(
             height: 44,
-            // Сегменты заливкой, без рамок (ADR-027).
+            // Сегменты заливкой, без рамок (ADR-027). Дорожка — внутри
+            // панели поля: чуть темнее её, выбранный сегмент — светлее.
             decoration: BoxDecoration(
-              color: context.colors.raised,
+              color: context.colors.brightness == Brightness.dark
+                  ? context.colors.workspace
+                  : context.colors.bubble,
               borderRadius: BorderRadius.circular(999),
             ),
           ),
@@ -806,7 +821,8 @@ final class _ModeSwitch extends StatelessWidget {
       alignment: Alignment.center,
       padding: EdgeInsets.symmetric(horizontal: labels ? 12 : 8),
       decoration: BoxDecoration(
-        color: active ? context.colors.bubble : Colors.transparent,
+        // Выбранный сегмент — светлее панели поля, как в «Заметках».
+        color: active ? context.colors.fieldOnRaised : Colors.transparent,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(

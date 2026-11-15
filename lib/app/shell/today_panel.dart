@@ -149,7 +149,7 @@ final class TodayPanel extends StatelessWidget {
   final List<TodaySection> sections;
 
   /// Свернуть колонку (широкий экран; на телефоне панели нет — всё это
-  /// в «Мой Tridot» → «Сводка»).
+  /// в «Мой Связной» → «Сводка»).
   final VoidCallback? onClose;
   final String closeTooltip;
   final Key closeKey;

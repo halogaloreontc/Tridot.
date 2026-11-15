@@ -109,7 +109,7 @@ Future<void> _say(WidgetTester tester, String text) async {
   await tester.pumpAndSettle();
 }
 
-/// Настройки помощников: «Мой Tridot» → «Помощники».
+/// Настройки помощников: «Мой Связной» → «Помощники».
 Future<void> _openSettings(WidgetTester tester) =>
     openMyRelay(tester, 'assistants');
 
@@ -118,6 +118,7 @@ Future<void> _openTasks(WidgetTester tester) => backToSession(tester);
 
 Future<void> _tapSetting(WidgetTester tester, String key) async {
   final target = find.byKey(ValueKey<String>(key));
+  await revealAssistantSetting(tester, key);
   await tester.ensureVisible(target);
   await tester.pumpAndSettle();
   await tester.tap(target);
@@ -296,6 +297,7 @@ void main() {
       final store = InMemorySettingsStore();
       await _pump(tester, settings: store);
       await _openSettings(tester);
+      await revealAssistantSetting(tester, 'persona-name-rio');
       final field = find.byKey(const ValueKey<String>('persona-name-rio'));
       await tester.ensureVisible(field);
       await tester.pumpAndSettle();
@@ -803,6 +805,7 @@ void main() {
 
       // Экран настроек показывает то же, что попросили в чате.
       await _openSettings(tester);
+      await revealAssistantSetting(tester, 'style-sado-brief');
       final selected = find.byKey(const ValueKey<String>('style-sado-brief'));
       await tester.ensureVisible(selected);
       expect(
@@ -1102,7 +1105,7 @@ void main() {
       expect(_history(tester), isEmpty);
     });
 
-    testWidgets('нажатие — «Мой Tridot» → «Сводка»', (tester) async {
+    testWidgets('нажатие — «Мой Связной» → «Сводка»', (tester) async {
       final repository = InMemoryTaskRepository();
       for (var i = 0; i < 5; i++) {
         await repository.save(_overdue('Дело $i'));

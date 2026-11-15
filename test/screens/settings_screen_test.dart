@@ -6,7 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/screens/settings_screen.dart';
 import 'package:local_assistant/app/voice/voice_kit.dart';
+import 'package:local_assistant/app/widgets/extensions_section.dart';
 import 'package:local_assistant/app/widgets/grouped.dart';
+import 'package:local_assistant/app/widgets/personas_section.dart';
 import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
@@ -467,26 +469,51 @@ void main() {
     });
   });
 
+  // Помощники — во вкладке «Мой Связной → Помощники» (ADR-027, поправка):
+  // раздел проверяется сам по себе, а рядом — «Расширения», чтобы выключить
+  // пак ответов.
   group('Помощники', () {
     Widget personasHost(
       List<AppSettings> changes, {
       ExtensionRegistry? extensions,
     }) {
       var settings = const AppSettings();
-      return StatefulBuilder(
-        builder: (context, setState) => host(
-          settings: settings,
-          extensions: extensions,
-          onChanged: (value) {
-            changes.add(value);
-            extensions?.apply(
-              ExtensionChoice(
-                disabled: value.disabledExtensions,
-                enabled: value.enabledExtensions,
-              ),
-            );
-            setState(() => settings = value);
-          },
+      return MaterialApp(
+        theme: AssistantTheme.dark(),
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              void onChanged(AppSettings value) {
+                changes.add(value);
+                extensions?.apply(
+                  ExtensionChoice(
+                    disabled: value.disabledExtensions,
+                    enabled: value.enabledExtensions,
+                  ),
+                );
+                setState(() => settings = value);
+              }
+
+              return SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    PersonasSection(
+                      settings: settings,
+                      onChanged: onChanged,
+                      registry: extensions,
+                    ),
+                    if (extensions != null)
+                      ExtensionsSection(
+                        registry: extensions,
+                        settings: settings,
+                        onChanged: onChanged,
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       );
     }
@@ -503,8 +530,22 @@ void main() {
         .widget<Text>(find.byKey(ValueKey<String>('style-preview-$persona')))
         .data!;
 
-    testWidgets('по умолчанию: трио, примеры стилей', (tester) async {
+    testWidgets('в «Настройках» помощников нет', (tester) async {
       await tester.pumpWidget(host());
+      expect(
+        find.byKey(const ValueKey<String>('personas-section')),
+        findsNothing,
+      );
+      expect(find.text('Роли'), findsNothing);
+      // Строки-перехода нет, пока экран не знает, куда вести.
+      expect(
+        find.byKey(const ValueKey<String>('settings-assistants')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('по умолчанию: трио, примеры стилей', (tester) async {
+      await tester.pumpWidget(personasHost(<AppSettings>[]));
       expect(find.text('Помощники'), findsOneWidget);
       ChoiceChip chip(String key) => tester.widget<ChoiceChip>(
             find.descendant(
@@ -614,9 +655,10 @@ void main() {
   });
 
   testWidgets(
-      'вкладка «Мой Tridot → Настройки»: без заголовка и помощников, '
-      'с «Данными» и «Сессиями»', (tester) async {
+      'вкладка «Мой Связной → Настройки»: без заголовка и помощников, '
+      'с переходом к «Помощникам», «Данными» и «Сессиями»', (tester) async {
     var storage = 0;
+    var assistants = 0;
     await tester.pumpWidget(
       MaterialApp(
         theme: AssistantTheme.dark(),
@@ -627,7 +669,7 @@ void main() {
             onClearChat: () {},
             messageCount: 5,
             showTitle: false,
-            includePersonas: false,
+            onOpenAssistants: () => assistants++,
             onOpenStorage: () => storage++,
           ),
         ),
@@ -640,6 +682,12 @@ void main() {
     );
     expect(find.text('Сессии'), findsOneWidget);
     expect(find.text('Очистить историю сессий'), findsOneWidget);
+    final link = find.byKey(const ValueKey<String>('settings-assistants'));
+    expect(find.text('Помощники и роли'), findsOneWidget);
+    await tester.ensureVisible(link);
+    await tester.pumpAndSettle();
+    await tester.tap(link);
+    expect(assistants, 1);
     final row = find.byKey(const ValueKey<String>('settings-storage'));
     await tester.ensureVisible(row);
     await tester.pumpAndSettle();
@@ -738,7 +786,9 @@ void main() {
 
       await pumpVoice(tester, support: VoiceSupport.unsupported);
       expect(
-        find.text('На этой платформе пока недоступен — сейчас только Android'),
+        find.text(
+          'На этой платформе пока недоступен\u00A0— сейчас только Android',
+        ),
         findsOneWidget,
       );
       expect(find.byKey(const Key('setting-voice')), findsNothing);

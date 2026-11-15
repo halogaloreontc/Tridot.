@@ -22,10 +22,23 @@ class PersonasSection extends StatefulWidget {
     required this.settings,
     required this.onChanged,
     this.registry,
+    this.showHeader = true,
+    this.editing,
+    this.onEditing,
   });
 
   final AppSettings settings;
   final ValueChanged<AppSettings> onChanged;
+
+  /// Заголовок «Помощники» над режимом; вкладка «Помощники» его не
+  /// повторяет.
+  final bool showHeader;
+
+  /// Компактный вид (вкладка «Помощники», [onEditing] задан): имя, род и
+  /// стиль — только у помощника [editing] (его «Изменить» на карточке),
+  /// «Как говорят» — свёрнуто в одну строку. Без [onEditing] видно всё.
+  final String? editing;
+  final ValueChanged<String?>? onEditing;
 
   /// Реестр расширений: стили из включённых паков ответов. `null` — только
   /// встроенные стили.
@@ -42,6 +55,11 @@ class PersonasSection extends StatefulWidget {
 }
 
 class _PersonasSectionState extends State<PersonasSection> {
+  /// «Как говорят» раскрыто в компактном виде.
+  bool _speechOpen = false;
+
+  bool get _compact => widget.onEditing != null;
+
   @override
   void initState() {
     super.initState();
@@ -91,7 +109,7 @@ class _PersonasSectionState extends State<PersonasSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         InsetGroup(
-          header: 'Помощники',
+          header: widget.showHeader ? 'Помощники' : null,
           children: <Widget>[
             _Group(
               title: 'Режим',
@@ -148,75 +166,102 @@ class _PersonasSectionState extends State<PersonasSection> {
           ],
         ),
         for (final persona in cast.members)
-          InsetGroup(
-            header: persona.russianName,
-            children: <Widget>[
-              _PersonaStyle(
-                key: ValueKey<String>('persona-settings-${persona.id}'),
-                persona: persona,
-                personas: personas,
-                library: library,
-                onStyle: (String style) =>
-                    _set(personas.withStyle(persona.id, style)),
-                onName: (String name) =>
-                    _set(personas.withName(persona.id, name)),
-                onGender: (ReplyGender gender) =>
-                    _set(personas.withGender(persona.id, gender)),
-              ),
-            ],
-          ),
-        InsetGroup(
-          header: 'Как говорят',
-          children: <Widget>[
-            _Group(
-              title: 'Обращение',
+          if (!_compact || widget.editing == persona.id)
+            InsetGroup(
+              key: ValueKey<String>('persona-group-${persona.id}'),
+              header: persona.russianName,
               children: <Widget>[
-                _Choice(
-                  key: const ValueKey<String>('address-vy'),
-                  label: 'На «вы»',
-                  selected: personas.address == ReplyAddress.formal,
-                  onSelected: () =>
-                      _set(personas.copyWith(address: ReplyAddress.formal)),
+                _PersonaStyle(
+                  key: ValueKey<String>('persona-settings-${persona.id}'),
+                  persona: persona,
+                  personas: personas,
+                  library: library,
+                  onStyle: (String style) =>
+                      _set(personas.withStyle(persona.id, style)),
+                  onName: (String name) =>
+                      _set(personas.withName(persona.id, name)),
+                  onGender: (ReplyGender gender) =>
+                      _set(personas.withGender(persona.id, gender)),
                 ),
-                _Choice(
-                  key: const ValueKey<String>('address-ty'),
-                  label: 'На «ты»',
-                  selected: personas.address == ReplyAddress.informal,
-                  onSelected: () =>
-                      _set(personas.copyWith(address: ReplyAddress.informal)),
-                ),
-              ],
-            ),
-            GroupedSwitchRow(
-              key: const ValueKey<String>('setting-emoji'),
-              title: 'Эмодзи в ответах',
-              subtitle: 'Если стиль ими пользуется',
-              value: personas.emoji,
-              onChanged: (bool value) => _set(personas.copyWith(emoji: value)),
-            ),
-            _Group(
-              title: 'Шутки',
-              hint: 'Как часто беседа добавляет каламбур к приветствию и '
-                  '«спасибо». Ответы задач всегда без шуток.',
-              children: <Widget>[
-                for (final (value, label) in const <(JokeFrequency, String)>[
-                  (JokeFrequency.off, 'Не шутить'),
-                  (JokeFrequency.rare, 'Изредка'),
-                  (JokeFrequency.normal, 'Чаще'),
-                ])
-                  _Choice(
-                    key: ValueKey<String>('jokes-${value.name}'),
-                    label: label,
-                    selected: personas.jokes == value,
-                    onSelected: () => _set(personas.copyWith(jokes: value)),
+                if (_compact)
+                  GroupedRow(
+                    key: ValueKey<String>('persona-done-${persona.id}'),
+                    title: 'Готово',
+                    accent: true,
+                    onTap: () => widget.onEditing!(null),
                   ),
               ],
             ),
+        InsetGroup(
+          header: 'Как говорят',
+          children: <Widget>[
+            if (_compact)
+              GroupedRow(
+                key: const ValueKey<String>('personas-speech-toggle'),
+                title: 'Обращение, эмодзи и шутки',
+                value: _speechOpen ? null : _speechSummary(personas),
+                trailing: Icon(
+                  _speechOpen ? Icons.expand_less : Icons.expand_more,
+                  color: context.colors.icon,
+                ),
+                onTap: () => setState(() => _speechOpen = !_speechOpen),
+              ),
+            if (!_compact || _speechOpen) ...<Widget>[
+              _Group(
+                title: 'Обращение',
+                children: <Widget>[
+                  _Choice(
+                    key: const ValueKey<String>('address-vy'),
+                    label: 'На «вы»',
+                    selected: personas.address == ReplyAddress.formal,
+                    onSelected: () =>
+                        _set(personas.copyWith(address: ReplyAddress.formal)),
+                  ),
+                  _Choice(
+                    key: const ValueKey<String>('address-ty'),
+                    label: 'На «ты»',
+                    selected: personas.address == ReplyAddress.informal,
+                    onSelected: () =>
+                        _set(personas.copyWith(address: ReplyAddress.informal)),
+                  ),
+                ],
+              ),
+              GroupedSwitchRow(
+                key: const ValueKey<String>('setting-emoji'),
+                title: 'Эмодзи в ответах',
+                subtitle: 'Если стиль ими пользуется',
+                value: personas.emoji,
+                onChanged: (bool value) =>
+                    _set(personas.copyWith(emoji: value)),
+              ),
+              _Group(
+                title: 'Шутки',
+                hint: 'Как часто беседа добавляет каламбур к приветствию и '
+                    '«спасибо». Ответы задач всегда без шуток.',
+                children: <Widget>[
+                  for (final (value, label) in const <(JokeFrequency, String)>[
+                    (JokeFrequency.off, 'Не шутить'),
+                    (JokeFrequency.rare, 'Изредка'),
+                    (JokeFrequency.normal, 'Чаще'),
+                  ])
+                    _Choice(
+                      key: ValueKey<String>('jokes-${value.name}'),
+                      label: label,
+                      selected: personas.jokes == value,
+                      onSelected: () => _set(personas.copyWith(jokes: value)),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ],
     );
   }
+
+  /// Свёрнутое «Как говорят»: «на «вы»» — коротко, без перечня.
+  static String _speechSummary(PersonaSettings personas) =>
+      personas.address == ReplyAddress.informal ? 'на «ты»' : 'на «вы»';
 }
 
 /// Кто ведёт обязанность: Лиорио или Нода. Если назначенного выключил

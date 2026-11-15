@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_assistant/core/app_info.dart';
 import 'package:local_assistant/core/replies/builtin_replies.g.dart';
 import 'package:local_assistant/core/replies/reply_library.dart';
 
@@ -124,6 +126,30 @@ void main() {
           File('assets/replies/$style.json').readAsStringSync(),
           reason: '$style: запустите dart run tool/gen_replies.dart',
         );
+      }
+    });
+
+    test('путь к ролям — «Мой Связной → Помощники → Роли», как в приложении',
+        () {
+      // Роли живут во вкладке «Помощники» (ADR-027, поправка): прежнего
+      // «Настройки → Роли» нет. Название раздела — AppInfo.hubName: сменят
+      // его — тест напомнит поправить и ответы.
+      for (final style in ReplyStyles.builtIn) {
+        final text = builtInReplyCatalogs[style]!;
+        expect(text, isNot(contains('Настройки → Роли')), reason: style);
+        const tail = ' → Помощники → Роли';
+        var found = 0;
+        for (var at = text.indexOf(tail);
+            at >= 0;
+            at = text.indexOf(tail, at + 1)) {
+          found++;
+          expect(
+            text.substring(0, at).endsWith(AppInfo.hubName),
+            isTrue,
+            reason: '$style: ${text.substring(math.max(0, at - 20), at)}',
+          );
+        }
+        expect(found, greaterThan(0), reason: style);
       }
     });
 
@@ -409,7 +435,14 @@ void main() {
         expect(raw, isNot(contains('{м:вторая')), reason: style);
         expect(raw, isNot(contains('{м:Вторая')), reason: style);
         expect(raw, isNot(contains('{м:Основная')), reason: style);
-        expect(raw, isNot(contains('Связн')), reason: style);
+        // Имя главного в тексте не пишется: его могут переименовать и
+        // выбрать род. Название раздела «Мой Связной» — не имя, оно
+        // постоянное (AppInfo.hubName).
+        expect(
+          raw.replaceAll(AppInfo.hubName, ''),
+          isNot(contains('Связн')),
+          reason: style,
+        );
       }
     });
 

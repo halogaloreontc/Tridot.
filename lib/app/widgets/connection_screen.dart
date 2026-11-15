@@ -116,7 +116,20 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       _result = result;
       _resultAt = at;
     });
+    // Итог под кнопкой: на узком экране и крупном шрифте он может уйти за
+    // нижний край — докручиваем до него.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _messageKey.currentContext;
+      if (!mounted || target == null) return;
+      Scrollable.ensureVisible(
+        target,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        duration: const Duration(milliseconds: 150),
+      );
+    });
   }
+
+  final GlobalKey _messageKey = GlobalKey();
 
   Future<void> _run(
     String at,
@@ -196,6 +209,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     final result = _result;
     if (result == null || _resultAt != at) return const SizedBox.shrink();
     return Padding(
+      key: _messageKey,
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
       child: Text(
         result.message,

@@ -1,15 +1,20 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/formatting/due_format.dart';
 import '../../core/models/task.dart';
 import '../../core/replies/reply_library.dart';
 import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
+import '../layout.dart';
 import '../shell/today_panel.dart';
 import '../widgets/activity_grid.dart';
 import '../widgets/grouped.dart';
 import '../widgets/personas_section.dart';
+import '../widgets/roles_section.dart';
 import '../widgets/task_tile.dart';
 import '../widgets/whole_word_text.dart';
 
@@ -18,8 +23,14 @@ import '../widgets/whole_word_text.dart';
 /// виден весь список «Сегодня»).
 const int nextLimit = 5;
 
-/// Ширина, с которой сетка «Сводки» показывает год, а не 16 недель.
+/// Ширина окна, с которой сетка «Сводки» показывает год мелкими клетками.
 const double wideGridWidth = 1000;
+
+/// Сколько недель сетки ([ActivityGrid]: подписи дней 22 + 6, клетка
+/// [cell], зазор [gap]) входит в [width] — ширину внутри её панели —
+/// целиком: от 12 до 52.
+int fitWeeks(double width, {required double cell, required double gap}) =>
+    ((width - 28 + gap) / (cell + gap)).floor().clamp(12, 52);
 
 /// «Сейчас и дальше»: активные задачи со сроком, просроченные первыми,
 /// затем по сроку.
@@ -59,7 +70,7 @@ TextStyle _heading(BuildContext context) => TextStyle(
       color: context.colors.textStrong,
     );
 
-/// Панель «Мой Tridot» — заливкой листа на фоне экрана, без рамки
+/// Панель «Мой Связной» — заливкой листа на фоне экрана, без рамки
 /// (ADR-027).
 BoxDecoration _card(BuildContext context) => BoxDecoration(
       color: context.colors.workspace,
@@ -68,10 +79,12 @@ BoxDecoration _card(BuildContext context) => BoxDecoration(
 
 // ---------------------------------------------------------------- Сводка
 
-/// «Сводка»: сетка активности (16 недель на телефоне, 52 на компьютере)
-/// и «Сейчас и дальше». Без советов и погоды: только то, что есть на
-/// устройстве.
-final class RelaySummary extends StatelessWidget {
+/// «Сводка» — всё о том, что было и что впереди, на одной вкладке:
+/// сетка активности (год на компьютере, на телефоне — сколько недель
+/// входит в ширину), «Сейчас и дальше» и выполненные задачи с «Вернуть». Отдельной
+/// вкладки «Активность» нет: сетка была и там, и здесь. Без советов и
+/// погоды: только то, что есть на устройстве.
+final class RelaySummary extends StatefulWidget {
   const RelaySummary({
     super.key,
     required this.activity,
@@ -80,6 +93,8 @@ final class RelaySummary extends StatelessWidget {
     required this.pending,
     required this.onOpenTask,
     required this.onAllTasks,
+    this.completed = const <Task>[],
+    this.onReopen,
     this.approximate = false,
     this.notifier,
   });
@@ -100,6 +115,15 @@ final class RelaySummary extends StatelessWidget {
   final VoidCallback onAllTasks;
   final bool approximate;
 
+  /// Выполненные задачи, новые первыми.
+  final List<Task> completed;
+
+  /// «Вернуть» выполненную задачу в работу; `null` — без отметки.
+  final ValueChanged<Task>? onReopen;
+
+  /// Сколько выполненных показать сразу и добавлять «Показать ещё».
+  static const pageSize = 20;
+
   /// Строки «Сейчас и дальше»: все просроченные и сегодняшние (как в
   /// колонке «Сегодня» на компьютере), затем ближайшие по сроку — не
   /// больше [nextLimit].
@@ -119,8 +143,18 @@ final class RelaySummary extends StatelessWidget {
   }
 
   @override
+  State<RelaySummary> createState() => _RelaySummaryState();
+}
+
+final class _RelaySummaryState extends State<RelaySummary> {
+  int _visible = RelaySummary.pageSize;
+
+  @override
   Widget build(BuildContext context) {
-    final next = rows(tasks, now);
+    final tasks = widget.tasks;
+    final now = widget.now;
+    final pending = widget.pending;
+    final next = RelaySummary.rows(tasks, now);
     final today = todayTasks(
       <Task>[
         for (final task in tasks)
@@ -132,17 +166,27 @@ final class RelaySummary extends StatelessWidget {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         // Компьютер (окно от 1000) — год мелкими клетками, как в
-        // D-Desk-Summary; телефон — 16 недель.
+        // D-Desk-Summary. Уже — столько недель, сколько входит в ширину
+        // целиком (на телефоне 390 — 16): сетка не прокручивается вбок, и
+        // свайп вправо по «Сводке» всегда открывает меню.
         final desk = MediaQuery.sizeOf(context).width >= wideGridWidth;
-        final weeks = desk ? 52 : 16;
+        final weeks = desk
+            ? 52
+            : fitWeeks(
+                // Поля страницы и панели сетки — по 16 с каждой стороны.
+                math.min(constraints.maxWidth, 960 + 32) - 64,
+                cell: 14,
+                gap: 4,
+              );
         return _page(
           key: const Key('my-relay-summary'),
           children: <Widget>[
             ActivityGrid(
-              counts: activity,
+              counts: widget.activity,
               now: now,
               weeks: weeks,
-              approximate: approximate,
+              title: weeks == 52 ? 'Активность за год' : 'Активность',
+              approximate: widget.approximate,
               cell: desk ? 12 : 14,
               gap: desk ? 3 : 4,
             ),
@@ -175,8 +219,14 @@ final class RelaySummary extends StatelessWidget {
                 ),
                 TextButton(
                   key: const Key('summary-all-tasks'),
-                  onPressed: onAllTasks,
-                  style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+                  onPressed: widget.onAllTasks,
+                  // Перенеслась под заголовок (узкий экран, крупный шрифт)
+                  // — текст начинается ровно под ним: слева отступ 4, как у
+                  // заголовка, справа — обычный.
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(44, 44),
+                    padding: const EdgeInsets.only(left: 4, right: 8),
+                  ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
@@ -214,13 +264,13 @@ final class RelaySummary extends StatelessWidget {
                           overdue: isOverdue(task, now),
                           title: task.title,
                           subtitle: todayDueLabel(task, now),
-                          onTap: () => onOpenTask(task),
+                          onTap: () => widget.onOpenTask(task),
                         ),
                       for (final (i, item) in pending.indexed)
                         _NextRow(
                           key: Key('next-pending-${item.id}'),
                           first: next.isEmpty && i == 0,
-                          mark: notifier ?? PersonaCast.current.notifier,
+                          mark: widget.notifier ?? PersonaCast.current.notifier,
                           title: item.title,
                           subtitle: item.subtitle,
                           onTap: item.onTap,
@@ -229,10 +279,55 @@ final class RelaySummary extends StatelessWidget {
                   ),
                 ),
               ),
+            const SizedBox(height: 24),
+            ..._done(context),
           ],
         );
       },
     );
+  }
+
+  /// «Выполненные · N»: новые первыми, по [RelaySummary.pageSize] за раз,
+  /// отметка возвращает задачу в работу.
+  List<Widget> _done(BuildContext context) {
+    final completed = widget.completed;
+    if (completed.isEmpty) {
+      return <Widget>[
+        const SectionLabel('Выполненные · 0'),
+        const EmptyState(
+          key: Key('summary-done-empty'),
+          icon: Icons.inventory_2_outlined,
+          title: 'Выполненных задач пока нет',
+          hint: 'Завершённые задачи появятся здесь',
+        ),
+      ];
+    }
+    final shown = completed.take(_visible).toList();
+    final hidden = completed.length - shown.length;
+    final reopen = widget.onReopen;
+    return <Widget>[
+      InsetGroup(
+        key: const Key('summary-done'),
+        header: 'Выполненные · ${completed.length}',
+        margin: EdgeInsets.zero,
+        children: <Widget>[
+          for (final task in shown)
+            TaskTile(
+              key: ValueKey<String>('activity-done-${task.id}'),
+              task: task,
+              now: widget.now,
+              onToggleDone: reopen == null ? null : () => reopen(task),
+            ),
+          if (hidden > 0)
+            GroupedRow(
+              key: const Key('activity-more'),
+              accent: true,
+              title: 'Показать ещё · $hidden',
+              onTap: () => setState(() => _visible += RelaySummary.pageSize),
+            ),
+        ],
+      ),
+    ];
   }
 }
 
@@ -313,89 +408,6 @@ final class _NextRow extends StatelessWidget {
   }
 }
 
-// ------------------------------------------------------------ Активность
-
-/// «Активность»: год по дням (на телефоне — с прокруткой) и выполненные
-/// задачи с «Вернуть».
-final class RelayActivity extends StatefulWidget {
-  const RelayActivity({
-    super.key,
-    required this.activity,
-    required this.completed,
-    required this.now,
-    required this.onReopen,
-    this.approximate = false,
-  });
-
-  final Map<DateTime, int> activity;
-
-  /// Выполненные задачи, новые первыми.
-  final List<Task> completed;
-  final DateTime now;
-  final ValueChanged<Task> onReopen;
-  final bool approximate;
-
-  static const pageSize = 20;
-
-  @override
-  State<RelayActivity> createState() => _RelayActivityState();
-}
-
-final class _RelayActivityState extends State<RelayActivity> {
-  int _visible = RelayActivity.pageSize;
-
-  @override
-  Widget build(BuildContext context) {
-    final completed = widget.completed;
-    final shown = completed.take(_visible).toList();
-    final hidden = completed.length - shown.length;
-    return _page(
-      key: const Key('my-relay-activity'),
-      children: <Widget>[
-        ActivityGrid(
-          counts: widget.activity,
-          now: widget.now,
-          weeks: 52,
-          title: 'За год',
-          cell: 12,
-          gap: 3,
-          approximate: widget.approximate,
-        ),
-        const SizedBox(height: 24),
-        if (completed.isEmpty) ...<Widget>[
-          SectionLabel('Выполненные · ${completed.length}'),
-          const EmptyState(
-            icon: Icons.inventory_2_outlined,
-            title: 'Выполненных задач пока нет',
-            hint: 'Завершённые задачи появятся здесь',
-          ),
-        ] else
-          InsetGroup(
-            header: 'Выполненные · ${completed.length}',
-            margin: EdgeInsets.zero,
-            children: <Widget>[
-              for (final task in shown)
-                TaskTile(
-                  key: ValueKey<String>('activity-done-${task.id}'),
-                  task: task,
-                  now: widget.now,
-                  onToggleDone: () => widget.onReopen(task),
-                ),
-              if (hidden > 0)
-                GroupedRow(
-                  key: const Key('activity-more'),
-                  accent: true,
-                  title: 'Показать ещё · $hidden',
-                  onTap: () =>
-                      setState(() => _visible += RelayActivity.pageSize),
-                ),
-            ],
-          ),
-      ],
-    );
-  }
-}
-
 // ------------------------------------------------------------- Помощники
 
 /// Подзаголовок карточки помощника: «главный помощник», «ведёт
@@ -423,23 +435,30 @@ String personaRole(Persona persona, PersonaSettings personas) {
 }
 
 /// «Помощники» (D-Desk-Assistants): карточки Связного, Лиорио и Ноды
-/// (стиль, обращение, роли, включён ли помощник), полные настройки ниже и
-/// приглушённая строка о журнале. Журнал не строим.
+/// (стиль, обращение, роли, включён ли помощник), под ними все настройки
+/// помощников — режим, обязанности, стили, обращение — и роли, которые
+/// они ведут. В «Настройках» помощников больше нет: всё о них — здесь.
+/// Журнал не строим — о нём приглушённая строка в конце вкладки.
 final class RelayAssistants extends StatefulWidget {
   const RelayAssistants({
     super.key,
     required this.settings,
     required this.onChanged,
     required this.registry,
-    required this.onOpenRoles,
+    this.connections = const <ConnectionService>[],
+    this.onOpenRoles,
   });
 
   final AppSettings settings;
   final ValueChanged<AppSettings> onChanged;
   final ExtensionRegistry registry;
 
-  /// «Ведёт: Кладовщик» → роли во вкладке «Настройки».
-  final VoidCallback onOpenRoles;
+  /// Подключения ролей: статус и «Подключить склад» в «Ролях».
+  final List<ConnectionService> connections;
+
+  /// «Ведёт: Кладовщик» → роли; `null` — прокрутка к «Ролям» ниже на этой
+  /// же вкладке.
+  final VoidCallback? onOpenRoles;
 
   /// С этой ширины карточки стоят в ряд, уже — столбцом.
   static const double rowWidth = 900;
@@ -450,6 +469,12 @@ final class RelayAssistants extends StatefulWidget {
 
 final class _RelayAssistantsState extends State<RelayAssistants> {
   final GlobalKey _details = GlobalKey();
+  final GlobalKey _roles = GlobalKey();
+
+  /// Чьи имя, род и стиль раскрыты под «Режимом» («Изменить» на
+  /// карточке); `null` — ничьи: вкладка короче, стиль и обращение и так
+  /// видны на карточках.
+  String? _editing;
 
   PersonaSettings get _personas => widget.settings.personas;
 
@@ -474,8 +499,21 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
     );
   }
 
-  void _edit() {
-    final target = _details.currentContext;
+  void _edit(Persona persona) {
+    setState(() => _editing = persona.id);
+    // Раскрытый блок — после перестройки: тогда к нему и прокрутка.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _reveal(_details);
+    });
+  }
+
+  void _openRoles() {
+    if (widget.onOpenRoles case final VoidCallback open) return open();
+    _reveal(_roles);
+  }
+
+  void _reveal(GlobalKey key) {
+    final target = key.currentContext;
     if (target == null) return;
     Scrollable.ensureVisible(
       target,
@@ -509,8 +547,8 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
                   // Связной всегда включён; помощников включает режим.
                   canToggle: persona.id != cast.responder.id,
                   onActive: (bool v) => _setActive(persona, v),
-                  onEdit: _edit,
-                  onOpenRoles: widget.onOpenRoles,
+                  onEdit: () => _edit(persona),
+                  onOpenRoles: _openRoles,
                 ),
             ];
             if (constraints.maxWidth >= RelayAssistants.rowWidth) {
@@ -537,12 +575,6 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
             );
           },
         ),
-        const SizedBox(height: 12),
-        Text(
-          'Журнал помощников — в планах',
-          key: Key('assistants-journal-planned'),
-          style: metaStyle(context),
-        ),
         const SizedBox(height: 24),
         KeyedSubtree(
           key: _details,
@@ -553,7 +585,38 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
               settings: widget.settings,
               onChanged: widget.onChanged,
               registry: widget.registry,
+              // Вкладка и так «Помощники»: заголовок не повторяется.
+              showHeader: false,
+              editing: _editing,
+              onEditing: (String? id) => setState(() => _editing = id),
             ),
+          ),
+        ),
+        // Роли ведут помощники (ADR-016): их выбор — рядом с обязанностями.
+        if (widget.registry.roles.isNotEmpty)
+          KeyedSubtree(
+            key: _roles,
+            child: InsetGroupScope(
+              side: 0,
+              child: RolesSection(
+                registry: widget.registry,
+                settings: widget.settings,
+                onChanged: widget.onChanged,
+                connections: widget.connections,
+              ),
+            ),
+          ),
+        // В самом конце, а не между карточками и их настройками: строка о
+        // будущем не разрывает вкладку.
+        // Отступ — как у подписей групп над ней (AppSpace.rowH): одна
+        // левая линия у «Роли» и у этой строки.
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpace.rowH),
+          child: Text(
+            'Журнал помощников — в планах',
+            key: const Key('assistants-journal-planned'),
+            style: metaStyle(context),
           ),
         ),
       ],
@@ -654,11 +717,11 @@ final class _PersonaCard extends StatelessWidget {
           _Fact(label: 'Стиль', value: style),
           _Fact(label: 'Обращение', value: address),
           if (roles.isNotEmpty)
-            // Кнопка для диктора: «Ведёт: Личное. Роли — в «Настройках»».
+            // Кнопка для диктора: «Ведёт: Личное», переход к «Ролям».
             Semantics(
               button: true,
               label: 'Ведёт: ${roles.join(', ')}',
-              hint: 'Открыть роли в настройках',
+              hint: 'Перейти к ролям',
               onTap: onOpenRoles,
               excludeSemantics: true,
               child: InkWell(

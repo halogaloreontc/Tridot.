@@ -115,4 +115,45 @@ void main() {
     expect(await opener.reveal('/data/user/0/app/app_flutter/a.zip'), isFalse);
     expect(calls, hasLength(1));
   });
+
+  test('имя для показа: Android передаёт его каналу, компьютер — нет',
+      () async {
+    const channel = MethodChannel('tridot/files');
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      calls.add(call);
+      return true;
+    });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+    final android = FileOpener(platform: JobPlatform.android);
+    const stored = '/data/app/assistant/chats/files/s/m_1_0-0.pdf';
+    expect(await android.open(stored, name: 'Отчёт за ноябрь.pdf'), isTrue);
+    expect(calls.single.arguments, <String, Object?>{
+      'path': stored,
+      'name': 'Отчёт за ноябрь.pdf',
+    });
+    calls.clear();
+    expect(await android.open(stored), isTrue);
+    expect(calls.single.arguments, <String, Object?>{'path': stored});
+
+    final started = <List<String>>[];
+    final linux = FileOpener(
+      platform: JobPlatform.linux,
+      start: (
+        String exe,
+        List<String> args, {
+        bool runInShell = false,
+        ProcessStartMode mode = ProcessStartMode.normal,
+      }) async {
+        started.add(args);
+        return _FakeProcess();
+      },
+    );
+    expect(await linux.open('/home/u/a.pdf', name: 'Другое имя.pdf'), isTrue);
+    expect(started.single, <String>['/home/u/a.pdf']);
+  });
 }

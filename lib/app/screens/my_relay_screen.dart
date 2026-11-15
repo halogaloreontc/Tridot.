@@ -5,15 +5,14 @@ import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
 import '../layout.dart';
 import '../shell/relay_drawer.dart';
-import '../widgets/app_name_text.dart';
+import '../shell/session_files_panel.dart' show metaLines;
 
-/// Вкладки «Мой Tridot».
-enum MyRelayTab { summary, activity, assistants, settings }
+/// Вкладки «Мой Связной».
+enum MyRelayTab { summary, assistants, settings }
 
 extension MyRelayTabInfo on MyRelayTab {
   String get title => switch (this) {
         MyRelayTab.summary => 'Сводка',
-        MyRelayTab.activity => 'Активность',
         MyRelayTab.assistants => 'Помощники',
         MyRelayTab.settings => 'Настройки',
       };
@@ -39,8 +38,8 @@ TextSpan statsSpan(String stats, AppPalette colors) {
   return TextSpan(children: children);
 }
 
-/// «Мой Tridot» (макет «Д»): шапка со знаками помощников, вкладки
-/// «Сводка», «Активность», «Помощники», «Настройки». Раздел внутри
+/// «Мой Связной» (макет «Д»): шапка со знаками помощников, вкладки
+/// «Сводка» (с активностью и выполненными), «Помощники», «Настройки». Раздел внутри
 /// оболочки, а не отдельный маршрут: на широком экране рядом остаётся
 /// меню.
 final class MyRelayScreen extends StatefulWidget {
@@ -49,7 +48,6 @@ final class MyRelayScreen extends StatefulWidget {
     required this.tab,
     required this.onTabChanged,
     required this.summary,
-    required this.activity,
     required this.assistants,
     required this.settings,
     this.onBack,
@@ -63,7 +61,6 @@ final class MyRelayScreen extends StatefulWidget {
   final MyRelayTab tab;
   final ValueChanged<MyRelayTab> onTabChanged;
   final Widget summary;
-  final Widget activity;
   final Widget assistants;
   final Widget settings;
 
@@ -155,10 +152,11 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
                       Semantics(
                         header: true,
                         child: Text.rich(
-                          appNameSpan(
-                            AppInfo.hubName,
-                            TextStyle(
-                              // Крупный шрифт на телефоне — мельче, чтобы «Tridot» не рвался.
+                          TextSpan(
+                            text: AppInfo.hubName,
+                            style: TextStyle(
+                              // Крупный шрифт на телефоне — мельче, чтобы
+                              // «Связной» не рвался.
                               fontSize: phone
                                   ? (MediaQuery.textScalerOf(context).scale(1) >
                                           1.3
@@ -173,6 +171,13 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
+                          // Заголовок и так крупный: на телефоне растёт не
+                          // больше чем в 1,6 раза, и «Связной» при шрифте
+                          // ×2 на 320 помещается целиком, без «…».
+                          textScaler: phone
+                              ? MediaQuery.textScalerOf(context)
+                                  .clamp(maxScaleFactor: 1.6)
+                              : null,
                         ),
                       ),
                       if (stats != null && !phone) ...<Widget>[
@@ -194,6 +199,10 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
           Expanded(
             child: TabBarView(
               controller: _tabs,
+              // Телефон: вкладки переключают сегменты, а свайп вправо с
+              // любой вкладки открывает меню (как в сессии) — а не
+              // листает на предыдущую.
+              physics: phone ? const NeverScrollableScrollPhysics() : null,
               children: <Widget>[
                 // Телефон: статистика — только в «Сводке», над её
                 // содержимым, а не закреплена над всеми вкладками: там
@@ -211,7 +220,6 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
                   )
                 else
                   widget.summary,
-                widget.activity,
                 widget.assistants,
                 widget.settings,
               ],
@@ -223,7 +231,7 @@ final class _MyRelayScreenState extends State<MyRelayScreen>
   }
 }
 
-/// Строка статистики «Мой Tridot»: числа ярче подписей. [pairs] —
+/// Строка статистики «Мой Связной»: числа ярче подписей. [pairs] —
 /// телефон: по две фразы в строке, фраза и пара не разрываются, пока
 /// помещаются; иначе фразы переносятся целиком, как в D-Desk-Summary.
 /// Диктор читает фразы через запятую.
@@ -259,12 +267,29 @@ final class RelayStatsLine extends StatelessWidget {
           '\u00A0·\u00A0',
           '\u00A0· ',
         );
+    final style = TextStyle(
+      fontSize: 15,
+      height: 1.45,
+      color: context.colors.muted,
+    );
     Widget line(String chunk) => Text.rich(
           statsSpan(glue(chunk), context.colors),
-          style: TextStyle(
-            fontSize: 15,
-            height: 1.45,
-            color: context.colors.muted,
+          style: style,
+        );
+    // Пара не входит (узкий экран, крупный шрифт) — фразы на своих
+    // строках и без «·»: строка не кончается голой точкой (metaLines).
+    Widget pair(String chunk) => LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints box) => Text.rich(
+            statsSpan(
+              metaLines(
+                glue(chunk),
+                DefaultTextStyle.of(context).style.merge(style),
+                MediaQuery.textScalerOf(context),
+                box.maxWidth,
+              ),
+              context.colors,
+            ),
+            style: style,
           ),
         );
     final parts = chunks(stats, pairs: pairs);
@@ -274,7 +299,7 @@ final class RelayStatsLine extends StatelessWidget {
       child: pairs
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[for (final chunk in parts) line(chunk)],
+              children: <Widget>[for (final chunk in parts) pair(chunk)],
             )
           : Wrap(
               spacing: 6,
@@ -284,11 +309,12 @@ final class RelayStatsLine extends StatelessWidget {
   }
 }
 
-/// Вкладки «Мой Tridot» — сегменты в капсуле (макет «Д»): дорожка
+/// Вкладки «Мой Связной» — сегменты в капсуле (макет «Д»): дорожка
 /// `raised` в тёмной теме и `bubble` в светлой, выбранный сегмент — на
 /// уровень светлее поверх неё (`bubble` / `workspace`), высота 44.
-/// Не помещаются (узкий экран, крупный шрифт) — прокручиваются с отступом
-/// 16 по краям.
+/// Помещаются — делят ширину строки между собой, и ни одна вкладка не
+/// уходит за край. Не помещаются (узкий экран, крупный шрифт) —
+/// прокручиваются с отступом 16 по краям.
 final class _Segments extends StatelessWidget {
   const _Segments({
     required this.selected,
@@ -300,51 +326,173 @@ final class _Segments extends StatelessWidget {
   final bool phone;
   final ValueChanged<MyRelayTab> onSelected;
 
+  static const EdgeInsets _outer = EdgeInsets.fromLTRB(16, 6, 16, 2);
+
+  /// Отступ подписи внутри сегмента, когда вкладки прокручиваются.
+  double get _pad => phone ? 10 : 18;
+
+  /// Наименьший отступ, с которым вкладки ещё делят ширину строки: на
+  /// телефоне 390 все три так помещаются целиком и с крупным шрифтом.
+  double get _minPad => phone ? 10 : 18;
+
+  TextStyle _style(BuildContext context, {required bool active}) => TextStyle(
+        fontSize: 15,
+        fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+        color: active ? context.colors.textStrong : context.colors.text,
+      );
+
+  /// Ширины подписей, если бы каждая была выбрана (полужирная — самая
+  /// широкая): выбор вкладки не сдвигает соседей.
+  List<double> _widths(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final base = DefaultTextStyle.of(context).style;
+    return <double>[
+      for (final tab in MyRelayTab.values)
+        () {
+          final painter = TextPainter(
+            text: TextSpan(
+              text: tab.title,
+              style: base.merge(_style(context, active: true)),
+            ),
+            textDirection: TextDirection.ltr,
+            textScaler: scaler,
+            maxLines: 1,
+          )..layout();
+          final width = painter.width;
+          painter.dispose();
+          return width;
+        }(),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      key: const Key('my-relay-tabs'),
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
-      child: Container(
-        padding: const EdgeInsets.all(2),
-        // Сегменты заливкой без рамки: дорожка — пузырь, выбранный — лист.
-        decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? context.colors.raised
-              : context.colors.bubble,
-          borderRadius: BorderRadius.circular(AppRadius.field),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            for (final tab in MyRelayTab.values)
-              _segment(context, tab, active: tab == selected),
-          ],
-        ),
-      ),
+    // Сегменты заливкой без рамки: дорожка — пузырь, выбранный — лист.
+    final track = BoxDecoration(
+      color: Theme.of(context).brightness == Brightness.dark
+          ? context.colors.raised
+          : context.colors.bubble,
+      borderRadius: BorderRadius.circular(AppRadius.field),
+    );
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final widths = _widths(context);
+        final need = widths.fold<double>(0, (double a, double b) => a + b) +
+            2 * _minPad * widths.length;
+        final room = constraints.maxWidth - _outer.horizontal - 4;
+        if (need <= room) {
+          // Помещаются: лишнее место — поровну каждому сегменту.
+          final extra = (room - need) / widths.length;
+          return Padding(
+            key: const Key('my-relay-tabs'),
+            padding: _outer,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: track,
+              child: Row(
+                children: <Widget>[
+                  for (final (i, tab) in MyRelayTab.values.indexed)
+                    SizedBox(
+                      width: widths[i] + 2 * _minPad + extra,
+                      child: _segment(
+                        context,
+                        tab,
+                        active: tab == selected,
+                        pad: _minPad,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }
+        // Прокрутка: края полосы гаснут на ширине поля (16), поэтому
+        // сегмент у края не обрезан ножом, а уходит в фон; в начале и в
+        // конце прокрутки поле пустое и гаснуть нечему.
+        return ShaderMask(
+          shaderCallback: (Rect bounds) {
+            final edge = bounds.width <= 0 ? 0.0 : _outer.left / bounds.width;
+            return LinearGradient(
+              // Маска, а не цвет: важна только непрозрачность.
+              colors: const <Color>[
+                Colors.transparent,
+                Colors.black,
+                Colors.black,
+                Colors.transparent,
+              ],
+              stops: <double>[0, edge, 1 - edge, 1],
+            ).createShader(bounds);
+          },
+          blendMode: BlendMode.dstIn,
+          child: _scrolling(context, track),
+        );
+      },
     );
   }
+
+  Widget _scrolling(BuildContext context, BoxDecoration track) =>
+      SingleChildScrollView(
+        key: const Key('my-relay-tabs'),
+        scrollDirection: Axis.horizontal,
+        padding: _outer,
+        child: Container(
+          padding: const EdgeInsets.all(2),
+          decoration: track,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              for (final tab in MyRelayTab.values)
+                _segment(
+                  context,
+                  tab,
+                  active: tab == selected,
+                  pad: _pad,
+                  reveal: true,
+                ),
+            ],
+          ),
+        ),
+      );
 
   Widget _segment(
     BuildContext context,
     MyRelayTab tab, {
     required bool active,
+    required double pad,
+    bool reveal = false,
   }) {
-    return Semantics(
+    // Прокрутка ([reveal]): выбранный сегмент выезжает к середине полосы,
+    // а у краёв прокрутка упирается в поле 16 — сегмент не остаётся
+    // наполовину за краем.
+    return Builder(
+      builder: (BuildContext segment) =>
+          _segmentBody(segment, tab, active: active, pad: pad, reveal: reveal),
+    );
+  }
+
+  Widget _segmentBody(
+    BuildContext context,
+    MyRelayTab tab, {
+    required bool active,
+    required double pad,
+    required bool reveal,
+  }) {
+    void select() => onSelected(tab);
+
+    final body = Semantics(
       button: true,
       selected: active,
       label: tab.title,
-      onTap: () => onSelected(tab),
+      onTap: select,
       excludeSemantics: true,
       child: InkWell(
         key: Key('my-relay-tab-${tab.name}'),
-        onTap: () => onSelected(tab),
+        onTap: select,
         borderRadius: BorderRadius.circular(10),
         child: Container(
           constraints: const BoxConstraints(minHeight: 44),
           alignment: Alignment.center,
-          padding: EdgeInsets.symmetric(horizontal: phone ? 10 : 18),
+          padding: EdgeInsets.symmetric(horizontal: pad),
           decoration: BoxDecoration(
             // Выбранный — на уровень светлее дорожки в обеих темах.
             color: active
@@ -358,14 +506,52 @@ final class _Segments extends StatelessWidget {
             tab.title,
             maxLines: 1,
             softWrap: false,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-              color: active ? context.colors.textStrong : context.colors.text,
-            ),
+            style: _style(context, active: active),
           ),
         ),
       ),
     );
+    return reveal ? _RevealWhenActive(active: active, child: body) : body;
   }
+}
+
+/// Сегмент прокручиваемой полосы: стал выбранным — касанием или из кода
+/// («Настройки → Помощники и роли» открывает «Помощники») — и выезжает к
+/// середине полосы, а не остаётся под краем.
+final class _RevealWhenActive extends StatefulWidget {
+  const _RevealWhenActive({required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<_RevealWhenActive> createState() => _RevealWhenActiveState();
+}
+
+final class _RevealWhenActiveState extends State<_RevealWhenActive> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _reveal(animate: false);
+  }
+
+  @override
+  void didUpdateWidget(_RevealWhenActive oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) _reveal(animate: true);
+  }
+
+  void _reveal({required bool animate}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.5,
+        duration: animate ? const Duration(milliseconds: 200) : Duration.zero,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

@@ -56,11 +56,11 @@ import 'core/voice/voice_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Лицензии шрифтов Inter, JetBrains Mono и Cormorant Unicase (SIL OFL) —
+  // Лицензии шрифтов Golos Text, JetBrains Mono и Cormorant Unicase (SIL OFL) —
   // в «Настройки → Лицензии».
   LicenseRegistry.addLicense(() async* {
-    final text = await rootBundle.loadString('assets/fonts/Inter-OFL.txt');
-    yield LicenseEntryWithLineBreaks(<String>['Inter'], text);
+    final text = await rootBundle.loadString('assets/fonts/GolosText-OFL.txt');
+    yield LicenseEntryWithLineBreaks(<String>['Golos Text'], text);
     final mono =
         await rootBundle.loadString('assets/fonts/JetBrainsMono-OFL.txt');
     yield LicenseEntryWithLineBreaks(<String>['JetBrains Mono'], mono);
