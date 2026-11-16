@@ -32,6 +32,8 @@ import io.flutter.plugin.common.MethodChannel
 class NotifyChannel(
     private val activity: Activity,
     messenger: BinaryMessenger,
+    /** Активность восстановлена из сохранённого состояния (MainActivity). */
+    restored: Boolean = false,
 ) {
     private val channel = MethodChannel(messenger, NAME)
     private var pendingRequest: MethodChannel.Result? = null
@@ -42,7 +44,7 @@ class NotifyChannel(
     init {
         channel.setMethodCallHandler(::handle)
         ensureChannels(activity)
-        launchTask = activity.intent?.getStringExtra(ReminderStore.EXTRA_TASK)
+        launchTask = takeTask(activity.intent, stale = restored)
         // Расписание могло потеряться (приложение остановили из настроек).
         ReminderStore.reschedule(activity)
     }
@@ -139,10 +141,25 @@ class NotifyChannel(
         return true
     }
 
-    /** Нажато уведомление, пока приложение открыто. */
+    /** Нажато уведомление или строка виджета, пока приложение открыто. */
     fun onNewIntent(intent: Intent) {
-        val taskId = intent.getStringExtra(ReminderStore.EXTRA_TASK) ?: return
+        val taskId = takeTask(intent) ?: return
         channel.invokeMethod("openTask", taskId)
+    }
+
+    /**
+     * Задача из уведомления или строки виджета — один раз: из намерения
+     * она убирается. Запуск из «Недавних» и восстановление после
+     * остановки процесса ([stale]) приносят прежнее намерение заново — его
+     * не читаем, иначе чат задачи открывался бы при каждом возврате в
+     * приложение.
+     */
+    private fun takeTask(intent: Intent?, stale: Boolean = false): String? {
+        if (intent == null) return null
+        val taskId = intent.getStringExtra(ReminderStore.EXTRA_TASK) ?: return null
+        intent.removeExtra(ReminderStore.EXTRA_TASK)
+        if (stale || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
+        return taskId
     }
 
     private fun exactStatus(): String {

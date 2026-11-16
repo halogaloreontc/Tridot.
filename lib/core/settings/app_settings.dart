@@ -78,6 +78,7 @@ final class AppSettings {
     this.appLock = false,
     this.appLockAfter = 60,
     this.formDefaults = const <String, String>{},
+    this.homeScreenShowText = true,
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -124,6 +125,7 @@ final class AppSettings {
       appLock: json['security.app_lock'] == true,
       appLockAfter: _lockAfter(json['security.app_lock_after']),
       formDefaults: cleanFormDefaults(json['form_defaults']),
+      homeScreenShowText: json['widgets.show_text'] != false,
     );
   }
 
@@ -348,6 +350,15 @@ final class AppSettings {
   /// если во фразе не сказано другое. Только коды, без файлов и путей.
   final Map<String, String> formDefaults;
 
+  /// Виджеты рабочего стола (ADR-034) показывают названия задач и
+  /// последнюю запись. Выключено — только число дел. По умолчанию
+  /// включено; при входе по отпечатку ([appLock]) текст не показывается
+  /// в любом случае.
+  final bool homeScreenShowText;
+
+  /// Текст задач уходит на виджет: включён показ и нет входа по отпечатку.
+  bool get homeScreenText => homeScreenShowText && !appLock;
+
   AppSettings copyWith({
     AppAppearance? appearance,
     bool? reduceMotion,
@@ -376,6 +387,7 @@ final class AppSettings {
     bool? appLock,
     int? appLockAfter,
     Map<String, String>? formDefaults,
+    bool? homeScreenShowText,
   }) =>
       AppSettings(
         appearance: appearance ?? this.appearance,
@@ -406,6 +418,7 @@ final class AppSettings {
         appLock: appLock ?? this.appLock,
         appLockAfter: appLockAfter ?? this.appLockAfter,
         formDefaults: formDefaults ?? this.formDefaults,
+        homeScreenShowText: homeScreenShowText ?? this.homeScreenShowText,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -460,6 +473,7 @@ final class AppSettings {
             for (final key in formDefaults.keys.toList()..sort())
               key: formDefaults[key]!,
           },
+        if (!homeScreenShowText) 'widgets.show_text': false,
       };
 }
 

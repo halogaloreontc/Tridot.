@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Сегодня» (ADR-034): шапка и строки задач. Строки добавляет код (HomeScreenRenderer) — только целиком, что не поместилось — «ещё N». Корень — @android:id/background: по нему Android 12+ скругляет виджет системным радиусом. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingBottom="6dp"
+    android:background="@drawable/hw_bg"
+    android:clipToOutline="true">
+    <include layout="@layout/hw_header" />
+    <LinearLayout
+        android:id="@+id/hw_rows"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical" />
+</LinearLayout>

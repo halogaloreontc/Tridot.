@@ -2,10 +2,14 @@ package com.example.local_assistant
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.res.Configuration
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
+import com.example.local_assistant.homescreen.HomeScreenChannel
+import com.example.local_assistant.homescreen.HomeScreenWidgets
 import com.example.local_assistant.media.MediaChannel
 import com.example.local_assistant.notify.NotifyChannel
 import com.example.local_assistant.voice.VoiceChannel
@@ -21,6 +25,22 @@ class MainActivity : FlutterActivity() {
     private var notify: NotifyChannel? = null
     private var links: LinksChannel? = null
     private var incoming: IncomingLinkChannel? = null
+    private var homeScreen: HomeScreenChannel? = null
+    private var fontScale = 0f
+
+    /**
+     * Активность восстановлена после остановки процесса (из «Недавних»
+     * или по значку): система снова приносит намерение, которым задачу
+     * когда-то открыли, — микрофон, поле или чат задачи с виджета и
+     * уведомления, ссылку склада. Каналы его не исполняют повторно.
+     */
+    private var restored = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        // До super.onCreate: каналы создаются внутри него (configureFlutterEngine).
+        restored = savedInstanceState != null
+        super.onCreate(savedInstanceState)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -34,7 +54,7 @@ class MainActivity : FlutterActivity() {
         DeviceAuthChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         // Уведомления о задачах и будильник в «Часах» (ADR-029): только на
         // устройстве, без сети.
-        notify = NotifyChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        notify = NotifyChannel(this, flutterEngine.dartExecutor.binaryMessenger, restored)
         // Своя страница и приложение погоды (ADR-030): открывает система,
         // канал в сеть не ходит.
         links = LinksChannel(this, flutterEngine.dartExecutor.binaryMessenger)
@@ -42,7 +62,11 @@ class MainActivity : FlutterActivity() {
         // «Открыть в Tridot» и «Поделиться» ссылкой или QR — в окно
         // подтверждения.
         SecretsChannel(flutterEngine.dartExecutor.binaryMessenger)
-        incoming = IncomingLinkChannel(this, flutterEngine.dartExecutor.binaryMessenger)
+        incoming = IncomingLinkChannel(this, flutterEngine.dartExecutor.binaryMessenger, restored)
+        // Виджеты рабочего стола (ADR-034): снимок «Сегодня», очередь
+        // отметок «выполнено», «Что сделать?» и микрофон с виджета.
+        homeScreen = HomeScreenChannel(this, flutterEngine.dartExecutor.binaryMessenger, restored)
+        fontScale = resources.configuration.fontScale
         // Голосовой ввод распознаванием телефона (ADR-023): только
         // createOnDeviceSpeechRecognizer, звук не уходит с устройства.
         disposeVoice = VoiceChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
@@ -88,7 +112,21 @@ class MainActivity : FlutterActivity() {
         notify = null
         links = null
         incoming = null
+        homeScreen?.dispose()
+        homeScreen = null
         super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    /**
+     * Сменили масштаб шрифта (Tridot сам перерисовывается — configChanges):
+     * строки виджетов считаются по шрифту, их число нужно пересчитать.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (newConfig.fontScale != fontScale) {
+            fontScale = newConfig.fontScale
+            HomeScreenWidgets.updateAll(this)
+        }
     }
 
     /** Ответ системного выбора «Другое приложение…» (погода). */
@@ -108,10 +146,14 @@ class MainActivity : FlutterActivity() {
         notify?.onRequestPermissionsResult(requestCode)
     }
 
-    /** Нажато уведомление, пока приложение открыто: чат задачи. */
+    /**
+     * Ссылка склада, поле или микрофон виджета, нажатое уведомление или
+     * строка виджета (чат задачи), пока приложение открыто.
+     */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         if (incoming?.onNewIntent(intent) == true) return
+        if (homeScreen?.onNewIntent(intent) == true) return
         notify?.onNewIntent(intent)
     }
 

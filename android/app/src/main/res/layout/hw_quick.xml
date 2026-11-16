@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Быстрый ввод» (ADR-034): тонкая полоса 48 dp посередине ячейки, корень
+     прозрачный и без полей. Знак Tridot и микрофон — цветом акцента,
+     «Что сделать?» — подпись, а не поле ввода: нажатие открывает Tridot
+     с клавиатурой, микрофон — сразу голосовой ввод. Подпись — в столбце
+     названий «Сегодня», когда виджеты стоят друг под другом; при очень
+     крупном шрифте на узком виджете она мельчает до 13 sp, а не
+     обрезается. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <LinearLayout
+        android:id="@android:id/background"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_gravity="center_vertical"
+        android:orientation="horizontal"
+        android:baselineAligned="false"
+        android:background="@drawable/hw_pill"
+        android:clipToOutline="true">
+        <LinearLayout
+            android:id="@+id/hw_pill_body"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/hw_pill_press">
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="18dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/hw_mark" />
+            <TextView
+                android:id="@+id/hw_hint"
+                style="@style/HwHint"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_marginStart="16dp"
+                android:singleLine="false"
+                android:maxLines="1"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="13sp"
+                android:autoSizeMaxTextSize="16sp"
+                android:autoSizeStepGranularity="1sp"
+                android:text="@string/hw_hint" />
+        </LinearLayout>
+        <FrameLayout
+            android:id="@+id/hw_mic_zone"
+            android:layout_width="48dp"
+            android:layout_height="match_parent"
+            android:background="@drawable/hw_pill_press"
+            android:contentDescription="@string/hw_voice">
+            <ImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/hw_mic" />
+        </FrameLayout>
+    </LinearLayout>
+</FrameLayout>

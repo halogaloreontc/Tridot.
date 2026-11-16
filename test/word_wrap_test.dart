@@ -17,6 +17,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/files/file_opener.dart';
 import 'package:local_assistant/app/home_page.dart';
+import 'package:local_assistant/app/homescreen/home_screen_channel.dart';
+import 'package:local_assistant/app/homescreen/home_screen_section.dart';
 import 'package:local_assistant/app/jobs/job_hub.dart';
 import 'package:local_assistant/app/passwords/backup_screens.dart';
 import 'package:local_assistant/app/passwords/clipboard_guard.dart';
@@ -69,6 +71,7 @@ import 'package:path/path.dart' as p;
 
 import 'passwords/vault_test_support.dart';
 import 'support/app_fonts.dart';
+import 'support/fake_home_screen.dart';
 import 'support/fake_voice.dart';
 import 'support/home_nav.dart';
 import 'support/word_wrap_guard.dart';
@@ -571,6 +574,57 @@ void main() {
       await tester.tap(row);
       await tester.pumpAndSettle();
       await _checkScrolling(tester, '$label: оформление');
+    });
+  });
+
+  group('виджеты рабочего стола', () {
+    // «Настройки → Виджеты» (ADR-034): все состояния группы одна под
+    // другой — обычное, виджет уже стоит, вход по отпечатку, лаунчер не
+    // добавляет по просьбе.
+    _phones('группа «Виджеты»', (tester, label) async {
+      Widget section(
+        FakeHomeScreen platform, {
+        AppSettings settings = const AppSettings(),
+        bool voice = true,
+      }) =>
+          HomeScreenSection(
+            platform: platform,
+            settings: settings,
+            onChanged: (_) {},
+            voice: voice,
+          );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: _theme(),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  section(
+                    FakeHomeScreen(
+                      installed: <HomeScreenKind, int>{
+                        HomeScreenKind.today: 1,
+                      },
+                    ),
+                  ),
+                  section(
+                    FakeHomeScreen(),
+                    settings: const AppSettings(appLock: true),
+                    voice: false,
+                  ),
+                  section(FakeHomeScreen(canPin: false)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Виджеты'), findsNWidgets(3));
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      await _checkScrolling(tester, label);
     });
   });
 

@@ -17,6 +17,7 @@ import 'app/files/file_opener.dart';
 import 'app/jobs/job_picker.dart';
 import 'app/jobs/media_channel_bridge.dart';
 import 'app/home_page.dart';
+import 'app/homescreen/home_screen_channel.dart';
 import 'app/notify/notify_channel.dart';
 import 'app/passwords/device_keys.dart';
 import 'app/passwords/passwords_kit.dart';
@@ -271,6 +272,10 @@ Future<void> main() async {
   // Уведомления о задачах и будильник в «Часах» (ADR-029): свой канал
   // `tridot/notify` на Android и macOS, на остальных — нет.
   final notify = NotifyPlatform.current();
+  // Виджеты рабочего стола (ADR-034): «Сегодня», «Быстрый ввод» и оба
+  // вместе — свой канал `tridot/homescreen`, только Android. Снимок задач
+  // остаётся на устройстве.
+  final homeScreen = HomeScreenPlatform.current();
   // Погода (ADR-030): выключена по умолчанию; Open-Meteo — только после
   // «Разрешить», своя ссылка и приложение открываются системой. Настройки
   // и кэш — в <поддержка>/assistant/weather, на устройстве.
@@ -389,6 +394,7 @@ Future<void> main() async {
       ytdl: ytdl,
       weather: weather,
       notify: notify,
+      homeScreen: homeScreen,
       incoming: incoming,
       signals: signals,
       initialAppearance: early.appearance,
@@ -508,6 +514,7 @@ final class AssistantApp extends StatefulWidget {
     this.ytdl,
     this.weather,
     this.notify,
+    this.homeScreen,
     this.appLock,
     this.incoming,
     this.signals = const <WarehouseSignals>[],
@@ -558,6 +565,9 @@ final class AssistantApp extends StatefulWidget {
 
   /// Уведомления и будильник (ADR-029); `null` — их нет.
   final NotifyPlatform? notify;
+
+  /// Виджеты рабочего стола (ADR-034); `null` — их нет.
+  final HomeScreenPlatform? homeScreen;
 
   /// «Открыть в Tridot» и «Поделиться» (ADR-031); `null` — нет.
   final IncomingLinks? incoming;
@@ -613,6 +623,7 @@ final class _AssistantAppState extends State<AssistantApp> {
       incoming: widget.incoming,
       signals: widget.signals,
       notify: widget.notify,
+      homeScreen: widget.homeScreen,
       appLock: widget.appLock,
       onAppearanceChanged: (AppAppearance appearance) =>
           _themeMode.value = themeModeOf(appearance),

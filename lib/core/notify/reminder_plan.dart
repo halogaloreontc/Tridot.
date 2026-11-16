@@ -1,3 +1,4 @@
+import '../formatting/one_line.dart';
 import '../models/task.dart';
 
 /// Одно системное напоминание о задаче (ADR-029): когда и что показать.
@@ -105,7 +106,7 @@ abstract final class ReminderPlan {
           id: '${task.id}@${at.millisecondsSinceEpoch ~/ 60000}',
           taskId: task.id,
           at: at,
-          title: _title(task.title),
+          title: oneLine(task.title, max: maxTitle),
           persona: persona,
         ),
       );
@@ -130,16 +131,5 @@ abstract final class ReminderPlan {
                 .isAfter(today))
           task.id,
     };
-  }
-
-  /// Название в одну строку, без управляющих знаков, не длиннее
-  /// [maxTitle].
-  static String _title(String title) {
-    final text = title
-        .replaceAll(RegExp(r'[\u0000-\u001f\u007f-\u009f]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    if (text.runes.length <= maxTitle) return text;
-    return '${String.fromCharCodes(text.runes.take(maxTitle - 1))}…';
   }
 }

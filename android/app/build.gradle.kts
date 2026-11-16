@@ -60,6 +60,14 @@ android {
         }
     }
 
+    // Тесты виджетов рабочего стола (ADR-034) на Robolectric: ресурсы
+    // приложения нужны, чтобы рисовать настоящие макеты.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -101,4 +109,25 @@ dependencies {
     implementation("androidx.media3:media3-transformer:1.11.1")
     implementation("androidx.media3:media3-effect:1.11.1")
     implementation("androidx.media3:media3-common:1.11.1")
+}
+
+dependencies {
+    // Тесты виджетов рабочего стола (ADR-034): только для
+    // `./gradlew :app:testDebugUnitTest`, в APK не попадают.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.18")
+    testImplementation("androidx.test:core:1.7.0")
+}
+
+// Модульные тесты берут ресурсы из сборки Flutter (copyFlutterAssets*), а
+// Gradle требует явного порядка между этими задачами.
+tasks.matching { it.name.startsWith("package") && it.name.endsWith("UnitTestForUnitTest") }
+    .configureEach {
+        mustRunAfter("copyFlutterAssets" + name.removePrefix("package").removeSuffix("UnitTestForUnitTest"))
+    }
+
+tasks.withType<Test>().configureEach {
+    maxHeapSize = "2g"
+    // Снимки виджетов в PNG: `-Ptridot.shots=<папка>` (без него не пишутся).
+    (project.findProperty("tridot.shots") as String?)?.let { systemProperty("tridot.shots", it) }
 }

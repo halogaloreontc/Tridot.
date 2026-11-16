@@ -250,10 +250,13 @@ final class TaskService {
       .replaceAll('ё', 'е')
       .replaceAll(RegExp(r'\s+'), ' ');
 
-  Future<Task> complete(String id) async {
+  /// Завершает задачу. [at] — когда её отметили на самом деле: отметка на
+  /// виджете рабочего стола применяется позже нажатия (ADR-034), а в
+  /// статистику и в отмену идёт время нажатия.
+  Future<Task> complete(String id, {DateTime? at}) async {
     final task = await _requireTask(id);
     if (task.status == TaskStatus.done) return task;
-    final now = _clock.now();
+    final now = at ?? _clock.now();
     final updated = task.copyWith(
       status: TaskStatus.done,
       completedAt: now,
@@ -261,6 +264,12 @@ final class TaskService {
     );
     await _repository.save(updated);
     return updated;
+  }
+
+  /// Задача [id] в любом состоянии; `null` — нет такой или удалена.
+  Future<Task?> find(String id) async {
+    final task = await _repository.get(id);
+    return task == null || task.deletedAt != null ? null : task;
   }
 
   Future<Task> reschedule(
@@ -398,14 +407,15 @@ final class TaskService {
     return updated;
   }
 
-  /// Возвращает завершённую задачу в работу.
-  Future<Task> reopen(String id) async {
+  /// Возвращает завершённую задачу в работу. [at] — когда это сделали на
+  /// самом деле (отмена отметки на виджете, ADR-034).
+  Future<Task> reopen(String id, {DateTime? at}) async {
     final task = await _requireTask(id);
     if (task.status != TaskStatus.done) return task;
     final updated = task.copyWith(
       status: task.dueAt == null ? TaskStatus.inbox : TaskStatus.planned,
       clearCompletedAt: true,
-      updatedAt: _clock.now(),
+      updatedAt: at ?? _clock.now(),
     );
     await _repository.save(updated);
     return updated;

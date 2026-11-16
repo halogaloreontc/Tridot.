@@ -7,10 +7,13 @@ import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/extensions/extension_registry.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/skills/converter/convert_caps.dart';
+import '../../core/voice/voice_recognizer.dart';
 import '../assistant_theme.dart';
 import '../extensions/tool_kit.dart';
 import '../extensions/weather_kit.dart';
 import '../extensions/ytdl_kit.dart';
+import '../homescreen/home_screen_channel.dart';
+import '../homescreen/home_screen_section.dart';
 import '../passwords/passwords_kit.dart';
 import '../shell/relay_drawer.dart';
 import '../voice/voice_kit.dart';
@@ -47,7 +50,12 @@ class SettingsScreen extends StatelessWidget {
     this.weather,
     this.appLock,
     this.notify,
+    this.homeScreen,
   });
+
+  /// Виджеты рабочего стола (ADR-034): группа «Виджеты», если они есть на
+  /// этом устройстве (Android).
+  final HomeScreenPlatform? homeScreen;
 
   /// Уведомления и будильник (ADR-029): группа «Разрешения», если на этом
   /// устройстве есть системные уведомления.
@@ -227,6 +235,15 @@ class SettingsScreen extends StatelessWidget {
                     platform: platform,
                     settings: settings,
                     onChanged: onChanged,
+                  ),
+                if (homeScreen case final HomeScreenPlatform platform
+                    when platform.supported)
+                  HomeScreenSection(
+                    platform: platform,
+                    settings: settings,
+                    onChanged: onChanged,
+                    voice: voice != null &&
+                        voice!.support != VoiceSupport.unsupported,
                   ),
                 if (extensions case final ExtensionRegistry registry)
                   ExtensionsSection(

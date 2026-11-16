@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../../core/formatting/due_format.dart';
-import '../../core/formatting/plural.dart';
+import '../../core/formatting/today_format.dart';
 import '../../core/models/task.dart';
 import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
 import '../layout.dart';
 import '../widgets/whole_word_text.dart';
+
+// Отбор задач и подписи сроков — без Flutter, общие с виджетом рабочего
+// стола (ADR-034).
+export '../../core/formatting/today_format.dart';
 
 /// Ждущая отметки карточка действия в «Сегодня»: «Приход 318 ждёт
 /// отметки · Нода · склад».
@@ -44,74 +48,6 @@ final class TodaySection {
   final String? semantics;
   final Color? dot;
   final VoidCallback onTap;
-}
-
-/// Задачи на «Сегодня»: на сегодня и просроченные, просроченные первыми.
-List<Task> todayTasks(List<Task> active, DateTime now) {
-  final overdue = <Task>[];
-  final today = <Task>[];
-  for (final task in active) {
-    switch (groupOf(task, now)) {
-      case TaskGroup.overdue:
-        overdue.add(task);
-      case TaskGroup.today:
-        today.add(task);
-      case TaskGroup.tomorrow || TaskGroup.later || TaskGroup.noDate:
-        break;
-    }
-  }
-  return <Task>[...overdue, ...today];
-}
-
-/// «пн, 9 ноября».
-String todayDateLabel(DateTime now) {
-  const week = <String>['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
-  const months = <String>[
-    'января',
-    'февраля',
-    'марта',
-    'апреля',
-    'мая',
-    'июня',
-    'июля',
-    'августа',
-    'сентября',
-    'октября',
-    'ноября',
-    'декабря',
-  ];
-  return '${week[now.weekday - 1]}, ${now.day} ${months[now.month - 1]}';
-}
-
-/// Подпись срока задачи в «Сегодня»: «11:00», «вечером», «без времени»,
-/// у просроченной — «…, просрочено».
-String todayDueLabel(Task task, DateTime now) {
-  final due = task.dueAt;
-  if (due == null) return 'без срока';
-  final sameDay =
-      due.year == now.year && due.month == now.month && due.day == now.day;
-  final String base;
-  if (sameDay) {
-    base = switch (task.duePrecision) {
-      DuePrecision.date => 'без времени',
-      DuePrecision.dateTime => formatTime(due),
-      DuePrecision.partOfDay => PartOfDay.of(due).label,
-    };
-  } else {
-    base = formatDue(due, task.duePrecision, now);
-  }
-  return isOverdue(task, now) ? '$base, просрочено' : base;
-}
-
-/// Итог под заголовком: «просрочена 1 задача», «3 дела», «дел нет».
-String todaySummary(int count, int overdue) {
-  if (overdue > 0) {
-    final verb = ruPlural(overdue, 'просрочена', 'просрочены', 'просрочено');
-    final noun = ruPlural(overdue, 'задача', 'задачи', 'задач');
-    return '$verb $overdue $noun';
-  }
-  if (count == 0) return 'дел нет';
-  return deeds(count);
 }
 
 /// Правая панель «Сегодня» (макет «Д»): дела на сегодня и просроченные,

@@ -18,21 +18,28 @@ import java.util.UUID
  * Прочитанное намерение очищается: код одноразовый и не должен
  * повториться при повороте экрана или возврате в приложение. Запуск из
  * «Недавних» (FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) и восстановление после
- * остановки процесса приносят прежнее намерение заново — его не читаем, а
- * намерение активности заменяем пустым (как MainActivity.handleLink в
- * DepotDesk). Картинку берём только по content:// — file:// мог бы
+ * остановки процесса ([restored]) приносят прежнее намерение заново — его
+ * не читаем, а намерение активности заменяем пустым (как
+ * MainActivity.handleLink в DepotDesk). Картинку берём только по content:// — file:// мог бы
  * указать на собственные файлы Tridot.
  */
 class IncomingLinkChannel(
     private val activity: Activity,
     messenger: BinaryMessenger,
+    /** Активность восстановлена из сохранённого состояния (MainActivity). */
+    restored: Boolean = false,
 ) {
     private val channel = MethodChannel(messenger, "tridot/incoming")
     private val main = Handler(Looper.getMainLooper())
     private var pending: Map<String, String>? = null
 
     init {
-        pending = read(activity.intent)
+        pending = if (restored) {
+            forget(activity.intent)
+            null
+        } else {
+            read(activity.intent)
+        }
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "initial" -> {
@@ -59,17 +66,22 @@ class IncomingLinkChannel(
             Intent.ACTION_SEND -> shared(intent)
             else -> null
         }
-        if (item != null) {
-            // Код одноразовый: из намерения его убираем сразу.
-            intent.data = null
-            intent.removeExtra(Intent.EXTRA_TEXT)
-            intent.removeExtra(Intent.EXTRA_STREAM)
-            intent.action = Intent.ACTION_MAIN
-            if (intent === activity.intent) {
-                activity.intent = Intent(activity, MainActivity::class.java)
-            }
-        }
+        // Код одноразовый: из намерения его убираем сразу.
+        if (item != null) forget(intent)
         return item
+    }
+
+    /** Ссылка или картинка из [intent] больше не прочитается. */
+    private fun forget(intent: Intent?) {
+        if (intent == null) return
+        if (intent.action != Intent.ACTION_VIEW && intent.action != Intent.ACTION_SEND) return
+        intent.data = null
+        intent.removeExtra(Intent.EXTRA_TEXT)
+        intent.removeExtra(Intent.EXTRA_STREAM)
+        intent.action = Intent.ACTION_MAIN
+        if (intent === activity.intent) {
+            activity.intent = Intent(activity, MainActivity::class.java)
+        }
     }
 
     private fun link(uri: Uri?): Map<String, String>? {

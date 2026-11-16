@@ -12,6 +12,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.local_assistant.MainActivity
 import com.example.local_assistant.R
+import com.example.local_assistant.homescreen.HomeScreenStore
 
 /**
  * Пришло время напоминания (ADR-029): уведомление в канале «Напоминания».
@@ -26,6 +27,23 @@ class ReminderReceiver : BroadcastReceiver() {
         val title = intent.getStringExtra(ReminderStore.EXTRA_TITLE) ?: return
         val persona = intent.getStringExtra(ReminderStore.EXTRA_PERSONA) ?: ""
         val reminder = Reminder(id, taskId, System.currentTimeMillis(), title, persona)
+        // Задачу уже отметили выполненной на виджете (ADR-034), а
+        // приложение ещё не прислало новое расписание: не напоминать. В
+        // первые секунды отметку ещё могут вернуть — тогда напоминание
+        // придёт сразу после них. «Через 10 минут» просто откладывается:
+        // через 10 минут проверка будет та же.
+        val mark = HomeScreenStore.mark(context, taskId)
+        if (mark != null && intent.action != ReminderStore.ACTION_SNOOZE) {
+            val now = HomeScreenStore.clock()
+            val end = mark.at + HomeScreenStore.LINGER
+            if (!mark.settled && now >= mark.at && now < end) {
+                ReminderStore.defer(context, reminder.copy(at = end + DEFER_SLACK))
+                return
+            }
+            ReminderStore.forget(context, id)
+            ReminderStore.dismiss(context, taskId)
+            return
+        }
         when (intent.action) {
             ReminderStore.ACTION_SNOOZE -> {
                 NotificationManagerCompat.from(context).cancel(notificationId(taskId))
@@ -38,7 +56,12 @@ class ReminderReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun notificationId(taskId: String) = taskId.hashCode()
+    private fun notificationId(taskId: String) = ReminderStore.notificationId(taskId)
+
+    private companion object {
+        /** Запас после показа отметки на виджете. */
+        const val DEFER_SLACK = 1_000L
+    }
 
     private fun show(context: Context, reminder: Reminder) {
         NotifyChannel.ensureChannels(context)

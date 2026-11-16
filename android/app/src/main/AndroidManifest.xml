@@ -104,6 +104,48 @@
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED"/>
             </intent-filter>
         </receiver>
+        <!-- Виджеты рабочего стола (ADR-034): «Сегодня», «Быстрый ввод» и
+             «Сегодня и ввод». Не экспортируются: обновления присылает
+             система. Задачи на виджете — из снимка приложения на
+             устройстве (SharedPreferences tridot_homescreen). -->
+        <receiver
+            android:name=".homescreen.TodayWidget"
+            android:exported="false"
+            android:label="@string/hw_today_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/hw_today_info" />
+        </receiver>
+        <receiver
+            android:name=".homescreen.QuickWidget"
+            android:exported="false"
+            android:label="@string/hw_quick_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/hw_quick_info" />
+        </receiver>
+        <receiver
+            android:name=".homescreen.ComboWidget"
+            android:exported="false"
+            android:label="@string/hw_combo_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/hw_combo_info" />
+        </receiver>
+        <!-- «Выполнено» и «вернуть» на виджете, перерисовка по будильнику.
+             Только для своих PendingIntent. -->
+        <receiver
+            android:name=".homescreen.HomeScreenActionReceiver"
+            android:exported="false" />
         <!-- «Открыть» у результата архиватора (ADR-024): FileProvider только
              для копий в cache/tridot-open (res/xml/file_paths.xml). -->
         <provider

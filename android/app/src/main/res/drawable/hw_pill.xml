@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Быстрый ввод»: тонкая полоса 48 dp с круглыми концами. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/hw_bg" />
+    <corners android:radius="24dp" />
+</shape>

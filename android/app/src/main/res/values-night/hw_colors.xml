@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Цвета виджетов рабочего стола (ADR-034), тёмная тема: AppPalette.dark. -->
+<resources>
+    <color name="hw_bg">#1C1C1E</color>
+    <color name="hw_field">#2C2C2E</color>
+    <color name="hw_text_strong">#FFFFFF</color>
+    <color name="hw_text">#EBEBF0</color>
+    <color name="hw_muted">#AEAEB2</color>
+    <color name="hw_faint">#98989F</color>
+    <color name="hw_icon">#A1A1A6</color>
+    <color name="hw_accent">#B69CFF</color>
+    <color name="hw_on_accent">#1C1C1E</color>
+    <color name="hw_danger">#FF8A80</color>
+    <color name="hw_border">#7C7C80</color>
+    <color name="hw_divider">#38383A</color>
+    <color name="hw_press">#1FFFFFFF</color>
+</resources>

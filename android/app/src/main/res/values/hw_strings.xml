@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Слова виджетов рабочего стола (ADR-034). Подписи сроков, названия и
+     записи задач приходят готовыми из приложения (снимок); здесь —
+     только постоянные слова. Формы «дело / дела / дел», дни недели и
+     месяцы сверяются с приложением тестом
+     test/android/home_screen_resources_test.dart. -->
+<resources>
+    <!-- Названия и описания в списке виджетов лаунчера. -->
+    <string name="hw_today_name">Сегодня</string>
+    <string name="hw_quick_name">Быстрый ввод</string>
+    <string name="hw_combo_name">Сегодня и ввод</string>
+    <string name="hw_today_description">Ближайшие и просроченные задачи. Отметить выполненную можно прямо на виджете.</string>
+    <string name="hw_quick_description">Поле «Что сделать?» и микрофон: Tridot открывается сразу с клавиатурой или слушает.</string>
+    <string name="hw_combo_description">Задачи на сегодня и поле «Что сделать?» в одном виджете.</string>
+
+    <string name="hw_today">Сегодня</string>
+    <string name="hw_hint">Что сделать?</string>
+    <string name="hw_voice">Голосовой ввод</string>
+    <string name="hw_empty">На сегодня дел нет</string>
+    <string name="hw_empty_hint">Нажмите, чтобы добавить</string>
+    <string name="hw_placeholder">Откройте Tridot — задачи появятся здесь</string>
+    <string name="hw_expired">Откройте Tridot, чтобы обновить список</string>
+    <!-- Сколько дел не поместилось. -->
+    <string name="hw_more">ещё %1$d</string>
+    <!-- Число дел в шапке после отметки на виджете (обычно фраза
+         приходит из приложения): как deeds() в lib/core/formatting/plural.dart. -->
+    <string name="hw_deeds_one">%1$d дело</string>
+    <string name="hw_deeds_few">%1$d дела</string>
+    <string name="hw_deeds_many">%1$d дел</string>
+    <!-- Дата в шапке после «Сегодня»: «· пн, 16 ноября». -->
+    <string name="hw_date">· %1$s, %2$d %3$s</string>
+    <!-- Для чтения с экрана: строка только что отмеченной задачи. -->
+    <string name="hw_done_say">выполнено</string>
+    <!-- Для чтения с экрана: кружок у задачи. -->
+    <string name="hw_mark_done">Отметить выполненной: %1$s</string>
+    <string name="hw_mark_undo">Вернуть в работу: %1$s</string>
+
+    <!-- Дата в шапке — «пн, 16 ноября», как todayDateLabel() в
+         lib/core/formatting/today_format.dart. С понедельника. -->
+    <string-array name="hw_weekdays">
+        <item>пн</item>
+        <item>вт</item>
+        <item>ср</item>
+        <item>чт</item>
+        <item>пт</item>
+        <item>сб</item>
+        <item>вс</item>
+    </string-array>
+    <string-array name="hw_months">
+        <item>января</item>
+        <item>февраля</item>
+        <item>марта</item>
+        <item>апреля</item>
+        <item>мая</item>
+        <item>июня</item>
+        <item>июля</item>
+        <item>августа</item>
+        <item>сентября</item>
+        <item>октября</item>
+        <item>ноября</item>
+        <item>декабря</item>
+    </string-array>
+
+    <!-- Образец в списке виджетов лаунчера (Android 12+): вымышленные дела. -->
+    <string name="hw_sample_count">3 дела</string>
+    <string name="hw_sample_title_1">Оплатить интернет</string>
+    <string name="hw_sample_due_1">вчера</string>
+    <string name="hw_sample_title_2">Позвонить в стоматологию</string>
+    <string name="hw_sample_due_2">11:30</string>
+    <string name="hw_sample_title_3">Забрать посылку на почте</string>
+    <string name="hw_sample_due_3">вечером</string>
+    <string name="hw_sample_note_3">Код получения 4417, окно 3</string>
+    <string name="hw_sample_title_4">Отправить отчёт</string>
+    <string name="hw_sample_due_4">завтра</string>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Скругления виджетов (ADR-034) до Android 12: свои. С Android 12 —
+     системные (values-v31/hw_dimens.xml). Поле внутри карточки «Сегодня
+     и ввод» стоит с отступом 8, поэтому его скругление меньше на столько
+     же. -->
+<resources>
+    <dimen name="hw_radius">20dp</dimen>
+    <dimen name="hw_inner_radius">12dp</dimen>
+</resources>

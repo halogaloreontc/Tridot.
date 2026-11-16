@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import androidx.core.app.NotificationManagerCompat
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -130,6 +131,38 @@ object ReminderStore {
         val next = upcoming + due
         save(context, next)
         scheduleAll(context, next)
+    }
+
+    /** Номер уведомления задачи: одно на задачу, как у ReminderReceiver. */
+    fun notificationId(taskId: String): Int = taskId.hashCode()
+
+    /**
+     * Задачу отметили выполненной на виджете (ADR-034) и показ отметки
+     * кончился: показанное уведомление убирается. Расписание остаётся —
+     * отметку можно вернуть; пока она есть, ReminderReceiver напоминание
+     * не показывает, а приложение потом пришлёт расписание без задачи.
+     */
+    fun dismiss(context: Context, taskId: String) {
+        NotificationManagerCompat.from(context).cancel(notificationId(taskId))
+    }
+
+    /**
+     * То же напоминание позже — в `reminder.at`, не раньше: задачу только
+     * что отметили на виджете, и её ещё могут вернуть (ADR-034).
+     */
+    fun defer(context: Context, reminder: Reminder) {
+        save(context, load(context).filter { it.id != reminder.id } + reminder)
+        val alarms = context.getSystemService(AlarmManager::class.java) ?: return
+        val intent = pending(context, reminder, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
+        try {
+            if (canExact(context)) {
+                alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, reminder.at, intent)
+            } else {
+                alarms.setWindow(AlarmManager.RTC_WAKEUP, reminder.at, 10 * 60_000L, intent)
+            }
+        } catch (error: SecurityException) {
+            alarms.set(AlarmManager.RTC_WAKEUP, reminder.at, intent)
+        }
     }
 
     /** Убирает показанное напоминание из расписания. */

@@ -1,12 +1,15 @@
 // Фокус поля ввода на телефоне: клавиатура открывается, только когда о
 // ней просили. Ответ, пришедший в другом разделе или под открытым
 // экраном, меню, закрытая клавиатура — не повод открыть её снова.
+// Единственное исключение — поле «Что сделать?» на виджете рабочего стола
+// (ADR-034): человек нажал на поле, только не в приложении.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
 import 'package:local_assistant/app/home_page.dart';
+import 'package:local_assistant/app/homescreen/home_screen_channel.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/models/task.dart';
@@ -17,6 +20,8 @@ import 'package:local_assistant/core/services/task_service.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
 import 'package:local_assistant/core/storage/task_repository.dart';
+
+import 'support/fake_home_screen.dart';
 
 final _clock = FixedClock(DateTime(2026, 11, 9, 12, 40));
 
@@ -44,7 +49,10 @@ final class _GatedRepository implements TaskRepository {
 
 final _navigator = GlobalKey<NavigatorState>();
 
-Future<_GatedRepository> _pump(WidgetTester tester) async {
+Future<_GatedRepository> _pump(
+  WidgetTester tester, {
+  HomeScreenPlatform? homeScreen,
+}) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -66,6 +74,7 @@ Future<_GatedRepository> _pump(WidgetTester tester) async {
         tasks: tasks,
         clock: _clock,
         settingsStore: InMemorySettingsStore(),
+        homeScreen: homeScreen,
       ),
     ),
   );
@@ -231,6 +240,55 @@ void main() {
     tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('new-session')));
+    await tester.pumpAndSettle();
+    expect(_composer(tester).hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
+  testWidgets(
+      'телефон: поле «Что сделать?» на виджете — единственный случай, когда '
+      'клавиатура открывается без нажатия на поле в приложении',
+      (tester) async {
+    final widgets = FakeHomeScreen();
+    await _pump(tester, homeScreen: widgets);
+    await _typeAndSend(tester, 'привет');
+    await _pumpFor(tester);
+    await tester.pumpAndSettle();
+    FocusManager.instance.primaryFocus?.unfocus();
+    await _keyboard(tester, shown: false);
+    // «Новая сессия» в меню — без клавиатуры, как и раньше.
+    tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('new-session')));
+    await tester.pumpAndSettle();
+    expect(_composer(tester).hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+    // Нажали поле на виджете — клавиатура открыта.
+    widgets.launched.add(HomeScreenLaunch.compose);
+    await tester.pumpAndSettle();
+    expect(_composer(tester).hasPrimaryFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+    // Закрыли клавиатуру — дальше всё по-прежнему: меню её не возвращает.
+    await _keyboard(tester, shown: true);
+    await _keyboard(tester, shown: false);
+    expect(_composer(tester).hasFocus, isFalse);
+    await tester.dragFrom(const Offset(150, 300), const Offset(220, 0));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(380, 400));
+    await tester.pumpAndSettle();
+    expect(_composer(tester).hasFocus, isFalse);
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
+  testWidgets('телефон: отметка на виджете и новый снимок — без клавиатуры',
+      (tester) async {
+    final widgets = FakeHomeScreen();
+    await _pump(tester, homeScreen: widgets);
+    expect(_composer(tester).hasFocus, isFalse);
+    // Задачу отметили на виджете, системе понадобился снимок: приложение
+    // работает молча, поле ввода не трогает.
+    widgets.changed.add(null);
+    widgets.wanted.add(null);
     await tester.pumpAndSettle();
     expect(_composer(tester).hasFocus, isFalse);
     expect(tester.testTextInput.isVisible, isFalse);

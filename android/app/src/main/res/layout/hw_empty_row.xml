@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «На сегодня дел нет» первой строкой, когда ниже — только ближайшие
+     задачи (их сроки сами говорят «завтра»). Не ниже 40 dp, отступы 8 + 8.
+     Не нажимается: Tridot открывает шапка. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/hw_empty_row"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+    <TextView
+        style="@style/HwTitleMuted"
+        android:layout_width="match_parent"
+        android:minHeight="40dp"
+        android:gravity="center_vertical"
+        android:paddingStart="50dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"
+        android:text="@string/hw_empty" />
+    <FrameLayout
+        android:id="@+id/hw_divider"
+        android:layout_width="match_parent"
+        android:layout_height="1px"
+        android:layout_gravity="top"
+        android:layout_marginStart="50dp"
+        android:layout_marginEnd="16dp"
+        android:background="@color/hw_divider" />
+</FrameLayout>

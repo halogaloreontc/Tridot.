@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Цвета виджетов рабочего стола (ADR-034), светлая тема: те же, что в
+     палитре приложения (lib/app/app_palette.dart, AppPalette.light) —
+     совпадение проверяет test/android/home_screen_resources_test.dart.
+     Тёмная — values-night/hw_colors.xml. Виджет следует теме системы, а
+     не настройке «Оформление»: лаунчер сам перечитывает ресурсы. -->
+<resources>
+    <!-- workspace: карточка виджета. -->
+    <color name="hw_bg">#FFFFFF</color>
+    <!-- raised: поле «Что сделать?» внутри карточки. -->
+    <color name="hw_field">#F2F2F7</color>
+    <color name="hw_text_strong">#000000</color>
+    <color name="hw_text">#1C1C1E</color>
+    <color name="hw_muted">#5E5E63</color>
+    <color name="hw_faint">#636368</color>
+    <color name="hw_icon">#636368</color>
+    <color name="hw_accent">#6A40D8</color>
+    <color name="hw_on_accent">#FFFFFF</color>
+    <color name="hw_danger">#B3202A</color>
+    <color name="hw_border">#86868B</color>
+    <color name="hw_divider">#C6C6C8</color>
+    <!-- Отклик на нажатие (не из палитры: полупрозрачная вуаль). -->
+    <color name="hw_press">#14000000</color>
+</resources>

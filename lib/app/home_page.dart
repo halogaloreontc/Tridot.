@@ -28,6 +28,8 @@ import '../core/connectors/manifest/connection_service.dart';
 import '../core/connectors/manifest/connection.dart';
 import '../core/connectors/manifest/manifest_text.dart';
 import '../core/formatting/due_format.dart';
+import '../core/homescreen/home_screen_actions.dart';
+import '../core/homescreen/home_screen_snapshot.dart';
 import '../core/jobs/extension_card.dart';
 import '../core/jobs/job_runner.dart';
 import '../core/models/action_card.dart';
@@ -64,6 +66,7 @@ import 'attachments/attachment_views.dart';
 import 'extensions/tool_kit.dart';
 import 'extensions/ytdl_kit.dart';
 import 'files/file_opener.dart';
+import 'homescreen/home_screen_channel.dart';
 import 'jobs/job_cards.dart';
 import 'jobs/job_hub.dart';
 import 'jobs/job_picker.dart';
@@ -71,6 +74,7 @@ import 'notify/notify_channel.dart';
 import 'notify/notify_views.dart';
 import 'passwords/entry_screens.dart';
 import 'security/app_lock.dart';
+import 'security/device_auth.dart';
 import 'passwords/generator_view.dart';
 import 'passwords/passwords_kit.dart';
 import 'passwords/passwords_screen.dart';
@@ -188,6 +192,7 @@ final class HomePage extends StatefulWidget {
     this.ytdl,
     this.weather,
     this.notify,
+    this.homeScreen,
     this.appLock,
     this.incoming,
     this.signals = const <WarehouseSignals>[],
@@ -267,6 +272,11 @@ final class HomePage extends StatefulWidget {
   /// Системные уведомления о задачах и будильник (ADR-029); `null` — их
   /// нет (тесты, Windows, Linux).
   final NotifyPlatform? notify;
+
+  /// Виджеты рабочего стола (ADR-034): снимок «Сегодня», отметки с
+  /// виджета, «открыть поле» и «начать слушать»; `null` — их нет (тесты,
+  /// всё, кроме Android).
+  final HomeScreenPlatform? homeScreen;
 
   /// Оформление сменилось в настройках (или прочитано с диска): приложение
   /// перекрашивает тему ([AppAppearance], ADR-027).
@@ -594,11 +604,13 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     widget.ytdl?.tool.addListener(_onJobsChanged);
     _settingsReady = _loadSettings();
     _chatsReady = _loadChats();
-    _refresh();
+    // Сначала отметки с виджета, потом первое чтение задач (ADR-034).
+    unawaited(_drainHomeScreen());
     _openedTask = _notify.openedTask.listen(
       (String taskId) => unawaited(_openNotifiedTask(taskId)),
     );
     unawaited(_openLaunchTask());
+    _listenHomeScreen();
     // Склад (ADR-031): ссылка «Открыть в Tridot» — окно подтверждения;
     // сигналы — только пока приложение на экране.
     final incoming = widget.incoming;
@@ -925,6 +937,234 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (taskId != null) await _openNotifiedTask(taskId);
   }
 
+  // ------------------------------------- виджеты рабочего стола (ADR-034)
+
+  HomeScreenPlatform get _homeScreen =>
+      widget.homeScreen ?? const UnsupportedHomeScreen();
+
+  final List<StreamSubscription<Object?>> _homeScreenEvents =
+      <StreamSubscription<Object?>>[];
+
+  /// Замок, за которым следит ожидающее нажатие с виджета.
+  AppLockController? _homeLock;
+
+  /// Состояние приложения: `null` — система ещё не сообщала (считается,
+  /// что приложение на экране).
+  AppLifecycleState? _lifecycle = WidgetsBinding.instance.lifecycleState;
+
+  void _listenHomeScreen() {
+    final homeScreen = _homeScreen;
+    if (!homeScreen.supported) return;
+    _homeScreenEvents
+      ..add(homeScreen.launches.listen(_onHomeScreenLaunch))
+      ..add(
+        homeScreen.pendingChanged.listen(
+          (_) => unawaited(_drainHomeScreen()),
+        ),
+      )
+      ..add(
+        homeScreen.snapshotWanted.listen((_) {
+          // Виджет только что поставили: снимок нужен, даже если он не
+          // менялся.
+          _syncedHomeScreen = null;
+          _syncHomeScreen();
+        }),
+      );
+    _homeLock = widget.appLock?..addListener(_onHomeLockChanged);
+    unawaited(_takeHomeScreenLaunch());
+  }
+
+  /// Снимок, отданный системе последним: тот же не шлётся повторно.
+  String? _syncedHomeScreen;
+  bool? _syncedHomeVoice;
+
+  /// Последняя отправка снимка: подтверждение отметок ждёт её.
+  Future<void> _homeScreenSent = Future<void>.value();
+
+  /// Микрофон на виджете нужен: голосовой ввод на устройстве есть.
+  bool get _homeScreenVoice {
+    final voice = widget.voice;
+    return voice != null && voice.support != VoiceSupport.unsupported;
+  }
+
+  /// Снимок «Сегодня» для виджетов — заново из активных задач. Только
+  /// после загрузки задач и настроек; тот же снимок не отправляется второй
+  /// раз. Текст задач в нём — только с «Показывать текст задач» и без
+  /// входа по отпечатку: иначе одни числа.
+  void _syncHomeScreen() {
+    final homeScreen = _homeScreen;
+    if (!homeScreen.supported ||
+        !_loaded ||
+        !_settingsLoaded ||
+        _loadError != null) {
+      return;
+    }
+    final voice = _homeScreenVoice;
+    final snapshot = HomeScreenPlan.from(
+      _active,
+      now: _now,
+      showText: _settings.homeScreenText,
+      voice: voice,
+    );
+    final encoded = snapshot.encode();
+    _syncedHomeVoice = voice;
+    if (encoded == _syncedHomeScreen) return;
+    _syncedHomeScreen = encoded;
+    _homeScreenSent = homeScreen.sync(snapshot).catchError((Object _) {});
+  }
+
+  bool _homeDraining = false;
+  bool _homeDrainAgain = false;
+
+  /// Отметки с виджета и свежий список задач, строго по порядку: очередь
+  /// → задачи → чтение (с ним уходит новый снимок) → подтверждение. Без
+  /// сообщения в чат и без уведомления: человек отметил задачу сам и не в
+  /// приложении. Два разбора сразу не идут — второй встаёт следом.
+  ///
+  /// Где виджетов нет, это просто чтение задач.
+  Future<void> _drainHomeScreen() async {
+    final homeScreen = _homeScreen;
+    if (!homeScreen.supported) {
+      await _refresh();
+      return;
+    }
+    if (_homeDraining) {
+      _homeDrainAgain = true;
+      return;
+    }
+    _homeDraining = true;
+    try {
+      do {
+        _homeDrainAgain = false;
+        var ops = const <HomeScreenOp>[];
+        try {
+          ops = await homeScreen.pending();
+        } on Object {
+          // Очередь не прочиталась — останется до другого раза.
+        }
+        if (!mounted) return;
+        final applied = await HomeScreenActions.apply(ops, widget.tasks);
+        if (!mounted) return;
+        applied.completed.forEach(widget.assistant.forgetTask);
+        await _refresh();
+        if (!mounted) return;
+        final upTo = applied.upTo;
+        if (upTo != null) {
+          // Подтверждение — только после снимка без этих задач, иначе
+          // строка на миг вернулась бы на виджет. Снимок ждёт настроек
+          // (показывать ли текст), значит, и подтверждение — тоже.
+          try {
+            await _settingsReady;
+          } on Object {
+            // Не прочитались — снимок уйдёт, когда прочитаются.
+          }
+          if (!mounted) return;
+          _syncHomeScreen();
+          await _homeScreenSent;
+          await homeScreen.ack(upTo);
+        }
+      } while (_homeDrainAgain && mounted);
+    } on Object {
+      // Не подтвердили — очередь придёт ещё раз, повтор ничего не изменит.
+    } finally {
+      _homeDraining = false;
+    }
+  }
+
+  /// Нажатие на виджете, которое ещё не выполнено: приложение не на
+  /// экране, заперто или настройки ещё читаются.
+  HomeScreenLaunch? _homeLaunch;
+  Timer? _homeLaunchTimer;
+
+  /// Дольше нажатие не ждёт: микрофон не должен включиться спустя минуты.
+  static const Duration _homeLaunchLimit = Duration(seconds: 60);
+
+  Future<void> _takeHomeScreenLaunch() async {
+    final launch = await _homeScreen.takeLaunch();
+    if (launch != null && mounted) _onHomeScreenLaunch(launch);
+  }
+
+  void _onHomeScreenLaunch(HomeScreenLaunch launch) {
+    _homeLaunch = launch;
+    _homeLaunchTimer?.cancel();
+    _homeLaunchTimer = Timer(_homeLaunchLimit, _dropHomeScreenLaunch);
+    unawaited(_tryHomeScreenLaunch());
+  }
+
+  void _dropHomeScreenLaunch() {
+    _homeLaunch = null;
+    _homeLaunchTimer?.cancel();
+    _homeLaunchTimer = null;
+  }
+
+  void _onHomeLockChanged() {
+    if (_homeLaunch != null) unawaited(_tryHomeScreenLaunch());
+  }
+
+  /// Выполняет ждущее нажатие, когда всё готово: настройки и чаты
+  /// прочитаны (иначе голосовой ввод выглядел бы выключенным),
+  /// приложение на экране (в фоне микрофон не слушает) и не заперто.
+  /// Не готово — нажатие ждёт следующего повода: возврата на экран или
+  /// открытия замка.
+  Future<void> _tryHomeScreenLaunch() async {
+    if (_homeLaunch == null) return;
+    try {
+      await _settingsReady;
+    } on Object {
+      // Не прочитались — с настройками по умолчанию.
+    }
+    try {
+      await _chatsReady;
+    } on Object {
+      // Чаты не прочитались — в пустую сессию.
+    }
+    if (!mounted) return;
+    final launch = _homeLaunch;
+    if (launch == null) return;
+    final state = _lifecycle;
+    if (state != null && state != AppLifecycleState.resumed) return;
+    if (widget.appLock?.locked ?? false) return;
+    _dropHomeScreenLaunch();
+    _composeFromHomeScreen(voice: launch == HomeScreenLaunch.voice);
+  }
+
+  /// «Что сделать?» и микрофон на виджете: пустая сессия и сразу поле
+  /// ввода с клавиатурой или голосовой ввод. Единственный случай, когда
+  /// клавиатура на телефоне открывается без нажатия на поле: человек
+  /// только что нажал на поле виджета ([_focusInputWithKeyboard]).
+  ///
+  /// Всегда новая или пустая сессия, а не чат задачи: «что сделать» — это
+  /// новое дело, а не запись в открытую задачу.
+  void _composeFromHomeScreen({required bool voice}) {
+    // Поверх открыт другой экран (сейф, карточка подключения, лист):
+    // приложение просто вышло на экран. Закрывать чужой экран нельзя — в
+    // нём может быть недописанное.
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    _switchChat(_book.newSession, mode: AssistantViewMode.dialogue);
+    if (voice) {
+      switch (_voiceMode) {
+        case VoiceButtonMode.off:
+          unawaited(_offerVoice());
+          return;
+        case VoiceButtonMode.idle:
+          unawaited(_startVoice());
+          return;
+        case VoiceButtonMode.loading:
+        case VoiceButtonMode.listening:
+          return;
+        case VoiceButtonMode.hidden:
+          // Голосового ввода нет — остаётся поле.
+          break;
+      }
+    }
+    WidgetsBinding.instance
+      ..addPostFrameCallback((_) {
+        if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+        _inputFocus.requestFocus();
+      })
+      ..ensureVisualUpdate();
+  }
+
   @override
   void dispose() {
     if (identical(widget.assistant.session.fileRemover, _fileRemover)) {
@@ -932,6 +1172,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     unawaited(_openedTask?.cancel());
     unawaited(_incoming?.cancel());
+    for (final subscription in _homeScreenEvents) {
+      unawaited(subscription.cancel());
+    }
+    _homeLaunchTimer?.cancel();
+    _homeLock?.removeListener(_onHomeLockChanged);
     for (final signals in widget.signals) {
       signals.pause();
       if (signals.onNews == _onWarehouseNews) signals.onNews = null;
@@ -995,6 +1240,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycle = state;
     // Хранилище паролей: фон и «спрятано» запирают, потеря фокуса прячет
     // показанное (3.6).
     widget.passwords?.lifecycle.onAppState(state);
@@ -1009,13 +1255,22 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       }
     }
     if (state == AppLifecycleState.resumed) {
-      _refresh();
+      // Отметки с виджета — до свежего списка задач (ADR-034).
+      unawaited(_drainHomeScreen());
       _preloadVoice();
       // После системной загрузки русского языка распознавание телефона
       // могло стать готовым.
       unawaited(widget.voice?.refreshDevice());
+      // Нажатие на виджете ждало, пока приложение выйдет на экран. Замок
+      // узнаёт о возврате тем же событием — пусть сначала решит он.
+      if (_homeLaunch != null) scheduleMicrotask(_tryHomeScreenLaunch);
     }
-    if (state == AppLifecycleState.paused) _saveDocument();
+    if (state == AppLifecycleState.paused) {
+      _saveDocument();
+      // Ушли, не дождавшись: микрофон через минуту сам не включится.
+      // Системный запрос отпечатка — не уход.
+      if (!SystemAuthGuard.busy) _dropHomeScreenLaunch();
+    }
     // В фоне не слушаем: распознавание прерывается без итога.
     // Системный диалог доступа к микрофону тоже делает приложение
     // неактивным — его ответа ждём, а не прерываем попытку.
@@ -1388,6 +1643,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _dailyChecks();
     _preloadVoice();
     _syncReminders();
+    _syncHomeScreen();
   }
 
   /// Чаты с диска: метаданные сразу, сообщения — при открытии. Открытой
@@ -1477,6 +1733,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     unawaited(_settingsStore.save(settings));
     _preloadVoice();
     _syncReminders();
+    _syncHomeScreen();
   }
 
   /// Вход в приложение по отпечатку / Face ID: настройки — в замок. Замок
@@ -1557,6 +1814,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       });
       if (chatRemoved) _onChatChanged();
       _syncReminders();
+      _syncHomeScreen();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -2549,6 +2807,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     setState(() {});
     _preloadVoice();
+    // Микрофон на виджете — только пока голосовой ввод на устройстве есть.
+    if (_homeScreenVoice != _syncedHomeVoice) _syncHomeScreen();
   }
 
   /// Модель загружается заранее, как только голосовой ввод включён и
@@ -4291,6 +4551,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         weather: widget.weather,
         appLock: widget.appLock,
         notify: widget.notify,
+        homeScreen: widget.homeScreen,
         showTitle: false,
         onOpenAssistants: () =>
             setState(() => _myRelayTab = MyRelayTab.assistants),
