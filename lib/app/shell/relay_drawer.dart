@@ -29,7 +29,6 @@ final class SessionEntry {
     this.active = false,
     this.unread = false,
     this.muted = false,
-    this.preview,
     this.persona,
     this.pinned = false,
     this.canAct = false,
@@ -55,10 +54,6 @@ final class SessionEntry {
   /// Приглушённая (выполненная задача).
   final bool muted;
 
-  /// Вторая строка: последний ответ помощника одной строкой (уже
-  /// очищенный) или нейтральная фраза вместо карточки; `null` — без неё.
-  final String? preview;
-
   /// Кто ответил последним: его знак слева; `null` — ещё никто.
   final Persona? persona;
 
@@ -74,8 +69,9 @@ final class SessionEntry {
   /// Можно перенести в проект-папку («В проект…», ADR-018).
   final bool canMove;
 
-  /// Проект-папка, в которой лежит сессия: маленькая подпись со значком
-  /// папки; `null` — вне проектов.
+  /// Проект-папка, в которой лежит сессия: значок папки перед временем,
+  /// название — в подсказке и для экранного диктора; `null` — вне
+  /// проектов.
   final String? projectName;
 }
 
@@ -244,10 +240,12 @@ String _dayMonth(DateTime at) {
   return '${at.day} ${months[at.month - 1]}';
 }
 
-/// Левая панель (макет «Ж1»): сверху — «Tridot» с версией, внизу — поиск
-/// по сессиям и «+» (новая сессия); между ними прокручиваются «Мой
-/// Связной», разделы со счётчиками, закреплённые сессии, сессии по дням и
-/// «Расширения». Края прокрутки мягко гаснут.
+/// Левая панель (макет «Ж1»): сверху — «Tridot», внизу — поиск по сессиям
+/// и «+» (новая сессия); между ними прокручиваются «Мой Связной», разделы
+/// со счётчиками, «Расширения», закреплённые сессии и сессии по дням.
+/// Сессии — последними: они растут вниз, к поиску и «Новой сессии», а
+/// «Расширения» не уезжают под длинный список. У сессии в панели только
+/// название — содержимое чата в строке не пересказывается.
 ///
 /// Долгое нажатие на сессию (на компьютере — «⋯» и правая кнопка) — меню
 /// «Ж2»: «Переименовать», «Закрепить», «Удалить» ([onSessionAction]).
@@ -342,7 +340,7 @@ final class RelayDrawer extends StatefulWidget {
   static const Duration searchDelay = Duration(milliseconds: 200);
 
   /// С этого числа сессий в меню «Вчера», «На неделе» и «Ранее» на
-  /// компьютере свёрнуты: «Расширения» видны без прокрутки. Меньше —
+  /// компьютере свёрнуты: свежие сессии видны без прокрутки. Меньше —
   /// всё раскрыто (сворачивать нечего).
   static const int foldFrom = 6;
 
@@ -453,10 +451,11 @@ final class _RelayDrawerState extends State<RelayDrawer> {
     // клавиатуру, поэтому отступ снизу — на высоту клавиатуры, и поиск с
     // «Отменой» стоит прямо над ней. Колонка на компьютере — без отступа.
     final inset = widget.wide ? 0.0 : MediaQuery.viewInsetsOf(context).bottom;
-    // Клавиатура открыта для поиска: шапка, «Мой Связной» и разделы
-    // уступают место результатам.
+    // Клавиатура открыта для поиска: шапка, «Мой Связной», разделы и
+    // «Расширения» уступают место сессиям и результатам.
     final roomy = !(_searching && inset > 0);
     final showHits = _searching && _query.text.trim().isNotEmpty;
+    final showExtensions = roomy && !showHits && widget.extensions.isNotEmpty;
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -504,17 +503,18 @@ final class _RelayDrawerState extends State<RelayDrawer> {
                 ),
                 const SizedBox(height: 8),
               ],
+              // «Расширения» — сразу под разделами, сессии — ниже них.
+              if (showExtensions) _buildExtensions(),
               if (showHits)
                 ..._buildHits()
               else ...<Widget>[
-                ..._buildGroups(),
+                ..._buildGroups(afterExtensions: showExtensions),
                 if (widget.hiddenSessions > 0 &&
                     widget.onShowMoreSessions != null)
                   _ShowMoreRow(
                     count: widget.hiddenSessions,
                     onTap: widget.onShowMoreSessions!,
                   ),
-                if (widget.extensions.isNotEmpty) _buildExtensions(),
               ],
             ],
           ),
@@ -532,9 +532,11 @@ final class _RelayDrawerState extends State<RelayDrawer> {
     );
   }
 
-  List<Widget> _buildGroups() {
+  /// Группы сессий; [afterExtensions] — над ними «Расширения», и первый
+  /// заголовок отбит от них так же, как группы друг от друга.
+  List<Widget> _buildGroups({required bool afterExtensions}) {
     final widgets = <Widget>[];
-    var first = true;
+    var first = !afterExtensions;
     final total = widget.groups
         .fold(0, (int n, SessionGroupEntry g) => n + g.entries.length);
     final foldByDefault = total >= RelayDrawer.foldFrom;
@@ -1692,8 +1694,8 @@ final class _ExtensionRow extends StatelessWidget {
   }
 }
 
-/// Строка сессии: знак ответившего, название, время, вторая строка —
-/// последний ответ. Долгое нажатие и правая кнопка — меню действий; на
+/// Строка сессии: знак ответившего, название и время — одной строкой,
+/// без пересказа чата. Долгое нажатие и правая кнопка — меню действий; на
 /// компьютере при наведении или фокусе справа ещё и «⋯».
 final class _SessionRow extends StatefulWidget {
   const _SessionRow({
@@ -1814,8 +1816,11 @@ final class _SessionRowState extends State<_SessionRow> {
           onEnter: (_) => setState(() => _hover = true),
           onExit: (_) => setState(() => _hover = false),
           child: Tooltip(
-            message:
-                entry.unread ? '${entry.title} — новое сообщение' : entry.title,
+            message: <String>[
+              entry.title,
+              if (entry.projectName != null) 'проект «${entry.projectName}»',
+              if (entry.unread) 'новое сообщение',
+            ].join(', '),
             waitDuration: const Duration(milliseconds: 600),
             child: Stack(
               children: <Widget>[
@@ -1828,7 +1833,6 @@ final class _SessionRowState extends State<_SessionRow> {
                       'в проекте «${entry.projectName}»',
                     if (entry.pinned) 'закреплена',
                     if (entry.unread) 'новое сообщение',
-                    if (entry.preview != null) entry.preview!,
                   ].join(', '),
                   onTap: widget.onTap,
                   onLongPress: _acts ? _openMenu : null,
@@ -1912,9 +1916,13 @@ final class SessionRowBody extends StatelessWidget {
       ),
     );
     return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: wide ? 58 : 64),
+      // Одна строка: высота — наименьшая цель нажатия (на компьютере —
+      // высота кнопки «⋯»).
+      constraints: BoxConstraints(
+        minHeight: wide ? AppSize.button : AppSize.rowMin,
+      ),
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: wide ? 8 : 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: <Widget>[
             // Тот, кто ответил последним, — тихой точкой его цвета
@@ -1939,94 +1947,50 @@ final class SessionRowBody extends StatelessWidget {
               ),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: <Widget>[
-                      Expanded(
-                        child: WholeWordText(
-                          entry.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          firstWordOnly: true,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            height: 1.35,
-                            color: titleColor,
-                          ),
-                        ),
-                      ),
-                      if (entry.unread) ...<Widget>[
-                        const SizedBox(width: 8),
-                        Container(
-                          key: entry.dotKey,
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: context.colors.textStrong,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(width: 8),
-                      // «⋯» встаёт на место времени: ширина строки не
-                      // прыгает.
-                      Visibility(
-                        visible: !more,
-                        maintainSize: true,
-                        maintainAnimation: true,
-                        maintainState: true,
-                        child: time,
-                      ),
-                    ],
-                  ),
-                  if (entry.preview != null ||
-                      entry.projectName != null) ...<Widget>[
-                    const SizedBox(height: 1),
-                    Text.rich(
-                      TextSpan(
-                        children: <InlineSpan>[
-                          if (entry.projectName != null) ...<InlineSpan>[
-                            WidgetSpan(
-                              alignment: PlaceholderAlignment.middle,
-                              child: Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: Icon(
-                                  Icons.folder_outlined,
-                                  key: Key('chat-project-${entry.id}'),
-                                  size: wide ? 13 : 14,
-                                  color: context.colors.faint,
-                                ),
-                              ),
-                            ),
-                            TextSpan(
-                              text: entry.projectName,
-                              style: TextStyle(
-                                color: context.colors.faint,
-                              ),
-                            ),
-                            if (entry.preview != null)
-                              const TextSpan(text: ' · '),
-                          ],
-                          if (entry.preview != null)
-                            TextSpan(text: entry.preview),
-                        ],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.4,
-                        color: context.colors.muted,
-                      ),
-                    ),
-                  ],
-                ],
+              child: WholeWordText(
+                entry.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                firstWordOnly: true,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  height: 1.35,
+                  color: titleColor,
+                ),
               ),
+            ),
+            if (entry.unread) ...<Widget>[
+              const SizedBox(width: 8),
+              Container(
+                key: entry.dotKey,
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: context.colors.textStrong,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+            // Сессия лежит в проекте-папке: значок в той же строке,
+            // название проекта — в подсказке и подписи строки.
+            if (entry.projectName != null) ...<Widget>[
+              const SizedBox(width: 8),
+              Icon(
+                Icons.folder_outlined,
+                key: Key('chat-project-${entry.id}'),
+                size: 14,
+                color: context.colors.faint,
+              ),
+            ],
+            const SizedBox(width: 8),
+            // «⋯» встаёт на место времени: ширина строки не прыгает.
+            Visibility(
+              visible: !more,
+              maintainSize: true,
+              maintainAnimation: true,
+              maintainState: true,
+              child: time,
             ),
           ],
         ),

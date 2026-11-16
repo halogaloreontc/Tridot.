@@ -9,6 +9,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/assistant_theme.dart';
+import 'package:local_assistant/app/layout.dart';
 import 'package:local_assistant/app/shell/relay_drawer.dart';
 import 'package:local_assistant/app/widgets/personas_section.dart';
 import 'package:local_assistant/core/app_info.dart';
@@ -63,7 +64,6 @@ SessionEntry _entry(
   bool active = false,
   bool pinned = false,
   bool acts = true,
-  String? preview,
   Persona? persona,
 }) =>
     SessionEntry(
@@ -76,7 +76,6 @@ SessionEntry _entry(
       pinned: pinned,
       canAct: acts,
       canRename: acts,
-      preview: preview,
       persona: persona,
     );
 
@@ -89,7 +88,6 @@ final _rich = <SessionGroupEntry>[
       'p',
       title: 'Еженедельный отчёт',
       pinned: true,
-      preview: 'Сводка за неделю готова',
       persona: Personas.noda,
     ),
   ]),
@@ -98,19 +96,18 @@ final _rich = <SessionGroupEntry>[
       'a',
       title: 'Отметить приход 318',
       active: true,
-      preview: 'Принят, но не проведён ни в SV, ни в 1С',
       persona: Personas.liorio,
     ),
   ]),
   _group('yesterday', 'Вчера', <SessionEntry>[
-    _entry('1', title: 'Сверить накладные', preview: 'Расхождение в двух'),
+    _entry('1', title: 'Сверить накладные'),
   ]),
   _group('week', 'На неделе', <SessionEntry>[
-    _entry('w', preview: 'Пересчитано 412 позиций из 530'),
+    _entry('w'),
   ]),
   _group('earlier', 'Ранее', <SessionEntry>[
-    _entry('e', preview: 'Продление до марта'),
-    _entry('e2', preview: 'Добавила перчатки'),
+    _entry('e'),
+    _entry('e2'),
   ]),
 ];
 
@@ -446,6 +443,36 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+      'поиск с клавиатурой, запрос пуст: сессии — сразу, без расширений',
+      (tester) async {
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await _pump(tester, size: const Size(320, 640));
+    await tester.tap(find.byKey(const Key('session-search')));
+    await tester.pumpAndSettle();
+    // «Расширения» стоят выше сессий — в поиске по сессиям они уступают
+    // место вместе с шапкой и разделами.
+    expect(find.byKey(const Key('drawer-extensions')), findsNothing);
+    expect(
+      find.byKey(const Key('chat-session:a')).hitTestable(),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('session-search-cancel')));
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('drawer-extensions')), findsOneWidget);
+  });
+
+  testWidgets('строка сессии на компьютере — 44, только название',
+      (tester) async {
+    await _pump(tester, groups: _rich, wide: true, size: const Size(312, 900));
+    expect(
+      tester.getSize(find.byKey(const Key('chat-session:p'))).height,
+      44,
+    );
+  });
+
   testWidgets('поиск растягивается, прячет «+», «Отмена» и Esc',
       (tester) async {
     await _pump(tester);
@@ -602,6 +629,17 @@ void main() {
       counts: const SectionCounts(tasks: 12, overdue: 3, projects: 4),
     );
     expect(tester.takeException(), isNull);
+    // Сессии — под «Расширениями»: на узком экране с крупным шрифтом до
+    // них прокручивают.
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('chat-session:p')),
+      120,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('drawer-scroll')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(tester.takeException(), isNull);
     await tester.longPress(find.byKey(const Key('chat-session:p')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -698,7 +736,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('группы: закреплённые — только если есть; превью и знак',
+  testWidgets('группы: закреплённые — только если есть; название и знак',
       (tester) async {
     await _pump(tester, groups: _rich, size: const Size(360, 1400));
     for (final key in <String>[
@@ -711,25 +749,37 @@ void main() {
       expect(find.byKey(Key(key)), findsOneWidget, reason: key);
     }
     expect(find.text('Закреплённые'), findsOneWidget);
-    expect(find.text('Сводка за неделю готова'), findsOneWidget);
     // Точка того, кто ответил последним (ADR-027).
     final mark = find.descendant(
       of: find.byKey(const Key('chat-session:p')),
       matching: find.byType(PersonaDot),
     );
     expect(tester.widget<PersonaDot>(mark).persona, Personas.noda);
-    // Порядок: «Мой Связной», разделы, закреплённые, дни, «Расширения».
+    // Порядок: «Мой Связной», разделы, «Расширения», закреплённые, дни —
+    // сессии ниже расширений, рядом с поиском и «Новой сессией».
     double top(String key) => tester.getRect(find.byKey(Key(key))).top;
     expect(top('drawer-my-relay'), lessThan(top('nav-tasks')));
-    expect(top('nav-planning'), lessThan(top('drawer-group-pinned')));
+    expect(top('nav-planning'), lessThan(top('drawer-extensions')));
+    expect(
+      tester.getRect(find.byKey(const Key('drawer-extensions'))).bottom,
+      lessThanOrEqualTo(top('drawer-group-pinned')),
+    );
     expect(top('drawer-group-pinned'), lessThan(top('drawer-group-today')));
     expect(top('drawer-group-today'), lessThan(top('drawer-group-yesterday')));
     expect(top('drawer-group-week'), lessThan(top('drawer-group-earlier')));
-    expect(top('drawer-group-earlier'), lessThan(top('drawer-extensions')));
-    // Строка сессии — не ниже 60, превью — одной строкой.
+    expect(top('drawer-group-earlier'), lessThan(top('new-session')));
+    // Строка сессии — только название (и время): одна строка текста,
+    // высота — наименьшая цель нажатия, а не две строки.
+    final row = find.byKey(const Key('chat-session:p'));
+    expect(tester.getSize(row).height, AppSize.rowMin);
     expect(
-      tester.getSize(find.byKey(const Key('chat-session:p'))).height,
-      greaterThanOrEqualTo(60),
+      tester
+          .widgetList<RichText>(
+            find.descendant(of: row, matching: find.byType(RichText)),
+          )
+          .map((RichText t) => t.text.toPlainText())
+          .where((String t) => t.trim().isNotEmpty),
+      <String>['Еженедельный отчёт', '12:00'],
     );
     // Края прокрутки — без затемнения-виньетки: список обрезается ровно.
     expect(find.byKey(const Key('drawer-fade-top')), findsNothing);
@@ -1047,7 +1097,7 @@ void main() {
       expect(calls.log, <String>['projects']);
     });
 
-    testWidgets('строка сессии в проекте — значок папки и название',
+    testWidgets('строка сессии в проекте — значок папки, проект — на слух',
         (tester) async {
       await _pump(
         tester,
@@ -1059,7 +1109,6 @@ void main() {
               time: '12:00',
               itemKey: Key('chat-session:p'),
               dotKey: Key('chat-unread-session:p'),
-              preview: 'Добавил задачу',
               projectName: 'Ремонт',
               canAct: true,
               canRename: true,
@@ -1068,8 +1117,22 @@ void main() {
           ]),
         ],
       );
-      expect(find.byKey(const Key('chat-project-session:p')), findsOneWidget);
-      expect(find.textContaining('Ремонт'), findsOneWidget);
+      // Значок папки — в той же строке, что и название: второй строки
+      // с названием проекта нет, оно — в подписи для экранного диктора.
+      final row = find.byKey(const Key('chat-session:p'));
+      expect(
+        find.descendant(
+          of: row,
+          matching: find.byKey(const Key('chat-project-session:p')),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.getSize(row).height, AppSize.rowMin);
+      expect(find.textContaining('Ремонт'), findsNothing);
+      expect(
+        find.bySemanticsLabel('Сессия «Плитка», в проекте «Ремонт»'),
+        findsOneWidget,
+      );
       await tester.longPress(find.byKey(const Key('chat-session:p')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('session-menu-move')), findsOneWidget);

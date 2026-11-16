@@ -1405,7 +1405,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           'попробуйте перезапустить приложение');
     }
     _dailyChecks();
-    // Вторая строка в меню у чатов из прежних версий — из их файлов.
+    // Знак ответившего у чатов из прежних версий — из их файлов.
     if (await _book.backfillPreviews() && mounted) setState(() {});
   }
 
@@ -3453,7 +3453,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           dotKey: Key('chat-unread-${thread.id}'),
           active: active,
           unread: thread.unread,
-          preview: thread.preview,
           persona: persona,
           pinned: thread.pinned,
           canAct: canAct,
@@ -3473,7 +3472,6 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           active: active,
           unread: thread.unread,
           muted: task.status == TaskStatus.done,
-          preview: thread.preview,
           persona: persona,
           pinned: thread.pinned,
           canAct: canAct,

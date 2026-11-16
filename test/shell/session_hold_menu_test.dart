@@ -26,7 +26,6 @@ SessionEntry _entry(String id, String title, {bool pinned = false}) =>
       pinned: pinned,
       canAct: true,
       canRename: true,
-      preview: 'Принят, но не проведён',
     );
 
 final _groups = <SessionGroupEntry>[

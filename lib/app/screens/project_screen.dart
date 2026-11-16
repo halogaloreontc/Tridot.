@@ -342,7 +342,6 @@ final class _ProjectSessionRowState extends State<_ProjectSessionRow> {
       label: <String>[
         'Сессия «${entry.title}»',
         if (entry.pinned) 'закреплена',
-        if (entry.preview != null) entry.preview!,
       ].join(', '),
       onTap: widget.onTap,
       onLongPress: _acts ? _openMenu : null,
