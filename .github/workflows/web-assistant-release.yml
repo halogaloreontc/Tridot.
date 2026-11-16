@@ -1,0 +1,212 @@
+# Выпуск веб-помощника «Связной» для складов (ADR-032, ADR-035).
+#
+# Actions → «Выпуск веб-помощника» → Run workflow → версия и «что нового».
+# Сборка, подпись ключом из секрета SVYAZNOY_SIGN_KEY, проверка — как на
+# складе, загрузка в бакет (если заданы его секреты) и выпуск web-v<версия>
+# в Releases с архивом. Кнопка Run workflow появляется, когда этот файл
+# есть в основной ветке. Подробно: tool/widget_release/README.md.
+#
+# Секреты (Settings → Secrets and variables → Actions):
+#   SVYAZNOY_SIGN_KEY      обязательно: закрытый ключ PEM (создаётся на складе)
+#   SVYAZNOY_BUCKET        для автообновлений складов: имя бакета
+#   AWS_ACCESS_KEY_ID      статический ключ сервисного аккаунта Yandex Cloud
+#   AWS_SECRET_ACCESS_KEY  его секрет
+# Значения секретов в журнал не печатаются; ввод формы попадает в команды
+# только через переменные окружения.
+#
+# Ключ подписи — корень доверия всех складов, поэтому он есть только в
+# шагах, где не исполняется чужой код: сборка Flutter (хуки пакетов,
+# плагины) идёт без него, а подписывает инструмент, собранный заранее
+# (`dart compile exe`), — без `dart run` и хуков рядом с ключом. Действия
+# закреплены по коммиту, токен checkout не остаётся в .git/config.
+name: Выпуск веб-помощника
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия — три числа, больше прежней: 1.0.0'
+        required: true
+        type: string
+      notes:
+        description: 'Что нового — увидит администратор склада (необязательно)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: web-assistant-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VERSION: ${{ inputs.version }}
+      NOTES: ${{ inputs.notes }}
+      TAG: web-v${{ inputs.version }}
+      OUT: build/widget_release/${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Проверка версии и секретов
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SVYAZNOY_SIGN_KEY: ${{ secrets.SVYAZNOY_SIGN_KEY }}
+          SVYAZNOY_BUCKET: ${{ secrets.SVYAZNOY_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          fail() {
+            echo "::error title=$1::$2"
+            printf '### %s\n\n%s\n' "$1" "$2" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          if ! [[ "$VERSION" =~ ^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$ ]]; then
+            fail 'Версия' 'Версия — три числа через точку, например 1.0.0.'
+          fi
+          if ! refs="$(gh api "repos/$GH_REPO/git/matching-refs/tags/web-v" --paginate --jq '.[].ref')"; then
+            fail 'Не прочитать выпуски' 'GitHub не ответил, какие выпуски уже есть. Запустите ещё раз.'
+          fi
+          if grep -qxF "refs/tags/$TAG" <<< "$refs"; then
+            fail 'Такой выпуск уже есть' "Тег $TAG уже есть, выпуск не перезаписывается. Укажите версию больше."
+          fi
+          last="$(sed -n 's#^refs/tags/web-v##p' <<< "$refs" \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          if [[ -n "$last" && "$(printf '%s\n%s\n' "$last" "$VERSION" | sort -V | tail -n 1)" != "$VERSION" ]]; then
+            fail 'Версия меньше прежней' "Последний выпуск — $last. Новая версия должна быть больше: склады ставят только более новую."
+          fi
+          if [[ -z "${SVYAZNOY_SIGN_KEY:-}" ]]; then
+            fail 'Нет ключа подписи' 'Добавьте секрет SVYAZNOY_SIGN_KEY: Settings → Secrets and variables → Actions → New repository secret. Ключ создаётся на складе: Управление → Инструменты → Помощник → «Ключ издателя» → «Создать ключ».'
+          fi
+          if [[ "$SVYAZNOY_SIGN_KEY" != *'-----BEGIN PRIVATE KEY-----'* || "$SVYAZNOY_SIGN_KEY" != *'-----END PRIVATE KEY-----'* ]]; then
+            fail 'Ключ подписи не похож на ключ' 'В секрете SVYAZNOY_SIGN_KEY должен быть весь текст ключа вместе со строками -----BEGIN PRIVATE KEY----- и -----END PRIVATE KEY-----.'
+          fi
+          missing=()
+          [[ -n "${SVYAZNOY_BUCKET:-}" ]] || missing+=(SVYAZNOY_BUCKET)
+          [[ -n "${AWS_ACCESS_KEY_ID:-}" ]] || missing+=(AWS_ACCESS_KEY_ID)
+          [[ -n "${AWS_SECRET_ACCESS_KEY:-}" ]] || missing+=(AWS_SECRET_ACCESS_KEY)
+          case "${#missing[@]}" in
+            0) echo 'upload=yes' >> "$GITHUB_OUTPUT" ;;
+            3) echo 'upload=no' >> "$GITHUB_OUTPUT" ;;
+            *)
+              printf -v list '%s, ' "${missing[@]}"
+              fail 'Бакет настроен не до конца' "Для загрузки в бакет нужны все три секрета: SVYAZNOY_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Не хватает: ${list%, }. Без бакета удалите и остальные — выпуск будет только в Releases."
+              ;;
+          esac
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # Без ключа: хуки пакетов отрабатывают здесь, дальше ключ видит только
+      # готовый исполняемый файл.
+      - name: Инструмент выпуска
+        run: dart compile exe tool/widget_release/release.dart -o "$RUNNER_TEMP/svz-release"
+
+      - name: Ключ издателя
+        id: key
+        env:
+          SVYAZNOY_SIGN_KEY: ${{ secrets.SVYAZNOY_SIGN_KEY }}
+        run: |
+          set -euo pipefail
+          # Открытый ключ — из закрытого через OpenSSL (release pubkey);
+          # закрытый не печатается.
+          pub="$("$RUNNER_TEMP/svz-release" pubkey | tail -n 1)"
+          fp="$("$RUNNER_TEMP/svz-release" fingerprint "$pub" | tail -n 1)"
+          if ! [[ "$pub" =~ ^[A-Za-z0-9+/]{43}=$ && "$fp" =~ ^[0-9a-f]{4}(\ [0-9a-f]{4}){3}$ ]]; then
+            echo '::error title=Ключ подписи::Из SVYAZNOY_SIGN_KEY не получился открытый ключ Ed25519.'
+            exit 1
+          fi
+          echo "pubkey=$pub" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=$fp" >> "$GITHUB_OUTPUT"
+          {
+            echo '## Ключ издателя'
+            echo
+            echo "Отпечаток: **$fp**"
+            echo
+            echo "Открытый ключ: \`$pub\`"
+            echo
+            echo 'Сверьте с отпечатком на складе: Управление → Инструменты → Помощник → «Ключ издателя». Не совпадает — склад не примет выпуск: в секрете SVYAZNOY_SIGN_KEY другой ключ.'
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Сборка
+        run: '"$RUNNER_TEMP/svz-release" web --version "$VERSION"'
+
+      - name: Подпись
+        env:
+          SVYAZNOY_SIGN_KEY: ${{ secrets.SVYAZNOY_SIGN_KEY }}
+        run: '"$RUNNER_TEMP/svz-release" build --version "$VERSION" --notes "$NOTES" --skip-build'
+
+      - name: Проверка — как на складе
+        env:
+          PUBKEY: ${{ steps.key.outputs.pubkey }}
+        run: '"$RUNNER_TEMP/svz-release" verify "$OUT/latest.json" --pubkey "$PUBKEY"'
+
+      - name: Загрузка в бакет
+        if: steps.check.outputs.upload == 'yes'
+        env:
+          SVYAZNOY_BUCKET: ${{ secrets.SVYAZNOY_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          bash tool/widget_release/upload.sh "$OUT"
+          # Склад читает latest.json без входа: проверим, что бакет его отдаёт.
+          got="$(curl -fsS --max-time 30 "https://storage.yandexcloud.net/$SVYAZNOY_BUCKET/svyaznoy-web/latest.json" | jq -r .version || true)"
+          if [[ "$got" == "$VERSION" ]]; then
+            echo 'Бакет: загружено, склады увидят версию при следующей проверке (раз в сутки или кнопкой «Проверить»).' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '::warning title=Бакет не отдаёт latest.json::Загрузка прошла, но latest.json без входа не читается. В консоли Yandex Cloud у бакета включите публичный доступ на чтение объектов.'
+            echo 'Бакет: загружено, но latest.json не читается без входа — включите у бакета публичное чтение объектов.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Выпуск в GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FP: ${{ steps.key.outputs.fingerprint }}
+          UPLOAD: ${{ steps.check.outputs.upload }}
+        run: |
+          set -euo pipefail
+          zip="$OUT/svyaznoy-web-$VERSION.zip"
+          if gh api "repos/$GH_REPO/git/matching-refs/tags/web-v" --paginate --jq '.[].ref' | grep -qxF "refs/tags/$TAG"; then
+            echo "::error title=Такой выпуск уже есть::Тег $TAG появился во время сборки, выпуск не перезаписывается."
+            exit 1
+          fi
+          {
+            if [[ -n "$NOTES" ]]; then printf '%s\n\n' "$NOTES"; fi
+            echo "Ключ издателя: $FP"
+            echo
+            if [[ "$UPLOAD" == yes ]]; then
+              echo 'Склады с бакетом увидят обновление сами: Управление → Инструменты → Помощник → «Установить».'
+            fi
+            echo "Без бакета: скачайте svyaznoy-web-$VERSION.zip, на складе Управление → Инструменты → Помощник → «Загрузить архив…» → этот файл → «Установить». В первый раз «Загрузить архив…» — рядом с «Установить помощника» и ставит сразу."
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" "$zip" "$OUT/latest.json" \
+            --title "Веб-помощник $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --target "$GITHUB_SHA"
+          size="$(stat -c %s "$zip")"
+          {
+            echo
+            echo "## Выпуск $VERSION"
+            echo
+            echo "- Releases → [$TAG]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG): svyaznoy-web-$VERSION.zip ($(( (size + 524288) / 1048576 )) МБ) и latest.json."
+            if [[ "$UPLOAD" != yes ]]; then
+              echo '- Бакет не настроен: на складе «Загрузить архив…» → этот zip → «Установить» (в первый раз — кнопка рядом с «Установить помощника», ставит сразу).'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

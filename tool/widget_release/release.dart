@@ -2,14 +2,21 @@
 //
 //   dart run tool/widget_release/release.dart build --version 1.0.0 \
 //       --notes "Первая версия"
+//   dart run tool/widget_release/release.dart web --version 1.0.0
 //   dart run tool/widget_release/release.dart pubkey
+//   dart run tool/widget_release/release.dart fingerprint [<base64>]
 //   dart run tool/widget_release/release.dart verify \
 //       build/widget_release/1.0.0/latest.json --pubkey <base64>
 //
 // Закрытый ключ подписи — только у владельца: путь к файлу PEM в
-// SVYAZNOY_SIGN_KEY_FILE или сам текст PEM в SVYAZNOY_SIGN_KEY. В
-// репозиторий он не попадает и в вывод не печатается. Подписывает
-// OpenSSL 3 (`openssl pkeyutl -sign -rawin`, Ed25519).
+// SVYAZNOY_SIGN_KEY_FILE или сам текст PEM в SVYAZNOY_SIGN_KEY (так его
+// передаёт выпуск в GitHub Actions — из секрета). В репозиторий он не
+// попадает и в вывод не печатается. Подписывает OpenSSL 3
+// (`openssl pkeyutl -sign -rawin`, Ed25519). Сборке Flutter ключ не
+// передаётся: `flutter build web` идёт без SVYAZNOY_SIGN_KEY* в окружении
+// ([buildEnvironment]); выпуск в GitHub Actions собирает (`web`) в шаге без
+// ключа, а подписывает (`build --skip-build`) заранее собранным
+// инструментом — без `dart run` и хуков сборки пакетов рядом с ключом.
 
 import 'dart:convert';
 import 'dart:io';
@@ -28,8 +35,12 @@ Future<void> main(List<String> args) async {
     switch (args.first) {
       case 'build':
         await _build(_options(args.skip(1)));
+      case 'web':
+        await _web(_options(args.skip(1)));
       case 'pubkey':
         stdout.writeln(await withSigningKey(publicKeyBase64));
+      case 'fingerprint':
+        await _fingerprint(args.skip(1).toList());
       case 'verify':
         await _verify(args.skip(1).toList());
       default:
@@ -48,7 +59,12 @@ const String _usage = '''
   build   --version 1.0.0 [--notes "…" | --notes-file файл]
           [--min-api 1] [--min-server depotdesk=1.4.63,halowarekeep=1.4.67]
           [--url адрес-архива] [--out build/widget_release] [--skip-build]
-  pubkey  открытый ключ (base64, 32 байта) для ASSIST_WEB_PUBKEY склада
+  web     --version 1.0.0
+          только flutter build web (ключ не нужен); потом build --skip-build
+  pubkey  открытый ключ (base64, 32 байта) для склада
+  fingerprint [<base64>]
+          отпечаток открытого ключа, как на складе: «21fe 31df a154 a261»;
+          без аргумента — ключа подписи
   verify  путь/к/latest.json --pubkey <base64>
 
 Ключ: SVYAZNOY_SIGN_KEY_FILE=путь/к/svyaznoy-sign.pem
@@ -91,6 +107,31 @@ Map<String, String> parseMinServer(String text) {
   return out;
 }
 
+/// Открытый ключ из base64: ровно 32 байта.
+List<int> _publicKey(String text) {
+  try {
+    final bytes = base64.decode(text.trim());
+    if (bytes.length == 32) return bytes;
+  } on FormatException {
+    // Ниже — общий отказ.
+  }
+  throw const _Fail('Открытый ключ — 44 знака base64 (32 байта)');
+}
+
+String _fingerprintOrEmpty(String b64) {
+  try {
+    return publisherFingerprint(_publicKey(b64));
+  } on _Fail {
+    return '';
+  }
+}
+
+Future<void> _fingerprint(List<String> args) async {
+  if (args.length > 1) throw const _Fail('fingerprint [<base64>]');
+  final pub = args.isEmpty ? await withSigningKey(publicKeyBase64) : args[0];
+  stdout.writeln(publisherFingerprint(_publicKey(pub)));
+}
+
 Future<void> _build(Map<String, String> options) async {
   final version = options['version'] ?? '';
   if (!isReleaseVersion(version)) {
@@ -117,27 +158,7 @@ Future<void> _build(Map<String, String> options) async {
   // Ключ проверяем до сборки: без него выпуск всё равно не подписать.
   await withSigningKey((String _) async => '');
 
-  if (options['skip-build'] == null) {
-    stdout.writeln('Сборка: flutter build web …');
-    final build = await Process.start(
-      'flutter',
-      <String>[
-        'build',
-        'web',
-        '--release',
-        '-t',
-        'lib/web_widget/main.dart',
-        '--no-web-resources-cdn',
-        '--no-source-maps',
-        '--no-wasm-dry-run',
-        '--dart-define=SVYAZNOY_WEB_VERSION=$version',
-      ],
-      mode: ProcessStartMode.inheritStdio,
-      runInShell: Platform.isWindows,
-    );
-    if (await build.exitCode != 0) throw const _Fail('flutter build web упал');
-    writeBuildStamp(Directory('build/web'), version);
-  }
+  if (options['skip-build'] == null) await _flutterBuild(version);
   final web = Directory('build/web');
   if (!web.existsSync()) throw const _Fail('Нет build/web — соберите заново');
   if (checkBuildStamp(web, version) case final String why) throw _Fail(why);
@@ -147,6 +168,7 @@ Future<void> _build(Map<String, String> options) async {
     'Файлов: ${files.length}, ${(total / 1048576).toStringAsFixed(1)} МБ',
   );
 
+  final pub = await withSigningKey(publicKeyBase64);
   final zip = await withSigningKey(
     (String key) => buildReleaseZip(
       version: version,
@@ -154,6 +176,7 @@ Future<void> _build(Map<String, String> options) async {
       notes: notes,
       minApi: minApi,
       minServer: minServer,
+      publicKey: pub,
       sign: (Uint8List message) => signEd25519(key, message),
     ),
   );
@@ -172,15 +195,60 @@ Future<void> _build(Map<String, String> options) async {
   outDir.createSync(recursive: true);
   File('${outDir.path}/$zipName').writeAsBytesSync(zip, flush: true);
   File('${outDir.path}/latest.json').writeAsStringSync(
-    '${latestJson(version: version, url: url, size: zip.length, sha256: hash, signature: base64.encode(latestSig), notes: notes, minApi: minApi, minServer: minServer)}\n',
+    '${latestJson(version: version, url: url, size: zip.length, sha256: hash, signature: base64.encode(latestSig), notes: notes, minApi: minApi, minServer: minServer, publicKey: pub)}\n',
     flush: true,
   );
   stdout
     ..writeln('Готово: ${outDir.path}/$zipName (${zip.length} байт)')
     ..writeln('sha256: $hash')
+    ..writeln('Ключ издателя: ${publisherFingerprint(base64.decode(pub))}')
     ..writeln('Дальше: tool/widget_release/upload.sh ${outDir.path}')
     ..writeln('или загрузите архив вручную: Инструменты → Помощник → '
         '«Загрузить архив…».');
+}
+
+/// `web`: только сборка, без ключа — в GitHub Actions это отдельный шаг без
+/// секрета; подпись потом — `build --skip-build`.
+Future<void> _web(Map<String, String> options) async {
+  final version = options['version'] ?? '';
+  if (!isReleaseVersion(version)) {
+    throw const _Fail('--version: нужно вида 1.0.0');
+  }
+  if (options.keys.any((String k) => k != 'version')) {
+    throw const _Fail('web: только --version');
+  }
+  await _flutterBuild(version);
+  stdout.writeln(
+    'Собрано: build/web ($version). Подпись: build --version $version '
+    '--skip-build',
+  );
+}
+
+/// `flutter build web` с версией в `main.dart.js` и меткой сборки. Окружение —
+/// без ключа подписи ([buildEnvironment]): сборка запускает чужой код
+/// (хуки пакетов, плагины), ему ключ ни к чему.
+Future<void> _flutterBuild(String version) async {
+  stdout.writeln('Сборка: flutter build web …');
+  final build = await Process.start(
+    'flutter',
+    <String>[
+      'build',
+      'web',
+      '--release',
+      '-t',
+      'lib/web_widget/main.dart',
+      '--no-web-resources-cdn',
+      '--no-source-maps',
+      '--no-wasm-dry-run',
+      '--dart-define=SVYAZNOY_WEB_VERSION=$version',
+    ],
+    environment: buildEnvironment(Platform.environment),
+    includeParentEnvironment: false,
+    mode: ProcessStartMode.inheritStdio,
+    runInShell: Platform.isWindows,
+  );
+  if (await build.exitCode != 0) throw const _Fail('flutter build web упал');
+  writeBuildStamp(Directory('build/web'), version);
 }
 
 /// Проверка выпуска открытым ключом — как это делает склад (через
@@ -192,8 +260,17 @@ Future<void> _verify(List<String> args) async {
   final latestFile = File(args[0]);
   final latest =
       jsonDecode(latestFile.readAsStringSync()) as Map<String, Object?>;
-  final pub = base64.decode(args[2]);
-  if (pub.length != 32) throw const _Fail('Открытый ключ — 32 байта');
+  final pub = _publicKey(args[2]);
+  // Ключ выпуска из latest.json — только подсказка, чтобы показать оба
+  // отпечатка, если подпись не сойдётся.
+  final hint = switch (latest['pubkey']) {
+    final String b64 => _fingerprintOrEmpty(b64),
+    _ => '',
+  };
+  final which = hint.isEmpty || hint == publisherFingerprint(pub)
+      ? ''
+      : ' (проверяемый ключ ${publisherFingerprint(pub)}, '
+          'ключ выпуска $hint)';
   final url = latest['url']! as String;
   if (url.startsWith('https://')) {
     throw const _Fail('Проверяется только архив рядом с latest.json');
@@ -212,13 +289,13 @@ Future<void> _verify(List<String> args) async {
     ),
     base64.decode(latest['sig']! as String),
   );
-  if (!latestOk) throw const _Fail('Подпись latest.json не сошлась');
+  if (!latestOk) throw _Fail('Подпись latest.json не сошлась$which');
   final archive = ZipDecoder().decodeBytes(zip);
   final manifest = archive.findFile(releaseJsonName)!.content;
   final sig =
       base64.decode(utf8.decode(archive.findFile(releaseSigName)!.content));
   if (!await verifyEd25519(pub, releaseSigningBytes(manifest), sig)) {
-    throw const _Fail('Подпись _release.json не сошлась');
+    throw _Fail('Подпись _release.json не сошлась$which');
   }
   final release = jsonDecode(utf8.decode(manifest)) as Map<String, Object?>;
   final listed = (release['files']! as Map).cast<String, String>();
@@ -229,14 +306,16 @@ Future<void> _verify(List<String> args) async {
     }
   }
   stdout.writeln(
-    'Выпуск ${release['version']} проверен: подписи и sha256 сходятся.',
+    'Выпуск ${release['version']} проверен: подписи и sha256 сходятся. '
+    'Ключ издателя: ${publisherFingerprint(pub)}.',
   );
 }
 
 // ------------------------------------------------------------- ключ
 
 /// Путь к PEM закрытого ключа на время [use]: из SVYAZNOY_SIGN_KEY_FILE,
-/// иначе текст SVYAZNOY_SIGN_KEY пишется во временный файл 0600 и потом
+/// иначе текст SVYAZNOY_SIGN_KEY ([normalizePrivateKeyPem]: вставленный
+/// в секрет GitHub как получилось) пишется во временный файл 0600 и потом
 /// стирается.
 Future<T> withSigningKey<T>(Future<T> Function(String keyFile) use) async {
   final env = Platform.environment;
@@ -247,12 +326,20 @@ Future<T> withSigningKey<T>(Future<T> Function(String keyFile) use) async {
     }
     return use(path);
   }
-  final text = env['SVYAZNOY_SIGN_KEY'];
-  if (text == null || !text.contains('PRIVATE KEY')) {
+  final raw = env['SVYAZNOY_SIGN_KEY'];
+  if (raw == null || raw.trim().isEmpty) {
     throw const _Fail(
       'Нет ключа подписи: задайте SVYAZNOY_SIGN_KEY_FILE (путь к PEM) или '
-      'SVYAZNOY_SIGN_KEY (текст PEM). Создать: openssl genpkey -algorithm '
-      'ed25519 -out svyaznoy-sign.pem',
+      'SVYAZNOY_SIGN_KEY (текст PEM). Создать: на складе «Инструменты → '
+      'Помощник → Ключ издателя → Создать ключ» или openssl genpkey '
+      '-algorithm ed25519 -out svyaznoy-sign.pem',
+    );
+  }
+  final text = normalizePrivateKeyPem(raw);
+  if (text == null) {
+    throw const _Fail(
+      'SVYAZNOY_SIGN_KEY: нужен весь текст ключа вместе со строками '
+      '-----BEGIN PRIVATE KEY----- и -----END PRIVATE KEY-----',
     );
   }
   final dir = Directory.systemTemp.createTempSync('svz-key-');
@@ -261,7 +348,7 @@ Future<T> withSigningKey<T>(Future<T> Function(String keyFile) use) async {
     if (!Platform.isWindows) {
       await Process.run('chmod', <String>['700', dir.path]);
     }
-    file.writeAsStringSync(text.endsWith('\n') ? text : '$text\n', flush: true);
+    file.writeAsStringSync(text, flush: true);
     if (!Platform.isWindows) {
       await Process.run('chmod', <String>['600', file.path]);
     }

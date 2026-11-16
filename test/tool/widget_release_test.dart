@@ -148,6 +148,35 @@ void main() {
       json['total'],
       sample().values.fold<int>(0, (int s, List<int> b) => s + b.length),
     );
+    expect(json.containsKey('pubkey'), isFalse);
+  });
+
+  test('ключ выпуска — подсказка складу в _release.json и latest.json', () {
+    const pub = '11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=';
+    final manifest = jsonDecode(
+      utf8.decode(
+        releaseJson(version: '1.2.3', files: sample(), publicKey: pub),
+      ),
+    ) as Map<String, Object?>;
+    expect(manifest['pubkey'], pub);
+    final latest = jsonDecode(
+      latestJson(
+        version: '1.2.3',
+        url: 'svyaznoy-web-1.2.3.zip',
+        size: 1,
+        sha256: 'ab',
+        signature: 'c2ln',
+        publicKey: pub,
+      ),
+    ) as Map<String, Object?>;
+    expect(latest['pubkey'], pub);
+    // Подписью latest.json ключ не покрыт: склад ему не верит.
+    expect(
+      utf8.decode(
+        latestSigningBytes(version: '1.2.3', sha256: 'ab', size: 1, minApi: 1),
+      ),
+      isNot(contains(pub)),
+    );
   });
 
   test('строки подписи — как на складе', () {
@@ -161,6 +190,70 @@ void main() {
       utf8.decode(releaseSigningBytes(utf8.encode('{}'))),
       'SVYAZNOY-WEB-RELEASE-V1\n{}',
     );
+  });
+
+  test('отпечаток ключа издателя — как на складе и в GitHub Actions', () {
+    // Открытый ключ из RFC 8032, тест 1: тот же пример у складов.
+    final pub = base64.decode('11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=');
+    expect(publisherFingerprint(pub), '21fe 31df a154 a261');
+    expect(() => publisherFingerprint(pub.sublist(1)), throwsArgumentError);
+  });
+
+  test('сборке Flutter ключ подписи и ключи бакета не передаются', () {
+    final env = buildEnvironment(<String, String>{
+      'PATH': '/usr/bin',
+      'HOME': '/home/u',
+      'SVYAZNOY_SIGN_KEY': '-----BEGIN PRIVATE KEY-----',
+      'SVYAZNOY_SIGN_KEY_FILE': '/keys/k.pem',
+      'AWS_ACCESS_KEY_ID': 'id',
+      'AWS_SECRET_ACCESS_KEY': 'secret',
+      'SVYAZNOY_BUCKET': 'svyaznoy-web',
+    });
+    expect(env, <String, String>{
+      'PATH': '/usr/bin',
+      'HOME': '/home/u',
+      'SVYAZNOY_BUCKET': 'svyaznoy-web',
+    });
+  });
+
+  test('ключ из секрета GitHub: переносы, одна строка, буквальные \\n',
+      () async {
+    if (!openssl) {
+      markTestSkipped('нет OpenSSL 3 с Ed25519');
+      return;
+    }
+    final pem = File(keyFile).readAsStringSync();
+    expect(normalizePrivateKeyPem(pem), pem);
+    final body = pem
+        .replaceAll('-----BEGIN PRIVATE KEY-----', '')
+        .replaceAll('-----END PRIVATE KEY-----', '')
+        .trim();
+    for (final pasted in <String>[
+      pem.replaceAll('\n', '\r\n'),
+      pem.trim(),
+      '  ${pem.replaceAll('\n', ' ')}  ',
+      pem.replaceAll('\n', r'\n'),
+      '-----BEGIN PRIVATE KEY-----$body-----END PRIVATE KEY-----',
+    ]) {
+      expect(normalizePrivateKeyPem(pasted), pem, reason: pasted);
+    }
+    // Из записанного так ключа OpenSSL берёт тот же открытый ключ.
+    final again = File('${temp.path}/normalized.pem')
+      ..writeAsStringSync(normalizePrivateKeyPem(pem.replaceAll('\n', ' '))!);
+    expect(
+      await release.publicKeyBase64(again.path),
+      await release.publicKeyBase64(keyFile),
+    );
+    for (final bad in <String>[
+      '',
+      body,
+      '-----BEGIN PUBLIC KEY-----\n$body\n-----END PUBLIC KEY-----',
+      '-----BEGIN ENCRYPTED PRIVATE KEY-----\n$body\n'
+          '-----END ENCRYPTED PRIVATE KEY-----',
+      '-----BEGIN PRIVATE KEY-----\n*не base64*\n-----END PRIVATE KEY-----',
+    ]) {
+      expect(normalizePrivateKeyPem(bad), isNull, reason: bad);
+    }
   });
 
   test('версия и неподходящий состав — отказ до подписи', () async {

@@ -43,5 +43,5 @@ aws s3 cp "$dir/latest.json" "s3://$SVYAZNOY_BUCKET/$prefix/latest.json" \
   --content-type "application/json; charset=utf-8" \
   --cache-control "no-cache, max-age=0"
 
-echo "Загружено. Адрес для ASSIST_WEB_UPDATES:"
+echo "Загружено. Адрес для «Источник обновлений» на складе (если бакет не svyaznoy-web):"
 echo "  $endpoint/$SVYAZNOY_BUCKET/$prefix/latest.json"

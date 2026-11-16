@@ -147,14 +147,74 @@ String pruneFontManifest(String source, Set<String> kept) {
 
 String sha256Hex(List<int> bytes) => sha256.convert(bytes).toString();
 
+/// Отпечаток ключа издателя — тот же, что показывает склад в «Инструменты
+/// → Помощник» и выпуск в GitHub Actions: sha256 от 32 байт открытого ключа
+/// (не от base64), первые 16 знаков hex строчными, по 4 через пробел —
+/// `21fe 31df a154 a261`. 64 бита: подобрать другой ключ с тем же
+/// отпечатком не по силам (32 бита подбирались бы за часы). Только чтобы
+/// сверить глазами; склад проверяет подпись полным ключом.
+String publisherFingerprint(List<int> publicKey) {
+  if (publicKey.length != 32) {
+    throw ArgumentError.value(publicKey.length, 'publicKey', 'нужно 32 байта');
+  }
+  final hex = sha256Hex(publicKey);
+  return <String>[
+    for (var i = 0; i < 16; i += 4) hex.substring(i, i + 4),
+  ].join(' ');
+}
+
+/// Окружение для `flutter build web`: всё, кроме ключа подписи
+/// (`SVYAZNOY_SIGN_KEY`, `SVYAZNOY_SIGN_KEY_FILE`) и ключей бакета — сборке
+/// они не нужны, а она запускает код пакетов.
+Map<String, String> buildEnvironment(Map<String, String> env) =>
+    <String, String>{
+      for (final MapEntry<String, String> e in env.entries)
+        if (!_secretEnv.contains(e.key.toUpperCase())) e.key: e.value,
+    };
+
+const Set<String> _secretEnv = <String>{
+  'SVYAZNOY_SIGN_KEY',
+  'SVYAZNOY_SIGN_KEY_FILE',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+};
+
+final RegExp _pem = RegExp(
+  r'-----BEGIN PRIVATE KEY-----([\s\S]*?)-----END PRIVATE KEY-----',
+);
+
+/// Закрытый ключ PEM в виде, который читает OpenSSL, — из текста, который
+/// вставили в секрет GitHub или в переменную как получилось: с `\r\n`, в
+/// одну строку, с лишними пробелами или с буквальными `\n`. `null` — в
+/// тексте нет PEM `PRIVATE KEY` (PKCS#8 без пароля).
+String? normalizePrivateKeyPem(String text) {
+  final match = _pem.firstMatch(text);
+  if (match == null) return null;
+  final body = match.group(1)!.replaceAll(RegExp(r'\\[nr]|\s'), '');
+  if (body.isEmpty || !RegExp(r'^[A-Za-z0-9+/]+=*$').hasMatch(body)) {
+    return null;
+  }
+  final lines = <String>[
+    for (var i = 0; i < body.length; i += 64)
+      body.substring(i, i + 64 > body.length ? body.length : i + 64),
+  ];
+  return '-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n'
+      '-----END PRIVATE KEY-----\n';
+}
+
 /// Описание выпуска `_release.json`: что внутри и для каких складов.
 /// Пути — по алфавиту; JSON без пробелов. Подписываются именно эти байты.
+/// [publicKey] (base64) — подсказка складу: подпись не сошлась — он
+/// покажет оба отпечатка, свой и этого ключа. Склад ей не верит: подпись
+/// проверяет только своим ключом.
 Uint8List releaseJson({
   required String version,
   required Map<String, List<int>> files,
   String notes = '',
   int minApi = defaultMinApi,
   Map<String, String> minServer = defaultMinServer,
+  String? publicKey,
 }) {
   final paths = files.keys.toList()..sort();
   var total = 0;
@@ -172,6 +232,7 @@ Uint8List releaseJson({
         'minApi': minApi,
         'minServer': minServer,
         'notes': notes,
+        if (publicKey != null) 'pubkey': publicKey,
         'files': hashes,
         'total': total,
       }),
@@ -195,9 +256,10 @@ Uint8List latestSigningBytes({
       utf8.encode('$latestSignatureTag$version\n$sha256\n$size\n$minApi'),
     );
 
-/// `latest.json` для бакета: склад читает его по `ASSIST_WEB_UPDATES`.
-/// [url] — адрес архива: относительный (рядом с `latest.json`) или https
-/// того же хоста.
+/// `latest.json` для бакета: склад читает его по своему источнику
+/// обновлений. [url] — адрес архива: относительный (рядом с `latest.json`)
+/// или https того же хоста. [publicKey] — та же подсказка, что в
+/// [releaseJson], подписью не покрыта.
 String latestJson({
   required String version,
   required String url,
@@ -207,6 +269,7 @@ String latestJson({
   String notes = '',
   int minApi = defaultMinApi,
   Map<String, String> minServer = defaultMinServer,
+  String? publicKey,
 }) =>
     const JsonEncoder.withIndent('  ').convert(<String, Object?>{
       'version': version,
@@ -217,6 +280,7 @@ String latestJson({
       'sha256': sha256,
       'notes': notes,
       'sig': signature,
+      if (publicKey != null) 'pubkey': publicKey,
     });
 
 /// Подпись Ed25519: 64 байта подписи по [message].
@@ -232,6 +296,7 @@ Future<Uint8List> buildReleaseZip({
   String notes = '',
   int minApi = defaultMinApi,
   Map<String, String> minServer = defaultMinServer,
+  String? publicKey,
 }) async {
   if (!isReleaseVersion(version)) {
     throw ArgumentError.value(version, 'version', 'нужно вида 1.0.0');
@@ -256,6 +321,7 @@ Future<Uint8List> buildReleaseZip({
     notes: notes,
     minApi: minApi,
     minServer: minServer,
+    publicKey: publicKey,
   );
   final signature = await sign(releaseSigningBytes(manifest));
   if (signature.length != 64) {

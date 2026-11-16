@@ -1,7 +1,58 @@
 # Веб-помощник «Связной» на складе
 
-Решение — ADR-032 (`docs/DECISIONS.md`). Выпуск и шаги владельца —
-`tool/widget_release/README.md`.
+Решение — ADR-032 (`docs/DECISIONS.md`), выпуск из GitHub — ADR-035.
+Шаги владельца по кнопкам — `tool/widget_release/README.md`.
+
+## Выпуск — кнопкой в GitHub
+
+Владелец ничего не ставит к себе: ни Flutter, ни OpenSSL, ни aws-cli.
+
+1. **Ключ издателя** создаёт склад в браузере (WebCrypto Ed25519):
+   Управление → Инструменты → Помощник → «Ключ издателя» → «Создать
+   ключ». Закрытый ключ (PEM PKCS#8) показывается один раз, на сервер не
+   уходит; владелец кладёт его в секрет `SVYAZNOY_SIGN_KEY` репозитория
+   Tridot (Settings → Secrets and variables → Actions). Склад сохраняет
+   только открытый ключ; второму складу его вставляют руками («У меня уже
+   есть ключ»). Со склада ключ задаётся, только пока его нет;
+   `ASSIST_WEB_PUBKEY` в `config.php` главнее.
+2. **Выпуск** — `.github/workflows/web-assistant-release.yml`, «Выпуск
+   веб-помощника»: Actions → Run workflow, поля version (`1.0.0`) и notes.
+   Шаги: проверка версии (вид `1.0.0`, тега `web-v<версия>` ещё нет,
+   больше прежнего `web-v*`, теги — через `gh api`) и секретов → Flutter
+   (как в `ci.yml`, действия закреплены по коммиту) → `dart compile exe`
+   инструмента (без ключа) → `pubkey` и `fingerprint` (открытый ключ и
+   отпечаток — в итоги запуска) → `web` — `flutter build web` без ключа →
+   `build --skip-build` — подпись → `verify` → если
+   заданы все три `SVYAZNOY_BUCKET`, `AWS_ACCESS_KEY_ID`,
+   `AWS_SECRET_ACCESS_KEY` — `upload.sh` и проверка, что `latest.json`
+   читается без входа → `gh release create web-v<версия>` с архивом и
+   `latest.json`. Выпуск в Releases — последним: упала загрузка — тот же
+   запуск можно повторить с той же версией. Тег не перезаписывается.
+3. **Склад** ставит из бакета («Установить помощника», дальше
+   «Проверить» → «Установить») или из архива Releases («Загрузить
+   архив…» — в первый раз рядом с «Установить помощника»): репозиторий
+   закрытый, сам склад файлы Releases не скачивает.
+
+Секреты попадают в шаги только через `env`, ввод формы — тоже (в `run:`
+нет `${{ inputs.* }}`); ключ подписи пишется во временный файл 600 и
+стирается, в журнал не печатается. Ключ есть только в шагах, где не
+исполняется чужой код: `flutter build web` (хуки пакетов, плагины) идёт в
+шаге без него, а сам `release.dart` и локально запускает Flutter без
+`SVYAZNOY_SIGN_KEY*` и ключей бакета в окружении (`buildEnvironment`);
+подписывает и считает открытый ключ инструмент, собранный `dart compile
+exe` до шага с ключом, — без `dart run` и хуков. Checkout — с
+`persist-credentials: false`, токен в `.git/config` не остаётся.
+
+### Отпечаток ключа
+
+Один и тот же на складе, в итогах запуска и в описании выпуска: sha256 от
+32 байт открытого ключа Ed25519 (не base64 и не DER), первые 16 знаков hex
+строчными, по 4 через пробел (64 бита — подобрать ключ с тем же отпечатком
+не по силам; 32 бита подбирались бы за часы). Ключ RFC 8032 (тест 1)
+`11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=` → `21fe 31df a154 a261` — этот пример
+проверяют тесты Tridot и склада. В Dart — `publisherFingerprint`
+(`release_core.dart`), в командной строке —
+`release.dart fingerprint <ключ>`.
 
 ## Что это
 
@@ -137,15 +188,25 @@ JetBrains Mono (и из `FontManifest.json`), `NOTICES` → `LICENSES.txt`.
 свой адрес, `wasm-unsafe-eval` для CanvasKit. Запасных шрифтов нет, за
 gstatic помощник не ходит.
 
+`flutter_bootstrap.js` до загрузчика оборачивает
+`WebAssembly.compileStreaming`: если сервер отдал `.wasm` с чужим типом
+(TypeError), модуль компилируется из ArrayBuffer. Без этого загрузчик
+Flutter с типом `application/octet-stream` показывает пустую страницу
+(«Incorrect response MIME type»; проверено Playwright на настоящей сборке),
+а склад требовал бы правки `mime.types` на сервере.
+
 ## Формат выпуска
 
 - `svyaznoy-web-<версия>.zip`: файлы сборки и в корне `_release.json`
   (`{product: "svyaznoy-web", version, minApi, minServer: {depotdesk,
-  halowarekeep}, notes, files: {путь: sha256}, total}`) и `_release.sig`
-  (base64 подписи Ed25519 байтов `"SVYAZNOY-WEB-RELEASE-V1\n"` +
-  `_release.json`).
+  halowarekeep}, notes, pubkey, files: {путь: sha256}, total}`) и
+  `_release.sig` (base64 подписи Ed25519 байтов
+  `"SVYAZNOY-WEB-RELEASE-V1\n"` + `_release.json`).
 - `latest.json`: `{version, minApi, minServer, url, size, sha256, notes,
-  sig}`; `sig` — base64 подписи `"SVYAZNOY-WEB-LATEST-V1\n<version>\n<sha256>\n<size>\n<minApi>"`.
+  sig, pubkey}`; `sig` — base64 подписи `"SVYAZNOY-WEB-LATEST-V1\n<version>\n<sha256>\n<size>\n<minApi>"`.
+- `pubkey` — открытый ключ, которым подписан выпуск (base64), только
+  подсказка: подпись не сошлась — склад пишет оба отпечатка, свой и этот.
+  Проверяет склад всегда своим ключом; старые склады поле не читают.
 - Имена в архиве — только то, что примет склад: без `..`, `\`, ведущей
   `/`, имён с точкой в начале; расширения `html js mjs json wasm css png
   svg ico webp otf ttf woff2 bin symbols txt frag`; не больше 3000 файлов и
@@ -153,9 +214,13 @@ gstatic помощник не ходит.
 - Подпись — OpenSSL 3 (`openssl pkeyutl -sign -rawin`), проверка на
   складе — `sodium_crypto_sign_verify_detached` (совместимость проверяет
   тест `test/tool/widget_release_test.dart`, если есть `php` с sodium).
+  Ключ из WebCrypto (PKCS#8, 48 байт) OpenSSL читает как есть; текст из
+  секрета `release.dart` сначала приводит к PEM (`normalizePrivateKeyPem`:
+  `\r\n`, одна строка, буквальные `\n`).
 
 ## Проверки
 
 К проверкам Tridot добавляется сборка помощника:
 `flutter build web --release -t lib/web_widget/main.dart --no-web-resources-cdn --no-source-maps`.
-Сборка APK не меняется.
+Сборка APK не меняется. Выпуск (`web-assistant-release.yml`) запускается
+только руками и в `ci.yml` не входит.
