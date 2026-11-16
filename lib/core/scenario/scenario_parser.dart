@@ -4,6 +4,7 @@ import '../connectors/person_names.dart';
 import '../connectors/question_phrases.dart';
 import '../connectors/social_prefix.dart';
 import '../connectors/speech_noise.dart';
+import '../connectors/task_rephrase.dart';
 import '../connectors/utterance.dart';
 import '../connectors/verb_forms.dart';
 import '../models/bulk.dart';
@@ -313,7 +314,9 @@ final class ScenarioParser {
         .length;
     certainty -= 0.25 * junk;
     if (title != null && !quoted) {
-      title = _withoutJunk(title);
+      // Обёртки просьбы и местоимения (ADR-033): «Нужно позвонить» →
+      // «Позвонить», «напомни про них» — без названия.
+      title = TaskRephrase.title(_withoutJunk(title));
       if (title.isEmpty) {
         title = null;
       } else {

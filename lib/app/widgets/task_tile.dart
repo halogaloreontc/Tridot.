@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/formatting/due_format.dart';
 import '../../core/models/task.dart';
 import '../assistant_theme.dart';
+import 'task_notes.dart';
 import 'whole_word_text.dart';
 
 /// Строка задачи для всех списков: панель задач, проекты, планирование,
@@ -46,7 +47,14 @@ final class TaskTile extends StatelessWidget {
             ? 'просрочено · ${formatDue(due, task.duePrecision, now)}'
             : formatDue(due, task.duePrecision, now),
       if (showProject && task.project != null) '#${task.project}',
+      // Заметки и пункты из чата (ADR-033).
+      if (taskExtrasSummary(task) case final String extras
+          when extras.isNotEmpty)
+        extras,
     ];
+    // Перед «·» неразрывный пробел: перенос — после точки, а не перед ней
+    // (ADR-021).
+    final detailsText = details.join('\u00a0· ');
     // Выбранная — заливкой на уровень выше, без рамки (ADR-027).
     return Material(
       color: selected && highlightSelected
@@ -95,7 +103,7 @@ final class TaskTile extends StatelessWidget {
                       ),
                       if (details.isNotEmpty)
                         Text(
-                          details.join(' · '),
+                          detailsText,
                           maxLines: dense ? 2 : 1,
                           overflow: TextOverflow.ellipsis,
                           style:

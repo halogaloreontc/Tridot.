@@ -9,6 +9,8 @@ import '../skills/data/data_phrases.dart';
 import '../skills/talk/talk_phrases.dart';
 import 'connector.dart';
 import 'task_chat_phrases.dart';
+import 'task_edit_phrases.dart';
+import 'task_rephrase.dart';
 
 /// Встроенный коннектор задач: создание, список, перенос и завершение.
 ///
@@ -160,6 +162,17 @@ final class TasksConnector
         );
       }
     }
+    // Правка текущей или названной задачи (ADR-033): срок, заметка,
+    // пункты, новое название.
+    final edit = TaskEditPhrases.parse(utterance, tasksId: id);
+    if (edit != null && _claims(edit, command)) {
+      return ConnectorMatch(
+        connectorId: id,
+        commandId: editCommand,
+        confidence: edit.bare ? 0.7 : 0.85,
+        payload: TaskEditRequest(edit, command),
+      );
+    }
     final (commandId, confidence) = switch (command.intent) {
       // Без маркера — ниже явных команд любого коннектора: «через 3 дня
       // сдать отчёт» с явным сроком увереннее, чем «купить хлеб».
@@ -205,6 +218,36 @@ final class TasksConnector
     );
   }
 
+  /// commandId правки задачи (ADR-033).
+  static const String editCommand = 'task.edit';
+
+  /// Берёт ли коннектор правку [edit] вместо обычного разбора [command].
+  static bool _claims(TaskEdit edit, ParsedCommand command) {
+    switch (edit.kind) {
+      case TaskEditKind.note:
+      case TaskEditKind.items:
+      case TaskEditKind.rename:
+        // «Отметь, что сдал отчёт» — сообщение о сделанном, его понимает
+        // обычный разбор.
+        return command.intent == CommandIntent.unknown ||
+            command.intent == CommandIntent.createTask;
+      case TaskEditKind.pickTime:
+        return true;
+      case TaskEditKind.due:
+      case TaskEditKind.remind:
+        // «Напомни про эссен завтра» — обычное создание: если такая задача
+        // уже есть, [_create] поставит срок ей, а не заведёт вторую.
+        // «Поставь срок «Эссен» завтра утром» (кнопка «Когда напомнить?»)
+        // — правка: слово срока названо явно, задача — в кавычках.
+        if (edit.target != null) return edit.quotedTarget && edit.explicitSet;
+        return switch (command.intent) {
+          CommandIntent.unknown => true,
+          CommandIntent.createTask => command.title == null,
+          _ => false,
+        };
+    }
+  }
+
   /// Подсветка команды (ADR-021): части фразы, которые понял разбор задач.
   /// Фраза о задаче чата («закрой», «на завтра») — только срок.
   @override
@@ -248,6 +291,7 @@ final class TasksConnector
       return _answer(payload, session);
     }
     if (payload is BulkUndoRequest) return _undoBulk(payload, session);
+    if (payload is TaskEditRequest) return _edit(payload, session);
     if (payload is _BulkRefine) return _refineBulk(payload, session);
     final command = payload! as ParsedCommand;
     switch (command.intent) {
@@ -307,6 +351,32 @@ final class TasksConnector
         );
       }
     }
+    if (command.reminder) {
+      // «Напомни про эссен завтра» при активной «Эссен» — напоминание о
+      // ней, а не вторая такая же задача (ADR-033).
+      final existing = await _tasks.findActiveByTitle(title);
+      if (existing.length == 1) {
+        final current = existing.single;
+        session.select(id, current.id);
+        final dueAt = command.dueAt;
+        if (dueAt == null) return _askWhen(current, session);
+        final task = await _tasks.reschedule(
+          current.id,
+          dueAt,
+          command.duePrecision ?? DuePrecision.dateTime,
+        );
+        return session.reply(
+          'task.rescheduled',
+          values: <String, String>{
+            'title': task.title,
+            'due': _due(task, session)!,
+          },
+          intent: 'task.reschedule',
+          status: AssistantStatus.completed,
+          task: task,
+        );
+      }
+    }
     final task = await _tasks.create(
       title: title,
       dueAt: command.dueAt,
@@ -320,6 +390,11 @@ final class TasksConnector
     session.select(id, task.id);
     final due = _due(task, session);
     final project = task.project;
+    if (command.reminder && due == null) {
+      // «Напомни X» без времени: задача есть, осталось спросить, когда
+      // (ADR-033). Следующая фраза со сроком поставит его.
+      return _askWhen(task, session, created: true);
+    }
     return session.reply(
       switch ((due, project)) {
         (null, null) => 'task.created',
@@ -1547,12 +1622,355 @@ final class TasksConnector
     );
   }
 
+  // ------------------------------------------------- правки (ADR-033)
+
+  /// «Их», «там», «про них» в начале заметки: она — о текущей задаче.
+  static final RegExp _aboutCurrent = RegExp(
+    r'^(?:их|они|там|тут|у них|по ним|про них|о них|у него|у нее|у неё)(?=[\s,]|$)',
+    caseSensitive: false,
+  );
+
+  Future<AssistantResponse> _edit(
+    TaskEditRequest request,
+    AssistantSession session,
+  ) async {
+    final edit = request.edit;
+    final intent = 'task.edit.${edit.kind.name}';
+    final resolved = await _editTarget(edit, session, intent);
+    if (resolved.clarification != null) return resolved.clarification!;
+    var task = resolved.task;
+    if (task == null) {
+      // Задача не названа и не выбрана, или названной нет.
+      final fallback = request.fallback;
+      if (edit.target != null) {
+        if (fallback.intent == CommandIntent.createTask &&
+            fallback.title != null) {
+          return _create(fallback, session);
+        }
+        return _ask(
+          session,
+          intent,
+          'task.notFound',
+          <String, String>{'query': edit.target!},
+        );
+      }
+      switch (edit.kind) {
+        case TaskEditKind.note:
+          final raw = edit.rawText ?? '';
+          final title = TaskRephrase.title(raw);
+          if (_aboutCurrent.hasMatch(raw) || title.isEmpty) {
+            return _ask(session, intent, 'task.note.which');
+          }
+          return _create(
+            ParsedCommand(intent: CommandIntent.createTask, title: title),
+            session,
+          );
+        case TaskEditKind.due:
+          if (fallback.intent == CommandIntent.createTask) {
+            return _create(fallback, session);
+          }
+          // Одна дата без задачи — не вопрос в ответ, чтобы следующее
+          // слово не считалось ответом на него.
+          if (edit.bare) return unknown(session);
+          return _ask(session, intent, 'task.ask.rescheduleWhich');
+        case TaskEditKind.remind:
+        case TaskEditKind.pickTime:
+        case TaskEditKind.items:
+        case TaskEditKind.rename:
+          return _ask(session, intent, 'task.note.which');
+      }
+    }
+    if (!task.isActive) {
+      return session.reply(
+        'task.chat.alreadyDone',
+        values: <String, String>{'title': task.title},
+        intent: intent,
+        status: AssistantStatus.noAction,
+        task: task,
+      );
+    }
+    // Заметка к задаче, о которой давно не говорили, — может быть и новым
+    // делом: спросить (ADR-033).
+    if (edit.kind == TaskEditKind.note &&
+        resolved.implicit &&
+        !_aboutCurrent.hasMatch(edit.rawText ?? '') &&
+        session.lastConnectorId != id) {
+      return _askNoteWhere(task, edit, session);
+    }
+    switch (edit.kind) {
+      case TaskEditKind.note:
+        task = await _tasks.addNote(task.id, edit.text!);
+        session.select(id, task.id);
+        return session.reply(
+          'task.note.added',
+          values: <String, String>{
+            'title': task.title,
+            'note': edit.text!,
+          },
+          intent: intent,
+          status: AssistantStatus.completed,
+          task: task,
+        );
+      case TaskEditKind.items:
+        task = await _tasks.addItems(task.id, edit.items);
+        session.select(id, task.id);
+        return session.reply(
+          'task.items.added',
+          values: <String, String>{
+            'title': task.title,
+            'items': edit.items.join(', '),
+          },
+          intent: intent,
+          status: AssistantStatus.completed,
+          task: task,
+        );
+      case TaskEditKind.rename:
+        final old = task.title;
+        task = await _tasks.updateDetails(task.id, title: edit.text);
+        session.select(id, task.id);
+        return session.reply(
+          'task.renamed',
+          values: <String, String>{'old': old, 'title': task.title},
+          intent: intent,
+          status: AssistantStatus.completed,
+          task: task,
+        );
+      case TaskEditKind.remind:
+        session.select(id, task.id);
+        return _askWhen(task, session);
+      case TaskEditKind.pickTime:
+        session.select(id, task.id);
+        return session.reply(
+          'task.remind.pickTime',
+          values: <String, String>{'title': task.title},
+          intent: intent,
+          status: AssistantStatus.needsClarification,
+          task: task,
+        );
+      case TaskEditKind.due:
+        final dueQuestion = _dueClarification(edit.dueIssue);
+        if (dueQuestion != null) return _ask(session, intent, dueQuestion);
+        final dueAt = edit.dueAt;
+        if (dueAt == null) {
+          session.select(id, task.id);
+          return _askWhen(task, session);
+        }
+        task = await _tasks.reschedule(
+          task.id,
+          dueAt,
+          edit.precision ?? DuePrecision.dateTime,
+        );
+        session.select(id, task.id);
+        return session.reply(
+          'task.rescheduled',
+          values: <String, String>{
+            'title': task.title,
+            'due': _due(task, session)!,
+          },
+          intent: intent,
+          status: AssistantStatus.completed,
+          task: task,
+        );
+    }
+  }
+
+  /// Задача правки: названная, задача чата или выбранная. [_EditTarget.task]
+  /// `null` — задачи нет (коннектор решит, создать ли новую).
+  Future<_EditTarget> _editTarget(
+    TaskEdit edit,
+    AssistantSession session,
+    String intent,
+  ) async {
+    final name = edit.target;
+    if (name != null) {
+      final exact = await _tasks.findActiveByTitle(name);
+      if (exact.length == 1) return _EditTarget(exact.single);
+      if (exact.length > 1) {
+        return _EditTarget.ask(_askWhich(exact, edit, session, intent));
+      }
+      if (edit.quotedTarget) return const _EditTarget(null);
+      final hits = await _tasks.searchActive(name);
+      if (hits.isEmpty) return const _EditTarget(null);
+      final best = hits.first.score;
+      if (best < confidentScore) return const _EditTarget(null);
+      final close = <Task>[
+        for (final hit in hits)
+          if (best - hit.score <= 0.1 + 1e-9) hit.task,
+      ];
+      if (close.length == 1) return _EditTarget(close.single);
+      return _EditTarget.ask(_askWhich(close, edit, session, intent));
+    }
+    final chatTask = await _chatTask(session);
+    if (chatTask != null) return _EditTarget(chatTask);
+    final selected = session.selectedItemFor(id);
+    if (selected != null) {
+      for (final task in await _tasks.listAll()) {
+        if (task.id == selected) {
+          return _EditTarget(task, implicit: true);
+        }
+      }
+    }
+    return const _EditTarget(null);
+  }
+
+  /// Каноническая фраза правки [edit] для задачи [title] — текст кнопки.
+  static String _editPhrase(TaskEdit edit, String title) => switch (edit.kind) {
+        TaskEditKind.note => 'Запиши в «$title», что ${edit.rawText}',
+        TaskEditKind.items =>
+          'Добавь в «$title» пункты ${edit.items.join(', ')}',
+        TaskEditKind.rename => 'Переименуй «$title» в «${edit.text}»',
+        TaskEditKind.due =>
+          'Поставь срок «$title» ${edit.dueText ?? ''}'.trim(),
+        TaskEditKind.remind => 'Выбрать время для «$title»',
+        TaskEditKind.pickTime => 'Выбрать время для «$title»',
+      };
+
+  /// Несколько задач подходят: «Какую из них: «А», «Б»?» с кнопками.
+  AssistantResponse _askWhich(
+    List<Task> tasks,
+    TaskEdit edit,
+    AssistantSession session,
+    String intent,
+  ) {
+    final top = tasks.take(3).toList(growable: false);
+    final titles = top.map((Task t) => '«${t.title}»').join(', ');
+    final clarification = Clarification(
+      questionId: 'task.ask.severalMatch',
+      options: <ClarifyOption>[
+        for (final task in top)
+          ClarifyOption(label: task.title, text: _editPhrase(edit, task.title)),
+      ],
+    );
+    session.requestConfirmation(
+      PendingConfirmation(
+        connectorId: id,
+        commandId: editCommand,
+        payload: clarification,
+      ),
+    );
+    return session.reply(
+      clarification.questionId,
+      values: <String, String>{
+        'name': edit.target ?? '',
+        'candidates': titles,
+      },
+      intent: intent,
+      status: AssistantStatus.needsClarification,
+      clarification: clarification,
+    );
+  }
+
+  /// «Записать в «Эссен» или создать новую задачу?» [В «Эссен»] [Новая].
+  AssistantResponse _askNoteWhere(
+    Task task,
+    TaskEdit edit,
+    AssistantSession session,
+  ) {
+    final raw = edit.rawText ?? edit.text!;
+    final title = TaskRephrase.title(raw);
+    final clarification = Clarification(
+      questionId: 'task.note.where',
+      options: <ClarifyOption>[
+        ClarifyOption(
+          label: 'В «${task.title}»',
+          text: _editPhrase(edit, task.title),
+          answers: const <String>{'туда', 'эту', 'запиши', 'добавь'},
+        ),
+        ClarifyOption(
+          label: 'Новая',
+          text: 'Добавь задачу «${title.isEmpty ? raw : title}»',
+          answers: const <String>{'новая', 'новую', 'создай', 'новой'},
+        ),
+      ],
+    );
+    session.requestConfirmation(
+      PendingConfirmation(
+        connectorId: id,
+        commandId: editCommand,
+        payload: clarification,
+      ),
+    );
+    return session.reply(
+      clarification.questionId,
+      values: <String, String>{'title': task.title},
+      intent: 'task.edit.note',
+      status: AssistantStatus.needsClarification,
+      task: task,
+      clarification: clarification,
+    );
+  }
+
+  /// «Когда напомнить?» [Сегодня вечером] [Завтра утром] [Выбрать время].
+  AssistantResponse _askWhen(
+    Task task,
+    AssistantSession session, {
+    bool created = false,
+  }) {
+    final late = session.clock.now().hour >= 18;
+    final first = late ? 'Через час' : 'Сегодня вечером';
+    final clarification = Clarification(
+      questionId: created ? 'task.created.askWhen' : 'task.remind.when',
+      options: <ClarifyOption>[
+        ClarifyOption(
+          label: first,
+          text: 'Поставь срок «${task.title}» ${first.toLowerCase()}',
+        ),
+        ClarifyOption(
+          label: 'Завтра утром',
+          text: 'Поставь срок «${task.title}» завтра утром',
+        ),
+        ClarifyOption(
+          label: 'Выбрать время',
+          text: 'Выбрать время для «${task.title}»',
+        ),
+      ],
+    );
+    session.requestConfirmation(
+      PendingConfirmation(
+        connectorId: id,
+        commandId: editCommand,
+        payload: clarification,
+      ),
+    );
+    return session.reply(
+      clarification.questionId,
+      values: <String, String>{'title': task.title},
+      intent: created ? 'task.create' : 'task.edit.remind',
+      status: AssistantStatus.needsClarification,
+      task: task,
+      clarification: clarification,
+    );
+  }
+
   /// Срок задачи словами («завтра в 10:00») или `null` без срока.
   String? _due(Task task, AssistantSession session) {
     final due = task.dueAt;
     if (due == null) return null;
     return formatDue(due, task.duePrecision, session.clock.now());
   }
+}
+
+final class _EditTarget {
+  const _EditTarget(this.task, {this.implicit = false}) : clarification = null;
+
+  const _EditTarget.ask(AssistantResponse this.clarification)
+      : task = null,
+        implicit = false;
+
+  final Task? task;
+
+  /// Задача не названа и не открыта, а только выбрана раньше.
+  final bool implicit;
+  final AssistantResponse? clarification;
+}
+
+/// Правка задачи из фразы и обычный разбор той же фразы — на случай, если
+/// задачи для правки нет (ADR-033).
+final class TaskEditRequest {
+  const TaskEditRequest(this.edit, this.fallback);
+
+  final TaskEdit edit;
+  final ParsedCommand fallback;
 }
 
 final class _Target {

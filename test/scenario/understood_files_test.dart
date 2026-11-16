@@ -72,8 +72,12 @@ void main() {
       );
       expect(await tasks.listActive(), isEmpty);
       final created = await assistant.handle('Создать');
-      expect(created.status, AssistantStatus.completed);
+      // «Напомни» без времени: задача создана, и сразу вопрос «Когда
+      // напомнить?» (ADR-033).
+      expect(created.status, AssistantStatus.needsClarification);
+      expect(created.replyId, 'task.created.askWhen');
       expect(created.task?.title, 'Лечь спать пораньше');
+      expect(await tasks.listActive(), hasLength(1));
     });
 
     test('«Исправить» — понятая команда в поле ввода, задачи нет', () async {

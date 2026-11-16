@@ -26,7 +26,7 @@
 {"id":"vox-026","text":"напоминание с утра написать андрею","intent":"createTask","title":"Написать Андрею","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual","note":"команда — одно существительное"}
 {"id":"vox-027","text":"можешь поставить зэд на утро напоминание написать андрею","intent":"createTask","title":"Написать Андрею","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual"}
 {"id":"vox-028","text":"напомни завтра утром чтобы я позвонил маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual"}
-{"id":"vox-029","text":"можешь напомнить мне завтра в восемь утра что надо отправить отчёт","intent":"createTask","title":"Надо отправить отчёт","due":"2026-11-03T08:00","precision":"dateTime","source":"manual"}
+{"id":"vox-029","text":"можешь напомнить мне завтра в восемь утра что надо отправить отчёт","intent":"createTask","title":"Отправить отчёт","due":"2026-11-03T08:00","precision":"dateTime","source":"manual"}
 {"id":"vox-030","text":"напомни завтра в девять позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T09:00","precision":"dateTime","source":"manual"}
 {"id":"vox-031","text":"напомни завтра в половине девятого позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T08:30","precision":"dateTime","source":"manual"}
 {"id":"vox-032","text":"напомни завтра в восемь тридцать позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T08:30","precision":"dateTime","source":"manual"}

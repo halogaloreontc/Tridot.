@@ -60,6 +60,54 @@ enum PartOfDay {
       DateTime(due.year, due.month, due.day, endHour);
 }
 
+/// Заметка к задаче (ADR-033): факт, записанный из чата («22 шт в ОК,
+/// арт. 67782»), и когда он записан.
+final class TaskNote {
+  const TaskNote({required this.text, required this.at});
+
+  final String text;
+  final DateTime at;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'text': text,
+        'at': at.toIso8601String(),
+      };
+
+  /// Запись без текста или с испорченной датой пропускается ([Task.fromJson]).
+  static TaskNote? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final text = json['text'];
+    final at = json['at'];
+    if (text is! String || text.trim().isEmpty || at is! String) return null;
+    final parsed = DateTime.tryParse(at);
+    if (parsed == null) return null;
+    return TaskNote(text: text, at: parsed);
+  }
+}
+
+/// Пункт чек-листа задачи (ADR-033): «добавь пункт молоко».
+final class TaskItem {
+  const TaskItem({required this.text, this.done = false});
+
+  final String text;
+  final bool done;
+
+  TaskItem copyWith({bool? done}) =>
+      TaskItem(text: text, done: done ?? this.done);
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'text': text,
+        'done': done,
+      };
+
+  static TaskItem? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final text = json['text'];
+    if (text is! String || text.trim().isEmpty) return null;
+    return TaskItem(text: text, done: json['done'] == true);
+  }
+}
+
 class Task {
   const Task({
     required this.id,
@@ -74,6 +122,8 @@ class Task {
     this.tags = const <String>[],
     this.completedAt,
     this.deletedAt,
+    this.notes = const <TaskNote>[],
+    this.items = const <TaskItem>[],
   });
 
   final String id;
@@ -88,6 +138,13 @@ class Task {
   final DateTime updatedAt;
   final DateTime? completedAt;
   final DateTime? deletedAt;
+
+  /// Заметки из чата, старые первыми (ADR-033). В файлах до этой версии
+  /// поля нет — пустой список.
+  final List<TaskNote> notes;
+
+  /// Пункты чек-листа (ADR-033).
+  final List<TaskItem> items;
 
   /// Проект задачи — первая метка; пусто, если проекта нет.
   String? get project => tags.isEmpty ? null : tags.first;
@@ -108,6 +165,8 @@ class Task {
     DateTime? completedAt,
     DateTime? deletedAt,
     List<String>? tags,
+    List<TaskNote>? notes,
+    List<TaskItem>? items,
     bool clearCompletedAt = false,
   }) {
     return Task(
@@ -123,6 +182,8 @@ class Task {
       updatedAt: updatedAt ?? this.updatedAt,
       completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
       deletedAt: deletedAt ?? this.deletedAt,
+      notes: notes ?? this.notes,
+      items: items ?? this.items,
     );
   }
 
@@ -139,6 +200,14 @@ class Task {
         'updated_at': updatedAt.toIso8601String(),
         'completed_at': completedAt?.toIso8601String(),
         'deleted_at': deletedAt?.toIso8601String(),
+        if (notes.isNotEmpty)
+          'notes': <Map<String, dynamic>>[
+            for (final note in notes) note.toJson(),
+          ],
+        if (items.isNotEmpty)
+          'items': <Map<String, dynamic>>[
+            for (final item in items) item.toJson(),
+          ],
       };
 
   factory Task.fromJson(Map<String, dynamic> json) {
@@ -163,6 +232,14 @@ class Task {
       deletedAt: json['deleted_at'] == null
           ? null
           : DateTime.parse(json['deleted_at'] as String),
+      notes: <TaskNote>[
+        for (final row in json['notes'] as List<dynamic>? ?? const <dynamic>[])
+          if (TaskNote.fromJson(row) case final TaskNote note) note,
+      ],
+      items: <TaskItem>[
+        for (final row in json['items'] as List<dynamic>? ?? const <dynamic>[])
+          if (TaskItem.fromJson(row) case final TaskItem item) item,
+      ],
     );
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/formatting/due_format.dart';
 import '../../core/models/task.dart';
 import '../assistant_theme.dart';
+import 'task_notes.dart';
 
 /// Состояние сохранения документа.
 enum DocumentSaveState {
@@ -33,6 +34,7 @@ final class DocumentView extends StatelessWidget {
     required this.onOpenTasks,
     this.topInset = 0,
     this.scrollController,
+    this.onToggleItem,
   });
 
   final Task? task;
@@ -52,6 +54,9 @@ final class DocumentView extends StatelessWidget {
 
   /// Прокрутка документа.
   final ScrollController? scrollController;
+
+  /// Отметить пункт чек-листа задачи; `null` — пункты только для показа.
+  final ValueChanged<int>? onToggleItem;
 
   @override
   Widget build(BuildContext context) {
@@ -166,6 +171,8 @@ final class DocumentView extends StatelessWidget {
             ),
           ),
         ),
+        // Пункты и заметки, записанные из чата (ADR-033).
+        TaskNotesSection(task: current, now: now, onToggleItem: onToggleItem),
         _FormattingToolbar(controller: bodyController, focus: bodyFocus),
         TextField(
           key: const Key('document-editor'),

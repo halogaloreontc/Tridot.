@@ -2475,6 +2475,19 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _refresh();
   }
 
+  /// Пункт чек-листа задачи из документа (ADR-033).
+  Future<void> _toggleItem(Task task, int index) async {
+    try {
+      await widget.tasks.toggleItem(task.id, index);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не получилось: $error')),
+      );
+    }
+    await _refresh();
+  }
+
   Future<void> _toggleDone(Task task) async {
     final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
     try {
@@ -4536,6 +4549,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     if (task != null) unawaited(_toggleDone(task));
                   },
                   onOpenTasks: () => _goTo(AppSection.tasks),
+                  onToggleItem: (int index) {
+                    final task = _selectedTask;
+                    if (task != null) unawaited(_toggleItem(task, index));
+                  },
                 ),
               );
     return Column(

@@ -308,7 +308,19 @@ void _validate(Map<String, dynamic> json, String location) {
       (connector is! String || !_connectorIds.contains(connector))) {
     fail('неизвестный connector «$connector»; известные: $_connectorIds');
   }
-  if (connector == null || connector == TasksConnector.id) {
+  if ((connector == null || connector == TasksConnector.id) &&
+      json['intent'] == TasksConnector.editCommand) {
+    // Правка задачи (ADR-033): проверяется `form` правки, полей разбора
+    // создания нет.
+    final extra = json.keys
+        .toSet()
+        .intersection(_taskOnlyKeys)
+        .where((String key) => !_isEmptyValue(json[key]))
+        .toSet();
+    if (extra.isNotEmpty) {
+      fail('у правки задачи поля $extra не проверяются — только form');
+    }
+  } else if (connector == null || connector == TasksConnector.id) {
     checkEnum('intent', CommandIntent.values);
   } else {
     // Для других коннекторов intent — commandId или `unknown`.
@@ -385,7 +397,8 @@ void _validate(Map<String, dynamic> json, String location) {
     if (form is! Map || form.values.any((Object? v) => v is! String)) {
       fail('поле form — объект «поле: значение» строками');
     }
-    if (connector != ConverterConnector.id &&
+    if (json['intent'] != TasksConnector.editCommand &&
+        connector != ConverterConnector.id &&
         connector != AlarmConnector.id &&
         connector != WeatherConnector.id) {
       fail('поле form бывает только у connector «converter», «alarm» и '
@@ -514,6 +527,33 @@ final class _Case {
         );
       }
       return mismatches;
+    }
+
+    // Правка задачи (ADR-033): её берёт коннектор задач, а не разбор
+    // создания. Строки разбора, наоборот, правкой стать не должны.
+    final tasksMatch = matches
+        .where((ConnectorMatch m) => m.connectorId == TasksConnector.id)
+        .firstOrNull;
+    final editPayload = tasksMatch?.payload;
+    final editForm =
+        editPayload is TaskEditRequest ? editPayload.edit.form : null;
+    if (expectedIntent == TasksConnector.editCommand) {
+      compare(
+        'intent',
+        editForm == null ? tasksMatch?.commandId ?? 'unknown' : 'task.edit',
+        TasksConnector.editCommand,
+      );
+      if (json['form'] case final Map<String, dynamic> form) {
+        compare(
+          'form',
+          editForm == null ? null : _sortedForm(editForm),
+          _sortedForm(form.cast<String, String>()),
+        );
+      }
+      return mismatches;
+    }
+    if (editForm != null) {
+      mismatches.add('правка задачи вместо разбора: $editForm');
     }
 
     final parsed = ScenarioParser(clock: FixedClock(now)).parse(phrase);

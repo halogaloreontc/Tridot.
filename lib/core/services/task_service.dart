@@ -303,6 +303,8 @@ final class TaskService {
       createdAt: current.createdAt,
       updatedAt: _clock.now(),
       completedAt: snapshot.completedAt,
+      notes: current.notes,
+      items: current.items,
     );
     await _repository.save(restored);
     return restored;
@@ -348,6 +350,50 @@ final class TaskService {
       tags: tags,
       updatedAt: _clock.now(),
     );
+    await _repository.save(updated);
+    return updated;
+  }
+
+  /// Дописывает заметку [text] к задаче (ADR-033).
+  Future<Task> addNote(String id, String text) async {
+    final task = await _requireTask(id);
+    final clean = text.trim();
+    if (clean.isEmpty) {
+      throw ArgumentError.value(text, 'text', 'Пустая заметка');
+    }
+    final now = _clock.now();
+    final updated = task.copyWith(
+      notes: <TaskNote>[...task.notes, TaskNote(text: clean, at: now)],
+      updatedAt: now,
+    );
+    await _repository.save(updated);
+    return updated;
+  }
+
+  /// Добавляет пункты чек-листа (ADR-033); повторы без учёта регистра
+  /// не дублируются.
+  Future<Task> addItems(String id, List<String> texts) async {
+    final task = await _requireTask(id);
+    final items = <TaskItem>[...task.items];
+    for (final raw in texts) {
+      final text = raw.trim();
+      if (text.isEmpty) continue;
+      final key = _titleKey(text);
+      if (items.any((TaskItem i) => _titleKey(i.text) == key)) continue;
+      items.add(TaskItem(text: text));
+    }
+    final updated = task.copyWith(items: items, updatedAt: _clock.now());
+    await _repository.save(updated);
+    return updated;
+  }
+
+  /// Отмечает пункт [index] чек-листа сделанным или снова открытым.
+  Future<Task> toggleItem(String id, int index) async {
+    final task = await _requireTask(id);
+    if (index < 0 || index >= task.items.length) return task;
+    final items = <TaskItem>[...task.items];
+    items[index] = items[index].copyWith(done: !items[index].done);
+    final updated = task.copyWith(items: items, updatedAt: _clock.now());
     await _repository.save(updated);
     return updated;
   }

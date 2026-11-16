@@ -477,6 +477,12 @@ void main() {
     _phones('документ и меню сессии', (tester, label) async {
       await _pumpHome(tester);
       await _say(tester, 'Добавь задачу купить молоко завтра в 10');
+      // Заметки и пункты из чата в документе (ADR-033).
+      await _say(
+        tester,
+        'запиши, что их 22шт в ок, 1шт в уценке под артикулом 67782',
+      );
+      await _say(tester, 'добавь пункты молоко, хлеб и сыр');
       await tester.tap(find.byKey(const Key('mode-document')));
       await tester.pumpAndSettle();
       await _checkScrolling(tester, '$label: документ');
