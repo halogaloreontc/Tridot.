@@ -30,3 +30,4 @@
 {"id":"col-030","text":"вычеркни","intent":"unknown","route":"none","source":"manual","note":"без предмета — не команда"}
 {"id":"col-031","text":"всё, закрой","intent":"unknown","route":"none","source":"manual","note":"глагол в конце не переставляется у записей над задачами: не «закрой всё»"}
 {"id":"col-032","text":"всё, перенеси","intent":"rescheduleTask","title":null,"due":null,"source":"manual","note":"перенос задачи из разговора (как bulk-neg-012), не всех"}
+{"id":"col-033","text":"напомнить завтра в 9 купить корм коту","intent":"createTask","title":"Купить корм коту","due":"2026-11-03T09:00","precision":"dateTime","source":"manual","note":"заметка себе инфинитивом — как «напомни», а не задача «Напомнить купить корм коту»"}
