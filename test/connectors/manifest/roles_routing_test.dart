@@ -592,6 +592,34 @@ void main() {
       expect(s.transport.requests, hasLength(1));
     });
 
+    test('«сколько позиций на складе» — честный ответ без запроса', () async {
+      final s = _Setup();
+      for (final phrase in <String>[
+        'сколько позиций на складе',
+        'Сколько всего товаров на складе?',
+        'сколько у нас всего товара',
+      ]) {
+        final response = await s.say(phrase);
+        expect(response.replyId, 'warehouse.total', reason: phrase);
+        expect(response.status, AssistantStatus.noAction, reason: phrase);
+        expect(
+          response.message,
+          startsWith('Сколько всего позиций, склад пока не считает'),
+          reason: phrase,
+        );
+      }
+      expect(
+        s.transport.requests,
+        isEmpty,
+        reason: 'товар «позиций на складе» не ищем',
+      );
+      // Вопрос о товаре — обычный запрос с чистым полем.
+      await s.say('сколько на складе 64115');
+      expect(s.transport.requests, hasLength(1));
+      expect(s.transport.requests.single.body, contains('"64115"'));
+      expect(s.transport.requests.single.body, isNot(contains('склад')));
+    });
+
     test('полные фразы и однословные начала не задеты', () async {
       final s = _Setup();
       expect((await s.say('где лежит стул')).replyId, isNot('warehouse.ask'));

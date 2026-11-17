@@ -13,6 +13,7 @@ import '../verb_forms.dart';
 import 'connection.dart';
 import 'manifest_format.dart';
 import 'manifest_matcher.dart';
+import 'manifest_query.dart';
 import 'manifest_text.dart';
 import 'manifest_view.dart';
 
@@ -31,9 +32,10 @@ final class ManifestPayload {
   final String command;
   final Map<String, String> slots;
 
-  /// `say`, `fallback`, `help` (своя фраза справки «Tridot») или `ask`
+  /// `say`, `fallback`, `help` (своя фраза справки «Tridot»), `ask`
   /// — начало фразы с полем без самого поля («где лежит»): спросить, что
-  /// искать.
+  /// искать, или `total` — вопрос обо всём складе («сколько позиций на
+  /// складе»): склад этого не считает, ответ — без запроса.
   final String how;
 
   /// Фраза начиналась с обращения к приложению: «на складе …».
@@ -239,6 +241,24 @@ final class ManifestConnector
   };
 
   /// Слова примеров: «сколько будет 2+2» — калькулятору.
+  static const Set<String> _notGoods = <String>{
+    'смысл',
+    'толк',
+    'толку',
+    'лет',
+    'годиков',
+  };
+
+  static const List<String> _currencyStems = <String>[
+    'доллар',
+    'евро',
+    'рубл',
+    'бакс',
+    'биткоин',
+    'юан',
+    'курс',
+  ];
+
   static const Set<String> _calcWords = <String>{
     'будет',
     'умножить',
@@ -417,8 +437,64 @@ final class ManifestConnector
         if (aliased != null) return aliased.match;
       }
     }
+    // Та же просьба словами описания: «есть ли на складе 64115», «наличие
+    // 64115», «поищи 64115», «в какой ячейке лежит 64115».
+    for (final candidate in candidates) {
+      for (final (:text, :availability) in ManifestQuery.paraphrases(
+        candidate,
+      )) {
+        if (availability && !_stockTalk(utterance, text)) continue;
+        final found = _matchText(matcher, utterance, text, aliased: false);
+        final match = found?.match;
+        if (match == null) continue;
+        // Наличие — догадка по обычным словам «есть ли»: уступает явной
+        // команде другого навыка («есть ли у меня задачи на завтра»).
+        if (!availability || match.confidence <= 0.75) return match;
+        return ConnectorMatch(
+          connectorId: match.connectorId,
+          commandId: match.commandId,
+          confidence: 0.75,
+          payload: match.payload,
+        );
+      }
+    }
     return null;
   }
+
+  /// Вопрос «есть ли X» — о складе: назван склад или артикул, склад только
+  /// что отвечал или подключён для роли «Кладовщик», и в вопросе нет слов
+  /// других навыков («есть ли резервная копия», «есть ли смысл ждать»).
+  /// В чате задачи и в ответ на вопрос помощника — нет.
+  bool _stockTalk(Utterance utterance, String text) {
+    if (utterance.chatTaskId != null || utterance.awaitingAnswer) return false;
+    final words = text.split(_wordSplit);
+    if (words.any((String w) => _foreignStems.any(w.startsWith))) return false;
+    return utterance.codes.isNotEmpty ||
+        words.any((String w) => w.startsWith('склад')) ||
+        utterance.recentConnectorId == slot.id ||
+        _hint('bareWords');
+  }
+
+  /// Слова других навыков и обычной речи в вопросе о наличии.
+  static const List<String> _foreignStems = <String>[
+    'задач',
+    'напомин',
+    'копи',
+    'бэкап',
+    'бекап',
+    'резервн',
+    'парол',
+    'будильник',
+    'таймер',
+    'погод',
+    'файл',
+    'смысл',
+    'толк',
+    'врем',
+    'дела',
+    'планы',
+    'вопрос',
+  ];
 
   /// «кстати, где лежит 64115» → «где лежит 64115».
   static String? _withoutLead(String text) {
@@ -475,7 +551,32 @@ final class ManifestConnector
     final bare = matcher.strip(text);
     for (final pass
         in bare.isNotEmpty && bare != text ? [text, bare] : [text]) {
-      for (final hit in matcher.hits(pass)) {
+      for (final raw in matcher.hits(pass)) {
+        final hit = _cleaned(raw);
+        final query = _textSlot(hit);
+        if (query != null && query.isEmpty && raw.rule!.literalWords > 0) {
+          // «сколько на складе»: искать нечего — спросить, что искать.
+          return _found(
+            hit.command.id,
+            const <String, String>{},
+            'ask',
+            0.9,
+            aliased: aliased,
+          );
+        }
+        if (query != null &&
+            _countsStock(hit.command) &&
+            ManifestQuery.isWholeStock(query)) {
+          // «сколько позиций на складе»: обо всём складе, а не поиск
+          // товара «позиций» — честный ответ без запроса к складу.
+          return _found(
+            hit.command.id,
+            const <String, String>{},
+            'total',
+            0.9,
+            aliased: aliased,
+          );
+        }
         final verdict = _judge(hit, utterance, pass, aliased: aliased);
         if (verdict == null) continue;
         if (verdict < 0) {
@@ -504,7 +605,8 @@ final class ManifestConnector
     }
     final relaxed = _relaxed(matcher, utterance, bare.isNotEmpty ? bare : text);
     if (relaxed != null) {
-      final (hit, pass) = relaxed;
+      final (raw, pass) = relaxed;
+      final hit = _cleaned(raw);
       final verdict = _judge(hit, utterance, pass, aliased: aliased);
       if (verdict != null && verdict > 0) {
         return _found(
@@ -518,7 +620,11 @@ final class ManifestConnector
     }
     final fallback = matcher.fallback;
     if (fallback == null) return null;
-    final value = bare.isNotEmpty ? bare : text;
+    // «есть в наличии 64115» — вопрос о наличии: его разберёт пересказ
+    // («остаток 64115»), а не «где лежит» по голому артикулу.
+    final raw = bare.isNotEmpty ? bare : text;
+    final value = _availability.hasMatch(raw) ? raw : ManifestQuery.clean(raw);
+    if (value.isEmpty) return null;
     final codeOnly = _code.hasMatch(value) && utterance.codes.length == 1;
     if (!codeOnly && !aliased) return null;
     // «склад, напомни купить хлеб», «склад, спасибо»: после обращения —
@@ -547,6 +653,44 @@ final class ManifestConnector
   }
 
   static final RegExp _blank = RegExp(r'\s+');
+
+  static final RegExp _availability = RegExp(r'наличи|(?:^|\s)есть(?:\s|$)');
+
+  /// Совпадение с текстовыми полями без служебных слов по краям
+  /// ([ManifestQuery.clean]): «по 64115» → «64115».
+  static ManifestHit _cleaned(ManifestHit hit) {
+    var changed = false;
+    final slots = <String, String>{};
+    for (final MapEntry(:key, :value) in hit.slots.entries) {
+      final type = hit.command.slots[key]?.type;
+      final clean =
+          type == 'cell' || type == 'int' ? value : ManifestQuery.clean(value);
+      if (clean != value) changed = true;
+      slots[key] = clean;
+    }
+    if (!changed) return hit;
+    return ManifestHit(
+      command: hit.command,
+      slots: slots,
+      how: hit.how,
+      rule: hit.rule,
+    );
+  }
+
+  /// Значение единственного текстового поля совпадения или `null`.
+  static String? _textSlot(ManifestHit hit) {
+    if (hit.slots.length != 1) return null;
+    final MapEntry(:key, :value) = hit.slots.entries.single;
+    final type = hit.command.slots[key]?.type;
+    return type == 'cell' || type == 'int' ? null : value;
+  }
+
+  /// Команда считает остаток: среди её фраз есть «сколько {поле}».
+  static bool _countsStock(ManifestCommand command) => command.say.any(
+        (String phrase) => _countPhrase.hasMatch(askText(phrase)),
+      );
+
+  static final RegExp _countPhrase = RegExp(r'^сколько\s+\{');
 
   /// Период у команды без полей: «приходы без фото за сегодня»,
   /// «приходы за день без фото». «За день», «за сутки» — это сегодня.
@@ -883,6 +1027,15 @@ final class ManifestConnector
       for (final token in utterance.tokens)
         if (Utterance.isCovered(token, utterance.due.spans)) token.text,
     };
+    // «сколько осталось до отпуска», «сколько стоит доллар», «сколько
+    // смысл ждать» — не товар.
+    if (words.first == 'до' ||
+        words.any(
+          (String w) =>
+              _notGoods.contains(w) || _currencyStems.any(w.startsWith),
+        )) {
+      return false;
+    }
     for (final word in words) {
       if (_taskWord(word) ||
           _pronouns.contains(word) ||
@@ -949,6 +1102,11 @@ final class ManifestConnector
     }
     if (description == null || command == null) {
       return say('serverError', AssistantStatus.failed);
+    }
+    if (payload.how == 'total') {
+      return say('total', AssistantStatus.noAction, <String, String>{
+        'example': command.examples.firstOrNull ?? 'сколько 64115',
+      });
     }
     if (command.reply case final String text) {
       // Свой текст каталога — голосом помощника; текст описания (на «вы»,

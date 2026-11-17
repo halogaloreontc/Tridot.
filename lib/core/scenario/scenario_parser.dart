@@ -2908,6 +2908,11 @@ bool _isListQuery(Utterance utterance) {
       ask = true;
       continue;
     }
+    // «есть ли у меня задачи на завтра» — вопрос и без «?».
+    if (word == 'ли' && i > 0 && words[i - 1] == 'есть') {
+      ask = true;
+      continue;
+    }
     // «хочу глянуть», «мне бы посмотреть», «дай глянуть»: инфинитив —
     // просьба только после желания; сам по себе это задача.
     if (_listLookInfinitives.contains(word)) {

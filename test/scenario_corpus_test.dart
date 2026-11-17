@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/manifest/connection_slots.dart';
+import 'package:local_assistant/core/connectors/manifest/manifest_connector.dart';
 import 'package:local_assistant/core/connectors/manifest/manifest_format.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/extensions/extension_registry.dart';
@@ -147,6 +148,13 @@ String? _formOf(Object? payload) => switch (payload) {
           if (r.label case final String label) 'label': label,
           if (r.issue == AlarmIssue.date && r.at != null)
             'date': r.at!.toIso8601String().substring(0, 10),
+        }),
+      // Склад (ADR-031): поля запроса («q=64115») и, кроме обычной фразы
+      // описания, как понят вопрос: `how=total` — обо всём складе, `ask` —
+      // спросить, что искать.
+      final ManifestPayload p => _sortedForm(<String, String>{
+          ...p.slots,
+          if (p.how == 'total' || p.how == 'ask') 'how': p.how,
         }),
       // Погода (ADR-030): день (ISO), город в именительном падеже, диапазон.
       final WeatherAsk a => _sortedForm(<String, String>{
@@ -401,9 +409,10 @@ void _validate(Map<String, dynamic> json, String location) {
     if (json['intent'] != TasksConnector.editCommand &&
         connector != ConverterConnector.id &&
         connector != AlarmConnector.id &&
-        connector != WeatherConnector.id) {
-      fail('поле form бывает только у connector «converter», «alarm» и '
-          '«weather»');
+        connector != WeatherConnector.id &&
+        connector != ConnectionSlots.warehouse.id) {
+      fail('поле form бывает только у connector «converter», «alarm», '
+          '«weather» и «warehouse»');
     }
   }
   // Кого выберет маршрутизатор для фразы, которую ни один навык не должен
