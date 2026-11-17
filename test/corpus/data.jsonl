@@ -42,3 +42,7 @@
 {"id": "data-062", "text": "нужна копия, паспорта и снилса", "connector": "data", "intent": "unknown", "route": "none", "source": "manual", "note": "копия бумаги, не данных приложения (ревью)"}
 {"id": "data-063", "text": "нужна копия, срочно, для банка", "connector": "data", "intent": "unknown", "route": "none", "source": "manual", "note": "копия бумаги, не данных приложения (ревью)"}
 {"id": "data-064", "text": "сделай копию чтобы отправить начальнику", "connector": "data", "intent": "unknown", "route": "none", "source": "manual", "note": "копия бумаги, не данных приложения (ревью)"}
+{"id": "data-065", "text": "вытащи все данные из копии", "connector": "data", "intent": "data.restore", "source": "manual", "note": "«из копии» — восстановление, а не новая копия поверх старой"}
+{"id": "data-066", "text": "загрузи все данные из бэкапа", "connector": "data", "intent": "data.restore", "source": "manual"}
+{"id": "data-067", "text": "воссттанови все данные из копии", "connector": "data", "intent": "data.restore", "source": "manual", "note": "опечатка в глаголе: направление даёт «из копии»"}
+{"id": "data-068", "text": "сделай копию всех данных", "connector": "data", "intent": "data.backup", "source": "manual"}

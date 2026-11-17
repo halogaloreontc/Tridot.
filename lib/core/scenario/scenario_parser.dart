@@ -282,6 +282,9 @@ final class ScenarioParser {
       if (ClockQuestion.of(utterance) != null) {
         return const ParsedCommand(intent: CommandIntent.unknown);
       }
+      if (_askToAssistant(utterance)) {
+        return const ParsedCommand(intent: CommandIntent.unknown);
+      }
       final question = QuestionPhrases.detect(utterance);
       if (question != null &&
           (question.opener != null || utterance.isQuestion) &&
@@ -518,6 +521,9 @@ final class ScenarioParser {
           ],
         );
       case CommandIntent.rescheduleTask:
+        if (!hasQuotes && _quantifiedTarget(utterance, marker.index)) {
+          return const ParsedCommand(intent: CommandIntent.unknown);
+        }
         return ParsedCommand(
           intent: intent,
           title: quoted,
@@ -535,6 +541,11 @@ final class ScenarioParser {
           titleIssue: titleIssue,
         );
       case CommandIntent.completeTask:
+        if (!hasQuotes &&
+            !isPastVerb(utterance.tokens[marker.index].text) &&
+            _quantifiedTarget(utterance, marker.index)) {
+          return const ParsedCommand(intent: CommandIntent.unknown);
+        }
         final targetQuery = hasQuotes
             ? null
             : _targetQuery(utterance, marker.index, _completeFiller);
@@ -555,6 +566,98 @@ final class ScenarioParser {
         return ParsedCommand(intent: intent);
     }
   }
+
+  /// «Напомни, как тебя зовут?», «напомни, что ты умеешь», «можешь
+  /// напомнить, что у меня на завтра?» — вопрос к помощнику о нём самом
+  /// или о планах, а не дело «Ты умеешь» или «У меня» на завтра. Сразу
+  /// после «напомни» (и вежливых слов, срока) — вопросительное слово или
+  /// «что», а за ним «ты/тебя/вы…» или «у меня/у нас» с «?».
+  /// «Напомни, что ты обещал позвонить» — тоже вопрос: дела «Ты обещал»
+  /// нет. «Можешь напомнить завтра, что необходимо оплатить счёт» — дело.
+  bool _askToAssistant(Utterance utterance) {
+    final tokens = utterance.tokens;
+    var i = tokens.indexWhere(
+      (UtteranceToken t) => _remindAsks.contains(t.text),
+    );
+    if (i < 0) return false;
+    i++;
+    while (i < tokens.length &&
+        (_askSkip.contains(tokens[i].text) ||
+            Utterance.isCovered(tokens[i], utterance.due.spans))) {
+      i++;
+    }
+    if (i + 1 >= tokens.length) return false;
+    final word = tokens[i].text;
+    if (word != 'что' && !QuestionPhrases.isWhWord(word)) return false;
+    final next = tokens[i + 1].text;
+    if (_secondPerson.contains(next)) return true;
+    return word == 'что' &&
+        utterance.isQuestion &&
+        next == 'у' &&
+        i + 2 < tokens.length &&
+        (tokens[i + 2].text == 'меня' || tokens[i + 2].text == 'нас');
+  }
+
+  static const Set<String> _remindAsks = <String>{
+    'напомни',
+    'напомните',
+    'напомнить',
+    'напомнишь',
+  };
+
+  static const Set<String> _askSkip = <String>{
+    'мне',
+    'нам',
+    'пожалуйста',
+    'плиз',
+    'еще',
+    'раз',
+    'ка',
+  };
+
+  static const Set<String> _secondPerson = <String>{
+    'ты',
+    'тебя',
+    'тебе',
+    'тобой',
+    'вы',
+    'вас',
+    'вам',
+  };
+
+  /// «Перенеси все просроченные», «закрой всё по отчёту»: сразу после
+  /// глагола (и «задачи») — «все». Массовой команды [BulkParser] в этой
+  /// фразе не нашёл, а одна задача по словам «все просроченные» — не то,
+  /// о чём просили: лучше не понять, чем перенести или закрыть не то.
+  /// «Всё готово по отчёту», «уже всё сделала» — «всё» до глагола, здесь
+  /// не смотрится.
+  bool _quantifiedTarget(Utterance utterance, int markerIndex) {
+    final tokens = utterance.tokens;
+    var i = markerIndex + 1;
+    while (i < tokens.length && _beforeQuantifier.contains(tokens[i].text)) {
+      i++;
+    }
+    return i < tokens.length && _quantifierWords.contains(tokens[i].text);
+  }
+
+  static const Set<String> _beforeQuantifier = <String>{
+    'ка',
+    'мне',
+    'пожалуйста',
+    'сразу',
+    'задачи',
+    'задачу',
+    'дела',
+  };
+
+  static const Set<String> _quantifierWords = <String>{
+    'все',
+    'всех',
+    'каждую',
+    'каждый',
+    'каждое',
+    'любые',
+  };
 
   /// Совместимая обёртка: только успешно разобранный срок.
   (DateTime, DuePrecision)? parseDue(String text) {
@@ -2189,7 +2292,9 @@ final class ScenarioParser {
         }
         return _Marker(CommandIntent.completeTask, i, 1);
       }
-      if (_isList(word, words)) return _Marker(CommandIntent.listTasks, i, 1);
+      if (_isList(word, words, i)) {
+        return _Marker(CommandIntent.listTasks, i, 1);
+      }
     }
     return const _Marker.none();
   }
@@ -2711,11 +2816,47 @@ final class ScenarioParser {
     'какие',
   };
 
-  bool _isList(String word, List<String> words) {
+  bool _isList(String word, List<String> words, int index) {
     if (word == 'запланировано') return true;
+    // «Очисти список задач», «отправь список задач маме» — действие над
+    // списком, которого помощник не умеет, а не просьба его показать.
+    if (word == 'список' && words.take(index).any(_notListVerbs.contains)) {
+      return false;
+    }
     return _listVerbs.contains(word) &&
         words.any((String w) => w.startsWith('задач') || w == 'дела');
   }
+
+  /// Глаголы перед «список», с которыми это не просьба показать список.
+  static const Set<String> _notListVerbs = <String>{
+    'очисти',
+    'очистить',
+    'почисти',
+    'удали',
+    'удалить',
+    'сотри',
+    'стереть',
+    'сбрось',
+    'сбросить',
+    'убери',
+    'убрать',
+    'распечатай',
+    'напечатай',
+    'отправь',
+    'отправить',
+    'перешли',
+    'пошли',
+    'скинь',
+    'сохрани',
+    'сохранить',
+    'скопируй',
+    'скопировать',
+    'экспортируй',
+    'выгрузи',
+    'поделись',
+    'отсортируй',
+    'переименуй',
+  };
 }
 
 /// Вопрос о своих планах целиком: «что у меня на сегодня по плану?»,

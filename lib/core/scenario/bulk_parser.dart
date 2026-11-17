@@ -1,4 +1,5 @@
 import '../connectors/due_parser.dart';
+import '../connectors/speech_noise.dart';
 import '../connectors/utterance.dart';
 import '../models/bulk.dart';
 import '../models/task.dart';
@@ -235,6 +236,29 @@ final class BulkParser {
     'как',
   };
 
+  /// Вступления перед глаголом: «будь добр, перенеси все просроченные»,
+  /// «а можешь закрыть все сегодняшние?». Без них фраза с одним чужим
+  /// словом переставала быть массовой и становилась переносом одной
+  /// задачи «Будь добр, все просроченные».
+  static const Set<String> _leadIns = <String>{
+    'а',
+    'и',
+    'будь',
+    'будьте',
+    'добр',
+    'добра',
+    'добры',
+    'любезен',
+    'любезна',
+    'любезны',
+    'слышь',
+    'ладно',
+    'хорошо',
+    'итак',
+    'теперь',
+    'еще',
+  };
+
   static const Set<String> _sourcePrepositions = <String>{'с', 'со', 'от'};
 
   static const Map<String, int> _numberWords = <String, int>{
@@ -438,6 +462,9 @@ final class BulkParser {
         used[i + 1] = true;
       } else if (!_neutralAdjectives.contains(word) &&
           !_polite.contains(word) &&
+          !SpeechNoise.isJunk(word) &&
+          !(i < verbIndex &&
+              (SpeechNoise.isLeadFiller(word) || _leadIns.contains(word))) &&
           !_beforeHashtag(utterance, i)) {
         return null;
       }
