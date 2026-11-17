@@ -1,4 +1,5 @@
 import '../connectors/due_parser.dart';
+import '../connectors/first_person_verbs.dart';
 import '../connectors/noun_forms.dart';
 import '../connectors/person_names.dart';
 import '../connectors/question_phrases.dart';
@@ -1438,6 +1439,8 @@ final class ScenarioParser {
     if (dontForget && _aboutPrepositions.contains(tokens[i].text)) {
       return _dontForgetAbout(utterance, remove);
     }
+    final firstPerson = _firstPersonCreate(utterance, i, remove);
+    if (firstPerson != null) return firstPerson;
     final verb = tokens[i].text;
     if (!DueParser.isInfinitive(verb) || _notImplicitVerbs.contains(verb)) {
       return null;
@@ -1476,6 +1479,70 @@ final class ScenarioParser {
       implicit: true,
     );
   }
+
+  /// «Завтра я позвоню маме», «я позвоню врачу завтра в 10 утра» — дело
+  /// от первого лица со сроком: глагол будущего времени из закрытой
+  /// таблицы ([FirstPersonVerbs], ADR-033). Это может быть и рассказ, а не
+  /// просьба, поэтому задача только с вопросом «Понял так: … Создать?»
+  /// (сомнение 0,5). Без срока («я позвоню маме»), с отрицанием, в чате
+  /// задачи («я сделаю это завтра» — о ней же) и с местоимением вместо
+  /// дела («я напишу тебе завтра», «я сделаю это») — не задача.
+  ParsedCommand? _firstPersonCreate(
+    Utterance utterance,
+    int index,
+    List<CharSpan> remove,
+  ) {
+    final tokens = utterance.tokens;
+    if (index + 1 >= tokens.length) return null;
+    final subject = tokens[index].text;
+    if (subject != 'я' && subject != 'мы') return null;
+    final verb = tokens[index + 1].text;
+    if (!FirstPersonVerbs.contains(verb)) return null;
+    final due = utterance.due;
+    if (due.spans.isEmpty || utterance.chatTaskId != null) return null;
+    final rest = <String>[
+      for (final token in tokens.skip(index + 2))
+        if (!Utterance.isCovered(token, due.spans)) token.text,
+    ];
+    if (rest.isEmpty ||
+        utterance.words.contains('не') ||
+        rest.any(
+          (String w) => _firstPersonNotTask.contains(w) || _isAssistantNoun(w),
+        )) {
+      return null;
+    }
+    final text = _titleText(utterance, remove);
+    if (text.isEmpty) return null;
+    _doubt += 0.5;
+    return ParsedCommand(
+      intent: CommandIntent.createTask,
+      title: Utterance.capitalize(text),
+      dueAt: due.dueAt,
+      duePrecision: due.precision,
+      dueIssue: due.issue,
+      projects: <String>[for (final tag in utterance.hashtags) tag.name],
+      implicit: true,
+    );
+  }
+
+  /// Местоимения после глагола от первого лица: дело не названо («я
+  /// сделаю это завтра») или это разговор («я напишу тебе завтра»).
+  static const Set<String> _firstPersonNotTask = <String>{
+    'это',
+    'этим',
+    'ее',
+    'его',
+    'их',
+    'ей',
+    'ему',
+    'им',
+    'тебе',
+    'тебя',
+    'тобой',
+    'вам',
+    'вас',
+    'вами',
+  };
 
   /// Обстоятельства времени, которые не сроки ([DueParser]): «ночью»,
   /// «после работы», «перед сном». Перед инфинитивом без маркера они

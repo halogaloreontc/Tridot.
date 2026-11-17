@@ -93,6 +93,33 @@ void main() {
     });
   });
 
+  group('дело от первого лица (ADR-033)', () {
+    test('без команды — только с вопросом «Создать?»', () async {
+      final asked = await assistant.handle('завтра я позвоню маме');
+      expect(asked.status, AssistantStatus.needsClarification);
+      expect(asked.message, contains('Позвонить маме'));
+      expect(await repository.list(), isEmpty);
+      final created = await assistant.handle('Создать');
+      expect(created.status, AssistantStatus.completed);
+      expect(created.task?.title, 'Позвонить маме');
+      expect(created.task?.dueAt, DateTime(2026, 11, 3));
+    });
+
+    test('с командой — сразу задача с инфинитивом', () async {
+      final created =
+          await assistant.handle('напомни завтра, что я позвоню маме');
+      expect(created.status, AssistantStatus.completed);
+      expect(created.task?.title, 'Позвонить маме');
+    });
+
+    test('в чате задачи «я сделаю это завтра» — не новая задача', () async {
+      final task = (await assistant.handle('Добавь задачу «Отчёт»')).task!;
+      assistant.enterChat(taskId: task.id);
+      await assistant.handle('я сделаю это завтра');
+      expect(await repository.list(), hasLength(1));
+    });
+  });
+
   test('запрашивает контекст вместо угадывания задачи', () async {
     final response = await assistant.handle('Заверши её');
 
