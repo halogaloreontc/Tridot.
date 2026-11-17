@@ -56,6 +56,44 @@ final class _FakeProcess implements Process {
   }
 }
 
+/// Запуски через подделку. До запуска задача создаёт папки настоящим
+/// вводом-выводом (поток ввода-вывода, а не очередь событий), поэтому
+/// тест ждёт сам вызов: одного `pumpEventQueue()` под нагрузкой не
+/// хватало — папок ещё не было, запуска тоже.
+final class _Starts {
+  _Starts(this.process, {this.missing});
+
+  final _FakeProcess process;
+
+  /// Программа, которой «нет» (ProcessException), например setsid.
+  final String? missing;
+
+  /// Вызовы по порядку: программа и аргументы.
+  final List<(String, List<String>)> calls = <(String, List<String>)>[];
+
+  final Completer<void> _launched = Completer<void>();
+
+  Future<Process> call(String exe, List<String> args) async {
+    calls.add((exe, args));
+    if (exe == missing) throw ProcessException(exe, const <String>[]);
+    if (!_launched.isCompleted) _launched.complete();
+    return process;
+  }
+
+  /// Ждёт удачного запуска; дальше задача подхватывает процесс без
+  /// ввода-вывода — ей хватает очереди событий. Задача кончилась раньше
+  /// запуска ([done]) — тест падает сразу, а не через 30 с.
+  Future<void> launched(Future<Object?> done) async {
+    await Future.any(<Future<void>>[
+      _launched.future,
+      done.then((_) {
+        if (!_launched.isCompleted) fail('задача кончилась без запуска');
+      }),
+    ]);
+    await pumpEventQueue();
+  }
+}
+
 void main() {
   group('аргументы', () {
     test('без оболочки, конфигов, cookies и плагинов; ссылка после --', () {
@@ -227,23 +265,19 @@ void main() {
     test('готово: путь из --print, ход работы, временная папка убрана',
         () async {
       final process = _FakeProcess();
-      String? exe;
-      List<String>? argv;
+      final starts = _Starts(process);
       final runner = YtdlJobRunner(
         ytdlpPath: () async => '/tools/yt-dlp',
         ffmpegPath: () async => null,
         windows: false,
-        starter: (String e, List<String> a) async {
-          exe = e;
-          argv = a;
-          return process;
-        },
+        starter: starts.call,
       );
       final events = <JobEvent>[];
       final done = runner.start(request()).listen(events.add).asFuture<void>();
-      await pumpEventQueue();
+      await starts.launched(done);
+      final (exe, argv) = starts.calls.single;
       expect(exe, '/tools/yt-dlp');
-      expect(argv!.last, _url);
+      expect(argv.last, _url);
       expect(Directory(scratch).existsSync(), isTrue);
       process
         ..out('tridot-progress 50 100')
@@ -269,15 +303,16 @@ void main() {
 
     test('путь вне папки загрузок не принимается', () async {
       final process = _FakeProcess();
+      final starts = _Starts(process);
       final runner = YtdlJobRunner(
         ytdlpPath: () async => '/tools/yt-dlp',
         ffmpegPath: () async => null,
         windows: false,
-        starter: (String e, List<String> a) async => process,
+        starter: starts.call,
       );
       final events = <JobEvent>[];
       final done = runner.start(request()).listen(events.add).asFuture<void>();
-      await pumpEventQueue();
+      await starts.launched(done);
       final outside = File(p.join(temp.path, 'чужой.mp4'))
         ..writeAsStringSync('x');
       process.out('tridot-file ${outside.path}');
@@ -288,15 +323,16 @@ void main() {
 
     test('ошибка: только код, без текста и ссылки', () async {
       final process = _FakeProcess();
+      final starts = _Starts(process);
       final runner = YtdlJobRunner(
         ytdlpPath: () async => '/tools/yt-dlp',
         ffmpegPath: () async => null,
         windows: false,
-        starter: (String e, List<String> a) async => process,
+        starter: starts.call,
       );
       final events = <JobEvent>[];
       final done = runner.start(request()).listen(events.add).asFuture<void>();
-      await pumpEventQueue();
+      await starts.launched(done);
       process.err('ERROR: [youtube] abc: Private video. $_url');
       await process.finish(1);
       await done;
@@ -340,16 +376,17 @@ void main() {
 
     test('отмена: SIGTERM, затем SIGKILL; временная папка убрана', () async {
       final process = _FakeProcess()..stubborn = true;
+      final starts = _Starts(process);
       final runner = YtdlJobRunner(
         ytdlpPath: () async => '/tools/yt-dlp',
         ffmpegPath: () async => null,
         windows: false,
         killGrace: const Duration(milliseconds: 10),
-        starter: (String e, List<String> a) async => process,
+        starter: starts.call,
       );
       final events = <JobEvent>[];
       final done = runner.start(request()).listen(events.add).asFuture<void>();
-      await pumpEventQueue();
+      await starts.launched(done);
       File(p.join(scratch, 'Ролик.mp4.part')).writeAsStringSync('частично');
       runner.cancel('j1');
       await done;
@@ -364,47 +401,40 @@ void main() {
 
     test('Linux: запуск через setsid, «Отмена» — всей группе', () async {
       final process = _FakeProcess();
-      String? exe;
-      List<String>? argv;
+      final starts = _Starts(process);
       final runner = YtdlJobRunner(
         ytdlpPath: () async => '/tools/yt-dlp',
         ffmpegPath: () async => null,
         windows: false,
         processGroup: true,
-        starter: (String e, List<String> a) async {
-          exe = e;
-          argv = a;
-          return process;
-        },
+        starter: starts.call,
       );
       final done = runner.start(request()).last;
-      await pumpEventQueue();
+      await starts.launched(done);
+      final (exe, argv) = starts.calls.single;
       expect(exe, YtdlJobRunner.setsidTool);
-      expect(argv!.first, '/tools/yt-dlp');
-      expect(argv!.last, _url);
+      expect(argv.first, '/tools/yt-dlp');
+      expect(argv.last, _url);
       await process.finish(0);
       await done;
     });
 
     test('Linux: нет setsid — обычный запуск', () async {
       final process = _FakeProcess();
-      final started = <String>[];
+      final starts = _Starts(process, missing: YtdlJobRunner.setsidTool);
       final runner = YtdlJobRunner(
         ytdlpPath: () async => '/tools/yt-dlp',
         ffmpegPath: () async => null,
         windows: false,
         processGroup: true,
-        starter: (String e, List<String> a) async {
-          started.add(e);
-          if (e == YtdlJobRunner.setsidTool) {
-            throw const ProcessException('setsid', <String>[]);
-          }
-          return process;
-        },
+        starter: starts.call,
       );
       final done = runner.start(request()).last;
-      await pumpEventQueue();
-      expect(started, <String>[YtdlJobRunner.setsidTool, '/tools/yt-dlp']);
+      await starts.launched(done);
+      expect(
+        starts.calls.map(((String, List<String>) c) => c.$1),
+        <String>[YtdlJobRunner.setsidTool, '/tools/yt-dlp'],
+      );
       await process.finish(0);
       await done;
     });
@@ -427,20 +457,36 @@ void main() {
         final events = <JobEvent>[];
         final done =
             runner.start(request()).listen(events.add).asFuture<void>();
+        // Файл появляется раньше, чем в нём номер (`>` сначала создаёт
+        // пустой): ждём номер, а не файл.
         final childFile = File('${script.path}.child');
-        for (var i = 0; i < 100 && !childFile.existsSync(); i++) {
+        String childPid() =>
+            childFile.existsSync() ? childFile.readAsStringSync().trim() : '';
+        for (var i = 0; i < 250 && childPid().isEmpty; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 20));
         }
-        final child = childFile.readAsStringSync().trim();
-        expect(Directory('/proc/$child').existsSync(), isTrue);
+        final child = childPid();
+        expect(child, matches(RegExp(r'^\d+$')));
+        // Жив — есть в /proc и не зомби. Процесс могут убрать между
+        // проверкой и чтением: нет файла — значит, уже не жив.
+        bool childAlive() {
+          try {
+            return !File('/proc/$child/stat')
+                .readAsStringSync()
+                .contains(') Z ');
+          } on FileSystemException {
+            return false;
+          }
+        }
+
+        expect(childAlive(), isTrue);
         runner.cancel('j1');
         await done;
         expect((events.last as JobFailed).code, JobCodes.cancelled);
         var alive = true;
-        for (var i = 0; i < 100 && alive; i++) {
+        for (var i = 0; i < 250 && alive; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 20));
-          alive = Directory('/proc/$child').existsSync() &&
-              !File('/proc/$child/stat').readAsStringSync().contains(') Z ');
+          alive = childAlive();
         }
         expect(alive, isFalse);
       },

@@ -80,7 +80,7 @@ Platform runners для Android, Windows, Linux и macOS уже находятс
 
 ## Требования
 
-Установите стабильный Flutter SDK. Прототип проверен с Flutter 3.47.9 и встроенным Dart 3.13.7 на macOS arm64.
+Установите стабильный Flutter SDK. Прототип проверен с Flutter 3.47.9 и встроенным Dart 3.13.7 на macOS arm64. CI закреплён на той же версии (`FLUTTER_VERSION` в `.github/workflows/ci.yml`, ADR-036); новый Flutter — отдельной правкой там, в `web-assistant-release.yml` и здесь.
 
 Дополнительные инструменты зависят от платформы:
 

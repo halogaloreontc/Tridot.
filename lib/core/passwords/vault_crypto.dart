@@ -632,9 +632,15 @@ final class SodiumVaultCrypto implements VaultCrypto {
         key: _key(key),
       );
 
+  // Сначала длина: `Sodium.memcmp` (package:sodium) на разной длине
+  // бросает RangeError.
+  // Не `a && memcmp(...)`: анализатор Dart 3.14 считает результат внутри
+  // `&&` неиспользованным (unused_result), хотя он возвращается.
   @override
-  bool equal(Uint8List a, Uint8List b) =>
-      a.length == b.length && _sodium.memcmp(a, b);
+  bool equal(Uint8List a, Uint8List b) {
+    if (a.length != b.length) return false;
+    return _sodium.memcmp(a, b);
+  }
 
   SecureKey _key(VaultKey key) {
     if (key is! _SodiumKey || key.isDisposed) {

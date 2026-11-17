@@ -3,6 +3,7 @@
 // предложение скачать yt-dlp; «Настроить» — скачать, «Обновить» (только
 // до версии, закреплённой в приложении), папка загрузок. Нет навыка в
 // сборке (Android, macOS, Google Play) — нет и плитки.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' show Abi;
 import 'dart:io';
@@ -26,6 +27,19 @@ import 'package:local_assistant/core/skills/ytdl/ytdl_unavailable.dart';
 import 'package:path/path.dart' as p;
 
 final List<int> _binary = utf8.encode('yt-dlp');
+
+/// Следующее сообщение [kit] о смене: setFolder шлёт его после записи
+/// файла настроек.
+Future<void> _changed(YtdlKit kit) {
+  final done = Completer<void>();
+  void listener() {
+    kit.removeListener(listener);
+    done.complete();
+  }
+
+  kit.addListener(listener);
+  return done.future;
+}
 
 final class _Downloader implements FileDownloader {
   int calls = 0;
@@ -231,7 +245,7 @@ void main() {
     );
     await tester.runAsync(() async {
       await tester.tap(find.byKey(const ValueKey<String>('tool-download')));
-      for (var i = 0; i < 100 && !ytdl.tool.isInstalled; i++) {
+      for (var i = 0; i < 500 && !ytdl.tool.isInstalled; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
     });
@@ -262,10 +276,14 @@ void main() {
         ),
       ),
     );
+    // Ждём сохранения (setFolder сообщает о смене после записи файла), а
+    // не время: сколько идёт запись на диск, не задано, под нагрузкой
+    // 50 мс может не хватить.
     await tester.runAsync(() async {
+      final saved = _changed(ytdl);
       await tester
           .tap(find.byKey(const ValueKey<String>('ytdl-folder-change')));
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await saved;
     });
     await tester.pumpAndSettle();
     expect(await tester.runAsync(ytdl.folder), chosen);
@@ -273,11 +291,15 @@ void main() {
     final again = kit();
     await tester.runAsync(again.load);
     expect(again.customFolder, chosen);
-    await tester.tap(find.byKey(const ValueKey<String>('ytdl-folder-reset')));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
+    await tester.runAsync(() async {
+      final saved = _changed(ytdl);
+      await tester.tap(find.byKey(const ValueKey<String>('ytdl-folder-reset')));
+      await saved;
+    });
     await tester.pumpAndSettle();
     expect(ytdl.customFolder, isNull);
+    final reset = kit();
+    await tester.runAsync(reset.load);
+    expect(reset.customFolder, isNull);
   });
 }
