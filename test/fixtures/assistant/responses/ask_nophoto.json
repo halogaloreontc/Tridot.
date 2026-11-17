@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "days": 30,
+  "since": "2026-10-04",
+  "count": 1,
+  "missing": 2,
+  "items": [
+    {
+      "id": "e5",
+      "no": "П-3",
+      "kind": "reg",
+      "kindLabel": "Реестр",
+      "at": "2026-10-20T10:00:00",
+      "day": "2026-10-20",
+      "time": "10:00",
+      "reason": "",
+      "buyer": "",
+      "missing": 2,
+      "total": 5,
+      "skus": "64115, 64116",
+      "scan": false
+    }
+  ],
+  "more": false
+}

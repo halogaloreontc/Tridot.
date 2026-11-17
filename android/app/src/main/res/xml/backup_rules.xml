@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Резервная копия Android 11 и ниже и `adb backup` (ADR-014, D20): без
+     хранилища паролей и секретов подключений. -->
+<full-backup-content>
+    <exclude domain="file" path="assistant/vault/" />
+    <exclude domain="file" path="assistant/secrets.json" />
+    <exclude domain="file" path="assistant/secrets.sealed" />
+    <exclude domain="file" path="assistant/secrets.sealed.bad" />
+    <!-- Модель голосового ввода (ADR-023): скачивается заново. -->
+    <exclude domain="file" path="assistant/voice/" />
+    <!-- Файлы, прикреплённые к сессиям (ADR-019). -->
+    <exclude domain="root" path="app_flutter/assistant/chats/files/" />
+    <!-- Расписание напоминаний (ADR-029): строится заново из задач. -->
+    <exclude domain="sharedpref" path="tridot_reminders.xml" />
+    <!-- Виджеты рабочего стола (ADR-034): снимок и очередь отметок —
+         строятся заново из задач. -->
+    <exclude domain="sharedpref" path="tridot_homescreen.xml" />
+    <!-- Погода (ADR-030): город, ссылка и кэш — только на устройстве. -->
+    <exclude domain="file" path="assistant/weather/" />
+</full-backup-content>

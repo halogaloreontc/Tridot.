@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Быстрый ввод» (ADR-034): одна ячейка в высоту, ширина не меньше
+     250 dp — уже подпись «Что сделать?» при крупном шрифте обрезалась бы
+     у микрофона. Растягивается только вширь. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="40dp"
+    android:minResizeWidth="250dp"
+    android:minResizeHeight="40dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:resizeMode="horizontal"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen|not_keyguard"
+    android:initialLayout="@layout/hw_quick"
+    android:previewLayout="@layout/hw_quick"
+    android:description="@string/hw_quick_description" />

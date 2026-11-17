@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Образец «Сегодня и ввод» в списке виджетов лаунчера (Android 12+):
+     четыре задачи, у одной — запись, и поле снизу. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingBottom="0dp"
+    android:background="@drawable/hw_bg"
+    android:clipToOutline="true">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="40dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp">
+        <TextView
+            style="@style/HwHead"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:text="@string/hw_today" />
+        <TextView
+            style="@style/HwMeta"
+            android:text="@string/hw_sample_count" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:baselineAligned="false"
+                android:background="@drawable/hw_press_bg">
+                <FrameLayout
+                    android:layout_width="48dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="2dp"
+                    android:background="@drawable/hw_press_bg">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/hw_check_off" />
+                </FrameLayout>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:paddingEnd="16dp">
+                    <TextView
+                        style="@style/HwTitle"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:text="@string/hw_sample_title_1" />
+                    <TextView
+                        style="@style/HwDueOver"
+                        android:layout_marginStart="12dp"
+                        android:text="@string/hw_sample_due_1" />
+                </LinearLayout>
+            </LinearLayout>
+        </FrameLayout>
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:baselineAligned="false"
+                android:background="@drawable/hw_press_bg">
+                <FrameLayout
+                    android:layout_width="48dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="2dp"
+                    android:background="@drawable/hw_press_bg">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/hw_check_off" />
+                </FrameLayout>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:paddingEnd="16dp">
+                    <TextView
+                        style="@style/HwTitle"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:text="@string/hw_sample_title_2" />
+                    <TextView
+                        style="@style/HwDue"
+                        android:layout_marginStart="12dp"
+                        android:text="@string/hw_sample_due_2" />
+                </LinearLayout>
+            </LinearLayout>
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="1px"
+                android:layout_gravity="top"
+                android:layout_marginStart="50dp"
+                android:layout_marginEnd="16dp"
+                android:background="@color/hw_divider" />
+        </FrameLayout>
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:orientation="horizontal"
+                android:gravity="top"
+                android:baselineAligned="false"
+                android:background="@drawable/hw_press_bg">
+                <FrameLayout
+                    android:layout_width="48dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="2dp"
+                    android:background="@drawable/hw_press_bg">
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="top"
+                        android:layout_marginTop="8dp">
+                        <TextView
+                            style="@style/HwTitle"
+                            android:layout_width="match_parent"
+                            android:paddingTop="2dp"
+                            android:paddingBottom="2dp"
+                            android:importantForAccessibility="no"
+                            android:visibility="invisible" />
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_gravity="center"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/hw_check_off" />
+                    </FrameLayout>
+                </FrameLayout>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:paddingEnd="16dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+                        <TextView
+                            style="@style/HwTitle"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:text="@string/hw_sample_title_3" />
+                        <TextView
+                            style="@style/HwDue"
+                            android:layout_marginStart="12dp"
+                            android:text="@string/hw_sample_due_3" />
+                    </LinearLayout>
+                    <TextView
+                        style="@style/HwMeta"
+                        android:layout_width="match_parent"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/hw_sample_note_3" />
+                </LinearLayout>
+            </LinearLayout>
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="1px"
+                android:layout_gravity="top"
+                android:layout_marginStart="50dp"
+                android:layout_marginEnd="16dp"
+                android:background="@color/hw_divider" />
+        </FrameLayout>
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:baselineAligned="false"
+                android:background="@drawable/hw_press_bg">
+                <FrameLayout
+                    android:layout_width="48dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="2dp"
+                    android:background="@drawable/hw_press_bg">
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/hw_check_off" />
+                </FrameLayout>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:paddingEnd="16dp">
+                    <TextView
+                        style="@style/HwTitle"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:text="@string/hw_sample_title_4" />
+                    <TextView
+                        style="@style/HwDue"
+                        android:layout_marginStart="12dp"
+                        android:text="@string/hw_sample_due_4" />
+                </LinearLayout>
+            </LinearLayout>
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="1px"
+                android:layout_gravity="top"
+                android:layout_marginStart="50dp"
+                android:layout_marginEnd="16dp"
+                android:background="@color/hw_divider" />
+        </FrameLayout>
+    </LinearLayout>
+    <include layout="@layout/hw_field" />
+</LinearLayout>

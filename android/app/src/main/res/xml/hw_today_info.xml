@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Сегодня» (ADR-034): по умолчанию 4×2, ширина от двух ячеек (уже
+     250 dp — узкий вид). Сжать можно до одной ячейки в высоту: шапка и
+     одна задача без «ещё N». Обновляется по снимку из приложения и
+     своему будильнику, не по расписанию системы. На экран блокировки не
+     ставится. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="110dp"
+    android:maxResizeHeight="520dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen|not_keyguard"
+    android:initialLayout="@layout/hw_loading"
+    android:previewLayout="@layout/hw_today_preview"
+    android:description="@string/hw_today_description" />

@@ -1,0 +1,75 @@
+{"id":"reg-001","text":"Добавь задачу «Завершить отчёт»","intent":"createTask","title":"Завершить отчёт","due":null,"note":"раньше «заверши» в названии завершало предыдущую задачу"}
+{"id":"reg-002","text":"Создай задачу «Передвинь шкаф» на завтра","intent":"createTask","title":"Передвинь шкаф","due":"2026-11-03","precision":"date","note":"раньше переносило предыдущую задачу"}
+{"id":"reg-003","text":"Добавь задачу «Покажи задачи Ивану»","intent":"createTask","title":"Покажи задачи Ивану","due":null}
+{"id":"reg-004","text":"Добавь задачу «Обсудить завтрак» в 18:00","intent":"createTask","title":"Обсудить завтрак","due":"2026-11-02T18:00","precision":"dateTime","note":"«завтрак» в названии не означает «завтра»"}
+{"id":"reg-005","text":"Добавь задачу «Планёрка завтра» сегодня","intent":"createTask","title":"Планёрка завтра","due":"2026-11-02","precision":"date"}
+{"id":"reg-006","text":"Добавь задачу «Купить хлеб» послезавтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-04","precision":"date","note":"раньше «послезавтра» давало завтрашний день"}
+{"id":"reg-007","text":"Добавь задачу «Отчёт по „Ромашке“»","intent":"createTask","title":"Отчёт по „Ромашке“"}
+{"id":"reg-008","text":"Добавь задачу «Отчёт по «Ромашке»»","intent":"createTask","title":"Отчёт по «Ромашке»","note":"вложенные ёлочки"}
+{"id":"reg-009","text":"Добавь задачу «Отчёт по \"Ромашке\"»","intent":"createTask","title":"Отчёт по \"Ромашке\""}
+{"id":"reg-010","text":"Добавь задачу «Встреча в 10:00»","intent":"createTask","title":"Встреча в 10:00","due":null,"note":"время внутри названия не становится сроком"}
+{"id":"reg-011","text":"Добавь задачу «Звонок» сегодня в 9:00","intent":"createTask","title":"Звонок","issue":"inPast","note":"раньше молча создавалась просроченная задача"}
+{"id":"reg-012","text":"Добавь задачу «Ремонт» на 31.02","intent":"createTask","title":"Ремонт","issue":"invalidDate"}
+{"id":"reg-013","text":"Добавь задачу «Ремонт» сегодня или завтра","intent":"createTask","title":"Ремонт","issue":"conflictingDays"}
+{"id":"reg-014","text":"Добавь задачу «Отчёт» 10.12.2026","intent":"createTask","title":"Отчёт","due":"2026-12-10","precision":"date","note":"раньше разбиралось как время 10:12"}
+{"id":"reg-015","now":"2026-10-25T00:30","text":"Добавь задачу «Бег» завтра","intent":"createTask","title":"Бег","due":"2026-10-26","precision":"date","note":"переход на зимнее время в Европе"}
+{"id":"reg-016","now":"2026-11-30T12:00","text":"Добавь задачу «Отчёт» завтра в 09:00","intent":"createTask","title":"Отчёт","due":"2026-12-01T09:00","precision":"dateTime"}
+{"id":"reg-017","now":"2026-12-31T23:00","text":"Добавь задачу «Салют» на 00:30","intent":"createTask","title":"Салют","due":"2027-01-01T00:30","precision":"dateTime"}
+{"id":"reg-018","text":"Добавь задачу выполнить отчёт","intent":"createTask","title":"Выполнить отчёт","note":"самый ранний маркер — «добавь»; «выполнить» остаётся в названии"}
+{"id":"reg-019","text":"Добавь задачу «Отчёт» на 15.11","intent":"createTask","title":"Отчёт","due":"2026-11-15","precision":"date","note":"раньше 15.11 разбиралось как 15:11"}
+{"id":"reg-020","text":"Что мне нужно выполнить сегодня?","intent":"unknown","note":"вопрос не должен завершать задачу из контекста"}
+{"id":"reg-021","text":"Выполненные задачи","intent":"unknown"}
+{"id":"reg-022","text":"Нет, не выполнено","intent":"unknown","note":"отрицание"}
+{"id":"reg-023","text":"Я ещё не сделал","intent":"unknown"}
+{"id":"reg-024","text":"Нужно выполнить «Отчёт» завтра","intent":"unknown","note":"инфинитив не в начале — не команда завершения"}
+{"id":"reg-025","text":"Напомни выполнить «Отчёт» завтра","intent":"createTask","title":"Отчёт","due":"2026-11-03","precision":"date"}
+{"id":"reg-026","text":"Перенеси задачу «Отчёт» на завтра","intent":"rescheduleTask","title":"Отчёт","due":"2026-11-03","precision":"date","note":"название указывает целевую задачу"}
+{"id":"reg-027","text":"Заверши задачу «Отчёт»","intent":"completeTask","title":"Отчёт"}
+{"id":"reg-028","text":"Добавь задачу «Отчёт «Q3» завтра","intent":"createTask","title":null,"titleIssue":"unbalancedQuotes","note":"незакрытая внешняя кавычка"}
+{"id":"reg-029","text":"Добавь задачу «Купить» и «Позвонить» завтра","intent":"createTask","title":null,"titleIssue":"multipleTitles"}
+{"id":"reg-030","text":"Добавь задачу “Отчёт“ на завтра","intent":"createTask","title":"Отчёт","due":"2026-11-03","precision":"date"}
+{"id":"reg-031","text":"Добавь задачу »Звонок« завтра","intent":"createTask","title":"Звонок","due":"2026-11-03","precision":"date"}
+{"id":"reg-032","text":"Перенеси встречу с 15:00 на 17:00","intent":"rescheduleTask","due":"2026-11-02T17:00","precision":"dateTime","note":"берётся время после «на», а не после «с»"}
+{"id":"reg-033","text":"Перенеси с 10.11 на 12.11","intent":"rescheduleTask","due":"2026-11-12","precision":"date"}
+{"id":"reg-034","text":"Перенеси на 18.30","intent":"rescheduleTask","due":"2026-11-02T18:30","precision":"dateTime","note":"такой даты нет, но это корректное время"}
+{"id":"reg-035","text":"Добавь задачу «Отчёт» к 18.00","intent":"createTask","title":"Отчёт","due":"2026-11-02T18:00","precision":"dateTime"}
+{"id":"reg-036","text":"Добавь задачу «Отчёт» завтра в 18.00.","intent":"createTask","title":"Отчёт","due":"2026-11-03T18:00","precision":"dateTime","note":"точка в конце предложения"}
+{"id":"reg-037","text":"Добавь задачу «Отчёт» 01.01.2025","intent":"createTask","title":"Отчёт","issue":"inPast"}
+{"id":"reg-038","text":"Добавь задачу «Отчёт» 10.12.25","intent":"createTask","title":"Отчёт","issue":"inPast","note":"двузначный год"}
+{"id":"reg-039","text":"Добавь задачу «Отчёт» 10.12.27","intent":"createTask","title":"Отчёт","due":"2027-12-10","precision":"date"}
+{"id":"reg-040","text":"Добавь задачу «Обновление» до версии 2.10 завтра","intent":"createTask","title":"Обновление","due":"2026-11-03","precision":"date","note":"номер версии не дата"}
+{"id":"reg-041","text":"Добавь задачу «Отчёт» сегодня 02.11","intent":"createTask","title":"Отчёт","due":"2026-11-02","precision":"date","note":"один и тот же день двумя способами"}
+{"id":"reg-042","text":"Добавь задачу «Отчёт» сегодня, 02.11 в 18:00","intent":"createTask","title":"Отчёт","due":"2026-11-02T18:00","precision":"dateTime"}
+{"id":"reg-043","now":"2027-03-01T10:00","text":"Добавь задачу «Високосный» 29.02","intent":"createTask","title":"Високосный","due":"2028-02-29","precision":"date"}
+{"id":"reg-044","text":"Добавь задачу «Отчёт» 10.11 или 12.11","intent":"createTask","title":"Отчёт","issue":"conflictingDays"}
+{"id":"reg-045","text":"Добавь задачу «Отчёт» сегодня в 24:00","intent":"createTask","title":"Отчёт","issue":"invalidTime"}
+{"id":"reg-046","text":"Добавь задачу «Отчёт» в 18:00:00","intent":"createTask","title":"Отчёт","due":"2026-11-02T18:00","precision":"dateTime"}
+{"id":"reg-047","text":"Добавь задачу «Отчёт» в 7.5","intent":"createTask","title":"Отчёт","issue":"invalidTime"}
+{"id":"reg-048","text":"Добавь задачу «Отчёт» в 10:00 или в 11:00","intent":"createTask","title":"Отчёт","issue":"conflictingTimes"}
+{"id":"reg-049","text":"Готово?","intent":"unknown"}
+{"id":"reg-050","text":"Добавь задачу «Отчёт» в 15.11","intent":"createTask","title":"Отчёт","due":"2026-11-03T15:11","precision":"dateTime","note":"после «в» число с точкой — время; 15:11 сегодня уже прошло"}
+{"id":"reg-051","text":"Добавь задачу «Звонок» завтра в 9 утра","intent":"createTask","title":"Звонок","due":"2026-11-03T09:00","precision":"dateTime","note":"час без минут и «утра»; раньше known_gap gap-002"}
+{"id":"reg-052","text":"Добавь задачу «Отчёт» в 10:00 15.11","intent":"createTask","title":"Отчёт","due":"2026-11-15T10:00","precision":"dateTime","note":"раньше 15.11 после «в 10:00» читалось как время 15:11 — конфликт времён"}
+{"id":"reg-053","text":"поставь задачу разместить стулья феррара 66580 в ячейки 1с","now":"2026-11-06T13:05","intent":"createTask","title":"Разместить стулья феррара 66580 в ячейки 1с","due":null,"note":"раньше «поставь задачу» не было маркером создания и помощник отвечал «не понял»; артикул и «1с» — не срок","source":"manual"}
+{"id":"reg-054","text":"поставить задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«поставить задачу» — создание","source":"manual"}
+{"id":"reg-055","text":"Поставь задачу купить хлеб на завтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"reg-056","text":"поставь мне задачу позвонить маме в пятницу в 10","intent":"createTask","title":"Позвонить маме","due":"2026-11-06T10:00","precision":"dateTime","source":"manual"}
+{"id":"reg-057","text":"Поставь новую задачу: проверить остатки","intent":"createTask","title":"Проверить остатки","due":null,"source":"manual"}
+{"id":"reg-058","text":"заведи задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«заведи задачу» — создание","source":"manual"}
+{"id":"reg-059","text":"Заведите напоминание оплатить счёт завтра в 9","intent":"createTask","title":"Оплатить счёт","due":"2026-11-03T09:00","precision":"dateTime","source":"manual"}
+{"id":"reg-060","text":"сделай задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«сделай задачу» — создание, а не завершение","source":"manual"}
+{"id":"reg-061","text":"Задача: купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«Задача:» в начале фразы — заголовок новой задачи","source":"manual"}
+{"id":"reg-062","text":"нужно поставить задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«нужно» перед маркером — вступление, а не часть названия","source":"manual"}
+{"id":"reg-063","text":"мне надо добавить задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"source":"manual"}
+{"id":"reg-064","text":"запиши задачу разместить стулья феррара 66580 в ячейки 1с","now":"2026-11-06T13:05","intent":"createTask","title":"Разместить стулья феррара 66580 в ячейки 1с","due":null,"source":"manual"}
+{"id":"reg-065","text":"создай задачу разместить стулья феррара 66580 в ячейки 1с","now":"2026-11-06T13:05","intent":"createTask","title":"Разместить стулья феррара 66580 в ячейки 1с","due":null,"source":"manual"}
+{"id":"reg-066","text":"поставь чайник","intent":"unknown","note":"«поставь» без «задачу» — не команда","source":"manual"}
+{"id":"reg-067","text":"сделай погромче","intent":"unknown","note":"«сделай» без «задачу» — не команда","source":"manual"}
+{"id":"reg-068","text":"задача купить хлеб","intent":"unknown","note":"без двоеточия «задача …» не заголовок","source":"manual"}
+{"id":"reg-069","text":"ДОБАВЬ \"КУПИТЬ ХЛЕБ\" ЗАВТРА","intent":"createTask","title":"КУПИТЬ ХЛЕБ","due":"2026-11-03","precision":"date","note":"заглавными: название в кавычках остаётся точным"}
+{"id":"reg-070","text":"добавь отчёт для ООО Ромашка","intent":"createTask","title":"Отчёт для ООО Ромашка","note":"не всё сообщение заглавными — аббревиатура остаётся"}
+{"id":"reg-071","text":"добавь купить Mилк завтра","intent":"createTask","title":"Купить Милк","due":"2026-11-03","precision":"date","note":"латинская M внутри русского слова"}
+{"id":"reg-072","text":"напомню завтра","intent":"unknown","note":"другая форма слова, не опечатка «напомни»"}
+{"id":"reg-073","text":"запишу хлеб","intent":"unknown","note":"другая форма слова, не опечатка «запиши»"}
+{"id":"reg-074","text":"пеернеси отчёт на завтра","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-11-03","precision":"date","note":"перестановка букв в команде"}
+{"id":"reg-075","text":"добавь купить iPhone завтра","intent":"createTask","title":"Купить iPhone","due":"2026-11-03","precision":"date","note":"слово целиком латиницей не меняется"}

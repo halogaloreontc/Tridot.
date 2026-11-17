@@ -1,0 +1,106 @@
+{"id":"rev-001","text":"добавь собрание в 2 часа дня","intent":"createTask","title":"Собрание","due":"2026-11-03T14:00","precision":"dateTime","note":"«часа» и «дня» вместе; 14:00 сегодня прошло"}
+{"id":"rev-002","text":"добавь звонок в 7 часов вечера","intent":"createTask","title":"Звонок","due":"2026-11-02T19:00","precision":"dateTime"}
+{"id":"rev-003","text":"добавь звонок завтра в 3 часа ночи","intent":"createTask","title":"Звонок","due":"2026-11-03T03:00","precision":"dateTime"}
+{"id":"rev-004","text":"добавь звонок в 10 часов утра","intent":"createTask","title":"Звонок","due":"2026-11-03T10:00","precision":"dateTime"}
+{"id":"rev-005","text":"добавь задачу купить хлеб завтра в 10 пожалуйста","intent":"createTask","title":"Купить хлеб","due":"2026-11-03T10:00","precision":"dateTime","note":"вежливое слово после часа"}
+{"id":"rev-006","text":"добавь задачу завтра в 10 пожалуйста","intent":"createTask","title":null,"due":"2026-11-03T10:00","precision":"dateTime","note":"«в 10» не становится названием"}
+{"id":"rev-007","text":"добавь в 10 позвонить","intent":"createTask","title":"Позвонить","due":"2026-11-03T10:00","precision":"dateTime","note":"час перед действием"}
+{"id":"rev-008","text":"напомни мне в 9 и в 18 пить таблетки","intent":"createTask","title":"Пить таблетки","due":null,"issue":"conflictingTimes","note":"два времени — уточнение, а не задача без срока"}
+{"id":"rev-009","text":"добавь в 2 магазина","intent":"createTask","title":"В 2 магазина","due":null,"note":"после числа существительное — не время"}
+{"id":"rev-010","text":"создай новую задачу купить хлеб завтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date"}
+{"id":"rev-011","text":"добавь новое напоминание оплатить интернет","intent":"createTask","title":"Оплатить интернет","due":null}
+{"id":"rev-012","text":"слушай, добавь задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"вступление перед командой"}
+{"id":"rev-013","text":"можешь добавить задачу купить хлеб?","intent":"createTask","title":"Купить хлеб","due":null}
+{"id":"rev-014","text":"добавь купить 1.5 кг сахара","intent":"createTask","title":"Купить 1.5 кг сахара","due":null,"note":"количество, а не 1 мая"}
+{"id":"rev-015","text":"добавь купить 3.5 метра кабеля","intent":"createTask","title":"Купить 3.5 метра кабеля","due":null}
+{"id":"rev-016","text":"добавь обновить flutter до 3.24","intent":"createTask","title":"Обновить flutter до 3.24","due":null,"note":"версия после латинского слова"}
+{"id":"rev-017","text":"добавь созвон zoom в 19.30","intent":"createTask","title":"Созвон zoom","due":"2026-11-02T19:30","precision":"dateTime","note":"после «в» — время, даже рядом с латиницей"}
+{"id":"rev-018","text":"запиши в список дел купить хлеб","intent":"createTask","title":"Купить хлеб","due":null}
+{"id":"rev-019","text":"нет, добавь задачу купить хлеб","intent":"createTask","title":"Купить хлеб","due":null,"note":"«нет,» — поправка, а не отрицание"}
+{"id":"rev-020","text":"Нет, перенеси на завтра","intent":"rescheduleTask","targetQuery":null,"due":"2026-11-03","precision":"date"}
+{"id":"rev-021","text":"не, добавь задачу купить хлеб на завтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date"}
+{"id":"rev-022","text":"не добавляй задачу купить хлеб","intent":"unknown","note":"«не» без запятой по-прежнему не команда"}
+{"id":"rev-023","text":"добавь позвонить в 03","intent":"createTask","title":"Позвонить в 03","due":null,"note":"номер службы, а не 03:00"}
+{"id":"rev-024","text":"добавь задачу приехать к 5","intent":"createTask","title":"Приехать","due":null,"issue":"ambiguousHour","note":"5 утра или 17:00 — уточнение"}
+{"id":"rev-025","text":"Перенеси выбранную задачу на завтра","intent":"rescheduleTask","targetQuery":null,"due":"2026-11-03","precision":"date","note":"«выбранную» — выбранная задача"}
+{"id":"rev-026","text":"Заверши текущую задачу","intent":"completeTask","targetQuery":null}
+{"id":"rev-027","text":"перенеси последнюю задачу на завтра","intent":"rescheduleTask","targetQuery":null,"due":"2026-11-03","precision":"date"}
+{"id":"rev-028","text":"отметь звонок маме выполненным","intent":"completeTask","targetQuery":"Звонок маме"}
+{"id":"rev-029","text":"Добавь задачу купить хлеб к 17","intent":"createTask","title":"Купить хлеб","due":"2026-11-02T17:00","precision":"dateTime","note":"час больше 12 — без уточнения"}
+{"id":"rev-030","text":"добавь звонок в 5 утра","intent":"createTask","title":"Звонок","due":"2026-11-03T05:00","precision":"dateTime","note":"с уточнением час 1–6 понятен"}
+{"id":"rev-031","text":"напомни о моей встрече с клиентом","intent":"createTask","title":"Моя встреча с клиентом","due":null,"note":"местоимение перед главным словом: «моей» → «моя», не «мояя»"}
+{"id":"rev-032","text":"напомни о нашей встрече","intent":"createTask","title":"Наша встреча","due":null}
+{"id":"rev-033","text":"напомни насчёт нашей встречи","intent":"createTask","title":"Наша встреча","due":null}
+{"id":"rev-034","text":"напомни о третьей встрече","intent":"createTask","title":"Третья встреча","due":null}
+{"id":"rev-035","text":"напомни о брате","intent":"createTask","title":"О брате","due":null,"note":"мужской род на «-ате» не угадать — как написано"}
+{"id":"rev-036","text":"напомни о ребёнке","intent":"createTask","title":"О ребёнке","due":null,"note":"«-нке» — мужской род, не «Ребёнка»"}
+{"id":"rev-037","text":"напомни о списке покупок","intent":"createTask","title":"О списке покупок","due":null}
+{"id":"rev-038","text":"напомни о малыше","intent":"createTask","title":"О малыше","due":null}
+{"id":"rev-039","text":"напомни насчёт помощи маме","intent":"createTask","title":"Насчёт помощи маме","due":null,"note":"женский род на «-ь»: не «Помоща»"}
+{"id":"rev-040","text":"напомни о гарантии на телефон","intent":"createTask","title":"Гарантия на телефон","due":null}
+{"id":"rev-041","text":"напомни о путешествии","intent":"createTask","title":"Путешествие","due":null}
+{"id":"rev-042","text":"напомни о Евгении","intent":"createTask","title":"О Евгении","due":null,"note":"Евгений или Евгения — не угадать"}
+{"id":"rev-043","text":"добавь рагу на ужин","intent":"createTask","title":"Рагу на ужин","due":null,"note":"несклоняемое на «-у»"}
+{"id":"rev-044","text":"напомни про Баку","intent":"createTask","title":"Баку","due":null}
+{"id":"rev-045","text":"добавь Олегу цветы","intent":"createTask","title":"Олегу цветы","due":null,"note":"дательный падеж: не «Олега цветы»"}
+{"id":"rev-046","text":"добавь заказчику документы","intent":"createTask","title":"Заказчику документы","due":null}
+{"id":"rev-047","text":"добавь созвон 5 ноября вечером","intent":"createTask","title":"Созвон","due":"2026-11-05T19:00","precision":"partOfDay","note":"дата словами и часть суток — один срок (раньше дату словами разбор не понимал, и вся фраза оставалась в названии)"}
+{"id":"rev-048","text":"добавь созвон 5-го вечером","intent":"createTask","title":"Созвон 5-го вечером","due":null}
+{"id":"rev-049","text":"добавь встречу вчера вечером","intent":"createTask","title":"Встреча вчера вечером","due":null,"note":"«вчера» не срок — и «вечером» рядом не сегодняшний вечер"}
+{"id":"rev-050","text":"добавь созвон вечером в 1","intent":"createTask","title":"Созвон","due":null,"issue":"ambiguousHour","note":"13:00 — не вечер: переспросить"}
+{"id":"rev-051","text":"добавь созвон завтра вечером в 12","intent":"createTask","title":"Созвон","due":null,"issue":"ambiguousHour"}
+{"id":"rev-052","text":"добавь вечером в 2 магазина зайти","intent":"createTask","title":"В 2 магазина зайти","due":"2026-11-02T19:00","precision":"partOfDay","note":"«в 2 магазина» — количество, не час"}
+{"id":"rev-053","text":"добавь днём в 10 классе провести урок","intent":"createTask","title":"В 10 классе провести урок","due":"2026-11-02T13:00","precision":"partOfDay"}
+{"id":"rev-054","text":"напомни утром в 3 поликлинику позвонить","intent":"createTask","title":"В 3 поликлинику позвонить","due":"2026-11-03T09:00","precision":"partOfDay","note":"3:00 — не утро: не час"}
+{"id":"rev-055","text":"поставь кипятить воду","intent":"unknown","note":"бытовая просьба, не задача"}
+{"id":"rev-056","text":"поставь стирать бельё","intent":"unknown"}
+{"id":"rev-057","text":"поставь смотреть фильм","intent":"unknown"}
+{"id":"rev-058","text":"перенеси созвон на вечер","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-02T19:00","precision":"partOfDay","note":"«на вечер» — срок переноса"}
+{"id":"rev-059","text":"перенеси встречу на утро","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-03T09:00","precision":"partOfDay","note":"утро уже прошло — завтра"}
+{"id":"rev-060","text":"перенеси созвон на вечер пятницы","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-06T19:00","precision":"partOfDay"}
+{"id":"rev-061","text":"перенеси встречу с утра на вечер завтра","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-03T19:00","precision":"partOfDay","note":"«с утра» — откуда переносят"}
+{"id":"rev-062","text":"добавь созвон завтра утром в 3","intent":"createTask","title":"Созвон","due":null,"issue":"ambiguousHour","note":"3:00 — не утро: переспросить, а не ставить 03:00"}
+{"id":"rev-063","text":"поставь подготовить отчёт","intent":"createTask","title":"Подготовить отчёт","due":null,"note":"закрытый список бытовых глаголов не мешает делам"}
+{"id":"rev-064","text":"поставь созвониться с клиентом","intent":"createTask","title":"Созвониться с клиентом","due":null}
+{"id":"rev-065","text":"добавь купить билеты на вечер встречи выпускников","intent":"createTask","title":"Купить билеты на вечер встречи выпускников","due":null,"note":"«на вечер встречи» — событие, не срок"}
+{"id":"rev-066","text":"добавь утром в 5 пробежку","intent":"createTask","title":"Пробежка","due":"2026-11-03T05:00","precision":"dateTime","note":"час в пределах утра — время"}
+{"id":"rev-067","text":"добавь посчитать траты с начала месяца","intent":"createTask","title":"Посчитать траты с начала месяца","due":null,"note":"«с начала месяца» — период, не срок"}
+{"id":"rev-068","text":"добавь сверить продажи после середины месяца","intent":"createTask","title":"Сверить продажи после середины месяца","due":null,"note":"«после» — не предлог срока"}
+{"id":"rev-069","text":"добавь отчёт о конце месяца","intent":"createTask","title":"Отчёт о конце месяца","due":null,"note":"«о конце месяца» — тема, не срок"}
+{"id":"rev-070","text":"добавь подготовить отчёт для конца месяца","intent":"createTask","title":"Подготовить отчёт для конца месяца","due":null}
+{"id":"rev-071","text":"добавь отчёт начала месяца","intent":"createTask","title":"Отчёт начала месяца","due":null,"note":"без предлога — не срок"}
+{"id":"rev-072","text":"добавь отчёт к середине месяца","intent":"createTask","title":"Отчёт","due":"2026-11-15","precision":"date"}
+{"id":"rev-073","text":"добавь сдать проект в 48 часов","intent":"createTask","title":"Сдать проект в 48 часов","due":null,"note":"срок работы, а не время на часах"}
+{"id":"rev-074","text":"добавь уложиться в 24 часа","intent":"createTask","title":"Уложиться в 24 часа","due":null}
+{"id":"rev-075","text":"добавь отчёт в 72 часа","intent":"createTask","title":"Отчёт в 72 часа","due":null}
+{"id":"rev-076","text":"добавь подготовиться к 25 часов эфира","intent":"createTask","title":"Подготовиться к 25 часов эфира","due":null,"note":"количество часов, а не время"}
+{"id":"rev-077","text":"добавь отчёт в 25 часов","intent":"createTask","title":"Отчёт","due":null,"issue":"invalidTime"}
+{"id":"rev-078","text":"добавь созвон 15 ноября 1999 года","intent":"createTask","title":"Созвон","due":null,"issue":"inPast","note":"прошедший год словами — как «15.11.1999»"}
+{"id":"rev-079","text":"добавь созвон 29 февраля 2100 года","intent":"createTask","title":"Созвон","due":null,"issue":"invalidDate","note":"2100 — не високосный"}
+{"id":"rev-080","text":"добавь созвон 15 ноября 2026г","intent":"createTask","title":"Созвон","due":"2026-11-15","precision":"date","note":"«г» слитно с годом"}
+{"id":"rev-081","text":"добавь оплатить 15 ноября 5000 рублей","intent":"createTask","title":"Оплатить 5000 рублей","due":"2026-11-15","precision":"date","note":"число не похоже на год"}
+{"id":"rev-082","text":"записи в блоге не грузятся","intent":"unknown","note":"«записи» — настоящее слово, не опечатка «запиши»"}
+{"id":"rev-083","text":"наполни ванну вечером","intent":"unknown","note":"«наполни» — не опечатка «напомни»"}
+{"id":"rev-084","text":"запомни, я люблю кофе","intent":"unknown","note":"правка первой буквы — другое слово"}
+{"id":"rev-085","text":"запили видео про котиков","intent":"unknown","note":"«запили» — не опечатка «запиши»"}
+{"id":"rev-086","text":"отметки за четверть завтра","intent":"unknown","note":"«отметки» — не опечатка «отмети»"}
+{"id":"rev-087","text":"добавки хочешь?","intent":"unknown","note":"«добавки» — не опечатка «добави»"}
+{"id":"rev-088","text":"двинь стол","intent":"unknown","note":"правка первой буквы — не «сдвинь»"}
+{"id":"rev-089","text":"выполи грядку завтра","intent":"unknown","note":"«выполи» — не опечатка «выполни», не завершение"}
+{"id":"rev-090","text":"обложи налогом завтра","intent":"unknown","note":"«обложи» — не опечатка «отложи»"}
+{"id":"rev-091","text":"напомин завтра позвонить","intent":"unknown","note":"перестановка двух последних букв — не опечатка"}
+{"id":"rev-092","text":"напомни созвон в Zoomе завтра","intent":"createTask","title":"Созвон в Zoomе","due":"2026-11-03","precision":"date","note":"латинское название с русским окончанием не меняется"}
+{"id":"rev-093","text":"напомни скинуть PDFку бухгалтеру","intent":"createTask","title":"Скинуть PDFку бухгалтеру","due":null,"note":"«PDFку» не меняется"}
+{"id":"rev-094","text":"напомни отправить SMSку маме","intent":"createTask","title":"Отправить SMSку маме","due":null,"note":"«SMSку» не меняется"}
+{"id":"rev-095","text":"всё понятно, не забудь","intent":"unknown","note":"«не забудь» в конце без дела во фразе — реплика"}
+{"id":"rev-096","text":"чайник, поставь","intent":"unknown","note":"бытовая просьба, как «поставь чайник»"}
+{"id":"rev-097","text":"я забыл, не забудь","intent":"unknown","note":"реплика, не задача"}
+{"id":"rev-098","text":"я закрыла дверь","intent":"unknown","note":"бытовое «закрыла», не завершение задачи"}
+{"id":"rev-099","text":"закрыл глаза","intent":"unknown","note":"бытовое «закрыл»"}
+{"id":"rev-100","text":"я закрыла отчёт","intent":"completeTask","targetQuery":"Отчёт","note":"не бытовой предмет — завершение"}
+{"id":"rev-101","text":"«Мастер и Маргарита» завтра в кино","intent":"unknown","note":"пояснение после кавычек, а название не с инфинитива — цитата"}
+{"id":"rev-102","text":"«Кто там?» в обед","intent":"unknown","note":"вопрос в кавычках — не название"}
+{"id":"rev-103","text":"«Спокойной ночи» в 22:00","intent":"unknown","note":"приветствие в кавычках — не название"}
+{"id":"rev-104","text":"перенеси на завтрашний вечер звонок","intent":"rescheduleTask","targetQuery":"Звонок","due":"2026-11-03T19:00","precision":"partOfDay","note":"цель после «на завтрашний вечер»"}
+{"id":"rev-105","text":"перенеси на завтрашнее утро звонок","intent":"rescheduleTask","targetQuery":"Звонок","due":"2026-11-03T09:00","precision":"partOfDay","note":"цель после «на завтрашнее утро»"}
+{"id":"rev-106","text":"с отчётом всё готово","intent":"completeTask","targetQuery":"Отчётом","note":"«с» перед целью убирается"}

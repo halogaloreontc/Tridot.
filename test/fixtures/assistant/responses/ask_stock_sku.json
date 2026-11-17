@@ -1,0 +1,56 @@
+{
+  "ok": true,
+  "q": "64115",
+  "mode": "sku",
+  "count": 2,
+  "qty": 1234.5,
+  "items": [
+    {
+      "sku": "64115",
+      "name": "Стул венский",
+      "qty": 1200,
+      "cellCount": 2,
+      "cells": [
+        {
+          "cell": "215-1-1-1",
+          "qty": 1000,
+          "cls": "ok",
+          "clsLabel": "годен"
+        },
+        {
+          "cell": "215-1-1-2",
+          "qty": 200,
+          "cls": "dmg",
+          "clsLabel": "уценка"
+        }
+      ],
+      "sheets": [
+        {
+          "sheet": "Основной",
+          "qty": 1200
+        }
+      ]
+    },
+    {
+      "sku": "",
+      "name": "Стул венский (без бирки)",
+      "qty": 34.5,
+      "cellCount": 1,
+      "cells": [
+        {
+          "cell": "БЕЗ МЕСТА",
+          "qty": 34.5,
+          "cls": "",
+          "clsLabel": ""
+        }
+      ],
+      "sheets": [
+        {
+          "sheet": "Возвраты",
+          "qty": 34.5
+        }
+      ]
+    }
+  ],
+  "more": false
+}

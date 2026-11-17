@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «ещё N»: сколько дел на сегодня не поместилось. В столбце названий,
+     приглушённо. Не ниже 28 dp, отступы 6 + 6. Не нажимается (мелкая
+     цель): Tridot открывает шапка. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/hw_more"
+    style="@style/HwMeta"
+    android:layout_width="match_parent"
+    android:minHeight="28dp"
+    android:gravity="center_vertical"
+    android:paddingStart="50dp"
+    android:paddingTop="6dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="6dp" />

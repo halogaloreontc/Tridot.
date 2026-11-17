@@ -1,0 +1,34 @@
+Голосовой ввод (ADR-023)
+========================
+
+Речь распознаётся на телефоне, без интернета. Звук не сохраняется и никуда
+не отправляется. Сеть нужна один раз — скачать модель распознавания.
+
+1. libvosk.so — движок распознавания (встроен в приложение для Android)
+-----------------------------------------------------------------------
+Vosk API, Alpha Cephei Inc., из пакета com.alphacephei:vosk-android 0.3.75
+(Maven Central); в приложение попадает только библиотека для arm64-v8a.
+Источник: https://github.com/alphacep/vosk-api
+Лицензия: Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0
+
+Внутри libvosk.so статически собраны:
+- Kaldi Speech Recognition Toolkit — Apache License 2.0,
+  https://github.com/kaldi-asr/kaldi
+- OpenFST — Apache License 2.0, https://www.openfst.org
+- OpenBLAS — BSD 3-Clause License, https://github.com/OpenMathLib/OpenBLAS
+- CLAPACK — BSD-style license (modified BSD), https://netlib.org/clapack/
+
+2. vosk-model-small-ru-0.22 — модель русской речи (скачивается)
+---------------------------------------------------------------
+Не встроена в приложение: скачивается один раз, когда включают голосовой
+ввод, с https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip
+и проверяется по SHA-256, закреплённой в приложении. «Удалить модель» в
+настройках освобождает место.
+Автор: Alpha Cephei Inc.
+Список моделей: https://alphacephei.com/vosk/models
+Лицензия: Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0
+
+3. record — запись с микрофона (пакет Dart)
+-------------------------------------------
+https://pub.dev/packages/record, BSD 3-Clause License. Его лицензия
+показывается в «Лицензии» вместе с остальными пакетами Dart.

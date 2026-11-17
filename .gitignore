@@ -15,3 +15,9 @@ macos/Flutter/ephemeral/
 .DS_Store
 .backups/
 .superpowers/
+
+# Временные тесты агентов проверки
+test/_scratch_*
+
+# Рабочие копии агентов (git worktree)
+.claude/worktrees/

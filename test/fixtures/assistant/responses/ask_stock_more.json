@@ -1,0 +1,250 @@
+{
+  "ok": true,
+  "q": "товар",
+  "mode": "name",
+  "count": 30,
+  "qty": 465,
+  "items": [
+    {
+      "sku": "70001",
+      "name": "Товар 1",
+      "qty": 1,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70002",
+      "name": "Товар 2",
+      "qty": 2,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70003",
+      "name": "Товар 3",
+      "qty": 3,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70004",
+      "name": "Товар 4",
+      "qty": 4,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70005",
+      "name": "Товар 5",
+      "qty": 5,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70006",
+      "name": "Товар 6",
+      "qty": 6,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70007",
+      "name": "Товар 7",
+      "qty": 7,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70008",
+      "name": "Товар 8",
+      "qty": 8,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70009",
+      "name": "Товар 9",
+      "qty": 9,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70010",
+      "name": "Товар 10",
+      "qty": 10,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70011",
+      "name": "Товар 11",
+      "qty": 11,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70012",
+      "name": "Товар 12",
+      "qty": 12,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70013",
+      "name": "Товар 13",
+      "qty": 13,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70014",
+      "name": "Товар 14",
+      "qty": 14,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70015",
+      "name": "Товар 15",
+      "qty": 15,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70016",
+      "name": "Товар 16",
+      "qty": 16,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70017",
+      "name": "Товар 17",
+      "qty": 17,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70018",
+      "name": "Товар 18",
+      "qty": 18,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70019",
+      "name": "Товар 19",
+      "qty": 19,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70020",
+      "name": "Товар 20",
+      "qty": 20,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70021",
+      "name": "Товар 21",
+      "qty": 21,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70022",
+      "name": "Товар 22",
+      "qty": 22,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70023",
+      "name": "Товар 23",
+      "qty": 23,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70024",
+      "name": "Товар 24",
+      "qty": 24,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70025",
+      "name": "Товар 25",
+      "qty": 25,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70026",
+      "name": "Товар 26",
+      "qty": 26,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70027",
+      "name": "Товар 27",
+      "qty": 27,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70028",
+      "name": "Товар 28",
+      "qty": 28,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70029",
+      "name": "Товар 29",
+      "qty": 29,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    },
+    {
+      "sku": "70030",
+      "name": "Товар 30",
+      "qty": 30,
+      "cells": [],
+      "sheets": [],
+      "cellCount": 0
+    }
+  ],
+  "more": true
+}

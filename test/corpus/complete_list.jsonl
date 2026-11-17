@@ -1,0 +1,46 @@
+{"id":"done-001","text":"Заверши её","intent":"completeTask"}
+{"id":"done-002","text":"Задача выполнена","intent":"completeTask"}
+{"id":"done-003","text":"Готово","intent":"completeTask"}
+{"id":"done-004","text":"Я выполнил","intent":"completeTask"}
+{"id":"done-005","text":"Отметь выполненной","intent":"completeTask"}
+{"id":"done-006","text":"Завершить задачу","intent":"completeTask"}
+{"id":"list-001","text":"Покажи задачи","intent":"listTasks"}
+{"id":"list-002","text":"Покажи мои задачи","intent":"listTasks"}
+{"id":"list-003","text":"Список задач","intent":"listTasks"}
+{"id":"list-004","text":"Что запланировано?","intent":"listTasks"}
+{"id":"list-005","text":"Какие у меня задачи?","intent":"listTasks"}
+{"id":"list-006","text":"Покажи все дела","intent":"listTasks"}
+{"id":"unk-001","text":"Расскажи что-нибудь","intent":"unknown"}
+{"id":"unk-002","text":"","intent":"unknown"}
+{"id":"unk-003","text":"Привет","intent":"unknown"}
+{"id":"unk-004","text":"Покажи погоду","connector":"weather","intent":"weather.now"}
+{"id":"list-007","text":"что у меня на завтра?","intent":"listTasks"}
+{"id":"list-008","text":"какие у меня дела на сегодня","intent":"listTasks"}
+{"id":"list-009","text":"покажи список «Дом»","intent":"listTasks","note":"название списка в кавычках после «список»"}
+{"id":"list-010","text":"что мне нужно сделать?","intent":"listTasks"}
+{"id":"list-011","text":"какие есть планы на выходные в городе?","intent":"unknown","note":"лишние слова — не вопрос о своих задачах"}
+{"id":"list-012","text":"что мне сделать с котом?","intent":"unknown"}
+{"id":"list-013","text":"покажи список моих контактов","intent":"unknown"}
+{"id":"done-007","text":"закрой задачу купить хлеб","intent":"completeTask","targetQuery":"Купить хлеб","note":"«закрой» + «задачу» — завершение"}
+{"id":"done-008","text":"закрой отчёт по проекту","intent":"completeTask","targetQuery":"Отчёт по проекту","note":"«закрой» с небытовым предметом — завершение"}
+{"id":"done-009","text":"закрой окно","intent":"unknown","note":"бытовой предмет — не задача"}
+{"id":"done-010","text":"закрой дверь","intent":"unknown","note":"бытовой предмет — не задача"}
+{"id":"done-011","text":"закрой вкладку с почтой","intent":"unknown","note":"бытовой предмет — не задача"}
+{"id":"done-012","text":"закрой","intent":"unknown","note":"без предмета «закрой» — не завершение"}
+{"id":"done-013","text":"магазин закрыт","intent":"unknown","note":"«закрыт» без «задача» — не завершение"}
+{"id":"done-014","text":"пометь отчёт готовым","intent":"completeTask","targetQuery":"Отчёт"}
+{"id":"done-015","text":"поставь галочку напротив отчёта","intent":"completeTask","targetQuery":"Отчёта","note":"«поставь галочку» — завершение; родительный после «напротив» не приводится"}
+{"id":"done-016","text":"отметить юбилей","intent":"unknown","note":"«отметить» без слова о готовности — не завершение"}
+{"id":"done-017","text":"задача «Отчёт» закрыта","intent":"completeTask","title":"Отчёт","note":"«закрыта» со словом «задача»"}
+{"id":"done-018","text":"закрыла задачу про звонок маме","intent":"completeTask","targetQuery":"Звонок маме","note":"прошедшее «закрыла» и «про» перед целью"}
+{"id":"done-019","text":"закрой напоминание про звонок брату","intent":"completeTask","targetQuery":"Звонок брату","note":"«напоминание» после «закрой» — как «задачу»"}
+{"id":"done-020","text":"заверши поход в пункт выдачи","intent":"completeTask","targetQuery":"Поход в пункт выдачи","note":"«пункт» не сразу после команды — часть цели"}
+{"id":"done-021","text":"дай список дел на завтра","intent":"listTasks"}
+{"id":"done-022","text":"дай мне хлеб","intent":"unknown","note":"«дай» без того, что показывать, — не список"}
+{"id":"done-023","text":"посмотри что у меня на завтра","intent":"listTasks"}
+{"id":"done-024","text":"напомни, что у меня на завтра","intent":"listTasks","note":"«напомни, что» с одним вопросом о планах — список"}
+{"id":"done-025","text":"напомни, что завтра встреча","intent":"createTask","title":"Встреча","due":"2026-11-03","precision":"date","note":"чужое слово «встреча» — напоминание, а не список"}
+{"id":"done-026","text":"Список дел на «Ромашку»","intent":"unknown","note":"в кавычках не срок и не название списка после «список»"}
+{"id":"done-027","text":"список покупок","intent":"unknown","note":"«список» без слова о задачах — не просьба о списке задач"}
+{"id":"done-028","text":"покажи график работы магазина","intent":"unknown","note":"чужие слова — не список"}
+{"id":"done-029","text":"что я записал в блокнот","intent":"unknown","note":"чужое слово «блокнот» — не список и не сообщение о сделанном"}

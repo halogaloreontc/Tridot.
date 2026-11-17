@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Открыть» у результата карточки расширения (ADR-024): другим
+     приложениям видна только копия в cache/tridot-open, только на чтение. -->
+<paths>
+    <cache-path name="open" path="tridot-open/" />
+</paths>

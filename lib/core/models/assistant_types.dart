@@ -1,3 +1,13 @@
+import '../commands/command_suggest.dart';
+import '../jobs/extension_card.dart';
+import '../personas/persona.dart';
+import 'action_card.dart';
+import 'launch_request.dart';
+import 'warehouse_card.dart';
+import 'weather_card.dart';
+import 'bulk.dart';
+import 'clarification.dart';
+import 'secure_card.dart';
 import 'task.dart';
 
 enum AssistantStatus { completed, needsClarification, failed, noAction }
@@ -8,19 +18,189 @@ final class AssistantResponse {
     required this.intent,
     required this.status,
     this.task,
+    this.replyId,
+    this.values = const <String, String>{},
+    this.personaId,
+    this.settingsChange,
+    this.addressedPersonaId,
+    this.checklist,
+    this.card,
+    this.secureCard,
+    this.clarification,
+    this.suggestions,
+    this.job,
+    this.weather,
+    this.warehouse,
+    this.launch,
+    this.draft,
   });
 
+  /// Готовый текст для пользователя. В истории чата хранится именно он:
+  /// смена стиля или помощника старые ответы не переписывает.
   final String message;
   final String intent;
   final AssistantStatus status;
   final Task? task;
-}
 
-final class ConversationContext {
-  const ConversationContext({this.lastTaskId});
+  /// Запись каталога ответов, из которой получен [message]; `null` —
+  /// текст коннектора не из каталога.
+  final String? replyId;
 
-  final String? lastTaskId;
+  /// Факты, подставленные в запись [replyId].
+  final Map<String, String> values;
 
-  ConversationContext withLastTask(String id) =>
-      ConversationContext(lastTaskId: id);
+  /// Кто из помощников ответил (`rio`, `noda`); `null` — ещё не назначен.
+  final String? personaId;
+
+  /// Просьба изменить настройки помощников («говори короче»): интерфейс
+  /// применяет её тем же путём, что и экран настроек. `null` — настройки
+  /// не меняются.
+  final PersonaSettingsChange? settingsChange;
+
+  /// К кому пользователь обратился по имени в этом сообщении (только в
+  /// дуэте): «Нода, расскажи шутку», «спасибо, Нода», «Нода». Помощник
+  /// продолжает разговор тем же навыком (`AssistantController._followUp`):
+  /// «к кому обратились, тот и продолжает». `null` — по имени не обращались.
+  final String? addressedPersonaId;
+
+  /// Вопрос массовой команды со списком задач: интерфейс показывает под
+  /// ответом карточку с галочками. Тот же объект ждёт ответа в сессии,
+  /// поэтому отметки в карточке видны ответу «да». `null` — без списка.
+  final BulkChecklist? checklist;
+
+  /// Карточка действия с записью (ADR-013): что изменится, кнопки
+  /// «Подтвердить» и «Отмена». Тот же объект ждёт ответа в сессии.
+  /// `null` — без карточки.
+  final ActionCard? card;
+
+  /// Временная карточка навыка «Пароли» (D10): только id записей. В
+  /// историю чата она не попадает (`ChatMessage.toJson` её не пишет).
+  final SecureCardRequest? secureCard;
+
+  /// Уточняющий вопрос с вариантами: интерфейс рисует под ответом кнопки
+  /// вариантов, пока вопрос ждёт ответа. Тот же объект ждёт ответа в
+  /// сессии. В историю чата не попадает. `null` — без вариантов.
+  final Clarification? clarification;
+
+  /// Подсказка команд под ответом «не до конца понял» (ADR-022): кнопки
+  /// похожих команд и «Найти команду». Нажатие вставляет шаблон в поле
+  /// ввода — отправляет пользователь сам. Только в памяти, в историю чата
+  /// не попадает. `null` — без подсказки.
+  final CommandSuggestions? suggestions;
+
+  /// Карточка-форма расширения (архиватор): поля, «Запустить», ход работы.
+  /// Тот же объект попадает в сообщение чата и в историю. `null` — без
+  /// карточки.
+  final ExtensionCard? job;
+
+  /// Карточка погоды (ADR-030): прогноз или «Открыть ещё раз». Пишется в
+  /// историю чата. `null` — без карточки.
+  final WeatherCard? weather;
+
+  /// Карточка ответа склада (ADR-031): строки ответа сервера. Пишется в
+  /// историю чата. `null` — без карточки.
+  final WarehouseCard? warehouse;
+
+  /// Открыть страницу или приложение погоды сразу после ответа. Только в
+  /// памяти и только у живого ответа: в историю не попадает.
+  final LaunchRequest? launch;
+
+  /// Команда, которую интерфейс кладёт в поле ввода, не отправляя: ответ
+  /// «Исправить» на «Понял так: … Создать?» подставляет понятую фразу,
+  /// чтобы её можно было поправить. `null` — поле ввода не трогается.
+  final String? draft;
+
+  /// Тот же ответ с подсказкой команд [suggestions].
+  AssistantResponse withSuggestions(CommandSuggestions? suggestions) =>
+      AssistantResponse(
+        message: message,
+        intent: intent,
+        status: status,
+        task: task,
+        replyId: replyId,
+        values: values,
+        personaId: personaId,
+        settingsChange: settingsChange,
+        addressedPersonaId: addressedPersonaId,
+        checklist: checklist,
+        card: card,
+        secureCard: secureCard,
+        clarification: clarification,
+        suggestions: suggestions,
+        job: job,
+        weather: weather,
+        warehouse: warehouse,
+        launch: launch,
+        draft: draft,
+      );
+
+  /// Тот же ответ от помощника [personaId].
+  AssistantResponse withPersona(String personaId) => AssistantResponse(
+        message: message,
+        intent: intent,
+        status: status,
+        task: task,
+        replyId: replyId,
+        values: values,
+        personaId: personaId,
+        settingsChange: settingsChange,
+        addressedPersonaId: addressedPersonaId,
+        checklist: checklist,
+        card: card,
+        secureCard: secureCard,
+        clarification: clarification,
+        suggestions: suggestions,
+        job: job,
+        weather: weather,
+        warehouse: warehouse,
+        launch: launch,
+        draft: draft,
+      );
+
+  /// Тот же ответ, в котором пользователь обратился к [personaId] по имени.
+  AssistantResponse withAddressed(String personaId) => AssistantResponse(
+        message: message,
+        intent: intent,
+        status: status,
+        task: task,
+        replyId: replyId,
+        values: values,
+        personaId: this.personaId,
+        settingsChange: settingsChange,
+        addressedPersonaId: personaId,
+        checklist: checklist,
+        card: card,
+        secureCard: secureCard,
+        clarification: clarification,
+        suggestions: suggestions,
+        job: job,
+        weather: weather,
+        warehouse: warehouse,
+        launch: launch,
+        draft: draft,
+      );
+
+  /// Тот же ответ с другим текстом и фактами (выходной фильтр паролей).
+  AssistantResponse withText(String message, Map<String, String> values) =>
+      AssistantResponse(
+        message: message,
+        intent: intent,
+        status: status,
+        task: task,
+        replyId: replyId,
+        values: values,
+        personaId: personaId,
+        settingsChange: settingsChange,
+        addressedPersonaId: addressedPersonaId,
+        checklist: checklist,
+        card: card,
+        secureCard: secureCard,
+        clarification: clarification,
+        suggestions: suggestions,
+        job: job,
+        weather: weather,
+        warehouse: warehouse,
+        launch: launch,
+        draft: draft,
+      );
 }

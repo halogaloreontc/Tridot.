@@ -44,4 +44,53 @@ void main() {
     expect(moved.status, TaskStatus.planned);
     expect(moved.completedAt, isNull);
   });
+
+  group('проект в документе — первая метка (ADR-018)', () {
+    late TaskService service;
+
+    setUp(() {
+      service = TaskService(
+        repository: InMemoryTaskRepository(),
+        clock: FixedClock(DateTime(2026, 11, 2, 12)),
+      );
+    });
+
+    test('новая метка, которая уже есть, не повторяется', () async {
+      final task = await service.create(
+        title: 'Отчёт',
+        tags: <String>['a', 'b'],
+      );
+      final updated = await service.updateDetails(task.id, project: 'b');
+      expect(updated.tags, <String>['b']);
+      expect(updated.project, 'b');
+    });
+
+    test('другая метка встаёт на место первой', () async {
+      final task = await service.create(
+        title: 'Отчёт',
+        tags: <String>['a', 'b'],
+      );
+      final updated = await service.updateDetails(task.id, project: '#C');
+      expect(updated.tags, <String>['c', 'b']);
+    });
+
+    test('очистка убирает только первую метку', () async {
+      final task = await service.create(
+        title: 'Отчёт',
+        tags: <String>['a', 'b'],
+      );
+      final updated = await service.updateDetails(task.id, project: '');
+      expect(updated.tags, <String>['b']);
+      expect(updated.project, 'b');
+    });
+
+    test('без project метки не меняются', () async {
+      final task = await service.create(
+        title: 'Отчёт',
+        tags: <String>['a', 'b'],
+      );
+      final updated = await service.updateDetails(task.id, title: 'Итог');
+      expect(updated.tags, <String>['a', 'b']);
+    });
+  });
 }

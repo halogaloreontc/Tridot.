@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Сегодня и ввод» (ADR-034): шапка, строки задач и поле «Что сделать?» снизу. Поле не пропадает ни при каком размере. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingBottom="0dp"
+    android:background="@drawable/hw_bg"
+    android:clipToOutline="true">
+    <include layout="@layout/hw_header" />
+    <LinearLayout
+        android:id="@+id/hw_rows"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical" />
+    <include layout="@layout/hw_field" />
+</LinearLayout>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Сообщение вместо списка: «На сегодня дел нет», число дел без
+     названий, «Откройте Tridot…». Видна только нужная строка. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/hw_message"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="6dp"
+    android:background="@drawable/hw_press_bg">
+    <TextView
+        android:id="@+id/hw_msg_strong"
+        style="@style/HwMessageStrong"
+        android:visibility="gone" />
+    <TextView
+        android:id="@+id/hw_msg"
+        style="@style/HwMessage"
+        android:visibility="gone" />
+    <TextView
+        android:id="@+id/hw_msg_sub"
+        style="@style/HwMessageSub"
+        android:layout_marginTop="4dp"
+        android:visibility="gone" />
+    <TextView
+        android:id="@+id/hw_msg_alert"
+        style="@style/HwMessageAlert"
+        android:layout_marginTop="4dp"
+        android:visibility="gone" />
+</LinearLayout>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Резервная копия Android 12+ (ADR-014, D20). Хранилище паролей
+     (files/assistant/vault/) и секреты подключений (files/assistant/secrets.json)
+     не уходят ни в облачную копию Google, ни при переносе «телефон → телефон».
+     Задачи и чаты (app_flutter/assistant/) копируются как раньше, кроме
+     прикреплённых файлов сессий (app_flutter/assistant/chats/files/, ADR-019):
+     в облачную копию они не уходят, при переносе на новый телефон — переносятся. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="assistant/vault/" />
+        <exclude domain="file" path="assistant/secrets.json" />
+        <exclude domain="file" path="assistant/secrets.sealed" />
+        <exclude domain="file" path="assistant/secrets.sealed.bad" />
+        <!-- Модель голосового ввода (ADR-023): скачивается заново. -->
+        <exclude domain="file" path="assistant/voice/" />
+        <!-- Файлы, прикреплённые к сессиям (ADR-019), — только на устройстве. -->
+        <exclude domain="root" path="app_flutter/assistant/chats/files/" />
+        <!-- Расписание напоминаний (ADR-029): строится заново из задач. -->
+        <exclude domain="sharedpref" path="tridot_reminders.xml" />
+        <!-- Виджеты рабочего стола (ADR-034): строятся заново из задач. -->
+        <exclude domain="sharedpref" path="tridot_homescreen.xml" />
+        <!-- Погода (ADR-030): город, ссылка и кэш — только на устройстве. -->
+        <exclude domain="file" path="assistant/weather/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="assistant/vault/" />
+        <exclude domain="file" path="assistant/secrets.json" />
+        <exclude domain="file" path="assistant/secrets.sealed" />
+        <exclude domain="file" path="assistant/secrets.sealed.bad" />
+        <!-- Модель голосового ввода (ADR-023): скачивается заново. -->
+        <exclude domain="file" path="assistant/voice/" />
+        <!-- Расписание напоминаний (ADR-029): строится заново из задач. -->
+        <exclude domain="sharedpref" path="tridot_reminders.xml" />
+        <!-- Виджеты рабочего стола (ADR-034): строятся заново из задач. -->
+        <exclude domain="sharedpref" path="tridot_homescreen.xml" />
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,46 @@
+// Навык «Погода» (ADR-030): сейчас 2026-11-02 16:30, понедельник. Поле form — день (ISO), город в именительном падеже и диапазон.
+{"id": "wth-001", "text": "погода", "connector": "weather", "intent": "weather.now"}
+{"id": "wth-002", "text": "какая погода завтра", "connector": "weather", "intent": "weather.day", "form": {"day": "2026-11-03"}}
+{"id": "wth-003", "text": "будет дождь?", "connector": "weather", "intent": "weather.rain"}
+{"id": "wth-004", "text": "погода в Казани", "connector": "weather", "intent": "weather.now", "form": {"place": "Казань"}}
+{"id": "wth-005", "text": "погода в Нижнем Новгороде на выходных", "connector": "weather", "intent": "weather.week", "form": {"day": "2026-11-07", "place": "Нижний Новгород", "range": "weekend"}}
+{"id": "wth-006", "text": "что надеть", "connector": "weather", "intent": "weather.wear"}
+{"id": "wth-007", "text": "во что одеться в субботу", "connector": "weather", "intent": "weather.wear", "form": {"day": "2026-11-07"}}
+{"id": "wth-008", "text": "прогноз на неделю", "connector": "weather", "intent": "weather.week", "form": {"range": "week"}}
+{"id": "wth-009", "text": "погода послезавтра в Сочи", "connector": "weather", "intent": "weather.day", "form": {"day": "2026-11-04", "place": "Сочи"}}
+{"id": "wth-010", "text": "вчера был дождь?", "connector": "weather", "intent": "weather.past"}
+{"id": "wth-011", "text": "какая погода сейчас", "connector": "weather", "intent": "weather.now"}
+{"id": "wth-012", "text": "Какая погода в Москве?", "connector": "weather", "intent": "weather.now", "form": {"place": "Москва"}}
+{"id": "wth-013", "text": "погода в санкт-петербурге завтра", "connector": "weather", "intent": "weather.day", "form": {"day": "2026-11-03", "place": "Санкт-Петербург"}}
+{"id": "wth-014", "text": "погода в Ростове-на-Дону", "connector": "weather", "intent": "weather.now", "form": {"place": "Ростов-на-Дону"}}
+{"id": "wth-015", "text": "нужен ли зонт завтра?", "connector": "weather", "intent": "weather.rain", "form": {"day": "2026-11-03"}}
+{"id": "wth-016", "text": "будет снег на выходных?", "connector": "weather", "intent": "weather.rain", "form": {"day": "2026-11-07", "range": "weekend"}}
+{"id": "wth-017", "text": "на выходных будет снег?", "connector": "weather", "intent": "weather.rain", "form": {"day": "2026-11-07", "range": "weekend"}}
+{"id": "wth-018", "text": "прогноз погоды на завтра", "connector": "weather", "intent": "weather.day", "form": {"day": "2026-11-03"}}
+{"id": "wth-019", "text": "как одеться завтра", "connector": "weather", "intent": "weather.wear", "form": {"day": "2026-11-03"}}
+{"id": "wth-020", "text": "сколько градусов на улице", "connector": "weather", "intent": "weather.now"}
+{"id": "wth-021", "text": "холодно сейчас на улице?", "connector": "weather", "intent": "weather.now"}
+{"id": "wth-022", "text": "открой погоду", "connector": "weather", "intent": "weather.open"}
+{"id": "wth-023", "text": "погода в пятницу", "connector": "weather", "intent": "weather.day", "form": {"day": "2026-11-06"}}
+{"id": "wth-024", "text": "погода через две недели", "connector": "weather", "intent": "weather.range", "form": {"day": "2026-11-16"}}
+{"id": "wth-025", "text": "будут осадки сегодня?", "connector": "weather", "intent": "weather.rain", "form": {"day": "2026-11-02"}}
+{"id": "wth-026", "text": "Связной, какая погода?", "connector": "weather", "intent": "weather.now"}
+{"id": "wth-027", "text": "погода Казань", "connector": "weather", "intent": "weather.now", "form": {"place": "Казань"}}
+{"id": "wth-028", "text": "погодка завтра как?", "connector": "weather", "intent": "weather.day", "form": {"day": "2026-11-03"}}
+{"id": "wth-029", "text": "гроза будет?", "connector": "weather", "intent": "weather.rain"}
+{"id": "wth-030", "text": "будет мороз завтра?", "connector": "weather", "intent": "weather.day", "form": {"day": "2026-11-03"}}
+{"id": "wth-n01", "text": "погоди минутку", "intent": "unknown", "connector": "talk"}
+{"id": "wth-n02", "text": "погодите", "intent": "unknown", "connector": "talk"}
+{"id": "wth-n03", "text": "напомни взять зонт, если будет дождь", "intent": "createTask"}
+{"id": "wth-n04", "text": "купить зонт", "intent": "createTask"}
+{"id": "wth-n05", "text": "температура от -5 до 12 градусов, нормально?", "intent": "unknown", "connector": "calc"}
+{"id": "wth-n06", "text": "погода в доме", "intent": "unknown", "connector": "talk"}
+{"id": "wth-n08", "text": "у меня температура", "intent": "unknown"}
+{"id": "wth-n09", "text": "написать статью о погоде", "intent": "createTask"}
+{"id": "wth-n10", "text": "сдать отчёт о погоде завтра", "intent": "createTask"}
+{"id": "wth-n11", "text": "прочитать прогноз погоды для отчёта", "intent": "createTask"}
+{"id": "wth-n12", "text": "обсудить с Иваном погоду на складе", "intent": "createTask"}
+{"id": "wth-n13", "text": "подготовить отчёт о погоде для клиента", "intent": "createTask"}
+{"id": "wth-n14", "text": "перенеси задачу про зонт на завтра", "intent": "rescheduleTask"}
+{"id": "wth-n15", "text": "выполнил задачу про зонт", "intent": "completeTask"}
+{"id":"wth-v01","text":"напомни, какая погода завтра","connector":"weather","intent":"weather.day","form":{"day":"2026-11-03"},"source":"manual"}

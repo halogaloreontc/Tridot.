@@ -1,0 +1,64 @@
+{"id": "ttl-001", "text": "напомни про встречу с клиентом завтра в 10", "intent": "createTask", "title": "Встреча с клиентом", "due": "2026-11-03T10:00", "precision": "dateTime", "note": "«про» убирается, главное слово — в именительном", "source": "manual"}
+{"id": "ttl-002", "text": "напомни о звонке маме", "intent": "createTask", "title": "Звонок маме", "due": null, "source": "manual"}
+{"id": "ttl-003", "text": "напомни об оплате счёта", "intent": "createTask", "title": "Оплата счёта", "due": null, "source": "manual"}
+{"id": "ttl-004", "text": "напомни мне про встречу в пятницу", "intent": "createTask", "title": "Встреча", "due": "2026-11-06", "precision": "date", "source": "manual"}
+{"id": "ttl-005", "text": "напомни позвонить маме", "intent": "createTask", "title": "Позвонить маме", "due": null, "note": "инфинитив остаётся как есть", "source": "manual"}
+{"id": "ttl-006", "text": "напомни насчёт отчёта", "intent": "createTask", "title": "Отчёт", "due": null, "source": "manual"}
+{"id": "ttl-007", "text": "напомни по поводу встречи с банком", "intent": "createTask", "title": "Встреча с банком", "due": null, "source": "manual"}
+{"id": "ttl-008", "text": "напомни о плане на неделю", "intent": "createTask", "title": "План на неделю", "due": null, "source": "manual"}
+{"id": "ttl-009", "text": "напомни о Москве", "intent": "createTask", "title": "О Москве", "due": null, "note": "форма не ясна правилам — название как написано, с предлогом", "source": "manual"}
+{"id": "ttl-010", "text": "напомни о дне рождения мамы", "intent": "createTask", "title": "День рождения мамы", "due": null, "source": "manual"}
+{"id": "ttl-011", "text": "напомни о ДР Саши", "intent": "createTask", "title": "ДР Саши", "due": null, "note": "сокращение не склоняется", "source": "manual"}
+{"id": "ttl-012", "text": "напомни про кофе", "intent": "createTask", "title": "Кофе", "due": null, "source": "manual"}
+{"id": "ttl-013", "text": "напомни про такси в аэропорт", "intent": "createTask", "title": "Такси в аэропорт", "due": null, "source": "manual"}
+{"id": "ttl-014", "text": "напомни про клиента", "intent": "createTask", "title": "Про клиента", "due": null, "note": "одушевлённое «клиента» — именительный не угадать, название как написано", "source": "manual"}
+{"id": "ttl-015", "text": "напомни о том, что завтра встреча", "intent": "createTask", "title": "Встреча", "due": "2026-11-03", "precision": "date", "source": "manual"}
+{"id": "ttl-016", "text": "напомни про iPhone", "intent": "createTask", "title": "Про iPhone", "due": null, "note": "латиница не меняется, предлог остаётся", "source": "manual"}
+{"id": "ttl-017", "text": "добавь встречу с клиентом завтра", "intent": "createTask", "title": "Встреча с клиентом", "due": "2026-11-03", "precision": "date", "source": "manual"}
+{"id": "ttl-018", "text": "добавь новую презентацию", "intent": "createTask", "title": "Новая презентация", "due": null, "source": "manual"}
+{"id": "ttl-019", "text": "добавь отчёт", "intent": "createTask", "title": "Отчёт", "due": null, "source": "manual"}
+{"id": "ttl-020", "text": "добавь документы для визы", "intent": "createTask", "title": "Документы для визы", "due": null, "source": "manual"}
+{"id": "ttl-021", "text": "добавь счёт за интернет", "intent": "createTask", "title": "Счёт за интернет", "due": null, "source": "manual"}
+{"id": "ttl-022", "text": "запиши покупку кофе", "intent": "createTask", "title": "Покупка кофе", "due": null, "source": "manual"}
+{"id": "ttl-023", "text": "добавь машину на ТО", "intent": "createTask", "title": "Машина на ТО", "due": null, "source": "manual"}
+{"id": "ttl-024", "text": "добавь задачу машину помыть", "intent": "createTask", "title": "Машину помыть", "due": null, "note": "в названии глагол — винительный к месту, не меняется", "source": "manual"}
+{"id": "ttl-025", "text": "добавь Машу забрать из школы", "intent": "createTask", "title": "Машу забрать из школы", "due": null, "source": "manual"}
+{"id": "ttl-026", "text": "добавь задачу презентацию", "intent": "createTask", "title": "Презентация", "due": null, "source": "manual"}
+{"id": "ttl-027", "text": "добавь клиенту счёт", "intent": "createTask", "title": "Клиенту счёт", "due": null, "note": "дательный падеж не трогается", "source": "manual"}
+{"id": "ttl-028", "text": "добавь задачу 66580 в ячейку 1с", "intent": "createTask", "title": "66580 в ячейку 1с", "due": null, "source": "manual"}
+{"id": "ttl-029", "text": "напомни про маму", "intent": "createTask", "title": "Мама", "due": null, "source": "manual"}
+{"id": "ttl-030", "text": "добавь задачу «встречу с клиентом»", "intent": "createTask", "title": "встречу с клиентом", "due": null, "note": "кавычки — точное название, падеж не меняется", "source": "manual"}
+{"id": "ttl-031", "text": "добавь уборку квартиры на субботу", "intent": "createTask", "title": "Уборка квартиры", "due": "2026-11-07", "precision": "date", "source": "manual"}
+{"id": "ttl-032", "text": "напомни о совещании", "intent": "createTask", "title": "Совещание", "due": null, "source": "manual"}
+{"id": "ttl-033", "text": "напомни о лекции", "intent": "createTask", "title": "Лекция", "due": null, "source": "manual"}
+{"id": "ttl-034", "text": "напомни о поездке на дачу", "intent": "createTask", "title": "Поездка на дачу", "due": null, "source": "manual"}
+{"id": "ttl-035", "text": "напомни о новой встрече", "intent": "createTask", "title": "Новая встреча", "due": null, "source": "manual"}
+{"id": "ttl-036", "text": "напомни о письме директору", "intent": "createTask", "title": "Письмо директору", "due": null, "source": "manual"}
+{"id": "ttl-037", "text": "добавь статью для блога", "intent": "createTask", "title": "Статья для блога", "due": null, "source": "manual"}
+{"id": "ttl-038", "text": "перенеси презентацию на завтра", "intent": "rescheduleTask", "targetQuery": "Презентация", "due": "2026-11-03", "precision": "date", "source": "manual"}
+{"id": "ttl-039", "text": "заверши уборку", "intent": "completeTask", "targetQuery": "Уборка", "source": "manual"}
+{"id": "ttl-040", "text": "встречу провёл", "intent": "completeTask", "targetQuery": "Встречу провёл", "note": "сообщение о сделанном с глаголом — запрос как написан", "source": "manual"}
+{"id": "ttl-041", "text": "добавь задачу о встрече", "intent": "createTask", "title": "Встреча", "due": null, "source": "manual"}
+{"id": "ttl-042", "text": "добавь важную встречу с инвестором", "intent": "createTask", "title": "Важная встреча с инвестором", "due": null, "source": "manual"}
+{"id": "ttl-043", "text": "перенеси встречу клиента на пятницу", "intent": "rescheduleTask", "targetQuery": "Встреча клиента", "due": "2026-11-06", "precision": "date", "source": "manual"}
+{"id": "ttl-044", "text": "напомни о звонке Ивану в 15:00", "intent": "createTask", "title": "Звонок Ивану", "due": "2026-11-03T15:00", "precision": "dateTime", "source": "manual"}
+{"id": "ttl-045", "text": "напомни насчёт оплаты интернета", "intent": "createTask", "title": "Оплата интернета", "due": null, "source": "manual"}
+{"id": "ttl-046", "text": "добавь такси", "intent": "createTask", "title": "Такси", "due": null, "source": "manual"}
+{"id": "ttl-047", "text": "напомни о собрании в 9 утра", "intent": "createTask", "title": "Собрание", "due": "2026-11-03T09:00", "precision": "dateTime", "source": "manual"}
+{"id": "ttl-048", "text": "добавь задачу маму поздравить", "intent": "createTask", "title": "Маму поздравить", "due": null, "source": "manual"}
+{"id": "ttl-049", "text": "напомни про оплату", "intent": "createTask", "title": "Оплата", "due": null, "source": "manual"}
+{"id": "ttl-050", "text": "поставь подготовить презентацию к понедельнику", "intent": "createTask", "title": "Подготовить презентацию", "due": "2026-11-09", "precision": "date", "note": "«поставь» + инфинитив — создание и без «задачу»", "source": "manual"}
+{"id": "ttl-051", "text": "Поставь «Подготовить презентацию к понедельнику»", "intent": "createTask", "title": "Подготовить презентацию к понедельнику", "due": null, "note": "«поставь» + кавычки — создание; срок внутри кавычек — часть названия", "source": "manual"}
+{"id": "ttl-052", "text": "поставь мне позвонить маме завтра", "intent": "createTask", "title": "Позвонить маме", "due": "2026-11-03", "precision": "date", "source": "manual"}
+{"id": "ttl-053", "text": "заведи оплатить интернет", "intent": "createTask", "title": "Оплатить интернет", "due": null, "source": "manual"}
+{"id": "ttl-054", "text": "поставь греться чайник", "intent": "unknown", "note": "бытовая просьба, не задача", "source": "manual"}
+{"id": "ttl-055", "text": "поставь будильник на 7", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0"}, "note": "будильник в «Часах» (ADR-029), не задача", "source": "manual"}
+{"id": "ttl-056", "text": "сделай «Отчёт»", "intent": "unknown", "note": "«сделай» создаёт только с «задачу»", "source": "manual"}
+{"id": "ttl-057", "text": "запиши меня к врачу на пятницу", "intent": "createTask", "title": "Записаться к врачу", "due": "2026-11-06", "precision": "date", "note": "«запиши меня к/на …» — задача записаться", "source": "manual"}
+{"id": "ttl-058", "text": "запиши меня на стрижку", "intent": "createTask", "title": "Записаться на стрижку", "due": null, "source": "manual"}
+{"id": "ttl-059", "text": "надо «сдать отчёт» завтра", "intent": "createTask", "title": "сдать отчёт", "due": "2026-11-03", "precision": "date", "source": "manual"}
+{"id": "ttl-060", "text": "необходимо «Оплатить счёт»", "intent": "createTask", "title": "Оплатить счёт", "due": null, "source": "manual"}
+{"id": "ttl-061", "text": "не забыть «Купить подарок»", "intent": "createTask", "title": "Купить подарок", "due": null, "source": "manual"}
+{"id": "ttl-062", "text": "«купить хлеб»", "intent": "unknown", "note": "одни кавычки без вступления — не команда", "source": "manual"}
+{"id": "ttl-063", "text": "хочу «отпуск»", "intent": "unknown", "source": "manual"}
+{"id": "ttl-064", "text": "надо «купить хлеб» и «молоко»", "intent": "unknown", "note": "два названия и других слов — не создание без маркера", "source": "manual"}

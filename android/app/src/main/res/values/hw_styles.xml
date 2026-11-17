@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Текст виджетов рабочего стола (ADR-034). Шрифт системный: лаунчер
+     разворачивает макет в ограниченном контексте и шрифт из res/font не
+     загружает. Мельче 13 текста нет; размеры — в sp, строки растут
+     вместе с системным масштабом шрифта. Высоты строк считает
+     homescreen/HomeScreenRenderer.kt (Metrics) по тем же размерам и
+     отступам: поменяли здесь или в res/layout/hw_*.xml — поменяйте и там. -->
+<resources>
+    <style name="HwText">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:includeFontPadding">false</item>
+        <!-- Высота строки — по шрифту, а не по запасному (эмодзи):
+             иначе расчёт строк разошёлся бы с видом. -->
+        <item name="android:fallbackLineSpacing">false</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textAlignment">viewStart</item>
+    </style>
+
+    <!-- «Сегодня» в шапке. -->
+    <style name="HwHead" parent="HwText">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/hw_text_strong</item>
+    </style>
+
+    <!-- Дата, число дел, «ещё N», запись под названием. -->
+    <style name="HwMeta" parent="HwText">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/hw_muted</item>
+    </style>
+
+    <!-- Название задачи. -->
+    <style name="HwTitle" parent="HwText">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/hw_text</item>
+    </style>
+
+    <!-- Название только что отмеченной задачи (зачёркивает код). -->
+    <style name="HwTitleDone" parent="HwTitle">
+        <item name="android:textColor">@color/hw_muted</item>
+    </style>
+
+    <!-- «На сегодня дел нет» над ближайшими задачами. -->
+    <style name="HwTitleMuted" parent="HwTitle">
+        <item name="android:textColor">@color/hw_muted</item>
+    </style>
+
+    <!-- Срок: не сокращается многоточием, цифры одной ширины. -->
+    <style name="HwDue" parent="HwMeta">
+        <item name="android:ellipsize">none</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+
+    <!-- Срок просроченной задачи: единственное место с цветом ошибки. -->
+    <style name="HwDueOver" parent="HwDue">
+        <item name="android:textColor">@color/hw_danger</item>
+    </style>
+
+    <!-- Сообщение посередине: «На сегодня дел нет», «Откройте Tridot…». -->
+    <style name="HwMessage" parent="HwText">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/hw_muted</item>
+        <item name="android:singleLine">false</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textAlignment">center</item>
+    </style>
+
+    <!-- Число дел без названий (вход по отпечатку или текст выключен). -->
+    <style name="HwMessageStrong" parent="HwMessage">
+        <item name="android:textColor">@color/hw_text</item>
+    </style>
+
+    <!-- Вторая строка сообщения. -->
+    <style name="HwMessageSub" parent="HwMessage">
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- «просрочена 1 задача» под числом дел. -->
+    <style name="HwMessageAlert" parent="HwMessageSub">
+        <item name="android:textColor">@color/hw_danger</item>
+    </style>
+
+    <!-- «Что сделать?» в «Быстром вводе»: подпись, а не поле ввода. -->
+    <style name="HwHint" parent="HwText">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/hw_faint</item>
+    </style>
+
+    <!-- «Что сделать?» в поле «Сегодня и ввод». -->
+    <style name="HwHintField" parent="HwHint">
+        <item name="android:textSize">15sp</item>
+    </style>
+</resources>

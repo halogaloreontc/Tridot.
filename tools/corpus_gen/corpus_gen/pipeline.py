@@ -1,0 +1,1100 @@
+"""Конвейер: генерация → перекрёстная разметка → проверка человеком → перенос в корпус."""
+
+from __future__ import annotations
+
+import contextlib
+import functools
+import json
+import queue
+import re
+import signal
+import subprocess
+import threading
+from collections import Counter
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Callable, Iterator, Sequence, TypeVar
+
+from . import prompts
+from .config import Config, Source
+from .topics import DEFAULT_CONNECTOR, Catalog, ConnectorTopics, load_catalog, row_connector, split_ref
+from .providers import Provider, ProviderError, make_provider
+from .secret_filter import looks_secret
+from .store import CandidateStore, Checkpoint, append_jsonl, candidate_id, clean_phrase, corpus_rows, normalize_text
+
+ProviderFactory = Callable[[Source], Provider]
+# Прогон фраз через маршрутизатор приложения (tool/route_phrases.dart): cid → результат.
+RouterRunner = Callable[[Config, list[dict[str, Any]]], dict[str, dict[str, Any]]]
+
+GENERATED_FILE = "generated.jsonl"
+
+# Значение «сейчас» по умолчанию в test/scenario_corpus_test.dart.
+CORPUS_DEFAULT_NOW = "2026-11-02T16:30"
+
+# Отметка в final_by: единственную разметку подтвердило приложение (маршрутизатор и
+# ScenarioParser), а не второй разметчик. В корпусе — тег «labels:<разметчик>,parser».
+APP_CHECK_MARK = "parser"
+
+# Ключи Counter из label() помимо статусов.
+AGREED_BY_PARSER = "agreed_by_parser"  # из agreed: подтверждены приложением
+RECHECKED = "rechecked"  # старые спорные с одной разметкой, решённые заново
+CHECK_FAILED = "check_failed"  # проверка приложением не удалась (dart упал)
+SECRET_DROPPED = "secret_dropped"  # похожи на секрет: не отправлены моделям, не в корпусе
+
+# Пометка check у фразы, отклонённой фильтром секретов (сам текст не печатается нигде).
+SECRET_CHECK = "отклонено: фраза похожа на секрет (пароль, код, логин, почта, телефон)"
+
+
+def catalog_for(config: Config) -> Catalog:
+    """Темы и намерения коннекторов из topics/*.toml (settings.topics_dir в config.toml)."""
+    return load_catalog(config.topics_dir)
+
+
+class Interrupted(Exception):
+    """Команду прервали (Ctrl+C, SIGTERM, SIGHUP); сделанное уже сохранено.
+
+    saved — сколько сохранено за запуск (разметок у label, новых фраз у generate),
+    remaining — сколько запросов к моделям не выполнено.
+    """
+
+    def __init__(self, saved: int, remaining: int) -> None:
+        super().__init__(f"прервано: сохранено {saved}, не выполнено {remaining}")
+        self.saved = saved
+        self.remaining = remaining
+
+
+@dataclass
+class Report:
+    added: int = 0
+    duplicates: int = 0
+    # Похожие на секрет фразы (secret_filter): не сохранены; текст не печатается.
+    secret_dropped: int = 0
+    errors: list[str] | None = None
+
+    def error(self, message: str) -> None:
+        if self.errors is None:
+            self.errors = []
+        self.errors.append(message)
+
+
+# ---------------------------------------------------------------- генерация
+
+
+def generate(
+    config: Config,
+    store: CandidateStore,
+    topic: str,
+    count: int,
+    sources: list[Source],
+    *,
+    per_request: int = 20,
+    factory: ProviderFactory = make_provider,
+    catalog: Catalog | None = None,
+) -> Report:
+    """topic — «connector:тема» или просто «тема» коннектора tasks."""
+    catalog = catalog or catalog_for(config)
+    connector, topic_ = catalog.resolve(topic)
+    report = Report()
+    known = _known_texts(config, store)
+    examples = _examples(config, connector, topic_.intents)
+    checkpoint = Checkpoint(store)
+    lock = checkpoint.lock
+    stop = threading.Event()
+    batches = -(-count // per_request) if count > 0 else 0
+    # Пачки, которые больше не нужны: выполненные и брошенные после ошибки источника.
+    finished = Counter[str]()
+
+    def run(source: Source) -> None:
+        provider = factory(source)
+        remaining = count
+        while remaining > 0 and not stop.is_set():
+            size = min(per_request, remaining)
+            remaining -= size
+            try:
+                completion = provider.complete(
+                    prompts.GENERATION_SYSTEM,
+                    prompts.generation_prompt(connector, topic_, size, examples),
+                    prompts.GENERATION_SCHEMA,
+                )
+            except Exception as error:  # noqa: BLE001 — сеть, лимиты, отказ, не-JSON
+                with lock:
+                    if not checkpoint.closed:
+                        report.error(f"{source.name}: {_generation_error(error, connector.id)}")
+                        checkpoint.add_usage(_usage_row(source, "generate", error))
+                        finished[source.name] = batches
+                return
+            phrases = completion.data.get("phrases")
+            with lock:
+                if checkpoint.closed:
+                    return  # прервали, файл уже записан
+                checkpoint.add_usage(_usage_row(source, "generate", completion))
+                if not isinstance(phrases, list):
+                    report.error(f"{source.name}: в ответе нет списка phrases")
+                    finished[source.name] = batches
+                    return
+                finished[source.name] += 1
+                for phrase in phrases:
+                    if not isinstance(phrase, str) or not phrase.strip():
+                        continue
+                    if looks_secret(clean_phrase(phrase), connector.id):
+                        report.secret_dropped += 1
+                        continue
+                    if not _add_candidate(
+                        store, known, phrase, source.name, source.family, connector.id, topic_.name, config
+                    ):
+                        report.duplicates += 1
+                    else:
+                        report.added += 1
+                        checkpoint.changed()
+
+    # Сохранение после прерывания — внутри stop_signals(): иначе второй SIGHUP между
+    # выходом из блока и сохранением убил бы процесс обычным для сигнала способом.
+    with stop_signals():
+        try:
+            _run_jobs(sources, run, len(sources), stop=stop, tick=checkpoint.maybe_save)
+        except KeyboardInterrupt:
+            stop.set()
+            _final_save(checkpoint)
+            with lock:
+                undone = sum(batches - finished[s.name] for s in sources)
+            raise Interrupted(report.added, undone) from None
+        _final_save(checkpoint)
+    return report
+
+
+def _generation_error(error: Exception, connector_id: str) -> str:
+    """Текст ошибки генерации для печати: кусок ответа модели — непроверенные фразы.
+
+    У навыка «Пароли» кусок ответа скрывается всегда, у других коннекторов — если похож на
+    секрет. Ошибку не провайдера, похожую на секрет, заменяет её тип.
+    """
+    if isinstance(error, ProviderError) and error.snippet:
+        strict = connector_id in prompts.STRICT_CONNECTORS
+        if strict or looks_secret(error.snippet, connector_id):
+            return error.redacted()
+    text = str(error)
+    if looks_secret(text, connector_id):
+        return f"{type(error).__name__}: <текст ошибки скрыт: похож на секрет>"
+    return text
+
+
+def import_manual(
+    config: Config,
+    store: CandidateStore,
+    lines: list[str],
+    source_name: str,
+    topic: str = "manual",
+    *,
+    catalog: Catalog | None = None,
+) -> Report:
+    """Фразы, вставленные из веб-чатов. Номера списков и маркеры срезаются, кавычки — нет.
+
+    topic — «connector:тема» или «тема» (коннектор tasks); тема может быть любой меткой,
+    например «manual», а коннектор должен быть описан в topics/*.toml.
+    """
+    connector_id, topic = split_ref(topic)
+    (catalog or catalog_for(config)).connector(connector_id)
+    report = Report()
+    known = _known_texts(config, store)
+    for raw in lines:
+        phrase = re.sub(r"^\s*(?:\d+[.)]\s+|[-*•–—]\s+)", "", clean_phrase(raw)).strip()
+        if not phrase:
+            continue
+        if looks_secret(phrase, connector_id):
+            report.secret_dropped += 1
+            continue
+        if _add_candidate(store, known, phrase, source_name, f"manual:{source_name}", connector_id, topic, config):
+            report.added += 1
+        else:
+            report.duplicates += 1
+    store.save()
+    return report
+
+
+def _add_candidate(
+    store: CandidateStore,
+    known: set[str],
+    phrase: str,
+    source: str,
+    family: str,
+    connector: str,
+    topic: str,
+    config: Config,
+) -> bool:
+    phrase = clean_phrase(phrase)
+    key = normalize_text(phrase)
+    if not key or key in known:
+        return False
+    known.add(key)
+    store.rows.append(
+        {
+            "cid": candidate_id(phrase),
+            "text": phrase,
+            "now": config.default_now,
+            "source": source,
+            "family": family,
+            "connector": connector,
+            "topic": topic,
+            "status": "new",
+            "labels": {},
+        }
+    )
+    return True
+
+
+def _known_texts(config: Config, store: CandidateStore) -> set[str]:
+    texts = {normalize_text(row["text"]) for row in corpus_rows(config.corpus_dir) if "text" in row}
+    texts.update(normalize_text(row["text"]) for row in store.rows)
+    return texts
+
+
+def _examples(config: Config, connector: ConnectorTopics, intents: frozenset[str] | None) -> list[str]:
+    """Примеры для промпта генерации; строки корпуса, похожие на секрет, моделям не уходят."""
+    rows = corpus_rows(config.corpus_dir)
+    return [
+        r["text"]
+        for r in rows
+        if r.get("text")
+        and row_connector(r) == connector.id
+        and (intents is None or r.get("intent") in intents)
+        and not looks_secret(r["text"], connector.id)
+    ]
+
+
+# ----------------------------------------------------------------- разметка
+
+
+def choose_labelers(candidate: dict[str, Any], labelers: list[Source], needed: int = 2) -> list[Source]:
+    """Разметчики другого семейства, чем генератор, и разных семейств между собой; дешёвые первыми."""
+    chosen: list[Source] = []
+    families = {candidate.get("family")}
+    for source in sorted(labelers, key=lambda s: (s.price_out, s.price_in, s.name)):
+        if source.family in families:
+            continue
+        chosen.append(source)
+        families.add(source.family)
+        if len(chosen) == needed:
+            break
+    return chosen
+
+
+def label(
+    config: Config,
+    store: CandidateStore,
+    labelers: list[Source],
+    *,
+    limit: int | None = None,
+    factory: ProviderFactory = make_provider,
+    catalog: Catalog | None = None,
+    router: RouterRunner | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> Counter[str]:
+    """Размечает новые и упавшие фразы и решает их статус.
+
+    on_progress(готово, всего) вызывается из главного потока примерно раз в секунду и после
+    каждого ответа модели — для индикатора в CLI.
+
+    Фраза с единственным доступным разметчиком (например, два источника двух семейств,
+    и каждый генерировал сам) при settings.single_labeler_check сверяется с приложением
+    (check_with_app). Спорные фразы с одной разметкой, оставшиеся от прошлых запусков,
+    решаются заново той же проверкой — модели при этом не вызываются.
+    """
+    catalog = catalog or catalog_for(config)
+    router = router or run_dart_router
+    # Фразы, похожие на секрет (вписаны в work/candidates.jsonl руками или сохранены до
+    # фильтра), моделям не отправляются: отклоняются без разметки.
+    secret = reject_secrets(store)
+    # Новые раньше упавших, чтобы --limit не застревал на одной ошибочной фразе;
+    # фразы без подходящих разметчиков пропускаются.
+    pending = [row for row in store.rows if row["status"] == "new"]
+    pending += [row for row in store.rows if row["status"] == "error"]
+    pending = [row for row in pending if choose_labelers(row, labelers)]
+    if limit is not None:
+        pending = pending[:limit]
+    # Спорные с одной разметкой — без вызова моделей, поэтому вне --limit. Решения
+    # человека (accepted, rejected) и перенесённые (promoted) сюда не попадают.
+    # Коннектор которых не находится (переименован или удалён), остаются как были:
+    # перепроверка не должна превращать спорную фразу в error и убирать её из review.
+    recheck = (
+        [row for row in store.rows if _single_label_disputed(row, labelers) and _connector_known(catalog, row)]
+        if config.single_labeler_check
+        else []
+    )
+    pending += recheck
+    providers: dict[str, Provider] = {}
+    semaphores = {s.name: threading.Semaphore(s.max_concurrency) for s in labelers}
+    checkpoint = Checkpoint(store)
+    lock = checkpoint.lock
+    stop = threading.Event()
+    jobs: list[tuple[dict[str, Any], Source]] = []
+    progress = {"labels": 0, "finished": 0}
+
+    connectors: dict[str, ConnectorTopics] = {}
+    for row in pending:
+        try:
+            connectors[row["cid"]] = catalog.connector(row_connector(row))
+        except ValueError as error:
+            row.setdefault("errors", []).append(str(error))
+            continue
+        for source in choose_labelers(row, labelers):
+            if source.name not in row["labels"]:
+                jobs.append((row, source))
+            if source.name not in providers:
+                providers[source.name] = factory(source)
+
+    def run(job: tuple[dict[str, Any], Source]) -> None:
+        # Статус фразы здесь не меняется (остаётся new/error до решения в конце), поэтому
+        # после прерывания повторный label запросит только недостающие разметки.
+        row, source = job
+        connector = connectors[row["cid"]]
+        with semaphores[source.name]:
+            if stop.is_set():
+                return
+            try:
+                completion = providers[source.name].complete(
+                    prompts.label_system(connector),
+                    prompts.label_prompt(row["text"], row["now"]),
+                    prompts.label_schema(connector),
+                )
+            except Exception as error:  # noqa: BLE001
+                with lock:
+                    if not checkpoint.closed:
+                        row.setdefault("errors", []).append(_error_text(source, error))
+                        checkpoint.add_usage(_usage_row(source, "label", error))
+                        checkpoint.changed()
+                        progress["finished"] += 1
+                return
+            # Ответ записывается, пока слот источника ещё занят: иначе следующий запрос к
+            # этому источнику мог начаться (и прервать работу) раньше, чем готовый ответ
+            # попал в файл, и при max_concurrency=1 он терялся бы при прерывании.
+            with lock:
+                if checkpoint.closed:
+                    return  # прервали, файл уже записан
+                checkpoint.add_usage(_usage_row(source, "label", completion))
+                try:
+                    row["labels"][source.name] = normalize_label(completion.data, connector)
+                    progress["labels"] += 1
+                except ProviderError as error:
+                    row.setdefault("errors", []).append(_error_text(source, error))
+                checkpoint.changed()
+                progress["finished"] += 1
+
+    workers = max(1, sum(s.max_concurrency for s in labelers))
+    # Сохранение после прерывания — внутри stop_signals() (см. generate).
+    with stop_signals():
+        try:
+            def tick() -> None:
+                checkpoint.maybe_save()
+                if on_progress is not None:
+                    with lock:
+                        finished = progress["finished"]
+                    on_progress(finished, len(jobs))
+
+            _run_jobs(jobs, run, workers, stop=stop, tick=tick)
+            counts = _decide_all(config, pending, recheck, labelers, connectors, router, checkpoint)
+            if secret:
+                counts[SECRET_DROPPED] = secret
+            return counts
+        except KeyboardInterrupt:
+            stop.set()
+            _final_save(checkpoint)
+            with lock:
+                raise Interrupted(progress["labels"], len(jobs) - progress["finished"]) from None
+
+
+def _decide_all(
+    config: Config,
+    pending: list[dict[str, Any]],
+    recheck: list[dict[str, Any]],
+    labelers: list[Source],
+    connectors: dict[str, ConnectorTopics],
+    router: RouterRunner,
+    checkpoint: Checkpoint,
+) -> Counter[str]:
+    """Статусы фраз после разметки; прерывание здесь не страшно — разметки уже в файле."""
+    checkpoint.flush()
+    counts: Counter[str] = Counter()
+    to_check: list[tuple[dict[str, Any], Source]] = []
+    for row in pending:
+        row.pop("check", None)
+        if row["cid"] not in connectors:
+            row["status"] = "error"
+            continue
+        chosen = choose_labelers(row, labelers)
+        row["status"] = decide(row, chosen)
+        if row["status"] == "disputed" and config.single_labeler_check and len(chosen) == 1:
+            others = sorted(set(row["labels"]) - {chosen[0].name})
+            if others:
+                # Разметки источников, недоступных в этом запуске, тоже голоса: их
+                # несогласие парсер не отменяет, решает человек.
+                row["check"] = f"есть разметки других источников ({', '.join(others)}) — с приложением не сверялось"
+            elif row["labels"][chosen[0].name]["confident"]:
+                to_check.append((row, chosen[0]))
+            else:
+                row["check"] = "разметчик не уверен — с приложением не сверялось"
+    if to_check:
+        counts.update(check_with_app(config, to_check, connectors, router))
+    for row in pending:
+        counts[row["status"]] += 1
+    if recheck:
+        counts[RECHECKED] = len(recheck)
+    with checkpoint.lock:
+        checkpoint.changed()
+    _final_save(checkpoint)
+    return counts
+
+
+def reject_secrets(store: CandidateStore) -> int:
+    """Отклоняет ещё не перенесённые фразы, похожие на секрет; возвращает их число.
+
+    Статус rejected (review их не показывает, promote не переносит), разметки моделей и ошибки
+    стираются, check объясняет причину без текста фразы. Принятые человеком (accepted) фразы
+    сохраняют статус и разметку — только check: promote пропускает их по тому же фильтру.
+    """
+    count = 0
+    for row in store.rows:
+        if row.get("status") in {"promoted", "rejected"} or row.get("check") == SECRET_CHECK:
+            continue
+        if not looks_secret(row.get("text", ""), row_connector(row)):
+            continue
+        row["check"] = SECRET_CHECK
+        count += 1
+        if row.get("status") == "accepted":
+            # Решение человека не стирается: promote всё равно не перенесёт фразу.
+            continue
+        row["status"] = "rejected"
+        row["labels"] = {}
+        row.pop("final", None)
+        row.pop("errors", None)
+    if count:
+        store.save()
+    return count
+
+
+def _single_label_disputed(row: dict[str, Any], labelers: list[Source]) -> bool:
+    """Спорная фраза, у которой единственная разметка — от единственного доступного разметчика.
+
+    Считаются разметки, уже сохранённые в строке, а не только доступные сейчас разметчики:
+    фраза, где два разметчика разошлись, остаётся спорной, даже если в этом запуске
+    второй недоступен (--source, нет ключа, сервис лежит).
+    """
+    if row.get("status") != "disputed":
+        return False
+    chosen = choose_labelers(row, labelers)
+    return len(chosen) == 1 and set(row.get("labels", {})) == {chosen[0].name}
+
+
+def _connector_known(catalog: Catalog, row: dict[str, Any]) -> bool:
+    try:
+        catalog.connector(row_connector(row))
+    except ValueError:
+        return False
+    return True
+
+
+def check_with_app(
+    config: Config,
+    rows: list[tuple[dict[str, Any], Source]],
+    connectors: dict[str, ConnectorTopics],
+    router: RouterRunner,
+) -> Counter[str]:
+    """Сверяет единственную уверенную разметку с тем, как фразу понимает приложение.
+
+    Все фразы — одним процессом dart (запуск долгий). Совпало — agreed, final_by =
+    [разметчик, "parser"]; нет — фраза остаётся disputed, а row["check"] говорит, что
+    приложение поняло иначе (его показывает review). Если dart упал, фразы тоже остаются
+    disputed с причиной: без проверки agreed не ставится никогда.
+    """
+    counts: Counter[str] = Counter()
+    failure: str | None = None
+    try:
+        results = router(config, [row for row, _ in rows])
+    except Exception as error:  # noqa: BLE001 — нет dart, ошибка компиляции, мусор на выходе
+        results, failure = {}, _short(str(error))
+    for row, source in rows:
+        result = results.get(row["cid"])
+        if result is None:
+            row["check"] = "проверка приложением не удалась: " + (failure or "нет результата для фразы")
+            counts[CHECK_FAILED] += 1
+            continue
+        if "error" in result:
+            row["check"] = "проверка приложением не удалась: приложение упало на фразе: " + _short(
+                str(result["error"])
+            )
+            counts[CHECK_FAILED] += 1
+            continue
+        label_ = row["labels"][source.name]
+        try:
+            mismatches = app_mismatches(label_, connectors[row["cid"]], result)
+        except (AttributeError, KeyError, TypeError) as error:
+            row["check"] = f"проверка приложением не удалась: непонятный ответ ({error})"
+            counts[CHECK_FAILED] += 1
+            continue
+        if mismatches:
+            row["check"] = "приложение: " + ", ".join(mismatches)
+            continue
+        row["final"] = {k: label_.get(k) for k in prompts.LABEL_FIELDS}
+        row["final_by"] = [source.name, APP_CHECK_MARK]
+        row["status"] = "agreed"
+        counts[AGREED_BY_PARSER] += 1
+    return counts
+
+
+def _short(text: str, limit: int = 300) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def app_mismatches(label_: dict[str, Any], connector: ConnectorTopics, result: dict[str, Any]) -> list[str]:
+    """Чем понимание приложения (tool/route_phrases.dart) отличается от разметки.
+
+    Правила — как в test/scenario_corpus_test.dart: если intent не «unknown», фразу должен
+    забрать именно этот коннектор; у других коннекторов intent — commandId их совпадения
+    («unknown» — совпадения нет); у tasks intent и поля сравниваются с ScenarioParser так же,
+    как в promote. Пустой список — совпало.
+    """
+    mismatches: list[str] = []
+    intent = label_["intent"]
+    routed = result.get("connector")
+    if intent != "unknown" and routed != connector.id:
+        mismatches.append(f"коннектор={routed or 'никто'}")
+    if connector.id != DEFAULT_CONNECTOR:
+        own = next(
+            (m["command"] for m in result.get("matches") or [] if m.get("connector") == connector.id),
+            "unknown",
+        )
+        if own != intent:
+            mismatches.append(f"intent={own}")
+        return mismatches
+    final = {k: label_.get(k) for k in prompts.LABEL_FIELDS}
+    line = corpus_line({"cid": "", "text": "", "now": CORPUS_DEFAULT_NOW, "final": final, "source": "", "topic": ""}, connector)
+    return mismatches + parser_mismatches(line, final, result["parse"])
+
+
+_OPENING_QUOTES = "«“„\""
+_CLOSING_QUOTES = "»”“\""
+
+
+def _error_text(source: Source, error: Exception) -> str:
+    """Ошибки провайдера уже начинаются с имени источника — не дублируем его."""
+    text = str(error)
+    return text if text.startswith(f"{source.name}:") else f"{source.name}: {text}"
+
+
+def _strip_title_quotes(title: Any) -> str | None:
+    """Название — текст внутри кавычек; модели иногда захватывают и сами кавычки."""
+    if not isinstance(title, str):
+        return None
+    title = title.strip()
+    if len(title) >= 2 and title[0] in _OPENING_QUOTES and title[-1] in _CLOSING_QUOTES:
+        title = title[1:-1].strip()
+    elif title.endswith('"') and title.count('"') % 2 == 1:
+        # Непарная " в конце — остаток сломанной закрывающей кавычки.
+        title = title[:-1].strip()
+    return title or None
+
+
+@functools.lru_cache(maxsize=1)
+def _builtin_tasks() -> ConnectorTopics:
+    return load_catalog().connector(DEFAULT_CONNECTOR)
+
+
+def normalize_label(data: dict[str, Any], connector: ConnectorTopics | None = None) -> dict[str, Any]:
+    """Проверяет разметку модели и приводит её к формату корпуса.
+
+    Без connector — правила коннектора tasks. Название сохраняется и у createTask без
+    кавычек (остаток фразы); у намерений вне title_intents оно сбрасывается в null.
+    """
+    connector = connector or _builtin_tasks()
+    intent = data.get("intent")
+    if intent not in connector.intents:
+        raise ProviderError(f"недопустимый intent: {intent!r}")
+    issue = data.get("issue") or "none"
+    if issue not in prompts.ISSUES:
+        raise ProviderError(f"недопустимый issue: {issue!r}")
+    title_issue = data.get("titleIssue") or "none"
+    if title_issue not in prompts.TITLE_ISSUES:
+        raise ProviderError(f"недопустимый titleIssue: {title_issue!r}")
+
+    title = _strip_title_quotes(data.get("title"))
+    if intent not in connector.title_intents or title_issue != "none":
+        title = None
+
+    due = data.get("due")
+    due = due.strip() if isinstance(due, str) and due.strip() else None
+    precision = data.get("precision")
+    if intent not in connector.due_intents:
+        due, issue = None, "none"
+    if issue != "none":
+        due = None
+    if due is None:
+        precision = None
+    else:
+        due, precision = _normalize_due(due, precision)
+
+    scope, shift = None, None
+    if connector.id == DEFAULT_CONNECTOR and intent in prompts.BULK_INTENTS:
+        title = None
+        scope = _normalize_scope(data.get("scope"))
+        shift = _normalize_shift(data.get("shift")) if intent == "rescheduleMany" else None
+        if shift is not None:
+            due, precision = None, None
+
+    return {
+        "intent": intent,
+        "title": title,
+        "due": due,
+        "precision": precision,
+        "issue": issue,
+        "titleIssue": title_issue,
+        "scope": scope,
+        "shift": shift,
+        "confident": bool(data.get("confident", True)),
+        "comment": str(data.get("comment") or ""),
+    }
+
+
+_SCOPE_BASE = re.compile(r"^(all|overdue|noDue|date:(\d{4}-\d{2}-\d{2}))$")
+_SHIFT = re.compile(r"^([+-])\s*(\d{1,4})\s*([mhdw])$")
+
+
+def _normalize_scope(scope: Any) -> str:
+    """Выбор задач массовой команды в формате корпуса: «all», «overdue #работа», «date:2026-11-06».
+
+    Пусто — «all». Метки — в нижнем регистре, без повторов, после признака через пробел.
+    """
+    if scope is None or (isinstance(scope, str) and not scope.strip()):
+        return "all"
+    if not isinstance(scope, str):
+        raise ProviderError(f"недопустимый scope: {scope!r}")
+    parts = scope.split()
+    base, tags = parts[0], parts[1:]
+    if base.startswith("#"):
+        base, tags = "all", parts
+    match = _SCOPE_BASE.match(base)
+    if not match:
+        raise ProviderError(f"недопустимый scope: {scope!r}")
+    if match.group(2):
+        try:
+            datetime.strptime(match.group(2), "%Y-%m-%d")
+        except ValueError:
+            raise ProviderError(f"недопустимая дата в scope: {scope!r}") from None
+    clean: list[str] = []
+    for tag in tags:
+        name = tag.lstrip("#").lower()
+        if not tag.startswith("#") or not name:
+            raise ProviderError(f"недопустимая метка в scope: {scope!r}")
+        if name not in clean:
+            clean.append(name)
+    return " ".join([base, *(f"#{t}" for t in clean)])
+
+
+def _normalize_shift(shift: Any) -> str | None:
+    """Сдвиг каждой задачи: «+1h», «-2d», «+30m»; неделя «+1w» — «+7d». Пусто — None."""
+    if shift is None or (isinstance(shift, str) and not shift.strip()):
+        return None
+    if not isinstance(shift, str):
+        raise ProviderError(f"недопустимый shift: {shift!r}")
+    match = _SHIFT.match(shift.strip())
+    if not match:
+        raise ProviderError(f"недопустимый shift: {shift!r}")
+    sign, amount, unit = match.group(1), int(match.group(2)), match.group(3)
+    if amount == 0:
+        raise ProviderError(f"нулевой shift: {shift!r}")
+    if unit == "w":
+        amount, unit = amount * 7, "d"
+    return f"{sign}{amount}{unit}"
+
+
+def _normalize_due(due: str, precision: Any) -> tuple[str, str]:
+    """Приводит срок к формату корпуса и сверяет его с precision модели.
+
+    «2026-11-03» → date; «2026-11-03T10:00[:00]» → dateTime; часть суток —
+    «2026-11-03T19:00» с precision=partOfDay. Противоречие (precision=date при
+    времени не 00:00, dateTime или partOfDay без времени) — ошибка разметки, а не
+    повод угадывать.
+    """
+    if precision not in (None, *prompts.PRECISIONS):
+        raise ProviderError(f"недопустимый precision: {precision!r}")
+    has_time = "T" in due or " " in due
+    try:
+        moment = datetime.fromisoformat(due.replace(" ", "T")) if has_time else datetime.strptime(due, "%Y-%m-%d")
+    except ValueError:
+        raise ProviderError(f"недопустимый due: {due!r}") from None
+    if not 2000 <= moment.year <= 2100:
+        raise ProviderError(f"недопустимый год в due: {due!r}")
+    if precision is None:
+        precision = "dateTime" if has_time else "date"
+    if precision in ("dateTime", "partOfDay") and not has_time:
+        raise ProviderError(f"precision={precision}, но в due нет времени: {due!r}")
+    if precision == "date" and has_time and (moment.hour, moment.minute, moment.second) != (0, 0, 0):
+        raise ProviderError(f"precision=date, но в due есть время: {due!r}")
+    date = f"{moment.year:04d}-{moment.month:02d}-{moment.day:02d}"
+    if precision == "date":
+        return date, "date"
+    return f"{date}T{moment.hour:02d}:{moment.minute:02d}", precision
+
+
+def comparable(label_: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(label_.get(field) for field in prompts.LABEL_FIELDS)
+
+
+def decide(row: dict[str, Any], labelers: list[Source]) -> str:
+    names = [s.name for s in labelers]
+    labels = [row["labels"][n] for n in names if n in row["labels"]]
+    if len(labels) < len(names) or not labels:
+        return "error"
+    if len(labels) < 2:
+        # Один разметчик: подтвердить может только человек или, при
+        # settings.single_labeler_check, приложение (check_with_app в label()).
+        return "disputed"
+    if not all(l["confident"] for l in labels):
+        return "disputed"
+    if len({comparable(l) for l in labels}) == 1:
+        row["final"] = {k: labels[0].get(k) for k in prompts.LABEL_FIELDS}
+        row["final_by"] = sorted(names)
+        return "agreed"
+    return "disputed"
+
+
+# ------------------------------------------------------- перенос в корпус
+
+
+def run_dart_router(config: Config, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Прогоняет фразы через маршрутизатор с коннекторами приложения (tool/route_phrases.dart).
+
+    Результат по cid: connector (победитель, «ambiguous» или None), command, matches и
+    parse — разбор ScenarioParser. Фраз без результата в ответе нет: их решает вызывающий.
+    """
+    return _run_dart_tool(config, "tool/route_phrases.dart", items)
+
+
+def _tool_input(item: dict[str, Any]) -> dict[str, Any]:
+    """Строка входа dart-инструмента: id, текст, «сейчас» и контекст сессии `after`, если он есть.
+
+    `after` — коннектор, который только что отвечал в чате (Utterance.recentConnectorId):
+    с ним tool/route_phrases.dart выбирает так же, как scenario_corpus_test.dart.
+    """
+    line = {"id": item["cid"], "text": item["text"], "now": item["now"]}
+    if item.get("after"):
+        line["after"] = item["after"]
+    return line
+
+
+def _run_dart_tool(config: Config, script: str, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    payload = "".join(json.dumps(_tool_input(i), ensure_ascii=False) + "\n" for i in items)
+    completed = subprocess.run(
+        [config.dart, "run", script],
+        cwd=config.project_root,
+        input=payload,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(f"dart run завершился с кодом {completed.returncode}:\n{completed.stderr}")
+    results: dict[str, dict[str, Any]] = {}
+    for line in completed.stdout.split("\n"):
+        start = line.find("{")  # dart может печатать служебный текст перед JSON
+        if start == -1:
+            continue
+        row = json.loads(line[start:])
+        results[row["id"]] = row
+    return results
+
+
+def promote(
+    config: Config,
+    store: CandidateStore,
+    *,
+    dry_run: bool = False,
+    router: RouterRunner = run_dart_router,
+    catalog: Catalog | None = None,
+) -> Counter[str]:
+    """Переносит принятые фразы в generated.jsonl.
+
+    Каждая фраза — любого коннектора и с любой отметкой (две модели, разметчик и
+    приложение, ручная разметка в review) — сверяется с маршрутизатором приложения
+    (tool/route_phrases.dart) по правилам test/scenario_corpus_test.dart (app_mismatches):
+    кто забрал фразу, commandId, а у tasks — поля ScenarioParser. Совпало — active, нет —
+    known_gap с причиной в note. Так корпусный тест не падает на только что перенесённых
+    строках: active совпадает с приложением, known_gap — расходится. Коннектор должен быть
+    зарегистрирован в _connectorFactories теста.
+    """
+    counts: Counter[str] = Counter()
+    secret = reject_secrets(store) if not dry_run else 0
+    if secret:
+        counts[SECRET_DROPPED] = secret
+    ready = [
+        r
+        for r in store.rows
+        if r["status"] in {"agreed", "accepted"} and r.get("final") and not looks_secret(r["text"], row_connector(r))
+    ]
+    if not ready:
+        return counts
+    catalog = catalog or catalog_for(config)
+    existing = corpus_rows(config.corpus_dir)
+    existing_ids = {r.get("id") for r in existing}
+    existing_texts = {normalize_text(r["text"]) for r in existing if "text" in r}
+    new_rows: list[tuple[dict[str, Any], ConnectorTopics]] = []
+    for row in ready:
+        corpus_id = f"gen-{row['cid']}"
+        if corpus_id in existing_ids or normalize_text(row["text"]) in existing_texts:
+            row["status"] = "promoted"
+            counts["already_in_corpus"] += 1
+            continue
+        try:
+            connector = catalog.connector(row_connector(row))
+        except ValueError as error:
+            counts["unknown_connector"] += 1
+            row.setdefault("errors", []).append(str(error))
+            continue
+        new_rows.append((row, connector))
+    # Все фразы — одним процессом dart; если он упал, исключение уходит наверх и
+    # ничего не записывается: без проверки строка в корпус не попадает.
+    routed = router(config, [row for row, _ in new_rows]) if new_rows else {}
+    lines: list[dict[str, Any]] = []
+    for row, connector in new_rows:
+        result = routed.get(row["cid"])
+        if result is None or "error" in result:
+            counts["parser_error"] += 1
+            reason = "нет результата для фразы" if result is None else _short(str(result["error"]))
+            row.setdefault("errors", []).append("проверка приложением не удалась: " + reason)
+            continue
+        line = corpus_line(row, connector)
+        try:
+            mismatches = app_mismatches(row["final"], connector, result)
+        except (AttributeError, KeyError, TypeError) as error:
+            counts["parser_error"] += 1
+            row.setdefault("errors", []).append(f"проверка приложением не удалась: непонятный ответ ({error})")
+            continue
+        if mismatches:
+            line["status"] = "known_gap"
+            line["note"] = "приложение сейчас: " + ", ".join(mismatches)
+            counts["known_gap"] += 1
+        else:
+            counts["active"] += 1
+        lines.append(line)
+        row["status"] = "promoted"
+    if not dry_run:
+        append_jsonl(config.corpus_dir / GENERATED_FILE, lines)
+        store.save()
+    return counts
+
+
+TARGET_INTENTS = frozenset({"rescheduleTask", "completeTask"})
+
+
+def parser_mismatches(line: dict[str, Any], final: dict[str, Any], parsed: dict[str, Any]) -> list[str]:
+    """Поля разбора задач, в которых ScenarioParser расходится с разметкой.
+
+    Сравниваются поля, которые попадут в строку корпуса, и всегда issue и titleIssue —
+    как их проверяет scenario_corpus_test.dart.
+    """
+    return [
+        f"{field}={value!r}"
+        for field in prompts.LABEL_FIELDS
+        if field in line or field in {"issue", "titleIssue"}
+        for value in [parsed_field(parsed, field)]
+        # Значение строки корпуса: у старых разметок без scope оно уже приведено («all»).
+        if value != (line[field] if field in line else final.get(field))
+    ]
+
+
+def parsed_field(parsed: dict[str, Any], field: str) -> Any:
+    """Значение поля разбора так, как его сравнивает scenario_corpus_test.dart.
+
+    У переноса и завершения без кавычек слова цели лежат в targetQuery, а title пуст;
+    корпус и разметка называют это title — тест сравнивает `title ?? targetQuery`.
+    """
+    if field == "title" and parsed.get("intent") in TARGET_INTENTS:
+        title = parsed.get("title")
+        return title if title is not None else parsed.get("targetQuery")
+    return parsed.get(field)
+
+
+def corpus_line(row: dict[str, Any], connector: ConnectorTopics | None = None) -> dict[str, Any]:
+    """Строка корпуса; "connector" пишется, только если это не tasks (значение по умолчанию).
+
+    Поля разбора задач (title, due, precision, issue, titleIssue, а у массовых команд — scope
+    и shift) пишутся только для tasks:
+    для других коннекторов scenario_corpus_test.dart их не проверяет и отвергает непустые.
+    """
+    connector = connector or _builtin_tasks()
+    final = row["final"]
+    line: dict[str, Any] = {"id": f"gen-{row['cid']}", "text": row["text"]}
+    if row["now"] != CORPUS_DEFAULT_NOW:
+        line["now"] = row["now"]
+    if connector.id != DEFAULT_CONNECTOR:
+        line["connector"] = connector.id
+    line["intent"] = final["intent"]
+    # Контекст сессии (поле корпуса `after`): строка проверяется с ним.
+    if row.get("after"):
+        line["after"] = row["after"]
+    if connector.id != DEFAULT_CONNECTOR:
+        line["source"] = row["source"]
+        line["tags"] = [f"topic:{row['topic']}", "labels:" + ",".join(row.get("final_by") or ["manual"])]
+        return line
+    if final["intent"] in connector.title_intents:
+        line["title"] = final["title"]
+    if final["intent"] in connector.due_intents:
+        line["due"] = final["due"]
+        if final["precision"] is not None:
+            line["precision"] = final["precision"]
+    if final["intent"] in prompts.BULK_INTENTS:
+        # Старые разметки без scope — все задачи, как и пустой scope модели.
+        line["scope"] = final.get("scope") or "all"
+        if final.get("shift") is not None:
+            line["shift"] = final["shift"]
+    if final["issue"] != "none":
+        line["issue"] = final["issue"]
+    if final["titleIssue"] != "none":
+        line["titleIssue"] = final["titleIssue"]
+    line["source"] = row["source"]
+    line["tags"] = [f"topic:{row['topic']}", "labels:" + ",".join(row.get("final_by") or ["manual"])]
+    return line
+
+
+# --------------------------------------------------------------- служебное
+
+
+def _usage_row(source: Source, stage: str, completion: Any) -> dict[str, Any]:
+    return {
+        "source": source.name,
+        "stage": stage,
+        "input_tokens": getattr(completion, "input_tokens", 0),
+        "output_tokens": getattr(completion, "output_tokens", 0),
+        "cost_usd": round(
+            source.cost(getattr(completion, "input_tokens", 0), getattr(completion, "output_tokens", 0)), 6
+        ),
+    }
+
+
+T = TypeVar("T")
+
+# Как часто главный поток просыпается без новых ответов, чтобы сохранить прогресс.
+_TICK = 1.0
+
+
+def _run_jobs(
+    items: Sequence[T],
+    run: Callable[[T], None],
+    workers: int,
+    *,
+    stop: threading.Event,
+    tick: Callable[[], Any],
+) -> None:
+    """Выполняет run(item) в workers потоках; главный поток ждёт и вызывает tick.
+
+    Потоки — daemon, а не ThreadPoolExecutor: при Ctrl+C процесс не должен ждать
+    зависших HTTP-запросов (у локальных моделей ответ идёт минутами). Ошибка или
+    KeyboardInterrupt внутри run (например, в тесте) поднимается в главном потоке;
+    stop останавливает раздачу новых заданий, а начатые запросы бросаются.
+    """
+    if not items:
+        return
+    todo: queue.SimpleQueue[T] = queue.SimpleQueue()
+    for item in items:
+        todo.put(item)
+    done: queue.SimpleQueue[BaseException | None] = queue.SimpleQueue()
+
+    def worker() -> None:
+        while not stop.is_set():
+            try:
+                item = todo.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                run(item)
+            except BaseException as error:  # noqa: BLE001 — передаём в главный поток
+                done.put(error)
+            else:
+                done.put(None)
+
+    for number in range(min(workers, len(items))):
+        threading.Thread(target=worker, name=f"corpus-gen-{number}", daemon=True).start()
+    finished = 0
+    try:
+        while finished < len(items):
+            try:
+                error = done.get(timeout=_TICK)
+            except queue.Empty:
+                tick()
+                continue
+            finished += 1
+            if error is not None:
+                raise error
+            tick()
+    finally:
+        stop.set()
+
+
+_STOP_SIGNALS = tuple(getattr(signal, name) for name in ("SIGTERM", "SIGHUP") if hasattr(signal, name))
+_ALL_STOP_SIGNALS = (signal.SIGINT, *_STOP_SIGNALS)
+
+
+def _raise_interrupt(signum: int, _frame: Any) -> None:
+    # Первый сигнал прерывает команду, следующие игнорируются до конца stop_signals():
+    # закрытие терминала шлёт SIGHUP дважды (от ядра и от bash), и второй не должен
+    # убить процесс, пока сохраняется сделанное.
+    for number in _ALL_STOP_SIGNALS:
+        signal.signal(number, signal.SIG_IGN)
+    raise KeyboardInterrupt(f"сигнал {signum}")
+
+
+@contextlib.contextmanager
+def stop_signals() -> Iterator[None]:
+    """Ctrl+C, SIGTERM и SIGHUP (закрыли терминал) прерывают команду одинаково.
+
+    Последнее сохранение после прерывания нужно делать внутри этого блока: обработчики
+    восстанавливаются только на выходе, а до тех пор повторные сигналы игнорируются.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    previous = {number: signal.signal(number, _raise_interrupt) for number in _ALL_STOP_SIGNALS}
+    try:
+        yield
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
+def _final_save(checkpoint: Checkpoint) -> None:
+    """Последнее сохранение; повторный Ctrl+C или сигнал во время записи игнорируются."""
+    if threading.current_thread() is not threading.main_thread():
+        checkpoint.flush(close=True)
+        return
+    previous = {number: signal.signal(number, signal.SIG_IGN) for number in _ALL_STOP_SIGNALS}
+    try:
+        checkpoint.flush(close=True)
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
+# Статусы, которые сбрасывает relabel. Решения человека (accepted, rejected)
+# и перенесённые в корпус фразы трогаются только по явному флагу или никогда.
+RELABEL_STATUSES = frozenset({"new", "error", "disputed", "agreed"})
+RELABEL_REVIEWED = frozenset({"accepted", "rejected"})
+
+
+def relabel(store: CandidateStore, include_reviewed: bool = False) -> int:
+    """Сбрасывает разметку, чтобы фразы разметились заново по текущим правилам.
+
+    Текст, источник и тема остаются; перенесённые в корпус (promoted) не
+    трогаются никогда.
+    """
+    statuses = RELABEL_STATUSES | (RELABEL_REVIEWED if include_reviewed else frozenset())
+    count = 0
+    for row in store.rows:
+        if row.get("status") not in statuses:
+            continue
+        row["status"] = "new"
+        row["labels"] = {}
+        for key in ("final", "final_by", "errors", "check"):
+            row.pop(key, None)
+        count += 1
+    store.save()
+    return count

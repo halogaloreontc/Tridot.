@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Поле «Что сделать?» в «Сегодня и ввод»: подпись, а не поле ввода —
+     нажатие открывает Tridot с клавиатурой, микрофон — голосовой ввод.
+     «+» стоит в столбце кружков, подпись — в столбце названий. Не ниже
+     48 dp, отступы 8 по бокам и снизу, 4 сверху (под строками и так
+     воздух; HomeScreenRenderer.Metrics). Микрофон — зона 48 dp. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/hw_field"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="48dp"
+    android:layout_marginStart="8dp"
+    android:layout_marginTop="4dp"
+    android:layout_marginEnd="8dp"
+    android:layout_marginBottom="8dp"
+    android:orientation="horizontal"
+    android:baselineAligned="false"
+    android:background="@drawable/hw_field_bg">
+    <LinearLayout
+        android:id="@+id/hw_field_body"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:background="@drawable/hw_field_press">
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="9dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/hw_plus" />
+        <TextView
+            android:id="@+id/hw_field_hint"
+            style="@style/HwHintField"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_marginStart="15dp"
+            android:singleLine="false"
+            android:maxLines="1"
+            android:autoSizeTextType="uniform"
+            android:autoSizeMinTextSize="13sp"
+            android:autoSizeMaxTextSize="15sp"
+            android:autoSizeStepGranularity="1sp"
+            android:text="@string/hw_hint" />
+    </LinearLayout>
+    <FrameLayout
+        android:id="@+id/hw_field_mic"
+        android:layout_width="48dp"
+        android:layout_height="match_parent"
+        android:background="@drawable/hw_field_press"
+        android:contentDescription="@string/hw_voice">
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/hw_mic" />
+    </FrameLayout>
+</LinearLayout>

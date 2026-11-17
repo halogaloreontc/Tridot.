@@ -1,0 +1,17 @@
+name: tridot_lame
+description: >-
+  Встроенный кодировщик MP3 Tridot (ADR-026): LAME 3.100 и тонкая обёртка,
+  разделяемая библиотека libtridot_mp3 (LGPL-2.0-or-later).
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.10.0 <4.0.0"
+
+# Версии закреплены точно: те же, что у сборки libsodium (пакет sodium).
+dependencies:
+  code_assets: 2.2.0
+  ffi: 2.2.0
+  hooks: 2.2.0
+  logging: 1.3.0
+  native_toolchain_c: 0.19.6

@@ -1,0 +1,57 @@
+{"id": "alm-001", "text": "поставь будильник на 7", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0"}, "source": "manual"}
+{"id": "alm-002", "text": "поставь будильник на 7:00", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0"}, "source": "manual"}
+{"id": "alm-003", "text": "поставь будильник на 7 утра", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0"}, "source": "manual"}
+{"id": "alm-004", "text": "заведи будильник на 6:30", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "6", "minute": "30"}, "source": "manual"}
+{"id": "alm-005", "text": "установи будильник на 19:00", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "19", "minute": "0"}, "source": "manual"}
+{"id": "alm-006", "text": "поставь будильник на 7 вечера", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "19", "minute": "0"}, "source": "manual"}
+{"id": "alm-007", "text": "будильник на 7", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0"}, "source": "manual"}
+{"id": "alm-008", "text": "будильник на полседьмого", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "6", "minute": "30"}, "source": "manual"}
+{"id": "alm-009", "text": "разбуди меня в 7", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0"}, "source": "manual"}
+{"id": "alm-010", "text": "разбуди меня завтра в 6:30", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "6", "minute": "30"}, "source": "manual"}
+{"id": "alm-011", "text": "разбуди меня через 8 часов", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "0", "minute": "30"}, "source": "manual"}
+{"id": "alm-012", "text": "будильник через 20 минут", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "16", "minute": "50"}, "source": "manual"}
+{"id": "alm-013", "text": "поставь будильник на 7 с подписью «спортзал»", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0", "label": "спортзал"}, "source": "manual"}
+{"id": "alm-014", "text": "будильник по будням на 7", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0", "days": "1-5"}, "source": "manual"}
+{"id": "alm-015", "text": "поставь будильник на 6:45 по выходным", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "6", "minute": "45", "days": "6-7"}, "source": "manual"}
+{"id": "alm-016", "text": "будильник каждый день на 8", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "8", "minute": "0", "days": "1-7"}, "source": "manual"}
+{"id": "alm-017", "text": "поставь будильник на 7 по понедельникам и средам", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0", "days": "1,3"}, "source": "manual"}
+{"id": "alm-018", "text": "Привет, поставь будильник на 7 утра", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0"}, "source": "manual"}
+{"id": "alm-019", "text": "сделай будильник на 5:15", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "5", "minute": "15"}, "source": "manual"}
+{"id": "alm-020", "text": "поставь будильник в половине седьмого", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "6", "minute": "30"}, "source": "manual"}
+{"id": "alm-021", "text": "поставь будильник на семь", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0"}, "source": "manual"}
+{"id": "alm-022", "text": "поставь будильник на 2 ночи", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "2", "minute": "0"}, "source": "manual"}
+{"id": "alm-023", "text": "поставь будильник на 10 вечера", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "22", "minute": "0"}, "source": "manual"}
+{"id": "alm-024", "text": "поставь пожалуйста будильник на 7:30", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "30"}, "source": "manual"}
+{"id": "alm-025", "text": "можешь поставить будильник на 8?", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "8", "minute": "0"}, "source": "manual"}
+{"id": "alm-026", "text": "завести будильник на 6", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "6", "minute": "0"}, "source": "manual"}
+{"id": "alm-027", "text": "поставь будильник на 7:00 по будням с подписью «работа»", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0", "days": "1-5", "label": "работа"}, "source": "manual"}
+{"id": "alm-028", "text": "разбуди в 6 утра", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "6", "minute": "0"}, "source": "manual"}
+{"id": "alm-029", "text": "поставь будильник", "connector": "alarm", "intent": "alarm.clarify", "source": "manual"}
+{"id": "alm-030", "text": "разбуди меня", "connector": "alarm", "intent": "alarm.clarify", "source": "manual"}
+{"id": "alm-031", "text": "поставь будильник на сегодня в 7", "connector": "alarm", "intent": "alarm.clarify", "source": "manual"}
+{"id": "alm-032", "text": "поставь будильник в пятницу в 7", "connector": "alarm", "intent": "alarm.date", "form": {"hour": "7", "minute": "0", "date": "2026-11-06"}, "source": "manual"}
+{"id": "alm-033", "text": "будильник на послезавтра в 9", "connector": "alarm", "intent": "alarm.date", "form": {"hour": "9", "minute": "0", "date": "2026-11-04"}, "source": "manual"}
+{"id": "alm-034", "text": "поставь таймер на 5 минут", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "300"}, "source": "manual"}
+{"id": "alm-035", "text": "таймер на полчаса", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "1800"}, "source": "manual"}
+{"id": "alm-036", "text": "таймер на 1:30", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "5400"}, "source": "manual"}
+{"id": "alm-037", "text": "засеки 10 минут", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "600"}, "source": "manual"}
+{"id": "alm-038", "text": "таймер 3 минуты", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "180"}, "source": "manual"}
+{"id": "alm-039", "text": "поставь таймер на 90 секунд", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "90"}, "source": "manual"}
+{"id": "alm-040", "text": "таймер на полтора часа", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "5400"}, "source": "manual"}
+{"id": "alm-041", "text": "таймер на 2 часа 15 минут", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "8100"}, "source": "manual"}
+{"id": "alm-042", "text": "таймер на минуту", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "60"}, "source": "manual"}
+{"id": "alm-043", "text": "таймер на час", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "3600"}, "source": "manual"}
+{"id": "alm-044", "text": "запусти таймер на 25 минут", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "1500"}, "source": "manual"}
+{"id": "alm-045", "text": "таймер на двадцать пять минут", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "1500"}, "source": "manual"}
+{"id": "alm-046", "text": "засеки 3 минуты", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "180"}, "source": "manual"}
+{"id": "alm-047", "text": "поставь таймер на 10 минут «пицца»", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "600", "label": "пицца"}, "source": "manual"}
+{"id": "alm-048", "text": "поставь таймер", "connector": "alarm", "intent": "alarm.clarify", "source": "manual"}
+{"id": "alm-049", "text": "купить будильник", "intent": "createTask", "title": "Купить будильник", "note": "не будильник", "source": "manual"}
+{"id": "alm-050", "text": "починить будильник", "intent": "createTask", "title": "Починить будильник", "note": "не будильник", "source": "manual"}
+{"id": "alm-051", "text": "напомни поставить будильник", "intent": "createTask", "note": "не будильник", "source": "manual"}
+{"id": "alm-052", "text": "напомни завтра в 7 позвонить маме", "intent": "createTask", "title": "Позвонить маме", "due": "2026-11-03T07:00", "precision": "dateTime", "note": "не будильник", "source": "manual"}
+{"id": "alm-053", "text": "будильник не прозвенел", "intent": "unknown", "note": "не будильник", "source": "manual"}
+{"id": "alm-054", "text": "выбрать новый будильник", "intent": "createTask", "title": "Выбрать новый будильник", "note": "не будильник", "source": "manual"}
+{"id": "alm-055", "text": "напомни через 5 минут выключить духовку", "intent": "createTask", "title": "Выключить духовку", "note": "не будильник", "source": "manual"}
+{"id":"alm-v01","text":"нужен будильник на семь","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual"}
+{"id":"alm-v02","text":"мне нужен таймер на пять минут","connector":"alarm","intent":"alarm.timer","form":{"seconds":"300"},"source":"manual"}

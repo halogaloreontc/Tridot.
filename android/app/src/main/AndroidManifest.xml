@@ -1,8 +1,49 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Подключения (склад) ходят в сеть: без этого release-сборка останется
+         без интернета. Только https, кроме адресов локальной сети (ADR-011). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Голосовой ввод (ADR-023): микрофон — только пока идёт запись,
+         звук распознаётся на телефоне (Vosk или распознавание телефона
+         без интернета), не сохраняется и никуда не отправляется.
+         Разрешение запрашивается при первом нажатии. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Сейф и вход в приложение по отпечатку / Face ID (ADR-025): только
+         системный запрос BiometricPrompt; биометрические данные приложению
+         не передаются никогда. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <!-- Напоминания о задачах (ADR-029): уведомления создаются на телефоне
+         и никуда не отправляются. Android 13+ спрашивает разрешение — только
+         когда появилась первая задача со сроком, после объяснения. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Напоминание точно в срок (Android 12+, «Будильники и напоминания»):
+         без него Android присылает его с опозданием до нескольких минут.
+         USE_EXACT_ALARM не нужен: Google Play даёт его только будильникам и
+         календарям. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <!-- После перезагрузки напоминания ставятся заново. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Будильник и таймер в приложении «Часы» (ADR-029): «Часы» открываются
+         с заполненным будильником, человек подтверждает там. Обычное
+         разрешение, без вопроса. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM"/>
+    <!-- Сканер QR склада (ADR-031): камера — только пока открыта шторка
+         «Сканировать QR»; код распознаётся на телефоне встроенной моделью,
+         кадры не сохраняются и никуда не отправляются. Разрешение
+         спрашивается при первом открытии сканера. Камера необязательна:
+         без неё ссылку можно вставить. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <!-- Копия Android: задачи и чаты копируются, хранилище паролей и
+         secrets.json — нет (res/xml/data_extraction_rules.xml, backup_rules.xml). -->
     <application
-        android:label="local_assistant"
+        android:label="Tridot"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        tools:targetApi="31">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -24,7 +65,98 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- «Открыть в Tridot» со страницы склада (ADR-031):
+                 tridot://connect?u=<адрес склада>&qr=<код>. Ссылка только
+                 открывает окно подтверждения; разбор строгий
+                 (IncomingLinkChannel.kt и ConnectionService.parseConnectLink). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="tridot" android:host="connect"/>
+            </intent-filter>
+            <!-- «Поделиться» ссылкой или снимком экрана с QR склада. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/*"/>
+            </intent-filter>
         </activity>
+        <!-- Напоминания о задачах (ADR-029): показ уведомления и «Через 10
+             минут». Только для своих PendingIntent. -->
+        <receiver
+            android:name=".notify.ReminderReceiver"
+            android:exported="false" />
+        <!-- Перезагрузка, обновление, смена времени: расписание заново. -->
+        <receiver
+            android:name=".notify.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.TIME_SET"/>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED"/>
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED"/>
+            </intent-filter>
+        </receiver>
+        <!-- Виджеты рабочего стола (ADR-034): «Сегодня», «Быстрый ввод» и
+             «Сегодня и ввод». Не экспортируются: обновления присылает
+             система. Задачи на виджете — из снимка приложения на
+             устройстве (SharedPreferences tridot_homescreen). -->
+        <receiver
+            android:name=".homescreen.TodayWidget"
+            android:exported="false"
+            android:label="@string/hw_today_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/hw_today_info" />
+        </receiver>
+        <receiver
+            android:name=".homescreen.QuickWidget"
+            android:exported="false"
+            android:label="@string/hw_quick_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/hw_quick_info" />
+        </receiver>
+        <receiver
+            android:name=".homescreen.ComboWidget"
+            android:exported="false"
+            android:label="@string/hw_combo_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/hw_combo_info" />
+        </receiver>
+        <!-- «Выполнено» и «вернуть» на виджете, перерисовка по будильнику.
+             Только для своих PendingIntent. -->
+        <receiver
+            android:name=".homescreen.HomeScreenActionReceiver"
+            android:exported="false" />
+        <!-- «Открыть» у результата архиватора (ADR-024): FileProvider только
+             для копий в cache/tridot-open (res/xml/file_paths.xml). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -37,9 +169,46 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Распознавание телефона без интернета (ADR-023): служба
+             распознавания на устройстве. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+        <!-- Есть ли «Часы», которые ставят будильник и таймер (ADR-029). -->
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_TIMER"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Своя страница погоды открывается в браузере (ADR-030). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <category android:name="android.intent.category.BROWSABLE"/>
+            <data android:scheme="https"/>
+        </intent>
+        <!-- «Другое приложение…» погоды (ADR-030): выбранное в системном
+             списке нужно потом открыть и подписать, а с Android 11 чужие
+             пакеты без запроса не видны. Видны только приложения с иконкой
+             на рабочем столе, без QUERY_ALL_PACKAGES. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent>
+        <!-- Известные приложения погоды (ADR-030). Тот же список —
+             LinksChannel.KNOWN. -->
+        <package android:name="com.google.android.apps.weather"/>
+        <package android:name="com.sec.android.daemonapp"/>
+        <package android:name="com.miui.weather2"/>
+        <package android:name="com.huawei.android.totemweather"/>
+        <package android:name="com.coloros.weather2"/>
+        <package android:name="com.oplus.weather"/>
+        <package android:name="ru.yandex.weatherplugin"/>
+        <package android:name="ru.gismeteo.gismeteo"/>
+        <package android:name="com.accuweather.android"/>
     </queries>
 </manifest>

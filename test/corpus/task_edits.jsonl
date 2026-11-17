@@ -1,0 +1,63 @@
+{"id": "edit-001", "text": "Напомни, доделать по складу реестр стринтина", "intent": "createTask", "title": "Доделать по складу реестр стринтина", "due": null, "note": "владелец: задача без времени, затем «Когда напомнить?»"}
+{"id": "edit-002", "text": "Поставь время 11:00", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-03T11:00", "precision": "dateTime"}, "note": "владелец: время текущей задаче, а не «не понял»"}
+{"id": "edit-003", "text": "напомни про них", "intent": "task.edit", "form": {"kind": "remind"}, "note": "владелец: «них» — текущая задача, не название"}
+{"id": "edit-004", "text": "в эссен запиши, что их 22шт в ок, 1шт в уценке под артикулом 67782", "intent": "task.edit", "form": {"kind": "note", "target": "эссен", "text": "22 шт в ОК, 1 шт в уценке, арт. 67782"}, "note": "владелец: заметка в «Эссен», а не новая задача"}
+{"id": "edit-005", "text": "к задаче Эссен добавь, что поставщик перезвонит в среду", "intent": "task.edit", "form": {"kind": "note", "target": "Эссен", "text": "поставщик перезвонит в среду"}}
+{"id": "edit-006", "text": "по эссену отметь, что всё пришло", "intent": "task.edit", "form": {"kind": "note", "target": "эссену", "text": "всё пришло"}, "note": "падеж названия ищет коннектор"}
+{"id": "edit-007", "text": "запиши в «Эссен», что 3 коробки повреждены", "intent": "task.edit", "form": {"kind": "note", "target": "Эссен", "text": "3 коробки повреждены"}}
+{"id": "edit-008", "text": "добавь в отчёт, что нужна подпись директора", "intent": "task.edit", "form": {"kind": "note", "target": "отчёт", "text": "нужна подпись директора"}}
+{"id": "edit-009", "text": "запиши, что их 5 штук", "intent": "task.edit", "form": {"kind": "note", "text": "5 шт"}}
+{"id": "edit-010", "text": "отметь, что там 12шт ок", "intent": "task.edit", "form": {"kind": "note", "text": "12 шт ОК"}}
+{"id": "edit-011", "text": "добавь, что артикул 55120", "intent": "task.edit", "form": {"kind": "note", "text": "арт. 55120"}}
+{"id": "edit-012", "text": "запиши, что у них 40 шт в уценке", "intent": "task.edit", "form": {"kind": "note", "text": "40 шт в уценке"}}
+{"id": "edit-013", "text": "Эссен: запиши, что приедут в 14:00", "intent": "task.edit", "form": {"kind": "note", "target": "Эссен", "text": "приедут в 14:00"}}
+{"id": "edit-014", "text": "добавь заметку: проверить накладные", "intent": "task.edit", "form": {"kind": "note", "text": "проверить накладные"}}
+{"id": "edit-015", "text": "в склад запиши, что паллет 7 шт", "intent": "task.edit", "form": {"kind": "note", "target": "склад", "text": "паллет 7 шт"}}
+{"id": "edit-016", "text": "пожалуйста, в эссен добавь что под артикулом 67782 ещё 3 шт", "intent": "task.edit", "form": {"kind": "note", "target": "эссен", "text": "арт. 67782 ещё 3 шт"}}
+{"id": "edit-017", "text": "запиши в список, что нужно позвонить Пете", "intent": "task.edit", "form": {"kind": "note", "text": "нужно позвонить Пете"}, "note": "«в список» — не название задачи"}
+{"id": "edit-018", "text": "в среду запиши, что придёт машина", "intent": "task.edit", "form": {"kind": "note", "text": "придёт машина"}, "note": "«в среду» — срок, не задача"}
+{"id": "edit-019", "text": "зафиксируй в эссен, что брак 2 шт", "intent": "task.edit", "form": {"kind": "note", "target": "эссен", "text": "брак 2 шт"}}
+{"id": "edit-020", "text": "поставь время 9:30", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-03T09:30", "precision": "dateTime"}}
+{"id": "edit-021", "text": "поставь срок на пятницу", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-06T00:00", "precision": "date"}}
+{"id": "edit-022", "text": "установи напоминание на 18:00", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-02T18:00", "precision": "dateTime"}}
+{"id": "edit-023", "text": "напомни в 9", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-03T09:00", "precision": "dateTime"}}
+{"id": "edit-024", "text": "напомни про неё завтра утром", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-03T09:00", "precision": "partOfDay"}}
+{"id": "edit-025", "text": "напомни об этом в пятницу", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-06T00:00", "precision": "date"}}
+{"id": "edit-026", "text": "поставь её на завтра", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-03T00:00", "precision": "date"}}
+{"id": "edit-027", "text": "на завтра", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-03T00:00", "precision": "date", "bare": "true"}, "after": "tasks", "note": "сразу после разговора о задаче"}
+{"id": "edit-028", "text": "в пятницу утром", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-06T09:00", "precision": "partOfDay", "bare": "true"}, "after": "tasks"}
+{"id": "edit-029", "text": "давай на понедельник", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-09T00:00", "precision": "date", "bare": "true"}, "after": "tasks"}
+{"id": "edit-030", "text": "завтра в 9", "intent": "task.edit", "form": {"kind": "due", "due": "2026-11-03T09:00", "precision": "dateTime", "bare": "true"}, "after": "tasks"}
+{"id": "edit-031", "text": "Поставь срок «Эссен» завтра утром", "intent": "task.edit", "form": {"kind": "due", "target": "Эссен", "due": "2026-11-03T09:00", "precision": "partOfDay"}, "note": "кнопка «Завтра утром»"}
+{"id": "edit-032", "text": "поставь время на 30 февраля", "intent": "task.edit", "form": {"kind": "due", "issue": "invalidDate"}}
+{"id": "edit-033", "text": "напомни про это", "intent": "task.edit", "form": {"kind": "remind"}}
+{"id": "edit-034", "text": "напомни о ней", "intent": "task.edit", "form": {"kind": "remind"}}
+{"id": "edit-035", "text": "Выбрать время для «Эссен»", "intent": "task.edit", "form": {"kind": "pickTime", "target": "Эссен"}, "note": "кнопка «Выбрать время»"}
+{"id": "edit-036", "text": "переименуй в Отчёт за май", "intent": "task.edit", "form": {"kind": "rename", "text": "Отчёт за май"}}
+{"id": "edit-037", "text": "переименуй её в «Сверка остатков»", "intent": "task.edit", "form": {"kind": "rename", "text": "Сверка остатков"}}
+{"id": "edit-038", "text": "переименуй эссен в Эссен склад", "intent": "task.edit", "form": {"kind": "rename", "target": "эссен", "text": "Эссен склад"}}
+{"id": "edit-039", "text": "переименуй задачу в нужно позвонить поставщику", "intent": "task.edit", "form": {"kind": "rename", "text": "Позвонить поставщику"}}
+{"id": "edit-040", "text": "добавь пункт молоко", "intent": "task.edit", "form": {"kind": "items", "items": "Молоко"}}
+{"id": "edit-041", "text": "добавь пункты хлеб, сыр и чай", "intent": "task.edit", "form": {"kind": "items", "items": "Хлеб|Сыр|Чай"}}
+{"id": "edit-042", "text": "в покупки добавь пункт яйца", "intent": "task.edit", "form": {"kind": "items", "target": "покупки", "items": "Яйца"}}
+{"id": "edit-043", "text": "добавь в «Покупки» пункты масло и соль", "intent": "task.edit", "form": {"kind": "items", "target": "Покупки", "items": "Масло|Соль"}}
+{"id": "edit-044", "text": "напомни, нужно доделать отчёт", "intent": "createTask", "title": "Доделать отчёт", "due": null}
+{"id": "edit-045", "text": "напомни, пожалуйста, что надо бы проверить склад", "intent": "createTask", "title": "Проверить склад", "due": null}
+{"id": "edit-046", "text": "напомни чтобы я позвонил в банк", "intent": "createTask", "title": "Позвонить в банк", "due": null}
+{"id": "edit-047", "text": "надо бы купить хлеб.", "intent": "createTask", "title": "Купить хлеб", "due": null}
+{"id": "edit-048", "text": "добавь задачу нужно сдать отчёт!", "intent": "createTask", "title": "Сдать отчёт", "due": null}
+{"id": "edit-049", "text": "можешь напомнить завтра, что необходимо оплатить счёт", "intent": "createTask", "title": "Оплатить счёт", "due": "2026-11-03", "precision": "date"}
+{"id": "edit-050", "text": "напомни про отчёт завтра", "intent": "createTask", "title": "Отчёт", "due": "2026-11-03", "precision": "date", "note": "названная задача: если «Отчёт» есть — срок ей (TasksConnector._create)"}
+{"id": "edit-051", "text": "напомни купить хлеб в 9", "intent": "createTask", "title": "Купить хлеб", "due": "2026-11-03T09:00", "precision": "dateTime"}
+{"id": "edit-052", "text": "поставь будильник на 7", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0"}}
+{"id": "edit-053", "text": "поставь задачу купить хлеб на завтра", "intent": "createTask", "title": "Купить хлеб", "due": "2026-11-03", "precision": "date"}
+{"id": "edit-054", "text": "добавь задачу купить молоко", "intent": "createTask", "title": "Купить молоко", "due": null}
+{"id": "edit-055", "text": "на завтра", "intent": "unknown", "note": "без разговора о задаче — не правка"}
+{"id": "edit-056", "text": "сегодня", "intent": "unknown", "after": "tasks", "note": "одно слово — подсказка роли, не срок задачи"}
+{"id": "edit-057", "text": "напомни мне позвонить маме", "intent": "createTask", "title": "Позвонить маме", "due": null}
+{"id": "edit-058", "text": "запиши задачу позвонить в банк", "intent": "createTask", "title": "Позвонить в банк", "due": null}
+{"id": "edit-059", "text": "добавь задачу «Пункт выдачи»", "intent": "createTask", "title": "Пункт выдачи", "due": null}
+{"id": "edit-060", "text": "отметь", "intent": "unknown"}
+{"id": "edit-061", "text": "переименуй", "intent": "unknown"}
+{"id": "edit-063", "text": "Добавь задачу купить хлеб и молоко", "intent": "createTask", "title": "Купить хлеб и молоко", "due": null}
+{"id": "edit-064", "text": "поставь «Оплатить интернет» на послезавтра", "intent": "createTask", "title": "Оплатить интернет", "due": "2026-11-04", "precision": "date"}

@@ -13,6 +13,10 @@ final class JsonTaskRepository implements TaskRepository {
   final String filePath;
   List<Task>? _cache;
 
+  /// Очередь записей: «прочитать — изменить — записать» не перемешиваются,
+  /// иначе параллельные сохранения теряют друг друга и делят один .tmp.
+  Future<void> _writes = Future<void>.value();
+
   @override
   Future<Task?> get(String id) async {
     final tasks = await _load();
@@ -26,15 +30,20 @@ final class JsonTaskRepository implements TaskRepository {
   Future<List<Task>> list() async => List<Task>.unmodifiable(await _load());
 
   @override
-  Future<void> save(Task task) async {
-    final tasks = await _load();
-    final index = tasks.indexWhere((Task item) => item.id == task.id);
-    if (index == -1) {
-      tasks.add(task);
-    } else {
-      tasks[index] = task;
-    }
-    await _persist(tasks);
+  Future<void> save(Task task) {
+    final write = _writes.then((_) async {
+      final tasks = await _load();
+      final index = tasks.indexWhere((Task item) => item.id == task.id);
+      if (index == -1) {
+        tasks.add(task);
+      } else {
+        tasks[index] = task;
+      }
+      await _persist(tasks);
+    });
+    // Ошибка одной записи не должна блокировать следующие.
+    _writes = write.catchError((Object _) {});
+    return write;
   }
 
   Future<List<Task>> _load() async {
@@ -61,8 +70,10 @@ final class JsonTaskRepository implements TaskRepository {
       'schema_version': 1,
       'tasks': tasks.map((Task task) => task.toJson()).toList(),
     };
-    await temporary
-        .writeAsString(const JsonEncoder.withIndent('  ').convert(payload));
+    await temporary.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(payload),
+      flush: true,
+    );
     await temporary.rename(file.path);
     _cache = List<Task>.of(tasks);
   }

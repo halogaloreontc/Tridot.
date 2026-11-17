@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Шапка «Сегодня»: «Сегодня · пн, 16 ноября» и число дел справа
+     (простым приглушённым текстом, без значка). Нажатие открывает
+     Tridot. Не ниже 40 dp, отступы 12 + 8 (HomeScreenRenderer.Metrics);
+     дата — только если помещается целиком. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/hw_header"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="40dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="8dp"
+    android:background="@drawable/hw_press_bg">
+    <TextView
+        android:id="@+id/hw_head"
+        style="@style/HwHead"
+        android:text="@string/hw_today" />
+    <TextView
+        android:id="@+id/hw_date"
+        style="@style/HwMeta"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_marginStart="4dp" />
+    <TextView
+        android:id="@+id/hw_count"
+        style="@style/HwMeta"
+        android:layout_marginStart="12dp"
+        android:visibility="gone" />
+</LinearLayout>

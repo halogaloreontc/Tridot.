@@ -1,0 +1,113 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+
+/// Граф импортов веб-помощника (ADR-032): `flutter build web` собирает
+/// всё, что импортирует `lib/web_widget/main.dart`. Плагины без веба и
+/// `dart:ffi` в нём не нужны и ломали бы сборку или работу; `dart:io` в
+/// вебе — заглушки, которые бросают ошибку только при вызове: можно лишь в
+/// файлах из [ioStubOk], код которых помощник не вызывает.
+const Set<String> forbidden = <String>{
+  'dart:ffi',
+  'package:path_provider',
+  'package:file_selector',
+  'package:mobile_scanner',
+  'package:record',
+  'package:tridot_lame',
+  'package:ffi',
+};
+
+/// Файлы, которые тянут `dart:io`, а помощник их файловый код не вызывает:
+/// паки (помощник — `PackStore.memory`), вложения и хранилище чатов
+/// (модели сообщений), размещение файлов задач расширений. Новый файл
+/// здесь — повод вынести его файловую часть отдельно, как
+/// `connection_store_io.dart`.
+const Set<String> ioStubOk = <String>{
+  'lib/core/extensions/pack_store.dart',
+  'lib/core/chats/attachments.dart',
+  'lib/core/chats/chat_store.dart',
+  'lib/core/jobs/job_placement.dart',
+};
+
+/// Путь коннектора склада и сам помощник — без `dart:io` вовсе.
+const List<String> ioFree = <String>[
+  'lib/web_widget/',
+  'lib/core/connectors/manifest/connection.dart',
+  'lib/core/connectors/manifest/connection_service.dart',
+  'lib/core/connectors/manifest/manifest_connector.dart',
+  'lib/core/connectors/http_transport.dart',
+];
+
+final RegExp _import = RegExp(
+  r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''',
+  multiLine: true,
+);
+
+Map<String, Set<String>> graph(String entry) {
+  final out = <String, Set<String>>{};
+  final queue = <String>[entry];
+  while (queue.isNotEmpty) {
+    final file = queue.removeLast();
+    if (out.containsKey(file)) continue;
+    final deps = <String>{};
+    out[file] = deps;
+    for (final m in _import.allMatches(File(file).readAsStringSync())) {
+      final target = m.group(1)!;
+      if (target.startsWith('dart:') || target.startsWith('package:')) {
+        if (target.startsWith('package:local_assistant/')) {
+          final path =
+              'lib/${target.substring('package:local_assistant/'.length)}';
+          deps.add(path);
+          queue.add(path);
+        } else {
+          deps.add(target);
+        }
+        continue;
+      }
+      final path = Uri.parse(file).resolve(target).path;
+      deps.add(path);
+      queue.add(path);
+    }
+  }
+  return out;
+}
+
+void main() {
+  final files = graph('lib/web_widget/main.dart');
+
+  test('нет плагинов без веба и dart:ffi', () {
+    final bad = <String>[
+      for (final MapEntry(:key, :value) in files.entries)
+        for (final dep in value)
+          if (forbidden.any((String f) => dep == f || dep.startsWith('$f/')))
+            '$key → $dep',
+    ];
+    expect(bad, isEmpty);
+  });
+
+  test('dart:io — только в известных заглушках', () {
+    final io = <String>{
+      for (final MapEntry(:key, :value) in files.entries)
+        if (value.contains('dart:io')) key,
+    };
+    expect(io.difference(ioStubOk), isEmpty);
+    for (final path in io) {
+      expect(
+        ioFree.any((String p) => path.startsWith(p)),
+        isFalse,
+        reason: path,
+      );
+    }
+  });
+
+  test('путь коннектора склада в графе помощника', () {
+    for (final path in ioFree.skip(1)) {
+      expect(files.containsKey(path), isTrue, reason: path);
+    }
+    expect(
+      files
+          .containsKey('lib/core/connectors/manifest/connection_store_io.dart'),
+      isFalse,
+    );
+  });
+}
