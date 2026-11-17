@@ -33,6 +33,6 @@
 {"id":"pod-032","text":"добавь позвонить маме в обед","now":"2026-11-02T15:00","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T13:00","precision":"partOfDay","note":"обед прошёл — завтра"}
 {"id":"pod-033","text":"добавь позвонить маме сегодня в обед","intent":"createTask","title":"Позвонить маме","due":null,"issue":"inPast"}
 {"id":"pod-034","text":"добавь сходить на обед с коллегами","intent":"createTask","title":"Сходить на обед с коллегами","due":null,"note":"«на обед» — событие, не срок"}
-{"id":"pod-035","text":"что в меню на обед?","intent":"unknown"}
+{"id":"pod-035","text":"что в меню на обед?","intent":"unknown","route":"none"}
 {"id":"pod-036","text":"перенеси созвон на сегодняшний вечер","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-02T19:00","precision":"partOfDay"}
 {"id":"pod-037","text":"перенеси созвон на завтрашний вечер встречи выпускников","intent":"rescheduleTask","due":null,"note":"«вечер встречи» — событие, не срок"}

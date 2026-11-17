@@ -6,12 +6,12 @@
 {"id":"files-006","text":"удали его","after":"converter","connector":"files","intent":"files.delete","source":"manual","note":"«его» сразу после карточки конвертера — её результат"}
 {"id":"files-007","text":"а теперь удали эту картинку","after":"converter","connector":"files","intent":"files.delete","source":"manual"}
 {"id":"files-008","text":"удали файл «Screenshot_20261114_233544.jpg»","connector":"files","intent":"files.delete","source":"manual"}
-{"id":"files-009","text":"удали его","connector":"files","intent":"unknown","source":"manual","note":"без карточки «его» — не файл"}
+{"id":"files-009","text":"удали его","connector":"files","intent":"unknown","route":"none","source":"manual","note":"без карточки «его» — не файл"}
 {"id":"files-010","text":"удали запись почта из паролей","connector":"passwords","intent":"passwords.delete","source":"manual","note":"пароли остаются паролями"}
-{"id":"files-011","text":"удали задачу купить хлеб","connector":"files","intent":"unknown","source":"manual"}
-{"id":"files-012","text":"удали эту сессию","connector":"files","intent":"unknown","source":"manual"}
-{"id":"files-013","text":"удали файл из задачи отчёт","connector":"files","intent":"unknown","source":"manual"}
-{"id":"files-014","text":"удали этот файл?","connector":"files","intent":"unknown","source":"manual","note":"вопрос — не просьба"}
+{"id":"files-011","text":"удали задачу купить хлеб","connector":"files","intent":"unknown","route":"none","source":"manual"}
+{"id":"files-012","text":"удали эту сессию","connector":"files","intent":"unknown","route":"none","source":"manual"}
+{"id":"files-013","text":"удали файл из задачи отчёт","connector":"files","intent":"unknown","route":"none","source":"manual"}
+{"id":"files-014","text":"удали этот файл?","connector":"files","intent":"unknown","route":"none","source":"manual","note":"вопрос — не просьба"}
 {"id":"files-015","text":"удали последний архив","connector":"files","intent":"files.delete","source":"manual"}
 {"id":"files-016","text":"файл удали","connector":"files","intent":"files.delete","source":"manual"}
 {"id":"files-017","text":"удали исходник","connector":"files","intent":"files.delete","source":"manual"}

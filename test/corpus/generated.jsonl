@@ -92,14 +92,14 @@
 {"id": "gen-7d0ddaa00c86", "text": "Отметил забрать вещи из химчистки", "intent": "completeTask", "title": "Забрать вещи из химчистки", "source": "gemma", "tags": ["topic:complete", "labels:ollama,manual"], "note": "«отметил X» — завершение (решение 1)"}
 {"id": "gen-99c6af29346d", "text": "По тренировке всё готово", "intent": "completeTask", "title": "Тренировка", "source": "gemma", "tags": ["topic:complete", "labels:ollama,manual"], "note": "«по X всё готово» → X в именительном (решение 1)"}
 {"id": "gen-f338fd060648", "text": "Заверши «Сдать отчет по продажам»", "intent": "completeTask", "title": "Сдать отчет по продажам", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
-{"id": "gen-432922707b16", "text": "Я не успел купить корм коту", "intent": "unknown", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
+{"id": "gen-432922707b16", "text": "Я не успел купить корм коту", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
 {"id": "gen-1efb8969e914", "text": "Выполнил задание по химии", "intent": "completeTask", "title": "Задание по химии", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
 {"id": "gen-954c4606cf7f", "text": "Поставь галочку на звонить стоматологу", "intent": "completeTask", "title": "Звонить стоматологу", "source": "gemma", "tags": ["topic:complete", "labels:ollama,manual"], "note": "«поставь галочку на X» — завершение (решение 1)"}
-{"id": "gen-916ccd80a4f1", "text": "Разве я не закончил статью?", "intent": "unknown", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
+{"id": "gen-916ccd80a4f1", "text": "Разве я не закончил статью?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
 {"id": "gen-b5e806128cb7", "text": "Сделано \"Оплатить интернет\"", "intent": "completeTask", "title": "Оплатить интернет", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
 {"id": "gen-2b7c947ee945", "text": "Выкинула старые газеты", "intent": "completeTask", "title": "Выкинула старые газеты", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
 {"id": "gen-a8f4d8e738bf", "text": "Отметь как завершенное письмо клиенту", "intent": "completeTask", "title": "Письмо клиенту", "source": "gemma", "tags": ["topic:complete", "labels:ollama,manual"], "note": "«отметь как завершённое X» — завершение (решение 1)"}
-{"id": "gen-16b62c63c0fa", "text": "Я не сделал запись к врачу", "intent": "unknown", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
+{"id": "gen-16b62c63c0fa", "text": "Я не сделал запись к врачу", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
 {"id": "gen-7ddb22511552", "text": "Посмотрела вебинар", "intent": "completeTask", "title": "Посмотрела вебинар", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
 {"id": "gen-e6344266ebb7", "text": "Закрой «Заказать подарок»", "intent": "completeTask", "title": "Заказать подарок", "source": "gemma", "tags": ["topic:complete", "labels:ollama,manual"], "note": "«закрой «X»» — завершение по точному названию (решение 1)"}
 {"id": "gen-e9350f049c99", "text": "С врачом всё, сделано", "intent": "completeTask", "title": "Врачом", "source": "gemma", "tags": ["topic:complete", "labels:ollama,manual"], "note": "«с X всё, сделано» → X без «с» (решение 1); творительный «врачом» не приводится"}
@@ -109,14 +109,14 @@
 {"id": "gen-fd709f2059e9", "text": "я закрыла отчёт по проекту", "intent": "completeTask", "title": "Отчёт по проекту", "source": "ollama", "tags": ["topic:complete", "labels:gemma,manual"], "note": "«я закрыла X» — сообщение о сделанном (решение 1)"}
 {"id": "gen-d38537d1add7", "text": "сделано, билеты забрала", "intent": "completeTask", "title": "Билеты забрала", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
 {"id": "gen-397052b6f44c", "text": "всё, задача закрыта", "intent": "completeTask", "title": null, "source": "ollama", "tags": ["topic:complete", "labels:gemma,manual"], "note": "«всё, задача закрыта» — завершение выбранной задачи (решение 1)"}
-{"id": "gen-e3bb09783654", "text": "а я не сделал ещё звонок?", "intent": "unknown", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
-{"id": "gen-50245b17f286", "text": "не закрыл отчёт, наверное забыл", "intent": "unknown", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
+{"id": "gen-e3bb09783654", "text": "а я не сделал ещё звонок?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
+{"id": "gen-50245b17f286", "text": "не закрыл отчёт, наверное забыл", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
 {"id": "gen-5034209874ce", "text": "заверши \"купить билеты на поезд\" пожалуйста", "intent": "completeTask", "title": "купить билеты на поезд", "source": "ollama", "tags": ["topic:complete", "labels:gemma,manual"]}
 {"id": "gen-007a97e78e7d", "text": "отметь выполненной \"сдать документы в архив\"", "intent": "completeTask", "title": "сдать документы в архив", "source": "ollama", "tags": ["topic:complete", "labels:gemma,manual"]}
 {"id": "gen-4b017f7fcb18", "text": "пометь готовым задачу про ремонт", "intent": "completeTask", "title": "Ремонт", "source": "ollama", "tags": ["topic:complete", "labels:gemma,manual"], "note": "«пометь готовым» — завершение, «про» убирается (решение 1)"}
 {"id": "gen-b84c0e2921c4", "text": "приложение установила, всё", "intent": "completeTask", "title": "Приложение установила", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
-{"id": "gen-43a1704e65cb", "text": "сними с активного — звонок в банк", "intent": "unknown", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
-{"id": "gen-a6b2e2d01b51", "text": "я не успел закрыть отчёт, это точно?", "intent": "unknown", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
+{"id": "gen-43a1704e65cb", "text": "сними с активного — звонок в банк", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
+{"id": "gen-a6b2e2d01b51", "text": "я не успел закрыть отчёт, это точно?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
 {"id": "gen-93f8fb15c7ec", "text": "заверши \"записаться к стоматологу\" пожалуйста", "intent": "completeTask", "title": "записаться к стоматологу", "source": "ollama", "tags": ["topic:complete", "labels:gemma,manual"]}
 {"id": "gen-8cec0f46f89f", "text": "завтра в 11 сходить в банк", "intent": "createTask", "title": "Сходить в банк", "due": "2026-11-03T11:00", "precision": "dateTime", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-d8758dc1d234", "text": "в субботу заехать за продуктами", "intent": "createTask", "title": "Заехать за продуктами", "due": "2026-11-07", "precision": "date", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
@@ -125,11 +125,11 @@
 {"id": "gen-52a3e41e2fd6", "text": "я уже сдал отчет", "intent": "completeTask", "title": "Сдал отчет", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-47a3ff744f7c", "text": "заплатил за интернет", "intent": "completeTask", "title": "Заплатил за интернет", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-72a2bff342a0", "text": "выпил витамины", "intent": "completeTask", "title": "Выпил витамины", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-3b5faaa102f8", "text": "купить корм для кота?", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-67f73c553a40", "text": "в понедельник \"записаться к стоматологу\" не нужно", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-3b5faaa102f8", "text": "купить корм для кота?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-67f73c553a40", "text": "в понедельник \"записаться к стоматологу\" не нужно", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-f1952173914c", "text": "покажи список задач", "intent": "listTasks", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-0e701f98dcae", "text": "зарядку купить", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-be110e278b0d", "text": "жена купила цветы", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-0e701f98dcae", "text": "зарядку купить", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-be110e278b0d", "text": "жена купила цветы", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-772d4bdf0486", "text": "кстати, завтра будет дождь", "connector": "weather", "intent": "weather.rain", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-032b4eb99a85", "text": "в пятницу в 18 \"созвониться с клиентом\"", "intent": "createTask", "title": "созвониться с клиентом", "due": "2026-11-06T18:00", "precision": "dateTime", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,manual"], "note": "срок и кавычки без команды — новая задача (решение 2); название в кавычках точное, без заглавной"}
 {"id": "gen-e2dc04a3c9f5", "text": "через час \"позвонить в клинику\" по записи", "intent": "createTask", "title": "позвонить в клинику", "due": "2026-11-02T17:30", "precision": "dateTime", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,manual"], "note": "кавычки со сроком — новая задача, короткое пояснение «по записи» после кавычек в название не входит (решение 2); название точное"}
@@ -138,14 +138,14 @@
 {"id": "gen-cec2fcbdb8a6", "text": "купила билеты на концерт", "intent": "completeTask", "title": "Купила билеты на концерт", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-69207f7c90f6", "text": "оплатил коммуналку", "intent": "completeTask", "title": "Оплатил коммуналку", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-bcf4a74a3eea", "text": "добавь в четверг в 11 \"видеозвонок с подрядчиком\"", "intent": "createTask", "title": "видеозвонок с подрядчиком", "due": "2026-11-05T11:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,manual"]}
-{"id": "gen-84675f3c9a2b", "text": "а надо ли позвонить врачу?", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
-{"id": "gen-224e3c16c849", "text": "не надо ехать сегодня в офис", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-84675f3c9a2b", "text": "а надо ли позвонить врачу?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-224e3c16c849", "text": "не надо ехать сегодня в офис", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-5c6508ec4477", "text": "отметь что сдал отчёт по проекту", "intent": "completeTask", "title": "Отчёт по проекту", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,manual"], "note": "«отметь что сдал X» → X (решение 1)"}
-{"id": "gen-27e4d9f564e1", "text": "документы подписать", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
-{"id": "gen-cd1b83f5e671", "text": "сосед уже забрал посылку", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-27e4d9f564e1", "text": "документы подписать", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-cd1b83f5e671", "text": "сосед уже забрал посылку", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-defbff3bda4f", "text": "хочу в субботу испечь пирог к ужину", "intent": "createTask", "title": "Испечь пирог к ужину", "due": "2026-11-07", "precision": "date", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-dedaa45ff852", "text": "напомни \"собрать портфель к понедельнику\"", "intent": "createTask", "title": "собрать портфель к понедельнику", "due": null, "source": "ollama", "tags": ["topic:implicit", "labels:gemma,manual"]}
-{"id": "gen-50e5e84451ba", "text": "завтра в 9", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-50e5e84451ba", "text": "завтра в 9", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-3f86e7dbe8c5", "text": "Что там у меня по плану на сегодня?", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,manual"]}
 {"id": "gen-8fe0f38e78e3", "text": "выведи весь список дел", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,manual"]}
 {"id": "gen-8ee6efdf5151", "text": "какие планы на неделю?", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,manual"]}
@@ -157,10 +157,10 @@
 {"id": "gen-7b9f0d0f3913", "text": "что там по тегу #работа", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,manual"]}
 {"id": "gen-22a5e7926f91", "text": "выведи список \"Срочно\"", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,manual"]}
 {"id": "gen-5a486da7fd2d", "text": "какой сейчас список покупок?", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,manual"]}
-{"id": "gen-4fa21e127a6c", "text": "покажи список моих контактов", "intent": "unknown", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
-{"id": "gen-2aaa964c05a8", "text": "что в меню на обед?", "intent": "unknown", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
-{"id": "gen-c0adce45548c", "text": "выведи список последних документов", "intent": "unknown", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
-{"id": "gen-28c6e9f323cc", "text": "какие есть планы на выходные в городе?", "intent": "unknown", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
+{"id": "gen-4fa21e127a6c", "text": "покажи список моих контактов", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
+{"id": "gen-2aaa964c05a8", "text": "что в меню на обед?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
+{"id": "gen-c0adce45548c", "text": "выведи список последних документов", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
+{"id": "gen-28c6e9f323cc", "text": "какие есть планы на выходные в городе?", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
 {"id": "gen-58777c1448ac", "text": "мне бы посмотреть план на неделю", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"]}
 {"id": "gen-6271c7f9c05a", "text": "ну и что там у меня на сегодня осталось?", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"]}
 {"id": "gen-6593ced37a9b", "text": "хочу глянуть список дел на завтра, там что-то есть?", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"]}
@@ -169,43 +169,43 @@
 {"id": "gen-efc9f58790ee", "text": "Что у меня в планах на конец месяца?", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"]}
 {"id": "gen-2643f4ffb75d", "text": "Мне нужен список того что я ещё не сделал", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"]}
 {"id": "gen-b82ae75ff9d3", "text": "дай глянуть все незавершённые, типа «погасить штраф»", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"]}
-{"id": "gen-f159fcf4057d", "text": "Покажи заметки", "intent": "unknown", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
+{"id": "gen-f159fcf4057d", "text": "Покажи заметки", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
 {"id": "gen-3e3a4424db3a", "text": "а что там у меня в расписании на пятницу?", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"]}
 {"id": "gen-0e6d8cde9b6c", "text": "Ну скажи, что мне ещё делать сегодня?", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"]}
-{"id": "gen-3ce9f4659f38", "text": "покажи мне «подготовить презентацию» и всё что к ней привязано", "intent": "unknown", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
-{"id": "gen-940063422c5f", "text": "Какие у меня подписки активны?", "intent": "unknown", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
+{"id": "gen-3ce9f4659f38", "text": "покажи мне «подготовить презентацию» и всё что к ней привязано", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
+{"id": "gen-940063422c5f", "text": "Какие у меня подписки активны?", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
 {"id": "gen-f32e4ec38923", "text": "список", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"]}
-{"id": "gen-b24a44b82491", "text": "хочу глянуть «позвонить в банк» и ещё что там осталось на завтра", "intent": "unknown", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
-{"id": "gen-e558e0da62de", "text": "хай, ты на связи?", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-b24a44b82491", "text": "хочу глянуть «позвонить в банк» и ещё что там осталось на завтра", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
+{"id": "gen-e558e0da62de", "text": "хай, ты на связи?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
 {"id": "gen-52a760168466", "text": "завтра мороз обещают, не знаю во что одеться", "connector": "weather", "intent": "weather.wear", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-fc1d6d939672", "text": "а ты живой или просто «скрипт» без души", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-0282b7678933", "text": "который час сейчас", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-243b930c9863", "text": "спасибо, выручил вчера реально", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-058fd81caa97", "text": "вот сижу чай пью и думаю куда сходить", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-78a4f51e4ee9", "text": "приветик!!", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-b83973950b2a", "text": "на выходных солнечно будет?", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-c3afca9dc1fa", "text": "а у тебя есть имя или ты просто «помощник» безликий", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-b727076214eb", "text": "мне тоскливо, поболтай со мной", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-92c67f73b455", "text": "которого числа мы сегодня живём", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-da5e0ddf8d88", "text": "базар, дружище", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-cd13772d8e7f", "text": "ветер сегодня свирепый, окна не закрывал", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-3629a8e3a190", "text": "можешь «рассказать что-нибудь смешное»?", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-d9ccc2f4d9f0", "text": "ну всё, до завтра", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-265d608c52fc", "text": "Здарова!", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-ea0ba2db3d7d", "text": "Добрый день, как дела?", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-efbb2d43e1bc", "text": "Хеллоу", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-55c04f45abc2", "text": "Доброго времени суток!", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-2a8b92085890", "text": "\"Как дела у тебя сегодня?\"", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-fc1d6d939672", "text": "а ты живой или просто «скрипт» без души", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-0282b7678933", "text": "который час сейчас", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-243b930c9863", "text": "спасибо, выручил вчера реально", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-058fd81caa97", "text": "вот сижу чай пью и думаю куда сходить", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-78a4f51e4ee9", "text": "приветик!!", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-b83973950b2a", "text": "на выходных солнечно будет?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-c3afca9dc1fa", "text": "а у тебя есть имя или ты просто «помощник» безликий", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-b727076214eb", "text": "мне тоскливо, поболтай со мной", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-92c67f73b455", "text": "которого числа мы сегодня живём", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-da5e0ddf8d88", "text": "базар, дружище", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-cd13772d8e7f", "text": "ветер сегодня свирепый, окна не закрывал", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-3629a8e3a190", "text": "можешь «рассказать что-нибудь смешное»?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-d9ccc2f4d9f0", "text": "ну всё, до завтра", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-265d608c52fc", "text": "Здарова!", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-ea0ba2db3d7d", "text": "Добрый день, как дела?", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-efbb2d43e1bc", "text": "Хеллоу", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-55c04f45abc2", "text": "Доброго времени суток!", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-2a8b92085890", "text": "\"Как дела у тебя сегодня?\"", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-35d4705e8fc2", "text": "На улице дождь?", "connector": "weather", "intent": "weather.rain", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-4665f515eec7", "text": "Какая сейчас температура в городе?", "connector": "weather", "intent": "weather.now", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-8bd108088561", "text": "Завтра будет солнце?", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-8bd108088561", "text": "Завтра будет солнце?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-77af52589c1d", "text": "Что там по погоде на выходные?", "connector": "weather", "intent": "weather.week", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-c15a53249e1b", "text": "\"Кто тебя создал?\"", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-75d1168936bf", "text": "Чем ты занимаешься?", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-aa4b9909dc8f", "text": "Ты вообще живой?", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-e31a8eae012a", "text": "Скучно что-то, давай поболтаем", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-48b83d289aaa", "text": "А ты умеешь шутить?", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-289a681ff74c", "text": "\"Расскажи анекдот про роботов\"", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-c15a53249e1b", "text": "\"Кто тебя создал?\"", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-75d1168936bf", "text": "Чем ты занимаешься?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-aa4b9909dc8f", "text": "Ты вообще живой?", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-e31a8eae012a", "text": "Скучно что-то, давай поболтаем", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-48b83d289aaa", "text": "А ты умеешь шутить?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-289a681ff74c", "text": "\"Расскажи анекдот про роботов\"", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-36d40c739d4d", "text": "добавь задачу купить завтрак на завтра", "intent": "createTask", "title": "Купить завтрак", "due": "2026-11-03", "precision": "date", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-31d5b2f39d06", "text": "напомни обновить до версии 2.10 в понедельник", "intent": "createTask", "title": "Обновить до версии 2.10", "due": "2026-11-09", "precision": "date", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-0ae2df52db00", "text": "запиши встречу в пятницу 10.11 в 15:00", "intent": "createTask", "title": "Встреча", "due": null, "issue": "conflictingDays", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"], "note": "было «Встречу»: начало названия без кавычек — в именительном падеже (docs/CORPUS.md)"}
@@ -261,8 +261,8 @@
 {"id": "gen-118a2eee5f77", "text": "добавь «заказать торт на юбилей мамы» на вечер", "intent": "createTask", "title": "заказать торт на юбилей мамы", "due": "2026-11-02T19:00", "precision": "partOfDay", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"]}
 {"id": "gen-ffac9739cd8a", "text": "перенеси «генеральную уборку» на завтра утром", "intent": "rescheduleTask", "title": "генеральную уборку", "due": "2026-11-03T09:00", "precision": "partOfDay", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"]}
 {"id": "gen-c45bba6edb66", "text": "я в обед хочу напомнить прозвонить по страховке, поставь", "intent": "createTask", "title": "Прозвонить по страховке", "due": "2026-11-03T13:00", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"], "note": "«, поставь» в конце (решение 7), «в обед» — срок (решение 3), «я хочу напомнить» — вступление", "precision": "partOfDay"}
-{"id": "gen-22bb1f3c4a88", "text": "по пятницам тренировка в 19:00", "intent": "unknown", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
-{"id": "gen-1d371b7f24e3", "text": "утром 6 бег", "intent": "unknown", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
+{"id": "gen-22bb1f3c4a88", "text": "по пятницам тренировка в 19:00", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
+{"id": "gen-1d371b7f24e3", "text": "утром 6 бег", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
 {"id": "gen-8048c0b17efd", "text": "заверши задачу про 15 ноября, уже всё сделала", "intent": "completeTask", "title": "Про 15 ноября", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"], "note": "дата после «про» — часть цели; «про» не убирается: «15 ноября» не приводится (решение 1)"}
 {"id": "gen-6c18b4e3133f", "text": "5,5 в квадрате", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:evaluate", "labels:gemma,parser"]}
 {"id": "gen-81d8412c45d5", "text": "8 разделить на 3", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:evaluate", "labels:gemma,parser"]}
@@ -317,7 +317,7 @@
 {"id": "gen-7b7b79dff5e7", "text": "Ну и где твой юмор?", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,manual"]}
 {"id": "gen-fee0b8479b9e", "text": "Давай что-нибудь смешное, плз", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,manual"]}
 {"id": "gen-7e1633d54d88", "text": "Рассмеши меня", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,parser"]}
-{"id": "gen-c050c4394473", "text": "Расскажи, как поменять пароль", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,parser"]}
+{"id": "gen-c050c4394473", "text": "Расскажи, как поменять пароль", "connector": "talk", "intent": "unknown", "route": "passwords", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,parser"]}
 {"id": "gen-aba53909db2d", "text": "Пошути, а то скучно капец", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,manual"]}
 {"id": "gen-e94f846a45cb", "text": "Лио, ну давай что-нибудь поржать", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,manual"]}
 {"id": "gen-ea3a85e1592f", "text": "Давай каламбур, если ты вообще на это способен", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,manual"]}
@@ -408,7 +408,7 @@
 {"id": "gen-42a3d535eacf", "text": "80% от 150", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:evaluate", "labels:ollama,parser"]}
 {"id": "gen-c590d91a5c0c", "text": "Лио, подкинь что-нибудь смешное", "connector": "talk", "intent": "talk.joke", "source": "ollama", "tags": ["topic:jokes", "labels:gemma,manual"]}
 {"id": "gen-31f5401492b7", "text": "ну давай, анекдот про кота", "connector": "talk", "intent": "talk.joke", "source": "ollama", "tags": ["topic:jokes", "labels:gemma,manual"]}
-{"id": "gen-a201a757f40b", "text": "ещё! ещё! ещё!", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:jokes", "labels:gemma,manual"]}
+{"id": "gen-a201a757f40b", "text": "ещё! ещё! ещё!", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:jokes", "labels:gemma,manual"]}
 {"id": "gen-2631699320a3", "text": "Расскажи каламбур, я скучаю", "connector": "talk", "intent": "talk.joke", "source": "ollama", "tags": ["topic:jokes", "labels:gemma,manual"]}
 {"id": "gen-fa2f4d50471b", "text": "шутка на сегодня будет?", "connector": "talk", "intent": "talk.joke", "source": "ollama", "tags": ["topic:jokes", "labels:gemma,manual"]}
 {"id": "gen-f1143c6aa7ae", "text": "Нода, пошути для меня пожалуйста", "connector": "talk", "intent": "talk.joke", "source": "ollama", "tags": ["topic:jokes", "labels:gemma,manual"]}
@@ -458,10 +458,10 @@
 {"id": "gen-698d3a90b528", "text": "будь помягче пожалуйста", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
 {"id": "gen-29506ed3f271", "text": "пусть Нода отвечает", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,parser"]}
 {"id": "gen-64f0bef12a44", "text": "ставь смайлики", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
-{"id": "gen-6da6d08f4066", "text": "говори по-русски", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
+{"id": "gen-6da6d08f4066", "text": "говори по-русски", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
 {"id": "gen-2adaf02051af", "text": "Нода расписывай подробнее", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
 {"id": "gen-2f85f3abb385", "text": "меньше ласкового", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
-{"id": "gen-3b4cd660f634", "text": "говори на английском", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
+{"id": "gen-3b4cd660f634", "text": "говори на английском", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
 {"id": "gen-b62668f543cc", "text": "Лио, ты основной?", "connector": "talk", "intent": "talk.whoAreYou", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
 {"id": "gen-152856ef6ccc", "text": "каламбуры только по праздникам", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
 {"id": "gen-9036f7f77b70", "text": "напомни мне в пятницу купить хлеб", "intent": "createTask", "title": "Купить хлеб", "due": "2026-11-06", "precision": "date", "source": "gemma", "tags": ["topic:create", "labels:ollama,parser"]}
@@ -470,7 +470,7 @@
 {"id": "gen-47b9101b3839", "text": "запиши сдать проект #учеба через 3 дня", "intent": "createTask", "title": "Сдать проект", "due": "2026-11-05", "precision": "date", "source": "gemma", "tags": ["topic:create", "labels:ollama,parser"]}
 {"id": "gen-0c9906c99e3d", "text": "надо оплатить коммуналку 25.10", "intent": "createTask", "title": "Оплатить коммуналку", "due": "2027-10-25", "precision": "date", "source": "gemma", "tags": ["topic:create", "labels:ollama,parser"]}
 {"id": "gen-c6ec30678d32", "text": "напомни о звонке врачу в вт к 18:00", "intent": "createTask", "title": "Звонок врачу", "due": "2026-11-03T18:00", "precision": "dateTime", "source": "gemma", "tags": ["topic:create", "labels:ollama,parser"]}
-{"id": "gen-ec862686b146", "text": "заведи встречу с юристом на следующей неделе", "intent": "unknown", "title": null, "due": null, "source": "gemma", "tags": ["topic:create", "labels:ollama,manual"], "note": "разметка исправлена: «заведи» без «задачу» создаёт задачу только с инфинитивом или кавычками (docs/CORPUS.md, «Маркеры создания»)"}
+{"id": "gen-ec862686b146", "text": "заведи встречу с юристом на следующей неделе", "intent": "unknown", "route": "none", "title": null, "due": null, "source": "gemma", "tags": ["topic:create", "labels:ollama,manual"], "note": "разметка исправлена: «заведи» без «задачу» создаёт задачу только с инфинитивом или кавычками (docs/CORPUS.md, «Маркеры создания»)"}
 {"id": "gen-48eb256dc62c", "text": "через полчаса выключить плиту", "intent": "createTask", "title": "Выключить плиту", "due": "2026-11-02T17:00", "precision": "dateTime", "source": "gemma", "tags": ["topic:create", "labels:ollama,parser"]}
 {"id": "gen-a31fb0ad541b", "text": "добавь пожалуйста проверить почту завтра утром", "intent": "createTask", "title": "Проверить почту", "due": "2026-11-03T09:00", "precision": "partOfDay", "source": "gemma", "tags": ["topic:create", "labels:ollama,parser"]}
 {"id": "gen-c9720df88975", "text": "напомни насчет записи к стоматологу 15.11.2024 в 10.00", "intent": "createTask", "title": "Насчет записи к стоматологу", "due": null, "issue": "inPast", "source": "gemma", "tags": ["topic:create", "labels:ollama,manual"], "note": "разметка исправлена: «записи» — женский род на «-ь», после «насчёт» не приводится (как «насчёт помощи»), предлог остаётся"}
@@ -527,14 +527,14 @@
 {"id": "gen-50822aaf7803", "text": "заверши позвонить маме", "intent": "completeTask", "title": "Позвонить маме", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
 {"id": "gen-69ca4251aac8", "text": "сделано, помыла посуду", "intent": "completeTask", "title": "Помыла посуду", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
 {"id": "gen-9ecfa65d433d", "text": "отметь выполненной «записаться к стоматологу на субботу»", "intent": "completeTask", "title": "записаться к стоматологу на субботу", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
-{"id": "gen-45ddf3997f88", "text": "а я отчёт уже закрыл?", "intent": "unknown", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
-{"id": "gen-42143608bc86", "text": "не успел купить хлеб, прости", "intent": "unknown", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
+{"id": "gen-45ddf3997f88", "text": "а я отчёт уже закрыл?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
+{"id": "gen-42143608bc86", "text": "не успел купить хлеб, прости", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
 {"id": "gen-cbea9831c40a", "text": "закрой напаминание про звонок брату", "intent": "completeTask", "title": "Звонок брату", "source": "ollama", "tags": ["topic:complete", "labels:gemma,manual"], "note": "бывший known_gap: опечатка в «напоминание» после «закрой»; «напоминание» — как «задачу»"}
 {"id": "gen-c41b63c0ec8b", "text": "позвонила маме, всё", "intent": "completeTask", "title": "Позвонила маме", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
 {"id": "gen-960ebc133294", "text": "всё готово по отчёту для Ивана", "intent": "completeTask", "title": "По отчёту для Ивана", "source": "ollama", "tags": ["topic:complete", "labels:gemma,manual"], "note": "разметка исправлена: «по» остаётся, если слово после него не привести («по отчёту всё, сделано» → «По отчёту»)"}
 {"id": "gen-10a349a52d5e", "text": "выполнил «сдать документы в управление»", "intent": "completeTask", "title": "сдать документы в управление", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
 {"id": "gen-5fa606446157", "text": "пометь выполненным купить билеты на поезд", "intent": "completeTask", "title": "Купить билеты на поезд", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
-{"id": "gen-a8fd2508dc77", "text": "я же уже закрыл звонок в банк??", "intent": "unknown", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
+{"id": "gen-a8fd2508dc77", "text": "я же уже закрыл звонок в банк??", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
 {"id": "gen-8daec085f514", "text": "хлеб и молоко купил", "intent": "completeTask", "title": "Хлеб и молоко купил", "source": "ollama", "tags": ["topic:complete", "labels:gemma,manual"], "note": "бывший known_gap: «и» внутри сообщения о сделанном остаётся в запросе"}
 {"id": "gen-faaad5902e59", "text": "закрыла задачу про поход в магазин", "intent": "completeTask", "title": "Поход в магазин", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
 {"id": "gen-ee0b5aac0356", "text": "заверши «задать вопрос на форуме»", "intent": "completeTask", "title": "задать вопрос на форуме", "source": "ollama", "tags": ["topic:complete", "labels:gemma,parser"]}
@@ -548,38 +548,38 @@
 {"id": "gen-8056fefd635b", "text": "Всё, сделал", "intent": "completeTask", "title": null, "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
 {"id": "gen-bd765353fa59", "text": "Закончил с уборкой", "intent": "completeTask", "title": "Закончил с уборкой", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
 {"id": "gen-abf4ab00a73f", "text": "\"Почистить почту\" — готово", "intent": "completeTask", "title": "Почистить почту", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
-{"id": "gen-aa0e703c19e2", "text": "Я разве не сделал отчет?", "intent": "unknown", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
-{"id": "gen-4af11ff2c5f9", "text": "По идее я не выполнял задачу по поливу цветов", "intent": "unknown", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
-{"id": "gen-352eb46a6a1a", "text": "Что, задача ещё не завершена?", "intent": "unknown", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
-{"id": "gen-b9e49bfba284", "text": "Не успел дописать статью", "intent": "unknown", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
+{"id": "gen-aa0e703c19e2", "text": "Я разве не сделал отчет?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
+{"id": "gen-4af11ff2c5f9", "text": "По идее я не выполнял задачу по поливу цветов", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
+{"id": "gen-352eb46a6a1a", "text": "Что, задача ещё не завершена?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
+{"id": "gen-b9e49bfba284", "text": "Не успел дописать статью", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:complete", "labels:ollama,parser"]}
 {"id": "gen-0db1ffb98083", "text": "завтра в 12 забрать посылку", "intent": "createTask", "title": "Забрать посылку", "due": "2026-11-03T12:00", "precision": "dateTime", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-ba5213276ce8", "text": "я сходил в спортзал", "intent": "completeTask", "title": "Сходил в спортзал", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-617d7bd99735", "text": "мне нужно \"записаться к стоматологу\" в среду", "intent": "createTask", "title": "записаться к стоматологу", "due": "2026-11-04", "precision": "date", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-d5076e07448a", "text": "паспорт заменить", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-d3a0cefd0195", "text": "поставь на пятницу в 15:00 созвон по проекту", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-0d2d0531f385", "text": "вынести мусор?", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-d5076e07448a", "text": "паспорт заменить", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-d3a0cefd0195", "text": "поставь на пятницу в 15:00 созвон по проекту", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-0d2d0531f385", "text": "вынести мусор?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-8bce9f797427", "text": "через час заварить чай", "intent": "createTask", "title": "Заварить чай", "due": "2026-11-02T17:30", "precision": "dateTime", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-f182d9887645", "text": "не надо покупать цветы", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-f182d9887645", "text": "не надо покупать цветы", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-a28c012bedee", "text": "хочу \"убраться в гараже\" в воскресенье", "intent": "createTask", "title": "убраться в гараже", "due": "2026-11-08", "precision": "date", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-7fbe0b766c56", "text": "папа починил кран", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-7fbe0b766c56", "text": "папа починил кран", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-0bdc98301319", "text": "покажи мои задачи на сегодня", "intent": "listTasks", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-ecfee76ab413", "text": "отчет отправил", "intent": "completeTask", "title": "Отчет отправил", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-d039333aab44", "text": "на выходных сходить в кино", "intent": "createTask", "title": "Сходить в кино", "due": "2026-11-07", "precision": "date", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-b756ad3392d8", "text": "кстати, что там с покупками", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-b756ad3392d8", "text": "кстати, что там с покупками", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-4bab95ef6fd5", "text": "на выходных отвезти кота к ветеринару", "intent": "createTask", "title": "Отвезти кота к ветеринару", "due": "2026-11-07", "precision": "date", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-a4960ec0d286", "text": "мне нужно до пятницы отнести посылку на почту", "intent": "createTask", "title": "Отнести посылку на почту", "due": "2026-11-06", "precision": "date", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-c7cc8cf33ebc", "text": "хочу в субботу испечь «яблочный пирог с карамелью»", "intent": "createTask", "title": "яблочный пирог с карамелью", "due": "2026-11-07", "precision": "date", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,manual"], "note": "бывший known_gap: инфинитив прямо перед названием в кавычках, название — из кавычек"}
 {"id": "gen-59329c01e7f1", "text": "через полтора часа отправить письмо руководителю", "intent": "createTask", "title": "Отправить письмо руководителю", "due": "2026-11-02T18:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-0877bce03320", "text": "оплатила коммуналку за ноябрь", "intent": "completeTask", "title": "Оплатила коммуналку за ноябрь", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
-{"id": "gen-7efafa87cbae", "text": "хлеб купил, молоко ещё надо", "intent": "unknown", "title": null, "source": "ollama", "tags": ["topic:implicit", "labels:gemma,manual"], "note": "разметка исправлена: ни первое, ни последнее значимое слово не глагол сделанного; фраза смешивает сделанное и несделанное"}
-{"id": "gen-bf10f4806b39", "text": "мама уже сдала отчёт руководителю", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-7efafa87cbae", "text": "хлеб купил, молоко ещё надо", "intent": "unknown", "route": "none", "title": null, "source": "ollama", "tags": ["topic:implicit", "labels:gemma,manual"], "note": "разметка исправлена: ни первое, ни последнее значимое слово не глагол сделанного; фраза смешивает сделанное и несделанное"}
+{"id": "gen-bf10f4806b39", "text": "мама уже сдала отчёт руководителю", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-cc2295b55454", "text": "завтра в 10:30 созвониться с командой", "intent": "createTask", "title": "Созвониться с командой", "due": "2026-11-03T10:30", "precision": "dateTime", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-6d358fe4a172", "text": "напомни в понедельник в 9 «встать раньше и не опаздывать»", "intent": "createTask", "title": "встать раньше и не опаздывать", "due": "2026-11-09T09:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
-{"id": "gen-9f287425e3d7", "text": "а купить хлеб надо?", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
-{"id": "gen-e5fa2bf000ff", "text": "«купить хлеб» не надо, уже есть дома", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
-{"id": "gen-40bda38f27ca", "text": "привет, а что у меня на сегодня?", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-9f287425e3d7", "text": "а купить хлеб надо?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-e5fa2bf000ff", "text": "«купить хлеб» не надо, уже есть дома", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-40bda38f27ca", "text": "привет, а что у меня на сегодня?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-f3bd581daace", "text": "кстати, не забыть записать ребёнка к стоматологу", "intent": "createTask", "title": "Записать ребёнка к стоматологу", "due": null, "source": "ollama", "tags": ["topic:implicit", "labels:gemma,manual"], "note": "бывший known_gap: «записать ребёнка к …» — само дело, а не маркер «запиши»"}
-{"id": "gen-cda487a36779", "text": "ногти постричь на выходных", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-cda487a36779", "text": "ногти постричь на выходных", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-3e60b1db707f", "text": "какой у меня план на эту неделю", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
 {"id": "gen-21fd4a2e708d", "text": "покажи что я должен сделать", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"], "note": "бывший known_gap: «что я должен сделать» — вопрос о планах"}
 {"id": "gen-6b9c65814a7a", "text": "дай список на понедельник", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"], "note": "бывший known_gap: «дай» — просьба показать"}
@@ -589,10 +589,10 @@
 {"id": "gen-83cdbb205961", "text": "что у меня в плане на выходные", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
 {"id": "gen-446f4b32b259", "text": "покажи что я записал на пятницу", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"], "note": "бывший known_gap: «что я записал» — вопрос о планах, а не сообщение о сделанном"}
 {"id": "gen-a592c691512b", "text": "какой у меня расписание на завтра", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
-{"id": "gen-cc8d52cfeb05", "text": "покажи мои заметки", "intent": "unknown", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
+{"id": "gen-cc8d52cfeb05", "text": "покажи мои заметки", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
 {"id": "gen-12913bd37198", "text": "что у меня в календаре на вторник", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
 {"id": "gen-e976864b6041", "text": "какие у меня встречи на этой неделе", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
-{"id": "gen-1cd9c586f052", "text": "покажи что я «должен был позвонить в банк»", "intent": "unknown", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
+{"id": "gen-1cd9c586f052", "text": "покажи что я «должен был позвонить в банк»", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:list", "labels:gemma,parser"]}
 {"id": "gen-ed071174ecea", "text": "ааа покажи что мне делать на сегодня", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"], "note": "бывший known_gap: междометие «ааа» не мешает просьбе о списке"}
 {"id": "gen-ef540ce7cd97", "text": "хочу посмотреть что у меня намечено на понедельник и вторник", "intent": "listTasks", "source": "ollama", "tags": ["topic:list", "labels:gemma,manual"], "note": "бывший known_gap: «намечено» — вопрос о планах"}
 {"id": "gen-84f41f650dcc", "text": "Что там у меня по плану?", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
@@ -605,38 +605,38 @@
 {"id": "gen-436cacbdad92", "text": "Список дел на «сегодня»", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,manual"], "note": "бывший known_gap: «Список дел» в начале — просьба; срок в кавычках — выделение"}
 {"id": "gen-db25fc34832a", "text": "Покажи расписание на день", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,manual"], "note": "бывший known_gap: «на день» в просьбе о списке — служебные слова"}
 {"id": "gen-538b1264e60c", "text": "Что там в «agenda»?", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,manual"], "status": "known_gap", "note": "known_gap: «agenda» в кавычках — название списка только по смыслу слова; правила не отличают его от любой цитаты («Что там в «Войне и мире»?»)"}
-{"id": "gen-09437296a81a", "text": "Что сегодня в меню?", "intent": "unknown", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
-{"id": "gen-ea45300540c5", "text": "Какой сейчас план действий по игре?", "intent": "unknown", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
-{"id": "gen-533ab76decd9", "text": "Покажи список контактов", "intent": "unknown", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
-{"id": "gen-cc2bbf4b7edf", "text": "Что ты планируешь делать?", "intent": "unknown", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
+{"id": "gen-09437296a81a", "text": "Что сегодня в меню?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
+{"id": "gen-ea45300540c5", "text": "Какой сейчас план действий по игре?", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
+{"id": "gen-533ab76decd9", "text": "Покажи список контактов", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
+{"id": "gen-cc2bbf4b7edf", "text": "Что ты планируешь делать?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:list", "labels:ollama,parser"]}
 {"id": "gen-912d5edace1a", "text": "Посмотри список «важное»", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,manual"], "note": "бывший known_gap: «посмотри» — просьба показать"}
-{"id": "gen-783a026d06ea", "text": "Здравствуй!", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-783a026d06ea", "text": "Здравствуй!", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-c841a45db1e2", "text": "Что там на улице, дождь пойдет?", "connector": "weather", "intent": "weather.rain", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-e74626894397", "text": "Приветствую, помощник", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-10124e31c7f5", "text": "Расскажи какой-нибудь анекдот", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-f4be9921daa7", "text": "Сколько сейчас градусов?", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-ac7f1a2d1df7", "text": "\"Ты кто вообще такой?\"", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-e2502319d4e2", "text": "Мне скучно, развлеки меня", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-9b6a263484bb", "text": "Погода в Москве на завтра", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-0bc466c83b29", "text": "\"Привет, как поживаешь?\"", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-eb8b37d86561", "text": "Что интересного произошло в мире?", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-e74626894397", "text": "Приветствую, помощник", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-10124e31c7f5", "text": "Расскажи какой-нибудь анекдот", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-f4be9921daa7", "text": "Сколько сейчас градусов?", "intent": "unknown", "route": "weather", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-ac7f1a2d1df7", "text": "\"Ты кто вообще такой?\"", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-e2502319d4e2", "text": "Мне скучно, развлеки меня", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-9b6a263484bb", "text": "Погода в Москве на завтра", "intent": "unknown", "route": "weather", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-0bc466c83b29", "text": "\"Привет, как поживаешь?\"", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-eb8b37d86561", "text": "Что интересного произошло в мире?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-637c6f320b43", "text": "Какая сейчас температура?", "connector": "weather", "intent": "weather.now", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-896d9b5c5a05", "text": "\"Что ты умеешь делать?\"", "intent": "unknown", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-987719a8801c", "text": "привет, как ты там?", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-896d9b5c5a05", "text": "\"Что ты умеешь делать?\"", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-987719a8801c", "text": "привет, как ты там?", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
 {"id": "gen-ca6f163154bc", "text": "а на улице сейчас дождь идёт или уже прояснилось", "connector": "weather", "intent": "weather.rain", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-db094a69dc48", "text": "окей ну ладно, забей, я просто зашёл глянуть", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-06ddb9e57978", "text": "скажи какой-нибудь факт про «космос» или что там интересного в науке", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-f832f028d2c7", "text": "здравствуй! давно к тебе не заходили, как дела", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-4772996b9bba", "text": "а в выходные будет жара или похолодает наконец-то", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-02235d379807", "text": "ну поболтай со мной, одному сидеть неинтересно совсем", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-fbfb87f88954", "text": "чё как, нормально всё?", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-70fa435ec84e", "text": "а ты умеешь просто болтать без всяких команд и списков?", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-9d8967ce06f2", "text": "хай, просто проверяю что ты на месте и живой", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-db094a69dc48", "text": "окей ну ладно, забей, я просто зашёл глянуть", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-06ddb9e57978", "text": "скажи какой-нибудь факт про «космос» или что там интересного в науке", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-f832f028d2c7", "text": "здравствуй! давно к тебе не заходили, как дела", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-4772996b9bba", "text": "а в выходные будет жара или похолодает наконец-то", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-02235d379807", "text": "ну поболтай со мной, одному сидеть неинтересно совсем", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-fbfb87f88954", "text": "чё как, нормально всё?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-70fa435ec84e", "text": "а ты умеешь просто болтать без всяких команд и списков?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-9d8967ce06f2", "text": "хай, просто проверяю что ты на месте и живой", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
 {"id": "gen-03a9792874b5", "text": "покажи прогноз на неделю вперёд, а то завтра на работу идти", "connector": "weather", "intent": "weather.week", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-9e8d675e2b35", "text": "я тут подумал... а сколько сейчас времени-то на часах?", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-f071972019a5", "text": "ну и мороз-то сегодня, минус пятнадцать, выйти не могу", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-44198cccce3b", "text": "расскажи что-нибудь смешное, настроение поднять надо после суток", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
-{"id": "gen-1f7fe7176f2d", "text": "«привет, дружище» — так я тебя называю, всё, до завтра", "intent": "unknown", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-9e8d675e2b35", "text": "я тут подумал... а сколько сейчас времени-то на часах?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-f071972019a5", "text": "ну и мороз-то сегодня, минус пятнадцать, выйти не могу", "intent": "unknown", "route": "weather", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-44198cccce3b", "text": "расскажи что-нибудь смешное, настроение поднять надо после суток", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
+{"id": "gen-1f7fe7176f2d", "text": "«привет, дружище» — так я тебя называю, всё, до завтра", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:unknown", "labels:gemma,parser"]}
 {"id": "gen-419e8d0626f4", "text": "напомни про пятничный отчёт в понедельник", "intent": "createTask", "title": "Пятничный отчёт", "due": "2026-11-09", "precision": "date", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-f65a6c422b35", "text": "запиши купить завтрак завтра в 8", "intent": "createTask", "title": "Купить завтрак", "due": "2026-11-03T08:00", "precision": "dateTime", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-1d24aefbf3d6", "text": "добавь встречу в пятницу 10.11 в 12:00", "intent": "createTask", "title": "Встреча", "due": null, "issue": "conflictingDays", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
@@ -658,7 +658,7 @@
 {"id": "gen-d8f7abc93a37", "text": "добавь Машу забрать из школы завтра в 16", "intent": "createTask", "title": "Машу забрать из школы", "due": "2026-11-03T16:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-71468dbc5aff", "text": "запиши меня к врачу на 30 февраля в 10", "intent": "createTask", "title": "Записаться к врачу", "due": null, "issue": "invalidDate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-5ea237e7a5f4", "text": "добавь перезвонить на +7 912 345 67 89 сегодня в 18", "intent": "createTask", "title": "Перезвонить на +7 912 345 67 89", "due": "2026-11-02T18:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-4d6144203c47", "text": "СРОЧНО ЗАВЕРШИЙ  ОТПРАВКА ЗАЯВЛЕНИЯ", "intent": "unknown", "title": null, "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "note": "разметка исправлена: опечатка — только в первом слове, а лишняя последняя буква («ЗАВЕРШИЙ») — не опечатка"}
+{"id": "gen-4d6144203c47", "text": "СРОЧНО ЗАВЕРШИЙ  ОТПРАВКА ЗАЯВЛЕНИЯ", "intent": "unknown", "route": "none", "title": null, "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "note": "разметка исправлена: опечатка — только в первом слове, а лишняя последняя буква («ЗАВЕРШИЙ») — не опечатка"}
 {"id": "gen-997a95d580fe", "text": "перенеси на завтра и потом на послезавтра звонить в страховую", "intent": "rescheduleTask", "title": "Звонить в страховую", "due": null, "issue": "conflictingDays", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "note": "бывший known_gap: союз «и потом» между сроками не входит в цель"}
 {"id": "gen-4c58aa22599a", "text": "напомни «после обеда с клиентом отзвониться»", "intent": "createTask", "title": "после обеда с клиентом отзвониться", "due": null, "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-a7fbc4b799c7", "text": "добавь «заказать билеты 15 мая» на завтра", "intent": "createTask", "title": "заказать билеты 15 мая", "due": "2026-11-03", "precision": "date", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "note": "разметка исправлена: название в кавычках — как есть"}
@@ -729,7 +729,7 @@
 {"id": "gen-9ea1ba994963", "text": "до завтра, Lio", "connector": "talk", "intent": "talk.bye", "source": "ollama", "tags": ["topic:social", "labels:gemma,parser"]}
 {"id": "gen-7ae6124c8657", "text": "спасибо большое, Лиорио", "connector": "talk", "intent": "talk.thanks", "source": "ollama", "tags": ["topic:social", "labels:gemma,parser"]}
 {"id": "gen-1f4486fe0d07", "text": "говори короче, без воды", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:social", "labels:gemma,parser"]}
-{"id": "gen-b1e43fab2e87", "text": "приветствие настрой для всех", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:social", "labels:gemma,parser"]}
+{"id": "gen-b1e43fab2e87", "text": "приветствие настрой для всех", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:social", "labels:gemma,parser"]}
 {"id": "gen-e25b81f6b91b", "text": "Нодочка я тебя не люблю", "connector": "talk", "intent": "talk.rude", "source": "ollama", "tags": ["topic:social", "labels:gemma,manual"]}
 {"id": "gen-146a2b670147", "text": "Спс, выручил", "connector": "talk", "intent": "talk.thanks", "source": "gemma", "tags": ["topic:social", "labels:ollama,manual"]}
 {"id": "gen-2d71211fd3ab", "text": "Пока-пока", "connector": "talk", "intent": "talk.bye", "source": "gemma", "tags": ["topic:social", "labels:ollama,parser"]}
@@ -770,7 +770,7 @@
 {"id": "gen-c5d3fa9194fa", "text": "Лио, повтори успех, еще анекдот", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,manual"]}
 {"id": "gen-55bf0c77a652", "text": "шути давай", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,manual"]}
 {"id": "gen-07b3a3865f69", "text": "каламбур гони", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,parser"]}
-{"id": "gen-f6e8895c66c0", "text": "расскажи, как тебя создали", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,parser"]}
+{"id": "gen-f6e8895c66c0", "text": "расскажи, как тебя создали", "connector": "talk", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,parser"]}
 {"id": "gen-36c649bb64d8", "text": "пошути, что ты умный, ага", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,manual"]}
 {"id": "gen-9604a9057a42", "text": "слышь, Нода, быстро пошутил!", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,manual"]}
 {"id": "gen-35cc471e4acf", "text": "ну и где анекдоты, бестолочь?", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:jokes", "labels:ollama,manual"]}
@@ -799,11 +799,11 @@
 {"id": "gen-2c6c4dfa58e1", "text": "Лиорио, будь покороче в ответах", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
 {"id": "gen-c1c2035232e6", "text": "давай с юмором, Нодочка", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
 {"id": "gen-86bb05e5bb5f", "text": "официально не надо, я не на работе", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
-{"id": "gen-1432d0a5f5c2", "text": "короче, расскажи мне про котов", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:style", "labels:gemma,parser"]}
+{"id": "gen-1432d0a5f5c2", "text": "короче, расскажи мне про котов", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:style", "labels:gemma,parser"]}
 {"id": "gen-fc9b21288ca5", "text": "Ну Лио, будь основному, а?", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
 {"id": "gen-71ef02733726", "text": "постарайся не юлить, по делу", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
 {"id": "gen-99d6dadc6129", "text": "Нода, ты на ты со мной?", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:style", "labels:gemma,manual"]}
-{"id": "gen-6a57e35185b6", "text": "официально, напиши мне заявление", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:style", "labels:gemma,parser"]}
+{"id": "gen-6a57e35185b6", "text": "официально, напиши мне заявление", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:style", "labels:gemma,parser"]}
 {"id": "gen-71c914ee7cbc", "text": "добрый вечер!", "connector": "talk", "intent": "talk.greet", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-464c6062745b", "text": "спс, реально спасло", "connector": "talk", "intent": "talk.thanks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-29020e4634af", "text": "ну как ты, Нодь?", "connector": "talk", "intent": "talk.howAreYou", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
@@ -811,23 +811,23 @@
 {"id": "gen-30501d7f83c8", "text": "пока, до завтра", "connector": "talk", "intent": "talk.bye", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-696f808a1127", "text": "ок, понял, спасибо", "connector": "talk", "intent": "talk.thanks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-9c9a1ddc3a9c", "text": "кто ты вообще, что за бот?", "connector": "talk", "intent": "talk.whoAreYou", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-da9cb358f83d", "text": "привет, добавь задачу: созвон с командой в 15:00", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-1f8e7011da18", "text": "пока не забыл, перенеси дедлайн на пятницу", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-aaec9b951769", "text": "спасибо, но перенеси встречу на 11:00", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-391dadad33f0", "text": "до завтра сдать отчёт — напомни в 17:00", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-11c9b4168f10", "text": "расскажи шутку на корпоративе — впиши в список задач", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-6728ffa5e303", "text": "как дела у проекта? статус по задаче 44?", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-da9cb358f83d", "text": "привет, добавь задачу: созвон с командой в 15:00", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-1f8e7011da18", "text": "пока не забыл, перенеси дедлайн на пятницу", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-aaec9b951769", "text": "спасибо, но перенеси встречу на 11:00", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-391dadad33f0", "text": "до завтра сдать отчёт — напомни в 17:00", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-11c9b4168f10", "text": "расскажи шутку на корпоративе — впиши в список задач", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-6728ffa5e303", "text": "как дела у проекта? статус по задаче 44?", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-6925b50fad6e", "text": "Нодочка, будь основной", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-3a0aaf7ebc58", "text": "Лео, ты вообще что умеешь-то, кроме шутить?", "connector": "talk", "intent": "talk.capabilities", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-0625609eb3ef", "text": "Привет, добавь в список покупок молоко", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-0625609eb3ef", "text": "Привет, добавь в список покупок молоко", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-95a7a0339a48", "text": "Спс, всё ок", "connector": "talk", "intent": "talk.reaction", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,manual"]}
-{"id": "gen-bf8dc3d9ea75", "text": "Пока не забыл, напомни про запись к врачу", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-bf8dc3d9ea75", "text": "Пока не забыл, напомни про запись к врачу", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-10a9bcccb20f", "text": "Лиорио, как дела?", "connector": "talk", "intent": "talk.howAreYou", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-9b34697e23aa", "text": "До завтра сдать правки по макету", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-9b34697e23aa", "text": "До завтра сдать правки по макету", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-8fe2390bd6ef", "text": "Нода, ты кто такая?", "connector": "talk", "intent": "talk.whoAreYou", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-ff9573e9adaa", "text": "Спасибо, перенеси созвон на 15:00", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-ff9573e9adaa", "text": "Спасибо, перенеси созвон на 15:00", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-8aae77ff4451", "text": "Давай на ты, Лио", "connector": "talk", "intent": "talk.setting", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-2dcef204892e", "text": "Как дела с отчетом по продажам?", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-2dcef204892e", "text": "Как дела с отчетом по продажам?", "connector": "talk", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-933b058746cc", "text": "Ну ты и тормоз, бесишь", "connector": "talk", "intent": "talk.rude", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,manual"]}
 {"id": "gen-53a2d13ce68d", "text": "Что ты умеешь в плане анализа данных?", "connector": "talk", "intent": "talk.capabilities", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,manual"]}
 {"id": "gen-40022e3ba2e5", "text": "Пошути, Нодочка", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
@@ -865,7 +865,7 @@
 {"id": "gen-fab932a8ba2a", "text": "через полтора часа напомни про совещание", "intent": "createTask", "title": "Совещание", "due": "2026-11-02T18:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
 {"id": "gen-f3485af3b4f2", "text": "по пятницам добавлять покупку продуктов", "intent": "createTask", "title": "Покупка продуктов", "due": "2026-11-06", "precision": "date", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"], "status": "known_gap", "note": "парсер сейчас: title='Добавлять покупку продуктов'"}
 {"id": "gen-d32d9f7a453b", "text": "напомни о новом проекте на этой неделе", "intent": "createTask", "title": "Новый проект", "due": "2026-11-06", "precision": "date", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"], "status": "known_gap", "note": "парсер сейчас: title='О новом проекте'"}
-{"id": "gen-d61f95384218", "text": "к вечеру \"сдать отчёт\" #работа", "intent": "unknown", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
+{"id": "gen-d61f95384218", "text": "к вечеру \"сдать отчёт\" #работа", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
 {"id": "gen-c96229184030", "text": "перенеси на ночь надо доехать", "intent": "rescheduleTask", "title": "На ночь доехать", "due": null, "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"], "status": "known_gap", "note": "парсер сейчас: title='На ночь надо доехать'"}
 {"id": "gen-76478b21f502", "text": "заверши в начале месяца оплату подписки", "intent": "completeTask", "title": "Оплата подписки", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"], "status": "known_gap", "note": "парсер сейчас: title='Оплату подписки'"}
 {"id": "gen-9ec5b7027faa", "text": "через 2-3 дня позвонить в школу", "intent": "createTask", "title": "Позвонить в школу", "due": null, "issue": "conflictingDays", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
@@ -925,83 +925,83 @@
 {"id": "gen-f4cc73e82719", "text": "склад, что пришло за день?", "connector": "warehouse", "intent": "warehouse.today", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,manual"]}
 {"id": "gen-20741b0328ea", "text": "где сейчас 102938", "connector": "warehouse", "intent": "warehouse.where", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-02c16c763ba4", "text": "на складе 215а что в ячейке без места", "connector": "warehouse", "intent": "warehouse.cell", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,manual"]}
-{"id": "gen-337ad18ca19d", "text": "500*2", "connector": "warehouse", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-4572bee5d3a1", "text": "14.05", "connector": "warehouse", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-42039ee09593", "text": "напомни завтра про инвентаризацию", "connector": "warehouse", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-3f5caffc83e9", "text": "помоги", "connector": "warehouse", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-9599e7474c7a", "text": "20.11.2023", "connector": "warehouse", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-d37f2991f885", "text": "здрасьте", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-6ead4490a05b", "text": "сколько 7 умножить на 8", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-05f41d6e2aca", "text": "позвонить на склад 215а в пятницу до 12", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-2e647f7ce7fc", "text": "до 15.11 всё сдать", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-f23b5fe2b9a5", "text": "какое число сегодня", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-73aeb7ca4855", "text": "спасибо за всё", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-2d19d008ba6c", "text": "1000 / 4 = ?", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-c71cef532679", "text": "напомнить складам проверить стеллажи в четверг", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-5b6cef681979", "text": "хорошего дня", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-337ad18ca19d", "text": "500*2", "connector": "warehouse", "intent": "unknown", "route": "calc", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-4572bee5d3a1", "text": "14.05", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-42039ee09593", "text": "напомни завтра про инвентаризацию", "connector": "warehouse", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-3f5caffc83e9", "text": "помоги", "connector": "warehouse", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-9599e7474c7a", "text": "20.11.2023", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-d37f2991f885", "text": "здрасьте", "connector": "warehouse", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-6ead4490a05b", "text": "сколько 7 умножить на 8", "connector": "warehouse", "intent": "unknown", "route": "calc", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-05f41d6e2aca", "text": "позвонить на склад 215а в пятницу до 12", "connector": "warehouse", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-2e647f7ce7fc", "text": "до 15.11 всё сдать", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-f23b5fe2b9a5", "text": "какое число сегодня", "connector": "warehouse", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-73aeb7ca4855", "text": "спасибо за всё", "connector": "warehouse", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-2d19d008ba6c", "text": "1000 / 4 = ?", "connector": "warehouse", "intent": "unknown", "route": "calc", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-c71cef532679", "text": "напомнить складам проверить стеллажи в четверг", "connector": "warehouse", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-5b6cef681979", "text": "хорошего дня", "connector": "warehouse", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-f125fffda943", "text": "привет всем, как погода", "connector": "weather", "intent": "weather.now", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-92ad1167fdc5", "text": "на складе сколько венских стульев", "connector": "warehouse", "intent": "warehouse.count", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-f6d6b9c59ac3", "text": "ячейка 215-1-1-1 что в ней", "connector": "warehouse", "intent": "warehouse.cell", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-fa57974767f7", "text": "за неделю приходы 120734", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "note": "приходы по артикулу: у команды приходов нет поля артикула (в описании склада у приходов нет фильтра sku), а общий список за период как ответ про артикул вводит в заблуждение — склад фразу не берёт. Владелец размечал warehouse.week — нужно подтверждение"}
+{"id": "gen-fa57974767f7", "text": "за неделю приходы 120734", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "note": "приходы по артикулу: у команды приходов нет поля артикула (в описании склада у приходов нет фильтра sku), а общий список за период как ответ про артикул вводит в заблуждение — склад фразу не берёт. Владелец размечал warehouse.week — нужно подтверждение"}
 {"id": "gen-7aafed56e47e", "text": "64115 без места сколько", "connector": "warehouse", "intent": "warehouse.count", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-6ab21f6e9c90", "text": "приходы без фото за сегодня", "connector": "warehouse", "intent": "warehouse.nophoto", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-f77474d63d13", "text": "на 215-3 что стоит", "connector": "warehouse", "intent": "warehouse.cell", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-51617e2529f3", "text": "склад, венский стул где лежит", "connector": "warehouse", "intent": "warehouse.where", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-c90b0454d9ad", "text": "120734 остатки на 215а", "connector": "warehouse", "intent": "warehouse.count", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-d5661d18f6e2", "text": "привет! добавь в список: позвонить в банк завтра до 10", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-aafe22af570a", "text": "пока не забыл: перенести встречу на 15:00", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-75cbe0788837", "text": "как дела у проекта?", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-edd31c55b39d", "text": "ну, Нода, пошути на корпоративе в пятницу — вставь в напоминания", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-272ce6511d85", "text": "до завтра сдать отчёт, напомни в 9", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-d5661d18f6e2", "text": "привет! добавь в список: позвонить в банк завтра до 10", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-aafe22af570a", "text": "пока не забыл: перенести встречу на 15:00", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-75cbe0788837", "text": "как дела у проекта?", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-edd31c55b39d", "text": "ну, Нода, пошути на корпоративе в пятницу — вставь в напоминания", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-272ce6511d85", "text": "до завтра сдать отчёт, напомни в 9", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-77b7b42ec51b", "text": "добрый вечер, Лиорио", "connector": "talk", "intent": "talk.greet", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-bf95e183f64d", "text": "ок, понял, перенеси дедлайн на 12-е", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-bf95e183f64d", "text": "ок, понял, перенеси дедлайн на 12-е", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-c84dcdd3c6ac", "text": "спс, Лио", "connector": "talk", "intent": "talk.thanks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-5327c1223417", "text": "расскажи шутку про IT — вставь в презентацию", "connector": "talk", "intent": "talk.joke", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-4128ba289e50", "text": "а ты вообще живой или бот?", "connector": "talk", "intent": "talk.whoAreYou", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-5f96ec3c3941", "text": "пока, до завтра, и не забудь: позвонить маме", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-5f96ec3c3941", "text": "пока, до завтра, и не забудь: позвонить маме", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-438ade805b21", "text": "хорошо, круто, давай на ты теперь", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-2d343345fd39", "text": "Нодь, кто ты и что умеешь вообще?", "connector": "talk", "intent": "talk.capabilities", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-47b082204204", "text": "спасибо, добавь задачу: купить билеты на 20-е", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-47b082204204", "text": "спасибо, добавь задачу: купить билеты на 20-е", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-24a1ce771e00", "text": "ну и бот, честно", "connector": "talk", "intent": "talk.rude", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-c45f289677b4", "text": "что нового по проекту?", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-c45f289677b4", "text": "что нового по проекту?", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-61b22acd17cb", "text": "без смайликов, пожалуйста, и шути меньше", "connector": "talk", "intent": "talk.setting", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "status": "known_gap", "note": "две настройки в одной реплике (без смайликов + шути меньше): TalkRequest хранит одну настройку, применять молча только первую нельзя — нужна модель с несколькими настройками"}
-{"id": "gen-19b1f27025f7", "text": "привет, Лиорио, а ты можешь составить план на неделю?", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-e9677c719bf0", "text": "Привет, добавь задачу по проекту", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-f372798733a7", "text": "Спс, перенеси встречу на завтра", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-72e099c52bb4", "text": "Пока не забыл, создай задачу купить хлеб", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-8820135e80e0", "text": "До завтра сдать макет, напомни мне", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-46c8f79ef7ea", "text": "Как дела по API?", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-19b1f27025f7", "text": "привет, Лиорио, а ты можешь составить план на неделю?", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-e9677c719bf0", "text": "Привет, добавь задачу по проекту", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-f372798733a7", "text": "Спс, перенеси встречу на завтра", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-72e099c52bb4", "text": "Пока не забыл, создай задачу купить хлеб", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-8820135e80e0", "text": "До завтра сдать макет, напомни мне", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-46c8f79ef7ea", "text": "Как дела по API?", "connector": "talk", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-7e5a4728e107", "text": "Здорово, Лиорио!", "connector": "talk", "intent": "talk.greet", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,manual"]}
 {"id": "gen-2c859f91221e", "text": "Нода, что ты умеешь?", "connector": "talk", "intent": "talk.capabilities", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-890246886d9c", "text": "Расскажи шутку для коллег — создай задачу", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,manual"]}
+{"id": "gen-890246886d9c", "text": "Расскажи шутку для коллег — создай задачу", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,manual"]}
 {"id": "gen-5a3ff8d61c30", "text": "Лио, давай на ты", "connector": "talk", "intent": "talk.setting", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-caf98f63153d", "text": "Без смайликов, пожалуйста", "connector": "talk", "intent": "talk.setting", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-327a0fec9cc3", "text": "Ну ты и тормоз", "connector": "talk", "intent": "talk.rude", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-23416cc6791d", "text": "Привет, поставь таймер на 5 минут", "connector": "alarm", "intent": "alarm.timer", "form": {"seconds": "300"}, "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-1c8e28acef25", "text": "Спасибо, занеси в список дел запись к стоматологу", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-1c8e28acef25", "text": "Спасибо, занеси в список дел запись к стоматологу", "connector": "talk", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-41b5c05546bf", "text": "Как ты?", "connector": "talk", "intent": "talk.howAreYou", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-410a548b3d07", "text": "(12 + 8) * (10 - 4)", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-486ffafc4733", "text": "сколько будет сто минус семьдесят два", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-eebf36d1f0c5", "text": "5.5 : 2", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-8bc675ad26e5", "text": "версия 1.4.2", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-8bc675ad26e5", "text": "версия 1.4.2", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-fb549a183842", "text": "3^4", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-e0ca8c8e497c", "text": "20% от 15000", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-6f5e4e05a139", "text": "75 / 3 =", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-84a663692380", "text": "завтра в 18:00", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-84a663692380", "text": "завтра в 18:00", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-e70c3bfdb0df", "text": "8 * 8 * 8", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-e35544533281", "text": "тридцать пять умножить на четыре", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-6d707ecfeff1", "text": "100-500 руб", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-a5e74b822eaa", "text": "арт. 998877", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-6d707ecfeff1", "text": "100-500 руб", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-a5e74b822eaa", "text": "арт. 998877", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-857f292ce3dd", "text": "посчитай 2,7 * 3,1", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-2c04f759c3e9", "text": "через 15 минут", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-cc2b2f6c84c7", "text": "812-34-56", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-2c04f759c3e9", "text": "через 15 минут", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-cc2b2f6c84c7", "text": "812-34-56", "connector": "calc", "intent": "unknown", "route": "warehouse", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-6ba0c113ee53", "text": "шесть разделить на два", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-25746f699393", "text": "(4+4)*2", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-6c5b04ed3e35", "text": "позвонить на 8-800-555-32-10", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-d3f353138ccb", "text": "отчёт на 25.06.24, не на 26.06", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-6c5b04ed3e35", "text": "позвонить на 8-800-555-32-10", "connector": "calc", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-d3f353138ccb", "text": "отчёт на 25.06.24, не на 26.06", "connector": "calc", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-e7681dbd8850", "text": "через 2 часа дедлайн, а 9×9 сколько?", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-9da8cd7ee5aa", "text": "артикул 4521-Б-03", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-1e75d0f0d405", "text": "ставится версия 3.1.2-rc4", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-9da8cd7ee5aa", "text": "артикул 4521-Б-03", "connector": "calc", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-1e75d0f0d405", "text": "ставится версия 3.1.2-rc4", "connector": "calc", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-d6867196f472", "text": "восьмерку в кубе дай", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-c29b6c3226b9", "text": "пять плюс семь, умножить на два", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-8beb2df61350", "text": "извлеки корень из 64", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
@@ -1132,7 +1132,7 @@
 {"id": "gen-6475d7e755c8", "text": "забыл логин от банка", "connector": "passwords", "intent": "passwords.login", "source": "gemma", "tags": ["topic:login", "labels:ollama,parser"]}
 {"id": "gen-ba92db02e138", "text": "лиорио, на какую почту создана учетка в вк?", "connector": "passwords", "intent": "passwords.login", "source": "gemma", "tags": ["topic:login", "labels:ollama,manual"]}
 {"id": "gen-d3d0311e8a03", "text": "подскажи логин от wifi", "connector": "passwords", "intent": "passwords.login", "source": "gemma", "tags": ["topic:login", "labels:ollama,parser"]}
-{"id": "gen-f569d610a7bb", "text": "какой адрес в почте для роутера?", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:login", "labels:ollama,manual"], "note": "бессвязно: «адрес … для роутера» — скорее IP-адрес роутера, а не почта для входа"}
+{"id": "gen-f569d610a7bb", "text": "какой адрес в почте для роутера?", "connector": "passwords", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:login", "labels:ollama,manual"], "note": "бессвязно: «адрес … для роутера» — скорее IP-адрес роутера, а не почта для входа"}
 {"id": "gen-36ae4fa4ecfa", "text": "не помню логин в сбер", "connector": "passwords", "intent": "passwords.login", "source": "gemma", "tags": ["topic:login", "labels:ollama,parser"]}
 {"id": "gen-aeb03a1f3dba", "text": "госуслуги какой там логин?", "connector": "passwords", "intent": "passwords.login", "source": "gemma", "tags": ["topic:login", "labels:ollama,manual"]}
 {"id": "gen-01a8d50dc5a3", "text": "лиорио, на какой имейл регался в озоне", "connector": "passwords", "intent": "passwords.login", "source": "gemma", "tags": ["topic:login", "labels:ollama,manual"]}
@@ -1143,9 +1143,9 @@
 {"id": "gen-4683ffa392aa", "text": "переключи пароль от почты на новый, старый уже не актуален", "connector": "passwords", "intent": "passwords.change", "source": "ollama", "tags": ["topic:manage", "labels:gemma,manual"]}
 {"id": "gen-eeffababb457", "text": "Лиорио, поменялся пароль от банка, обнови запись пожалуйста", "connector": "passwords", "intent": "passwords.change", "source": "ollama", "tags": ["topic:manage", "labels:gemma,manual"]}
 {"id": "gen-70376d1cef49", "text": "удали пароль от вк, я больше не пользуюс", "connector": "passwords", "intent": "passwords.delete", "source": "ollama", "tags": ["topic:manage", "labels:gemma,parser"]}
-{"id": "gen-059b075f2871", "text": "выкинь запись про озон, Лиорио", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:manage", "labels:gemma,manual"], "note": "без слова о паролях «запись про X» — и задача, и заметка; удаление записи навыка — «удали пароль от X» или «удали запись X из паролей» (passwords.toml)"}
+{"id": "gen-059b075f2871", "text": "выкинь запись про озон, Лиорио", "connector": "passwords", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:manage", "labels:gemma,manual"], "note": "без слова о паролях «запись про X» — и задача, и заметка; удаление записи навыка — «удали пароль от X» или «удали запись X из паролей» (passwords.toml)"}
 {"id": "gen-8016ace16b1b", "text": "сколько у меня всего паролей в хранелище?", "connector": "passwords", "intent": "passwords.list", "source": "ollama", "tags": ["topic:manage", "labels:gemma,manual"]}
-{"id": "gen-465c6a4934c9", "text": "Лиорио, покажи список всех сохранённых записей", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:manage", "labels:gemma,manual"], "note": "ни слова о паролях: «список сохранённых записей» в приложении задач — не обязательно сейф; навык без опоры не берёт"}
+{"id": "gen-465c6a4934c9", "text": "Лиорио, покажи список всех сохранённых записей", "connector": "passwords", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:manage", "labels:gemma,manual"], "note": "ни слова о паролях: «список сохранённых записей» в приложении задач — не обязательно сейф; навык без опоры не берёт"}
 {"id": "gen-4cec868fd9e4", "text": "а пароль от госуслуг у меня там есть?", "connector": "passwords", "intent": "passwords.hint", "source": "ollama", "tags": ["topic:manage", "labels:gemma,parser"]}
 {"id": "gen-d8b02f27e9f4", "text": "сколько записей в паролях сейчас вообще?", "connector": "passwords", "intent": "passwords.list", "source": "ollama", "tags": ["topic:manage", "labels:gemma,manual"]}
 {"id": "gen-b0dd7074e709", "text": "Лиорио, открой хранилище паролей", "connector": "passwords", "intent": "passwords.open", "source": "ollama", "tags": ["topic:manage", "labels:gemma,manual"]}
@@ -1167,12 +1167,12 @@
 {"id": "gen-6802af6613ff", "text": "хочу изменить пароль от банка", "connector": "passwords", "intent": "passwords.change", "source": "gemma", "tags": ["topic:manage", "labels:ollama,manual"]}
 {"id": "gen-93623707983b", "text": "Лиорио, удали пароль от старой почты", "connector": "passwords", "intent": "passwords.delete", "source": "gemma", "tags": ["topic:manage", "labels:ollama,parser"]}
 {"id": "gen-e7de316822b6", "text": "стерти пароль от вк", "connector": "passwords", "intent": "passwords.delete", "source": "gemma", "tags": ["topic:manage", "labels:ollama,manual"], "status": "known_gap", "note": "опечатка глагола «стерти»: и «сотри», и «стереть» — delete (инфинитив команды навыка — команда), но опечатки глаголов правилами не разбираются; отложено до обработки опечаток"}
-{"id": "gen-c9ce28cedd20", "text": "убери запись про роутер", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:manage", "labels:ollama,manual"], "note": "без слова о паролях «запись про X» — и задача, и заметка; удаление записи навыка — «удали пароль от X» или «удали запись X из паролей» (passwords.toml)"}
+{"id": "gen-c9ce28cedd20", "text": "убери запись про роутер", "connector": "passwords", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:manage", "labels:ollama,manual"], "note": "без слова о паролях «запись про X» — и задача, и заметка; удаление записи навыка — «удали пароль от X» или «удали запись X из паролей» (passwords.toml)"}
 {"id": "gen-f89659416e48", "text": "Лиорио, удали пароль от госуслуг", "connector": "passwords", "intent": "passwords.delete", "source": "gemma", "tags": ["topic:manage", "labels:ollama,parser"]}
 {"id": "gen-5a6e70dd0107", "text": "что у меня в паролях", "connector": "passwords", "intent": "passwords.list", "source": "gemma", "tags": ["topic:manage", "labels:ollama,manual"]}
 {"id": "gen-b5565b6c4738", "text": "список всех пароллей", "connector": "passwords", "intent": "passwords.list", "source": "gemma", "tags": ["topic:manage", "labels:ollama,manual"]}
 {"id": "gen-6a6a33c4418e", "text": "сколько паролей сохранено?", "connector": "passwords", "intent": "passwords.list", "source": "gemma", "tags": ["topic:manage", "labels:ollama,parser"]}
-{"id": "gen-90b0237e08f5", "text": "Лиорио, какие аккаунты в списке", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:manage", "labels:ollama,manual"], "note": "ни слова о паролях: «аккаунты в списке» — и подключения, и задачи; навык без опоры не берёт"}
+{"id": "gen-90b0237e08f5", "text": "Лиорио, какие аккаунты в списке", "connector": "passwords", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:manage", "labels:ollama,manual"], "note": "ни слова о паролях: «аккаунты в списке» — и подключения, и задачи; навык без опоры не берёт"}
 {"id": "gen-58d27563c449", "text": "Лиорио, запри пароли", "connector": "passwords", "intent": "passwords.lock", "source": "gemma", "tags": ["topic:manage", "labels:ollama,manual"]}
 {"id": "gen-4c715777501e", "text": "заблокируй хранилище пожалуйста", "connector": "data", "intent": "data.clarify", "source": "gemma", "tags": ["topic:manage", "labels:ollama,manual"], "note": "голое «хранилище»: сейф с паролями или все данные — «Данные» переспрашивают (решения владельца 3, 5); раньше passwords.lock"}
 {"id": "gen-a3a1c8c213e9", "text": "Лиорио, придумай пароль из 4 слов для почты, пожалуйста", "connector": "passwords", "intent": "passwords.generate", "source": "ollama", "tags": ["topic:generate_check", "labels:gemma,parser"]}
@@ -1207,7 +1207,7 @@
 {"id": "gen-c3f1aea75610", "text": "проверь надежность пароля от сбера", "connector": "passwords", "intent": "passwords.check", "source": "gemma", "tags": ["topic:generate_check", "labels:ollama,manual"]}
 {"id": "gen-a96e04bbb960", "text": "есть ли у меня повторы в паролях", "connector": "passwords", "intent": "passwords.check", "source": "gemma", "tags": ["topic:generate_check", "labels:ollama,manual"]}
 {"id": "gen-058d08934edd", "text": "какие пароли надо сменить", "connector": "passwords", "intent": "passwords.check", "source": "gemma", "tags": ["topic:generate_check", "labels:ollama,manual"]}
-{"id": "gen-ab79fca29f09", "text": "лиорио, найди дубликаты в списке", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:generate_check", "labels:ollama,parser"]}
+{"id": "gen-ab79fca29f09", "text": "лиорио, найди дубликаты в списке", "connector": "passwords", "intent": "unknown", "route": "warehouse", "source": "gemma", "tags": ["topic:generate_check", "labels:ollama,parser"]}
 {"id": "gen-f03019bb9da3", "text": "хочу потренировать память на пароли", "connector": "passwords", "intent": "passwords.train", "source": "gemma", "tags": ["topic:generate_check", "labels:ollama,manual"]}
 {"id": "gen-fe693e90c777", "text": "Лиорио, давай проверим как я помню пароли", "connector": "passwords", "intent": "passwords.train", "source": "gemma", "tags": ["topic:generate_check", "labels:ollama,manual"]}
 {"id": "gen-996acbe7b831", "text": "режим тренировки памяти пожалуйста", "connector": "passwords", "intent": "passwords.train", "source": "gemma", "tags": ["topic:generate_check", "labels:ollama,manual"]}
@@ -1220,7 +1220,7 @@
 {"id": "gen-7900d59fa9b7", "text": "нужно перенести всё из старого ноута в новый, подсказать как?", "connector": "passwords", "intent": "passwords.lostDevice", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"]}
 {"id": "gen-92c2e887292c", "text": "Лиорио, восстановить хранилище из резервной копии пожалуйста", "connector": "data", "intent": "data.clarify", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,parser"], "note": "голое «хранилище»: сейф с паролями или все данные — «Данные» переспрашивают (решения владельца 3, 5); раньше passwords.restore"}
 {"id": "gen-8cde902ab83b", "text": "я скачал файл с паролями, куда его теперь грузить?", "connector": "passwords", "intent": "passwords.import", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"]}
-{"id": "gen-f845824b88c9", "text": "бэкап в облако можно делать или только локально?", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"], "note": "нет опоры на пароли или сейф: в приложении есть и общая резервная копия данных («Данные и резервная копия»), навык такие фразы не берёт"}
+{"id": "gen-f845824b88c9", "text": "бэкап в облако можно делать или только локально?", "connector": "passwords", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"], "note": "нет опоры на пароли или сейф: в приложении есть и общая резервная копия данных («Данные и резервная копия»), навык такие фразы не берёт"}
 {"id": "gen-4c85b4193cd3", "text": "после импорта из сафари не всё открылось, что делать?", "connector": "passwords", "intent": "passwords.help", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"]}
 {"id": "gen-ce84b18e527a", "text": "как часто лучше копировать хранилище, а то боюсь потерять", "connector": "data", "intent": "data.clarify", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"], "note": "голое «хранилище»: сейф с паролями или все данные — «Данные» переспрашивают (решения владельца 3, 5); раньше passwords.help"}
 {"id": "gen-782e3c7b3ead", "text": "Лиорио, хочу загрузить список из обычного txt", "connector": "passwords", "intent": "passwords.import", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"], "note": "разметка владельца: txt и csv в приложении загружает только импорт паролей (экран импорта), «список из txt» — его файл"}
@@ -1228,25 +1228,25 @@
 {"id": "gen-2be63d3d7dc7", "text": "копия хранилища не открывается, в чём может быть дело", "connector": "data", "intent": "data.clarify", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"], "note": "голое «хранилище»: сейф с паролями или все данные — «Данные» переспрашивают (решения владельца 3, 5); раньше passwords.help"}
 {"id": "gen-49318b48c3cc", "text": "импорт из оперы есть или только из хрома?", "connector": "passwords", "intent": "passwords.help", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"]}
 {"id": "gen-fa0f2df6a9b5", "text": "верни всё из вчерашнего бэкапа, пожалуйста", "connector": "data", "intent": "data.clarify", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"], "note": "копия или восстановление без объекта: сейф с паролями или все данные — «Данные» переспрашивают (решения владельца 3, 5)"}
-{"id": "gen-01f77bba284b", "text": "как экспортировать всё в файл, чтобы потом на другом устройстве загрузить", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"], "note": "нет опоры на пароли или сейф: в приложении есть и общая резервная копия данных («Данные и резервная копия»), навык такие фразы не берёт"}
-{"id": "gen-56217ef3e946", "text": "я не помню где лежит копия, можно её найти на устройстве?", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,parser"]}
+{"id": "gen-01f77bba284b", "text": "как экспортировать всё в файл, чтобы потом на другом устройстве загрузить", "connector": "passwords", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"], "note": "нет опоры на пароли или сейф: в приложении есть и общая резервная копия данных («Данные и резервная копия»), навык такие фразы не берёт"}
+{"id": "gen-56217ef3e946", "text": "я не помню где лежит копия, можно её найти на устройстве?", "connector": "passwords", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,parser"]}
 {"id": "gen-d0431dbd68a5", "text": "перенести пароли из яндекса сюда, реально?", "connector": "passwords", "intent": "passwords.import", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"]}
 {"id": "gen-9bfcd013655b", "text": "Лиорио, можно импортировать из двух браузеров за один раз?", "connector": "passwords", "intent": "passwords.help", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"]}
-{"id": "gen-03878a9e1c22", "text": "бэкап как-то повредился, восстановление без копии вообще возможно?", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"], "note": "нет опоры на пароли или сейф: в приложении есть и общая резервная копия данных («Данные и резервная копия»), навык такие фразы не берёт"}
+{"id": "gen-03878a9e1c22", "text": "бэкап как-то повредился, восстановление без копии вообще возможно?", "connector": "passwords", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:backup_import", "labels:gemma,manual"], "note": "нет опоры на пароли или сейф: в приложении есть и общая резервная копия данных («Данные и резервная копия»), навык такие фразы не берёт"}
 {"id": "gen-f95739a22990", "text": "Лиорио, как сохранить копию всех паролей?", "connector": "passwords", "intent": "passwords.help", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"]}
 {"id": "gen-412d1fca5cec", "text": "хочу перенести данные из хрома", "connector": "passwords", "intent": "passwords.import", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"]}
 {"id": "gen-f88dfb997f81", "text": "восстанови пароли из бэкапа", "connector": "passwords", "intent": "passwords.restore", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,parser"]}
 {"id": "gen-141a2e8495b0", "text": "Лиорио, можно импортировать пароли из файла?", "connector": "passwords", "intent": "passwords.import", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,parser"]}
 {"id": "gen-8af523f06562", "text": "нужно сделать бэкап пожалуйста", "intent": "createTask", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"], "title": "Сделать бэкап", "note": "нет слова о паролях; «нужно + инфинитив» — дело (CORPUS.md, «Создание»); в приложении есть и общая резервная копия данных"}
 {"id": "gen-7d810bd196df", "text": "как вернуть пароли из резервной копии?", "connector": "passwords", "intent": "passwords.restore", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,parser"]}
-{"id": "gen-97f1b7c422f4", "text": "загрузи данные из файла", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,parser"]}
+{"id": "gen-97f1b7c422f4", "text": "загрузи данные из файла", "connector": "passwords", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,parser"]}
 {"id": "gen-59a203842e23", "text": "Лиорио, импорт из браузера как сделать", "connector": "passwords", "intent": "passwords.help", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"], "note": "вопрос «как сделать» — справка, как «импорт из хрома, как это работает?» (gen-32a70004e890)"}
 {"id": "gen-2ba7fe3ebb7f", "text": "восстановление данных из копии", "connector": "data", "intent": "data.clarify", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"], "note": "копия или восстановление без объекта: сейф с паролями или все данные — «Данные» переспрашивают (решения владельца 3, 5)"}
 {"id": "gen-0421446eed27", "text": "перенеси всё из сафари", "connector": "passwords", "intent": "passwords.import", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"]}
 {"id": "gen-48fe10760458", "text": "бэкап паролей сделай", "connector": "passwords", "intent": "passwords.backup", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"]}
 {"id": "gen-886dcfc262d1", "text": "Лиорио, как восстановить через резервную копию", "connector": "data", "intent": "data.clarify", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"], "note": "копия или восстановление без объекта: сейф с паролями или все данные — «Данные» переспрашивают (решения владельца 3, 5)"}
 {"id": "gen-ed41803454bc", "text": "импортируй всё из текстовика", "connector": "passwords", "intent": "passwords.import", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"]}
-{"id": "gen-7906288d80dd", "text": "помоги создать резервную копию", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"], "note": "нет опоры на пароли или сейф: в приложении есть и общая резервная копия данных («Данные и резервная копия»), навык такие фразы не берёт; «помоги + инфинитив» — явная задача, «Данные» уступают"}
+{"id": "gen-7906288d80dd", "text": "помоги создать резервную копию", "connector": "passwords", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"], "note": "нет опоры на пароли или сейф: в приложении есть и общая резервная копия данных («Данные и резервная копия»), навык такие фразы не берёт; «помоги + инфинитив» — явная задача, «Данные» уступают"}
 {"id": "gen-187439be4e4a", "text": "Лиорио, загрузи пароли из другого браузера", "connector": "passwords", "intent": "passwords.import", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,parser"]}
 {"id": "gen-3c5f3695ef23", "text": "как сделать копию чтобы не пропало?", "connector": "data", "intent": "data.clarify", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"], "note": "копия или восстановление без объекта: сейф с паролями или все данные — «Данные» переспрашивают (решения владельца 3, 5)"}
 {"id": "gen-f5651cc20b6f", "text": "восстановление из бэкапа", "connector": "data", "intent": "data.clarify", "source": "gemma", "tags": ["topic:backup_import", "labels:ollama,manual"], "note": "копия или восстановление без объекта: сейф с паролями или все данные — «Данные» переспрашивают (решения владельца 3, 5)"}
@@ -1259,7 +1259,7 @@
 {"id": "gen-60ae4b5d3684", "text": "новый ноутбук купил, а старый не включается — пароли все потерял", "connector": "passwords", "intent": "passwords.lostDevice", "source": "ollama", "tags": ["topic:lost", "labels:gemma,manual"]}
 {"id": "gen-4505fa4b8933", "text": "Лиорио, подскажи, есть ли резервная копия хранилища на случай если телефон сломается?", "connector": "data", "intent": "data.clarify", "source": "ollama", "tags": ["topic:lost", "labels:gemma,manual"], "note": "голое «хранилище»: сейф с паролями или все данные — «Данные» переспрашивают (решения владельца 3, 5); раньше passwords.lostDevice"}
 {"id": "gen-ca58b4b60c7b", "text": "потеряла телефон в метро, а мастер пароль нигде не записывала...", "connector": "passwords", "intent": "passwords.lostDevice", "source": "ollama", "tags": ["topic:lost", "labels:gemma,parser"]}
-{"id": "gen-1a6ff80b96cc", "text": "как перенести хранилище на новый ноутбук, если старый уже не работает?", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:lost", "labels:gemma,manual"], "note": "голое «хранилище» — не якорь сейфа (решение владельца 5); «перенести X на …» забирают задачи как перенос, «Данные» уступают явной команде (раньше passwords.lostDevice)"}
+{"id": "gen-1a6ff80b96cc", "text": "как перенести хранилище на новый ноутбук, если старый уже не работает?", "connector": "passwords", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:lost", "labels:gemma,manual"], "note": "голое «хранилище» — не якорь сейфа (решение владельца 5); «перенести X на …» забирают задачи как перенос, «Данные» уступают явной команде (раньше passwords.lostDevice)"}
 {"id": "gen-c31863f81fa2", "text": "Лиорио, а при переезде на другой телефон мастер пароль тот же остаётся?", "connector": "passwords", "intent": "passwords.lostDevice", "source": "ollama", "tags": ["topic:lost", "labels:gemma,manual"]}
 {"id": "gen-52d472cc43c3", "text": "забыла мастер пароль и не могу открыть ни сбер ни госуслуги через приложение, помогите", "connector": "passwords", "intent": "passwords.masterForgot", "source": "ollama", "tags": ["topic:lost", "labels:gemma,parser"]}
 {"id": "gen-5ca33e7f7c03", "text": "а есть ли какая то тренировка памяти чтобы не забывать мастер пароль в следующий раз?", "connector": "passwords", "intent": "passwords.train", "source": "ollama", "tags": ["topic:lost", "labels:gemma,manual"]}
@@ -1286,25 +1286,25 @@
 {"id": "gen-f10e36ca0232", "text": "Лиорио, переезжаю на другой компьютер, как восстановить базу?", "connector": "passwords", "intent": "passwords.lostDevice", "source": "gemma", "tags": ["topic:lost", "labels:ollama,manual"]}
 {"id": "gen-7c3b4516f457", "text": "как переставить пароли на новый ноутбук?", "connector": "passwords", "intent": "passwords.lostDevice", "source": "gemma", "tags": ["topic:lost", "labels:ollama,manual"]}
 {"id": "gen-e3954a83f332", "text": "Лиорио, сменил ноут, нужно восстановить доступ", "connector": "passwords", "intent": "passwords.lostDevice", "source": "gemma", "tags": ["topic:lost", "labels:ollama,manual"]}
-{"id": "gen-db48b0b17064", "text": "перенос данных на новый комп", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:lost", "labels:ollama,manual"], "note": "ни паролей, ни сейфа, ни просьбы: похоже на название задачи; переезд без слова о паролях навык берёт только с вопросом, как вернуть данные"}
+{"id": "gen-db48b0b17064", "text": "перенос данных на новый комп", "connector": "passwords", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:lost", "labels:ollama,manual"], "note": "ни паролей, ни сейфа, ни просьбы: похоже на название задачи; переезд без слова о паролях навык берёт только с вопросом, как вернуть данные"}
 {"id": "gen-6f39b703b4fe", "text": "как восстановить доступ если забыл главный код?", "connector": "passwords", "intent": "passwords.masterForgot", "source": "gemma", "tags": ["topic:lost", "labels:ollama,manual"]}
-{"id": "gen-37104a50c260", "text": "Лиорио, есть ли резервная копия для восстановления?", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:lost", "labels:ollama,manual"], "note": "нет опоры на пароли или сейф: в приложении есть и общая резервная копия данных («Данные и резервная копия»), навык такие фразы не берёт"}
+{"id": "gen-37104a50c260", "text": "Лиорио, есть ли резервная копия для восстановления?", "connector": "passwords", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:lost", "labels:ollama,manual"], "note": "нет опоры на пароли или сейф: в приложении есть и общая резервная копия данных («Данные и резервная копия»), навык такие фразы не берёт"}
 {"id": "gen-fbee14eb6b0e", "text": "не могу зайти в сейф, подсказка не помогает", "connector": "passwords", "intent": "passwords.masterForgot", "source": "gemma", "tags": ["topic:lost", "labels:ollama,manual"]}
 {"id": "gen-6b0faa117f4f", "text": "как восстановить всё из бэкапа?", "connector": "data", "intent": "data.clarify", "source": "gemma", "tags": ["topic:lost", "labels:ollama,manual"], "note": "копия или восстановление без объекта: сейф с паролями или все данные — «Данные» переспрашивают (решения владельца 3, 5)"}
 {"id": "gen-c8c13c0a45a2", "text": "Лиорио, помоги восстановить доступ к паролям", "connector": "passwords", "intent": "passwords.recoverHelp", "source": "gemma", "tags": ["topic:lost", "labels:ollama,manual"]}
-{"id": "gen-98d16b819181", "text": "напомни через две недели смменить пароль от сбера, пожалуйста", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-72d2b109ee8a", "text": "поставить пароль на роутер как только приеду домой", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-1e6ee916104f", "text": "скажи Пете пароль от вайфая, он опять не может зайти", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-98d16b819181", "text": "напомни через две недели смменить пароль от сбера, пожалуйста", "connector": "passwords", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-72d2b109ee8a", "text": "поставить пароль на роутер как только приеду домой", "connector": "passwords", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-1e6ee916104f", "text": "скажи Пете пароль от вайфая, он опять не может зайти", "connector": "passwords", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-3d9047386662", "text": "потерял телефон вчера, надо запистать пароль от почты на бумажке где-нибудь", "connector": "passwords", "intent": "passwords.lostDevice", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-06794b2ee291", "text": "лиорио, в календарь: смена пароля от госуслуг в середине марта", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
+{"id": "gen-06794b2ee291", "text": "лиорио, в календарь: смена пароля от госуслуг в середине марта", "connector": "passwords", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-5352189bfad7", "text": "скопировать пароль от озона", "connector": "passwords", "intent": "passwords.copy", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-4f4966409220", "text": "напомнить маме сменить пароль от почты, она всё забывает", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
+{"id": "gen-4f4966409220", "text": "напомнить маме сменить пароль от почты, она всё забывает", "connector": "passwords", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-41cd0ca33d9f", "text": "сгенерируй пароль на 16 символов из 5 слов", "connector": "passwords", "intent": "passwords.generate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-b89e9d930a32", "text": "посчитай 3 паролей по 2", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-6d019fcf3939", "text": "забыл ключи от квартиры, пароль от домофона не при чём но ладно", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-b89e9d930a32", "text": "посчитай 3 паролей по 2", "connector": "passwords", "intent": "unknown", "route": "calc", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-6d019fcf3939", "text": "забыл ключи от квартиры, пароль от домофона не при чём но ладно", "connector": "passwords", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-61c43fbc3185", "text": "добавить пароль от банка", "connector": "passwords", "intent": "passwords.add", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-87d841447a97", "text": "тренировка памяти по паролю от роутера", "connector": "passwords", "intent": "passwords.train", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-022a9602b67a", "text": "передай жене пароль от госуслуг, она просила вчера", "connector": "passwords", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-022a9602b67a", "text": "передай жене пароль от госуслуг, она просила вчера", "connector": "passwords", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-e4a5c3cda4de", "text": "импорт паролей из резервной копии", "connector": "passwords", "intent": "passwords.restore", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-757fc6b76530", "text": "телефон украли и пароль от сбера в памяти пропал, что делать теперь", "connector": "passwords", "intent": "passwords.lostDevice", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-82ee98419871", "text": "Лиорио, скопируй пароль от озона", "connector": "passwords", "intent": "passwords.copy", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
@@ -1321,10 +1321,10 @@
 {"id": "gen-35af9c363b74", "text": "импортируй пароли", "connector": "passwords", "intent": "passwords.import", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-91bad23b7876", "text": "Лиорио, я забыл мастер пароль", "connector": "passwords", "intent": "passwords.masterForgot", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-6c2917ed7ad3", "text": "что делать с паролями если телефон потерян", "connector": "passwords", "intent": "passwords.lostDevice", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,manual"]}
-{"id": "gen-e826f6a282dd", "text": "напомни сменить пароль завтра", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-c2aaf4c01671", "text": "скажи Пете пароль от роутера", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-9f6461bdefec", "text": "сколько будет 10 паролей на 2", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-98ab14f703ec", "text": "Лиорио, я потерял ключи", "connector": "passwords", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-e826f6a282dd", "text": "напомни сменить пароль завтра", "connector": "passwords", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-c2aaf4c01671", "text": "скажи Пете пароль от роутера", "connector": "passwords", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-9f6461bdefec", "text": "сколько будет 10 паролей на 2", "connector": "passwords", "intent": "unknown", "route": "calc", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-98ab14f703ec", "text": "Лиорио, я потерял ключи", "connector": "passwords", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-cabac6085f09", "text": "добавь напомнить о Москве в обед", "intent": "createTask", "title": "О Москве", "due": "2026-11-03T13:00", "precision": "partOfDay", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"], "status": "known_gap", "note": "парсер сейчас: title='Напомнить о Москве'"}
 {"id": "gen-9eb91f420cd4", "text": "к вечеру надо сдать отчёт", "intent": "createTask", "title": "К вечеру сдать отчёт", "due": null, "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"], "status": "known_gap", "note": "парсер сейчас: intent='unknown', title=None"}
 {"id": "gen-6c6abfc3bb5f", "text": "поставь задачу позвонить клиенту после работы", "intent": "createTask", "title": "Позвонить клиенту после работы", "due": null, "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
@@ -1365,7 +1365,7 @@
 {"id": "gen-579006df35c7", "text": "передвинь задачу отчет на 15 ноября", "intent": "rescheduleTask", "title": "Отчет", "due": "2026-11-15", "precision": "date", "source": "gemma", "tags": ["topic:gaps", "labels:ollama,parser"]}
 {"id": "gen-d68b021fcf0b", "text": "добавь «оплатить налоги» к вечеру", "intent": "createTask", "title": "оплатить налоги", "due": null, "source": "gemma", "tags": ["topic:gaps", "labels:ollama,parser"]}
 {"id": "gen-0df3db9fd9aa", "text": "добавь купить завтрак на завтра в 8", "intent": "createTask", "title": "Купить завтрак", "due": "2026-11-03T08:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-843cb35328e3", "text": "поставь пятничный отчёт на сегодня в 15", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-843cb35328e3", "text": "поставь пятничный отчёт на сегодня в 15", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-bcd75e6cbb89", "text": "добавь настроить среду разработки на понедельник", "intent": "createTask", "title": "Настроить среду разработки", "due": "2026-11-09", "precision": "date", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-c81c0b884dbb", "text": "напомни перейти через дорогу когда перестанет идти дождь", "intent": "createTask", "title": "Перейти через дорогу когда перестанет идти дождь", "due": null, "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-f247004695c3", "text": "добавь обновить до версии 2.10 на пятницу 10.11", "intent": "createTask", "title": "Обновить до версии 2.10", "due": null, "issue": "conflictingDays", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
@@ -1381,7 +1381,7 @@
 {"id": "gen-825c07334547", "text": "добавь  ПЕРЕЗВОНИТЬ   МАМЕ  завтра в 10", "intent": "createTask", "title": "Перезвонить маме", "due": "2026-11-03T10:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "status": "known_gap", "note": "парсер сейчас: title='ПЕРЕЗВОНИТЬ МАМЕ'"}
 {"id": "gen-eeb3e52920b3", "text": "добавь \"поздравить с днём рождения\" на 15 марта", "intent": "createTask", "title": "поздравить с днём рождения", "due": "2027-03-15", "precision": "date", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-6317b6339d13", "text": "добавь Машу забрать из школы на 17:00", "intent": "createTask", "title": "Машу забрать из школы", "due": "2026-11-02T17:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-24837d78762c", "text": "поставь чайник на завтра в 7", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-24837d78762c", "text": "поставь чайник на завтра в 7", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-5e649e30fcef", "text": "добавь купить завтрак на 9 утра", "intent": "createTask", "title": "Купить завтрак", "due": "2026-11-03T09:00", "precision": "dateTime", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-80eba2395c3a", "text": "запиши пятничный отчёт на завтра", "intent": "createTask", "title": "Пятничный отчёт", "due": "2026-11-03", "precision": "date", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-aeb9768d59ec", "text": "создай задачу настроить среду разработки на среду", "intent": "createTask", "title": "Настроить среду разработки", "due": "2026-11-04", "precision": "date", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
@@ -1403,22 +1403,22 @@
 {"id": "gen-edb96c122249", "text": "Через два часа позвонить врачу", "intent": "createTask", "title": "Позвонить врачу", "due": "2026-11-02T18:30", "precision": "dateTime", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-5158f7280891", "text": "В субботу съездить в Икею", "intent": "createTask", "title": "Съездить в Икею", "due": "2026-11-07", "precision": "date", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-f9648fe1190f", "text": "Мне нужно купить корм коту", "intent": "createTask", "title": "Купить корм коту", "due": null, "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-4ad3fce681f9", "text": "В пятницу в 15:00 созвон по проекту", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-4ad3fce681f9", "text": "В пятницу в 15:00 созвон по проекту", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-f55fdda65ea8", "text": "Сдал отчет в бухгалтерию", "intent": "completeTask", "title": "Сдал отчет в бухгалтерию", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-3c5c04ec9f10", "text": "«Оплатить ЖКХ» уже сделал", "intent": "completeTask", "title": "Оплатить ЖКХ", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-9a34ccaa8aac", "text": "Я помыл машину", "intent": "completeTask", "title": "Помыл машину", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-e2e9a6a5cd63", "text": "Купить корм?", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-e2e9a6a5cd63", "text": "Купить корм?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-93a0157f6cfc", "text": "Не забудь «забрать ключи»", "intent": "createTask", "title": "забрать ключи", "due": null, "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-acdefe654247", "text": "Кстати, что там с задачами?", "intent": "listTasks", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,manual"], "status": "known_gap", "note": "парсер сейчас: intent='unknown'"}
 {"id": "gen-11c7d07fd0ff", "text": "Показать список дел", "intent": "listTasks", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,manual"], "status": "known_gap", "note": "парсер сейчас: intent='unknown'"}
-{"id": "gen-bc20e5a9a5d4", "text": "Книгу вернуть в библиотеку", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-80fa74174975", "text": "Ногти подстричь", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-a8503041aef5", "text": "Сестра купила подарок", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-bc20e5a9a5d4", "text": "Книгу вернуть в библиотеку", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-80fa74174975", "text": "Ногти подстричь", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-a8503041aef5", "text": "Сестра купила подарок", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-128243aaca55", "text": "В среду в 9 утра зайти в аптеку", "intent": "createTask", "title": "Зайти в аптеку", "due": "2026-11-04T09:00", "precision": "dateTime", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-5373e890ea2b", "text": "Хочу сходить в бассейн в четверг", "intent": "createTask", "title": "Сходить в бассейн", "due": "2026-11-05", "precision": "date", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-7074f32ed9b0", "text": "Через неделю «сдать машину в сервис»", "intent": "createTask", "title": "сдать машину в сервис", "due": "2026-11-09", "precision": "date", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-2eb511c90c01", "text": "Выбросил старые вещи", "intent": "completeTask", "title": "Выбросил старые вещи", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
-{"id": "gen-d3cf42f95661", "text": "«Помыть окна» не надо", "intent": "unknown", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
+{"id": "gen-d3cf42f95661", "text": "«Помыть окна» не надо", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:implicit", "labels:ollama,parser"]}
 {"id": "gen-3a3702d04cdf", "text": "через полчаса перезвонить в клинику", "intent": "createTask", "title": "Перезвонить в клинику", "due": "2026-11-02T17:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-9fdd0ecbff7b", "text": "на выходных поехать на дачу", "intent": "createTask", "title": "Поехать на дачу", "due": "2026-11-07", "precision": "date", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-ffab09340db1", "text": "мне нужно отвести ребёнка в секцию в пятницу", "intent": "createTask", "title": "Отвести ребёнка в секцию", "due": "2026-11-06", "precision": "date", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
@@ -1430,102 +1430,102 @@
 {"id": "gen-50b56da11e55", "text": "добавь завтра в 11 созвон с отделом продаж", "intent": "createTask", "title": "Созвон с отделом продаж", "due": "2026-11-03T11:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-cbae515ad62b", "text": "напомни 15 марта в 8 подъём на тренировку", "intent": "createTask", "title": "Подъём на тренировку", "due": "2027-03-15T08:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-5091c871535e", "text": "запиши на четверг в 16 «обед с коллегами из отдела» #работа", "intent": "createTask", "title": "обед с коллегами из отдела", "due": "2026-11-05T16:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
-{"id": "gen-daa157331ec6", "text": "а купить хлеб?", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-daa157331ec6", "text": "а купить хлеб?", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-ac897f735f30", "text": "привет, что у меня на сегодня?", "intent": "listTasks", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,manual"], "status": "known_gap", "note": "парсер сейчас: intent='unknown'"}
-{"id": "gen-68c156677943", "text": "купить цветы не надо, отменяю", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-68c156677943", "text": "купить цветы не надо, отменяю", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-a230c3237756", "text": "показать список задач на эту неделю", "intent": "listTasks", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
-{"id": "gen-8ef51e090685", "text": "мама уже купила хлеб", "intent": "unknown", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
+{"id": "gen-8ef51e090685", "text": "мама уже купила хлеб", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-8acaea61ae8b", "text": "кстати не забыть про подписку на журнал", "intent": "createTask", "title": "Подписка на журнал", "due": null, "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-864906ab3fc4", "text": "отметь «Оформить визовую карту» как выполненную", "intent": "completeTask", "title": "Оформить визовую карту", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
 {"id": "gen-63db04802dc2", "text": "добавь «звонить в страховую по поводу ДТП» на завтра в 10", "intent": "createTask", "title": "звонить в страховую по поводу ДТП", "due": "2026-11-03T10:00", "precision": "dateTime", "source": "ollama", "tags": ["topic:implicit", "labels:gemma,parser"]}
-{"id": "gen-2c506d2dd491", "text": "помощь нужна", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-b93b334e5b99", "text": "Сегодня привезти что-то?", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-62479441af7d", "text": "Склад: 64115 переместить в 215-1-2-1", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-b838392f959e", "text": "До 5 числа сдать отчёт по остаткам", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-f9d0fa053d8e", "text": "на складе 3+4 сколько?", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-2c506d2dd491", "text": "помощь нужна", "connector": "warehouse", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-b93b334e5b99", "text": "Сегодня привезти что-то?", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-62479441af7d", "text": "Склад: 64115 переместить в 215-1-2-1", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
+{"id": "gen-b838392f959e", "text": "До 5 числа сдать отчёт по остаткам", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-f9d0fa053d8e", "text": "на складе 3+4 сколько?", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-ddad1775aa4b", "text": "склад, 120734 срочно к завтрашнему дню где?", "connector": "warehouse", "intent": "warehouse.where", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-61dbe6b5e47e", "text": "что в ячейке 215-1-1-1?", "connector": "warehouse", "intent": "warehouse.cell", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-dcb6f4696540", "text": "приходы без фото за неделю, склад", "connector": "warehouse", "intent": "warehouse.nophoto", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-ff18cf8ea177", "text": "на складе без места что лежит?", "connector": "warehouse", "intent": "warehouse.cell", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-9fc840c329ad", "text": "120734, приходы за сегодня?", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "note": "приходы по артикулу: у команды приходов нет поля артикула (в описании склада у приходов нет фильтра sku), а общий список за сегодня как ответ про артикул вводит в заблуждение — склад фразу не берёт. Владелец размечал warehouse.today — нужно подтверждение"}
+{"id": "gen-9fc840c329ad", "text": "120734, приходы за сегодня?", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "note": "приходы по артикулу: у команды приходов нет поля артикула (в описании склада у приходов нет фильтра sku), а общий список за сегодня как ответ про артикул вводит в заблуждение — склад фразу не берёт. Владелец размечал warehouse.today — нужно подтверждение"}
 {"id": "gen-5b742b8fd38a", "text": "венских стульев сколько на 215-3?", "connector": "warehouse", "intent": "warehouse.count", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-53449c713fd9", "text": "88210 где?", "connector": "warehouse", "intent": "warehouse.where", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-9553cbf9bfe0", "text": "215а, что там?", "connector": "warehouse", "intent": "warehouse.cell", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-0d7a6ed83683", "text": "остаток 64115 на складе", "connector": "warehouse", "intent": "warehouse.count", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-251399af5a37", "text": "без фото приходы есть за день?", "connector": "warehouse", "intent": "warehouse.nophoto", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-2a1697c3575b", "text": "здорово! склад работает?", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
+{"id": "gen-2a1697c3575b", "text": "здорово! склад работает?", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-478f4f698a84", "text": "склад 7х7 сколько?", "connector": "warehouse", "intent": "warehouse.count", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-385418c57108", "text": "на следующей неделе завезти стул венский 20 шт", "connector": "warehouse", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-385418c57108", "text": "на следующей неделе завезти стул венский 20 шт", "connector": "warehouse", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-7ff2f581eb0d", "text": "склад, 88210 и 120734 где лежат?", "connector": "warehouse", "intent": "warehouse.where", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-33a2267383f2", "text": "склад, что в ячейке 215-1-1-1", "connector": "warehouse", "intent": "warehouse.cell", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-f5158c4924a5", "text": "на складе где 55103", "connector": "warehouse", "intent": "warehouse.where", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-38b95acfd3f4", "text": "сколько венских стульев осталось", "connector": "warehouse", "intent": "warehouse.count", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-abb40073aefe", "text": "150*2", "connector": "warehouse", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-abb40073aefe", "text": "150*2", "connector": "warehouse", "intent": "unknown", "route": "calc", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-df6547c52acc", "text": "склад, приходы за день без фото", "connector": "warehouse", "intent": "warehouse.nophoto", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,manual"]}
 {"id": "gen-479ee405d84b", "text": "где лежит артикул 33104", "connector": "warehouse", "intent": "warehouse.where", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-44371e195f67", "text": "01.01.2024", "connector": "warehouse", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-44371e195f67", "text": "01.01.2024", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-8637cfadcf61", "text": "на складе что в ячейке 215-3", "connector": "warehouse", "intent": "warehouse.cell", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-fc8847c0b7e5", "text": "сколько будет 100 плюс 200", "connector": "warehouse", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-fc8847c0b7e5", "text": "сколько будет 100 плюс 200", "connector": "warehouse", "intent": "unknown", "route": "calc", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-a069fc5de820", "text": "склад, остатки по 12099", "connector": "warehouse", "intent": "warehouse.count", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-c2a3c7a19a76", "text": "в ячейке без места что лежит", "connector": "warehouse", "intent": "warehouse.cell", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,manual"]}
 {"id": "gen-f630808519df", "text": "склад, покажи приходы за неделю", "connector": "warehouse", "intent": "warehouse.week", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-03e1f7d7cf5c", "text": "где 88102", "connector": "warehouse", "intent": "warehouse.where", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-665de5184da7", "text": "помогите", "connector": "warehouse", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-665de5184da7", "text": "помогите", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-5c45c9560298", "text": "на складе что в 215а", "connector": "warehouse", "intent": "warehouse.cell", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-6103388cfc93", "text": "завтра", "connector": "warehouse", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-6103388cfc93", "text": "завтра", "connector": "warehouse", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-af4c55f2b743", "text": "привет, Нодочка, как ты сегодня?", "connector": "talk", "intent": "talk.howAreYou", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-1e44ea517d3e", "text": "спс огромное, выручил реально", "connector": "talk", "intent": "talk.thanks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-0d62d20cafe3", "text": "пока-пока, хорошего тебе вечера!", "connector": "talk", "intent": "talk.bye", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-0c5eaf80a308", "text": "а кто ты вообще, Лиорио?", "connector": "talk", "intent": "talk.whoAreYou", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-c044ca0a941b", "text": "что у тебя в арсенале, Нодь?", "connector": "talk", "intent": "talk.capabilities", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-7b98151a07b5", "text": "ок, всё понял, спасибо!", "connector": "talk", "intent": "talk.thanks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-0fdf152a6ffb", "text": "давай без нары, говори по делу, пожалуйста", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "note": "«нары» — испорченное генератором слово; словарь беседы закрытый и чужое слово не угадывает (с «без воды» была бы настройка стиля)"}
+{"id": "gen-0fdf152a6ffb", "text": "давай без нары, говори по делу, пожалуйста", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "note": "«нары» — испорченное генератором слово; словарь беседы закрытый и чужое слово не угадывает (с «без воды» была бы настройка стиля)"}
 {"id": "gen-e6da72f7e550", "text": "ну ты и урод, Нода, но хоть смешной", "connector": "talk", "intent": "talk.rude", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
 {"id": "gen-0444768e8554", "text": "до завтра, Lio, до связи", "connector": "talk", "intent": "talk.bye", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-5f14379453fc", "text": "помогите, никак не найду кнопку", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-a6ad12d8446c", "text": "привет, добавь задачу: созвон с подрядчиком в 14:00", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-68fedaa424bd", "text": "пока не забыл, напомнить про визит к стоматологу", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-0e2cfa723bf7", "text": "спасибо, перенеси отчёт на среду", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-a5e911409f15", "text": "до завтра сдать презентацию, не подведи", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-615ac07e4ec6", "text": "расскажи шутку на корпоративе — это задача на четверг", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-b9b817a98bc3", "text": "как дела у команды, дедлайн по проекту горит?", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-543421e1c8e3", "text": "ну, Лиорио, добавь в календарь встречу с инвестором", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-c055ef80e65d", "text": "кто ты в иерархии ботов — уточни в задаче", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-407605d0aea1", "text": "пошути на собрании — запиши в список дел на завтра", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-7ee3dfd8bf10", "text": "спс, Нодочка, но пересоздай задачу по бюджету — сроки сдвинули", "connector": "talk", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-796b3b331eaa", "text": "Привет, добавь встречу в календарь", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-5f14379453fc", "text": "помогите, никак не найду кнопку", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-a6ad12d8446c", "text": "привет, добавь задачу: созвон с подрядчиком в 14:00", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-68fedaa424bd", "text": "пока не забыл, напомнить про визит к стоматологу", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-0e2cfa723bf7", "text": "спасибо, перенеси отчёт на среду", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-a5e911409f15", "text": "до завтра сдать презентацию, не подведи", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-615ac07e4ec6", "text": "расскажи шутку на корпоративе — это задача на четверг", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-b9b817a98bc3", "text": "как дела у команды, дедлайн по проекту горит?", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-543421e1c8e3", "text": "ну, Лиорио, добавь в календарь встречу с инвестором", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-c055ef80e65d", "text": "кто ты в иерархии ботов — уточни в задаче", "connector": "talk", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-407605d0aea1", "text": "пошути на собрании — запиши в список дел на завтра", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-7ee3dfd8bf10", "text": "спс, Нодочка, но пересоздай задачу по бюджету — сроки сдвинули", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-796b3b331eaa", "text": "Привет, добавь встречу в календарь", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-a47319504c5c", "text": "Спс, Лиорио!", "connector": "talk", "intent": "talk.thanks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-6f90d4600917", "text": "Добрый вечер, запиши задачу по документам", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-6f90d4600917", "text": "Добрый вечер, запиши задачу по документам", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-d6684112dd25", "text": "Ты кто вообще такой?", "connector": "talk", "intent": "talk.whoAreYou", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-270e6301a08f", "text": "Как дела с дедлайном по проекту?", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-5692f8581865", "text": "Пока не забыл, напомни позвонить клиенту", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-270e6301a08f", "text": "Как дела с дедлайном по проекту?", "connector": "talk", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-5692f8581865", "text": "Пока не забыл, напомни позвонить клиенту", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-a81f03fc8eac", "text": "Нода, будь основной", "connector": "talk", "intent": "talk.setting", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-3ae804e12560", "text": "Привет, создай список покупок", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-3ae804e12560", "text": "Привет, создай список покупок", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-d86df2f2fb76", "text": "Что ты умеешь делать?", "connector": "talk", "intent": "talk.capabilities", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-32b5ff7b1c2d", "text": "До завтра сдать отчет — поставь задачу", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-32b5ff7b1c2d", "text": "До завтра сдать отчет — поставь задачу", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-4cfb22f92c2d", "text": "Пошути что-нибудь, пожалуйста", "connector": "talk", "intent": "talk.joke", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-0c46513fc74e", "text": "Лио, говори короче", "connector": "talk", "intent": "talk.setting", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-0f69aed63686", "text": "Привет, занеси в задачи правки по макету", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-0f69aed63686", "text": "Привет, занеси в задачи правки по макету", "connector": "talk", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-82eee26a4e8b", "text": "Нодочка, не ставь смайлики", "connector": "talk", "intent": "talk.setting", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-eebf0e2df8e9", "text": "Расскажи шутку для корпоратива — запиши в черновик", "connector": "talk", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-eebf0e2df8e9", "text": "Расскажи шутку для корпоратива — запиши в черновик", "connector": "talk", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-90f736641e9b", "text": "Ок, понял", "connector": "talk", "intent": "talk.reaction", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-ef5668b9770c", "text": "Лиорио, ты тупишь", "connector": "talk", "intent": "talk.rude", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-d7fdb2173eb8", "text": "25.12.2024 — какой это день недели?", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-710236516415", "text": "позвонить 8-800-200-30-40, там опять сбой", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-d7fdb2173eb8", "text": "25.12.2024 — какой это день недели?", "connector": "calc", "intent": "unknown", "route": "talk", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-710236516415", "text": "позвонить 8-800-200-30-40, там опять сбой", "connector": "calc", "intent": "unknown", "route": "tasks", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-4993e1367a06", "text": "5 в квадрате, быстро", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-d2f26d09ee76", "text": "температура от -5 до 12 градусов, нормально?", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-1552999087f4", "text": "обновил до 4.2.1, стало быстрее?", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-d2f26d09ee76", "text": "температура от -5 до 12 градусов, нормально?", "connector": "calc", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-1552999087f4", "text": "обновил до 4.2.1, стало быстрее?", "connector": "calc", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-b0b64cf946c9", "text": "из 60 задач закрыл 45, какой процент?", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"], "status": "known_gap", "note": "текстовая задача на долю («из 60 закрыл 45, какой процент?»): грамматика примеров её не покрывает, узкий шаблон был бы подгонкой"}
-{"id": "gen-9d31b9a1b336", "text": "через 2 часа это уже 14:30?", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-9d31b9a1b336", "text": "через 2 часа это уже 14:30?", "connector": "calc", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-959ab76eaabe", "text": "посчитай 12% от 5800", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-ba59805434e4", "text": "артикул BX-7712, сколько ещё на складе?", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-ba59805434e4", "text": "артикул BX-7712, сколько ещё на складе?", "connector": "calc", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-5244f796d190", "text": "3+*2 = ?", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-91f68f735c23", "text": "дедлайн 03.01.2025, не пропустить", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-91f68f735c23", "text": "дедлайн 03.01.2025, не пропустить", "connector": "calc", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-599de63c5a44", "text": "(8-3)÷5, помоги", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,manual"]}
-{"id": "gen-1a0c5be28e1f", "text": "осталось 2 штуки из 10, хватит?", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-1a0c5be28e1f", "text": "осталось 2 штуки из 10, хватит?", "connector": "calc", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-8a9abb221b1d", "text": "корень из 961", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-8d43bf1bc520", "text": "сто двадцать четыре разделить на двенадцать", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
-{"id": "gen-5c5c98f04d4e", "text": "в 22.15 уже сплю", "connector": "calc", "intent": "unknown", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
+{"id": "gen-5c5c98f04d4e", "text": "в 22.15 уже сплю", "connector": "calc", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-1cc4a09db055", "text": "2,75 × 3,2", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-129b6175733d", "text": "10 в степени 5 минус 99999", "connector": "calc", "intent": "calc.evaluate", "source": "ollama", "tags": ["topic:tricky", "labels:gemma,parser"]}
 {"id": "gen-34d494ecf7ce", "text": "8*9=", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
@@ -1537,13 +1537,13 @@
 {"id": "gen-e1e9cb48aa89", "text": "вычисли корень из 81", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-dadf909b4bad", "text": "10 : 0,5", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-6eb7f737135e", "text": "15 × 1,2", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-53b6cdbeeeac", "text": "дата 25.12.2023", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-b955fd9f2564", "text": "буду в 14:30", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-16470163ad15", "text": "номер +79001112233", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-d2d728acacd7", "text": "диапазон от 100 до 500", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-e276adf2744d", "text": "v 2.1.0", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-19b9cf0d4569", "text": "артикул 55432-А", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-5aa863444e5c", "text": "3 кг яблок и 2 пачки молока", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-a9692b8454bb", "text": "через 3 часа буду", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
-{"id": "gen-4e8268d06074", "text": "ул. Ленина, 12, кв 45", "connector": "calc", "intent": "unknown", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-53b6cdbeeeac", "text": "дата 25.12.2023", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-b955fd9f2564", "text": "буду в 14:30", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-16470163ad15", "text": "номер +79001112233", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-d2d728acacd7", "text": "диапазон от 100 до 500", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-e276adf2744d", "text": "v 2.1.0", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-19b9cf0d4569", "text": "артикул 55432-А", "connector": "calc", "intent": "unknown", "route": "tasks", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-5aa863444e5c", "text": "3 кг яблок и 2 пачки молока", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-a9692b8454bb", "text": "через 3 часа буду", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
+{"id": "gen-4e8268d06074", "text": "ул. Ленина, 12, кв 45", "connector": "calc", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}
 {"id": "gen-25fa369734e6", "text": "тысяча минус двести", "connector": "calc", "intent": "calc.evaluate", "source": "gemma", "tags": ["topic:tricky", "labels:ollama,parser"]}

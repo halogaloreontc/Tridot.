@@ -50,7 +50,7 @@
 {"id": "alm-050", "text": "починить будильник", "intent": "createTask", "title": "Починить будильник", "note": "не будильник", "source": "manual"}
 {"id": "alm-051", "text": "напомни поставить будильник", "intent": "createTask", "note": "не будильник", "source": "manual"}
 {"id": "alm-052", "text": "напомни завтра в 7 позвонить маме", "intent": "createTask", "title": "Позвонить маме", "due": "2026-11-03T07:00", "precision": "dateTime", "note": "не будильник", "source": "manual"}
-{"id": "alm-053", "text": "будильник не прозвенел", "intent": "unknown", "note": "не будильник", "source": "manual"}
+{"id": "alm-053", "text": "будильник не прозвенел", "intent": "unknown", "route": "none", "note": "не будильник", "source": "manual"}
 {"id": "alm-054", "text": "выбрать новый будильник", "intent": "createTask", "title": "Выбрать новый будильник", "note": "не будильник", "source": "manual"}
 {"id": "alm-055", "text": "напомни через 5 минут выключить духовку", "intent": "createTask", "title": "Выключить духовку", "note": "не будильник", "source": "manual"}
 {"id":"alm-v01","text":"нужен будильник на семь","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual"}

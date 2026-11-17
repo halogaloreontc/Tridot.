@@ -128,6 +128,7 @@ const Set<String> _allowedKeys = <String>{
   'connected',
   'after',
   'form',
+  'route',
 };
 
 /// Что карточка конвертера получит из фразы: цель и качество, ключи по
@@ -405,6 +406,23 @@ void _validate(Map<String, dynamic> json, String location) {
           '«weather»');
     }
   }
+  // Кого выберет маршрутизатор для фразы, которую ни один навык не должен
+  // понять как свою команду: `none`, `ambiguous` или id коннектора (беседа
+  // как запасной ответ, справочный вопрос, чужой навык). Обязательно у
+  // каждой строки с `intent: unknown`: иначе отрицательная строка задач,
+  // ушедшая складу или файлам, проходила бы тест.
+  final route = json['route'];
+  if (json['intent'] == 'unknown') {
+    if (route is! String ||
+        !(route == 'none' ||
+            route == 'ambiguous' ||
+            _connectorIds.contains(route))) {
+      fail('у intent: unknown поле route обязательно: none, ambiguous или '
+          'id коннектора ($_connectorIds)');
+    }
+  } else if (route != null) {
+    fail('поле route бывает только у intent: unknown');
+  }
   final after = json['after'];
   if (after != null && (after is! String || !_connectorIds.contains(after))) {
     fail('поле after — id коннектора: $_connectorIds');
@@ -502,6 +520,8 @@ final class _Case {
     }
     if (expectedIntent != 'unknown') {
       compare('connector', _routed(decision), connectorId);
+    } else {
+      compare('route', _routed(decision) ?? 'none', json['route']);
     }
     if (connectorId != TasksConnector.id) {
       final own = matches

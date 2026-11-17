@@ -27,18 +27,18 @@
 {"id": "data-038", "text": "сделай бэкап", "connector": "data", "intent": "data.clarify", "after": "tasks", "source": "manual", "note": "контекст другого навыка не выбирает между сейфом и данными — вопрос"}
 {"id": "data-039", "text": "сделай резервную копию всех данных", "connector": "data", "intent": "data.backup", "after": "passwords", "source": "manual", "note": "явный объект важнее контекста"}
 {"id": "data-040", "text": "сделай резервную копию сейфа", "connector": "passwords", "intent": "passwords.backup", "after": "data", "source": "manual", "note": "явный сейф важнее контекста"}
-{"id": "data-050", "text": "сделай копию договора", "connector": "data", "intent": "unknown", "source": "manual", "note": "копия чего-то названного — не данные приложения"}
-{"id": "data-051", "text": "восстанови задачу из копии", "connector": "data", "intent": "unknown", "source": "manual"}
-{"id": "data-052", "text": "купить хранилище для велосипеда", "connector": "data", "intent": "unknown", "source": "manual", "note": "хранилище для вещей — не данные"}
-{"id": "data-053", "text": "облачное хранилище подорожало", "connector": "data", "intent": "unknown", "source": "manual"}
-{"id": "data-054", "text": "копия ключа от хранилища есть или нет", "connector": "data", "intent": "unknown", "source": "manual", "note": "ключ от хранилища — помещение"}
-{"id": "data-055", "text": "закрой задачу хранилище", "connector": "data", "intent": "unknown", "source": "manual", "note": "названа задача — завершение задачи"}
+{"id": "data-050", "text": "сделай копию договора", "connector": "data", "intent": "unknown", "route": "none", "source": "manual", "note": "копия чего-то названного — не данные приложения"}
+{"id": "data-051", "text": "восстанови задачу из копии", "connector": "data", "intent": "unknown", "route": "none", "source": "manual"}
+{"id": "data-052", "text": "купить хранилище для велосипеда", "connector": "data", "intent": "unknown", "route": "tasks", "source": "manual", "note": "хранилище для вещей — не данные"}
+{"id": "data-053", "text": "облачное хранилище подорожало", "connector": "data", "intent": "unknown", "route": "tasks", "source": "manual"}
+{"id": "data-054", "text": "копия ключа от хранилища есть или нет", "connector": "data", "intent": "unknown", "route": "none", "source": "manual", "note": "ключ от хранилища — помещение"}
+{"id": "data-055", "text": "закрой задачу хранилище", "connector": "data", "intent": "unknown", "route": "tasks", "source": "manual", "note": "названа задача — завершение задачи"}
 {"id": "data-056", "text": "нужно сделать бэкап", "intent": "createTask", "title": "Сделать бэкап", "source": "manual", "note": "«нужно + инфинитив» без объекта — дело (задача); «Данные» уступают"}
 {"id": "data-057", "text": "сколько записей в хранилище", "connector": "warehouse", "intent": "warehouse.count", "source": "manual", "note": "склад: вопрос о количестве"}
 {"id": "data-058", "text": "бэкап паролей сделай", "connector": "passwords", "intent": "passwords.backup", "source": "manual", "note": "слово о паролях — навык «Пароли»"}
 {"id": "data-059", "text": "открой хранилище паролей", "connector": "passwords", "intent": "passwords.open", "source": "manual", "note": "«хранилище паролей» — якорь сейфа"}
 {"id": "data-060", "text": "сделать бэкап", "intent": "createTask", "title": "Сделать бэкап", "source": "manual", "note": "инфинитив без объекта — дело; «Данные» уступают задачам"}
 {"id": "data-061", "text": "восстанови из копии, а то всё пропало", "connector": "data", "intent": "data.clarify", "source": "manual", "note": "«а то всё пропало» — страх потерять данные; задача уступает (ревью)"}
-{"id": "data-062", "text": "нужна копия, паспорта и снилса", "connector": "data", "intent": "unknown", "source": "manual", "note": "копия бумаги, не данных приложения (ревью)"}
-{"id": "data-063", "text": "нужна копия, срочно, для банка", "connector": "data", "intent": "unknown", "source": "manual", "note": "копия бумаги, не данных приложения (ревью)"}
-{"id": "data-064", "text": "сделай копию чтобы отправить начальнику", "connector": "data", "intent": "unknown", "source": "manual", "note": "копия бумаги, не данных приложения (ревью)"}
+{"id": "data-062", "text": "нужна копия, паспорта и снилса", "connector": "data", "intent": "unknown", "route": "none", "source": "manual", "note": "копия бумаги, не данных приложения (ревью)"}
+{"id": "data-063", "text": "нужна копия, срочно, для банка", "connector": "data", "intent": "unknown", "route": "none", "source": "manual", "note": "копия бумаги, не данных приложения (ревью)"}
+{"id": "data-064", "text": "сделай копию чтобы отправить начальнику", "connector": "data", "intent": "unknown", "route": "none", "source": "manual", "note": "копия бумаги, не данных приложения (ревью)"}

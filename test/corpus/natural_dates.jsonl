@@ -137,7 +137,7 @@
 {"id":"nd-130","text":"добавь бассейн каждую пятницу","intent":"createTask","title":"Бассейн","due":"2026-11-06","precision":"date","note":"повторение — ближайшая пятница"}
 {"id":"nd-131","text":"добавь бассейн по понедельникам","now":"2026-11-02T09:00","intent":"createTask","title":"Бассейн","due":"2026-11-09","precision":"date","note":"сегодняшний день без времени — через неделю, как «в понедельник»"}
 {"id":"nd-132","text":"добавь бассейн по понедельникам и средам","intent":"createTask","title":"Бассейн","due":null,"issue":"conflictingDays","note":"два дня повторения — как «в среду или четверг»"}
-{"id":"nd-133","text":"по пятницам у меня бассейн?","intent":"unknown","note":"вопрос — не задача"}
+{"id":"nd-133","text":"по пятницам у меня бассейн?","intent":"unknown","route":"none","note":"вопрос — не задача"}
 {"id":"nd-134","text":"напомни каждый понедельник в 9 планёрка","intent":"createTask","title":"Планёрка","due":"2026-11-09T09:00","precision":"dateTime"}
 {"id":"nd-135","text":"перенеси отчёт на 1-е","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-12-01","precision":"date","note":"число прошло — следующий месяц"}
 {"id":"nd-136","text":"перенеси отчёт на 31-е","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-12-31","precision":"date","note":"в ноябре нет 31-го — ближайший месяц, где оно есть"}

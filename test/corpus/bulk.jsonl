@@ -50,8 +50,8 @@
 {"id":"bulk-neg-006","text":"добавь задачу перенести все встречи на пятницу","intent":"createTask","title":"Перенести все встречи","due":"2026-11-06","precision":"date","source":"manual","note":"глагол переноса внутри названия новой задачи"}
 {"id":"bulk-neg-007","text":"заверши отчёт","intent":"completeTask","title":"Отчёт","source":"manual"}
 {"id":"bulk-neg-008","text":"закрой «Все задачи по ремонту»","intent":"completeTask","title":"Все задачи по ремонту","source":"manual","note":"«все» внутри кавычек — название"}
-{"id":"bulk-neg-009","text":"отменить","now":"2026-11-05T12:00","intent":"unknown","source":"manual","note":"отмена — «отмени», а инфинитив без предмета — не команда"}
+{"id":"bulk-neg-009","text":"отменить","now":"2026-11-05T12:00","intent":"unknown","route":"none","source":"manual","note":"отмена — «отмени», а инфинитив без предмета — не команда"}
 {"id":"bulk-neg-010","text":"перенеси задачу на завтра","intent":"rescheduleTask","title":null,"due":"2026-11-03","precision":"date","source":"manual"}
 {"id":"bulk-neg-011","text":"всё, закрой задачу","intent":"completeTask","title":null,"source":"manual","note":"«всё,» перед глаголом — конец реплики: завершение задачи из разговора"}
-{"id":"bulk-neg-013","text":"всё, закрой","intent":"unknown","source":"manual","note":"как и «закрой» без предмета — не команда и тем более не «закрой все задачи»"}
+{"id":"bulk-neg-013","text":"всё, закрой","intent":"unknown","route":"none","source":"manual","note":"как и «закрой» без предмета — не команда и тем более не «закрой все задачи»"}
 {"id":"bulk-neg-012","text":"всё, перенеси на пятницу","intent":"rescheduleTask","title":null,"due":"2026-11-06","precision":"date","source":"manual","note":"перенос задачи из разговора, не всех"}
