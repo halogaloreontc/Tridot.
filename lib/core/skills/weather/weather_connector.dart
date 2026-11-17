@@ -89,7 +89,8 @@ final class WeatherConnector implements Connector, ConnectorHealth {
 
   @override
   ConnectorMatch? match(Utterance utterance) {
-    final ask = WeatherPhrases.parse(utterance, clock.now());
+    final ask =
+        WeatherPhrases.parse(utterance, clock.now()) ?? _followUp(utterance);
     if (ask == null) return null;
     return ConnectorMatch(
       connectorId: id,
@@ -98,6 +99,47 @@ final class WeatherConnector implements Connector, ConnectorHealth {
       payload: ask,
     );
   }
+
+  /// «А завтра?», «а в Сочи?», «а на выходных?» сразу после ответа о
+  /// погоде — тот же вопрос на другой день или о другом городе. Только
+  /// короткий обрывок (до четырёх слов) из срока или «в/во Городе»: «а
+  /// завтра купить хлеб» — уже не продолжение.
+  WeatherAsk? _followUp(Utterance utterance) {
+    if (utterance.recentConnectorId != id) return null;
+    final match = _fragment.firstMatch(utterance.original.trim());
+    if (match == null) return null;
+    final rest = match.group(1)!.trim();
+    final now = clock.now();
+    final fragment = Utterance.analyze(rest, now: now);
+    final words = fragment.words;
+    if (words.isEmpty || words.length > 4) return null;
+    final dateOnly = fragment.tokens.every(
+      (UtteranceToken t) =>
+          Utterance.isCovered(t, fragment.due.spans) ||
+          t.text == 'на' ||
+          t.text == 'в' ||
+          t.text == 'во',
+    );
+    final place = _placeFragment.hasMatch(rest);
+    final weekend = _weekend.hasMatch(rest.toLowerCase());
+    if (!dateOnly && !place && !weekend) return null;
+    return WeatherPhrases.parse(
+      Utterance.analyze('погода $rest', now: now),
+      now,
+    );
+  }
+
+  static final RegExp _fragment = RegExp(
+    r'^(?:а|и)\s+(?:как\s+|что\s+)?(?:насчет\s+|насчёт\s+)?'
+    r'([^?!.]+?)\s*[?!.]*$',
+    caseSensitive: false,
+  );
+
+  static final RegExp _placeFragment = RegExp(
+    r'^(?:в|во)\s+[А-ЯЁ][а-яё-]+(?:\s+[А-ЯЁ][а-яё-]+)?$',
+  );
+
+  static final RegExp _weekend = RegExp(r'^на\s+выходных$');
 
   @override
   Future<AssistantResponse> run(
