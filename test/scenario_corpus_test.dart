@@ -13,6 +13,7 @@ import 'package:local_assistant/core/models/task.dart';
 import 'package:local_assistant/core/personas/persona_address.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/command_frame.dart';
+import 'package:local_assistant/core/scenario/layout_fix.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
@@ -534,6 +535,22 @@ final class _Case {
         matches = framedMatches;
         decision = framedDecision;
       }
+    }
+    // Набрано не в той раскладке: то же правило, что в маршрутизаторе
+    // (LayoutFix.prefer); фразы о паролях не исправляются.
+    for (final fixedText in LayoutFix.candidates(phrase)) {
+      final fixed = Utterance.analyze(fixedText, now: now)
+          .withChat(null, recentConnectorId: after);
+      if (PasswordPhrases.looksLike(fixed)) break;
+      final fixedMatches = matchesOf(fixed);
+      final fixedDecision =
+          RoutePolicy.pick(fixedMatches, recentConnectorId: after);
+      if (!LayoutFix.prefer(decision, fixedDecision)) continue;
+      phrase = fixedText;
+      utterance = fixed;
+      matches = fixedMatches;
+      decision = fixedDecision;
+      break;
     }
     // Фраза понята по контексту как фраза другого навыка: проверяется
     // разбор канонической фразы, как её разберёт маршрутизатор.

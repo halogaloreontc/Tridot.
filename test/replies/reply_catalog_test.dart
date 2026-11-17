@@ -11,6 +11,7 @@ import 'package:local_assistant/core/replies/reply_library.dart';
 /// работала форма числа.
 const Map<String, String> facts = <String, String>{
   'title': 'Купить хлеб «Бородинский»',
+  'text': 'напомни завтра в 10 позвонить маме',
   'due': 'завтра в 10:00',
   'project': 'работа',
   'query': 'отчёт',

@@ -1,0 +1,17 @@
+{"id":"lay-001","text":"yfgjvyb pfdnhf d 10 gjpdjybnm vfvt","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T10:00","precision":"dateTime","source":"manual","note":"набрано не в той раскладке (LayoutFix): «напомни завтра в 10 позвонить маме»; запись — только после «Да»"}
+{"id":"lay-002","text":"gjrf;b pflfxb","intent":"listTasks","source":"manual","note":"«покажи задачи»"}
+{"id":"lay-003","text":"Gthtytcb dcnhtxe yf pfdnhf","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-03","precision":"date","source":"manual","note":"«Перенеси встречу на завтра» — заглавная тоже"}
+{"id":"lay-004","text":"pfdthib pflfxe regbnm [kt,","intent":"completeTask","targetQuery":"Купить хлеб","source":"manual","note":"запятая в конце слова на клавиатуре — «б»: «хлеб»"}
+{"id":"lay-005","text":"hfp,elb vtyz d 6^30","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"30"},"source":"manual","note":"«разбуди меня в 6:30»: «^» между цифрами — двоеточие русской раскладки"}
+{"id":"lay-006","text":"gjcnfdm ,elbkmybr yf 7","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual","note":"«,» в начале слова — «б»"}
+{"id":"lay-007","text":"crjkmrj ,eltn 125 evyj;bnm yf 4","connector":"calc","intent":"calc.evaluate","answer":"500","source":"manual"}
+{"id":"lay-008","text":"ghjuyjp yf ytltk.","connector":"weather","intent":"weather.week","source":"manual","note":"«.» в конце слова — «ю»: «неделю»"}
+{"id":"lay-009","text":"cgfcb,j","connector":"talk","intent":"talk.thanks","source":"manual"}
+{"id":"lay-010","text":"ult cnek dtycrbq","connector":"warehouse","intent":"warehouse.where","form":{"q":"стул венский"},"source":"manual"}
+{"id":"lay-011","text":"rfrbt ghb[jls ,tp ajnj","connector":"warehouse","intent":"warehouse.nophoto","source":"manual"}
+{"id":"lay-012","text":"cj;vb afqks d zip","connector":"archiver","intent":"archiver.zip","source":"manual","note":"«сожми файлы в zip»: латинское слово среди русских — тоже клавиши"}
+{"id":"lay-013","text":"buy milk tomorrow","intent":"unknown","route":"none","source":"manual","note":"английская фраза — в другой раскладке бессмыслица, её никто не берёт"}
+{"id":"lay-014","text":"help","connector":"talk","intent":"talk.capabilities","source":"manual","note":"понято как есть — раскладку не трогаем"}
+{"id":"lay-015","text":"ghblevfq gfhjkm yf 16 cbvdjkjd","intent":"unknown","route":"none","source":"manual","note":"фраза о паролях не исправляется: исправленный текст повторяется в чате"}
+{"id":"lay-016","text":"Qwerty123","intent":"unknown","route":"none","source":"manual","note":"буквы и цифры вперемешку — так выглядят пароли: не трогаем"}
+{"id":"lay-017","text":"https://example.com/abc","intent":"unknown","route":"none","source":"manual"}

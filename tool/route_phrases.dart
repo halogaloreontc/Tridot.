@@ -38,6 +38,7 @@ import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/personas/persona_address.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/command_frame.dart';
+import 'package:local_assistant/core/scenario/layout_fix.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
@@ -138,6 +139,25 @@ Map<String, Object?> routePhrase(
     if (CommandFrame.prefer(decision, framedDecision)) {
       final resolved = routePhrase(framedText, now, after: after);
       return <String, Object?>{...resolved, 'frame': framedText};
+    }
+  }
+  // Набрано не в той раскладке (LayoutFix.prefer); фразы о паролях не
+  // исправляются.
+  for (final fixedText in LayoutFix.candidates(text)) {
+    final fixed = Utterance.analyze(fixedText, now: now)
+        .withChat(null, recentConnectorId: after);
+    if (PasswordPhrases.looksLike(fixed)) break;
+    final fixedDecision = RoutePolicy.pick(
+      <ConnectorMatch>[
+        for (final connector in appConnectors(now))
+          if (!(passwordsPhrase && connector.info.requiresNetwork))
+            if (connector.match(fixed) case final ConnectorMatch match) match,
+      ],
+      recentConnectorId: after,
+    );
+    if (LayoutFix.prefer(decision, fixedDecision)) {
+      final resolved = routePhrase(fixedText, now, after: after);
+      return <String, Object?>{...resolved, 'layout': fixedText};
     }
   }
   final winner = decision.winner;

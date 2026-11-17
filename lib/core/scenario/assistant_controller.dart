@@ -17,6 +17,7 @@ import '../services/clock.dart';
 import '../skills/passwords/passwords_phrases.dart';
 import 'command_spans.dart';
 import 'command_frame.dart';
+import 'layout_fix.dart';
 import 'route_policy.dart';
 
 export 'command_spans.dart';
@@ -991,9 +992,19 @@ final class AssistantController {
     final named = trailing == null
         ? null
         : session.personas.cast.byId(trailing.persona.id);
-    final answerUtterance = trailing == null
+    var answerUtterance = trailing == null
         ? utterance
         : Utterance.analyze(trailing.rest, now: session.clock.now());
+    // «lf», «ytn» — «да» и «нет», набранные не в той раскладке.
+    if (pending != null && ConfirmationReply.of(answerUtterance) == null) {
+      for (final fixed in LayoutFix.candidates(message)) {
+        final answer = Utterance.analyze(fixed, now: session.clock.now());
+        if (ConfirmationReply.of(answer) != null) {
+          answerUtterance = answer;
+          break;
+        }
+      }
+    }
     // Уточняющий вопрос с вариантами (Clarification): выбранный вариант
     // разбирается заново как его каноническая команда — со всеми
     // правилами, в том числе «фраза о паролях не уходит в сеть»; «нет» —
@@ -1183,6 +1194,31 @@ final class AssistantController {
         }
       }
     }
+    // «yfgjvyb pfdnhf d 10 gjpdjybnm vfvt»: набрано не в той раскладке
+    // (LayoutFix). Только если фразу как есть не понял никто явно.
+    if (pending == null && depth == 0) {
+      for (final repaired in LayoutFix.candidates(message)) {
+        final fixed =
+            Utterance.analyze(repaired, now: session.clock.now()).withChat(
+          session.chatTaskId,
+          awaitingAnswer: _awaitingAnswer,
+          recentConnectorId: recent,
+        );
+        // Фраза о паролях не повторяется в чате ни в каком виде.
+        if (PasswordPhrases.looksLike(fixed) ||
+            SecretGuard.redact(repaired, known: knownSecret).guarded) {
+          break;
+        }
+        final fixedDecision = RoutePolicy.pick(
+          <ConnectorMatch>[
+            for (final (_, m) in collect(fixed, hideFromNetwork)) m,
+          ],
+          recentConnectorId: recent,
+        );
+        if (!LayoutFix.prefer(decision, fixedDecision)) continue;
+        return _repaired(repaired, fixedDecision.winner!, addressed: addressed);
+      }
+    }
     final best = decision.winner;
     if (decision.isAmbiguous) {
       session.lastConnectorId = null;
@@ -1256,6 +1292,72 @@ final class AssistantController {
 
     _leadByDuty(bestConnector);
     return _run(bestConnector, best);
+  }
+
+  /// Ответ на фразу, набранную не в той раскладке: чтение — сразу, с
+  /// пояснением «понял как «…»»; запись (задача, будильник, файлы,
+  /// действия склада…) — только после «Да»: исправление могло понять не
+  /// то, и ошибка должна стоить вопроса, а не действия.
+  Future<AssistantResponse> _repaired(
+    String text,
+    ConnectorMatch winner, {
+    required bool addressed,
+  }) async {
+    if (_readOnly(winner)) {
+      final response = await _route(text, addressed: addressed, depth: 1);
+      if (response.status == AssistantStatus.failed) return response;
+      return response.withText(
+        '${session.say('router.repaired', <String, String>{'text': text})} '
+        '${response.message}',
+        response.values,
+      );
+    }
+    final clarification = Clarification(
+      questionId: 'router.repaired.confirm',
+      options: <ClarifyOption>[
+        ClarifyOption(
+          label: 'Да',
+          text: text,
+          answers: const <String>{
+            'выполни',
+            'выполнить',
+            'давай',
+            'ага',
+            'верно',
+            'lf',
+          },
+          connectorId: winner.connectorId,
+        ),
+        const ClarifyOption(label: 'Нет', text: 'нет'),
+      ],
+    );
+    session.requestConfirmation(
+      PendingConfirmation(
+        connectorId: winner.connectorId,
+        commandId: winner.commandId,
+        payload: clarification,
+      ),
+    );
+    return session.reply(
+      'router.repaired.confirm',
+      values: <String, String>{'text': text},
+      intent: 'router.repaired',
+      status: AssistantStatus.needsClarification,
+      clarification: clarification,
+    );
+  }
+
+  /// Команды без записи: список задач, калькулятор, беседа, погода,
+  /// вопросы складу.
+  static bool _readOnly(ConnectorMatch match) {
+    final command = match.commandId;
+    if (command == 'task.list') return true;
+    if (command.startsWith('warehouse.')) {
+      return !command.startsWith('warehouse.act.');
+    }
+    return command.startsWith('calc.') ||
+        command.startsWith('talk.') ||
+        command.startsWith('weather.');
   }
 
   /// Выключенное расширение с подсказкой ([ConnectorInfo.offHint]), которое

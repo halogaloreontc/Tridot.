@@ -10,6 +10,7 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
   "title": "Нейтральный",
   "description": "Спокойно и по делу. Основа каталога: каждая запись есть здесь.",
   "protected": [
+    "router.repaired.confirm",
     "weather.network.off",
     "weather.offline.cached",
     "weather.offline.none",
@@ -128,6 +129,8 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "common.working": "Команда обрабатывается локально…",
     "router.ambiguous": "Не {м:понял|ж:поняла}, к чему относится команда: «{first}» или «{second}»? {вы:Уточните|ты:Уточни}, пожалуйста.",
     "router.failed": "Не удалось выполнить действие: {error}",
+    "router.repaired": "Набрано в английской раскладке — {м:понял|ж:поняла} как «{text}».",
+    "router.repaired.confirm": "Набрано в английской раскладке — {м:понял|ж:поняла} как «{text}». Выполнить?",
     "router.failed.quiet": "Не получилось выполнить действие.",
     "secret.redacted": "Похоже, в сообщении был пароль. Я {м:скрыл|ж:скрыла} его и в историю не {м:записал|ж:записала}. Пароли {вы:вносите|ты:вноси} в «Пароли» → «Добавить» — там защищённое поле.",
     "common.confirm.unclear": "Пока ничего не {м:сделал|ж:сделала}. {вы:Ответьте|ты:Ответь}, пожалуйста: «да» или «нет»?",
