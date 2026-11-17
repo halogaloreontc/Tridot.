@@ -93,3 +93,5 @@
 {"id": "calc-093", "text": "найди квадратный корень проблемы", "connector": "calc", "intent": "unknown", "route": "none", "note": "после «найди квадратный корень» нет числа", "source": "manual"}
 {"id": "calc-094", "text": "найди корень из", "connector": "calc", "intent": "unknown", "route": "none", "note": "после «найди корень из» нет числа", "source": "manual"}
 {"id": "calc-095", "text": "найди квадратный корень из 144", "connector": "calc", "intent": "calc.evaluate", "answer": "12", "source": "manual"}
+{"id": "calc-096", "text": "сколько будет полтора плюс два", "connector": "calc", "intent": "calc.evaluate", "answer": "3,5", "source": "manual"}
+{"id": "calc-097", "text": "полторы тысячи разделить на три", "connector": "calc", "intent": "calc.evaluate", "answer": "500", "source": "manual", "note": "«полторы тысячи» — не 1,5 и не пример без числа"}
