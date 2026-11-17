@@ -8,6 +8,7 @@ import '../services/task_service.dart';
 import '../skills/data/data_phrases.dart';
 import '../skills/talk/talk_phrases.dart';
 import 'connector.dart';
+import 'reminder_choices.dart';
 import 'task_chat_phrases.dart';
 import 'task_edit_phrases.dart';
 import 'task_rephrase.dart';
@@ -1906,19 +1907,19 @@ final class TasksConnector
     AssistantSession session, {
     bool created = false,
   }) {
-    final late = session.clock.now().hour >= 18;
-    final first = late ? 'Через час' : 'Сегодня вечером';
+    // Варианты — по времени суток, срок в кнопке — числами
+    // (ReminderChoices): нажатая поздно кнопка спросит, а не поставит
+    // прошедшее время.
     final clarification = Clarification(
       questionId: created ? 'task.created.askWhen' : 'task.remind.when',
       options: <ClarifyOption>[
-        ClarifyOption(
-          label: first,
-          text: 'Поставь срок «${task.title}» ${first.toLowerCase()}',
-        ),
-        ClarifyOption(
-          label: 'Завтра утром',
-          text: 'Поставь срок «${task.title}» завтра утром',
-        ),
+        for (final choice in ReminderChoices.forNow(session.clock.now()))
+          ClarifyOption(
+            label: choice.label,
+            text: 'Поставь срок «${task.title}» '
+                '${ReminderChoices.dueText(choice.at)}',
+            answers: choice.answers,
+          ),
         ClarifyOption(
           label: 'Выбрать время',
           text: 'Выбрать время для «${task.title}»',
