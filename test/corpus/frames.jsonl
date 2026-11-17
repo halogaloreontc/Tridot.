@@ -1,0 +1,39 @@
+{"id":"frm-001","text":"будь добр, запиши встречу с клиентом завтра в 15:00","intent":"createTask","title":"Встреча с клиентом","due":"2026-11-03T15:00","precision":"dateTime","source":"manual","note":"обёртка снята (CommandFrame): тот же навык той же командой — чище название"}
+{"id":"frm-002","text":"так, купить хлеб","intent":"createTask","title":"Купить хлеб","source":"manual"}
+{"id":"frm-003","text":"в общем, напомни завтра купить хлеб","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"frm-004","text":"давай-ка перенеси встречу на завтра","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-03","precision":"date","source":"manual","note":"не задача «Ка встречу»"}
+{"id":"frm-005","text":"перенеси-ка встречу на завтра","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"frm-006","text":"запиши себе купить хлеб","intent":"createTask","title":"Купить хлеб","source":"manual","note":"не «Себе купить хлеб»"}
+{"id":"frm-007","text":"будь добр, что у меня на завтра?","intent":"listTasks","source":"manual"}
+{"id":"frm-008","text":"итак, что у меня на завтра","intent":"listTasks","source":"manual"}
+{"id":"frm-009","text":"можешь показать задачи на завтра?","intent":"listTasks","source":"manual"}
+{"id":"frm-010","text":"а можешь отметить отчёт выполненным?","intent":"completeTask","targetQuery":"Отчёт","source":"manual","note":"просьба вопросом: инфинитив из таблицы — повелительное, «?» снят"}
+{"id":"frm-011","text":"короче, добавь заметку: проверить накладные","intent":"task.edit","form":{"kind":"note","text":"проверить накладные"},"after":"tasks","source":"manual","note":"правка текущей задачи, а не задачи «короче»"}
+{"id":"frm-012","text":"так, поставь будильник на 7","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual"}
+{"id":"frm-013","text":"если тебе не трудно, поставь будильник на 7","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual"}
+{"id":"frm-014","text":"а ты можешь поставить таймер на 5 минут?","connector":"alarm","intent":"alarm.timer","form":{"seconds":"300"},"source":"manual"}
+{"id":"frm-015","text":"будь добр, сколько будет 2+2*2","connector":"calc","intent":"calc.evaluate","answer":"6","source":"manual"}
+{"id":"frm-016","text":"эээ 15% от 2400","connector":"calc","intent":"calc.evaluate","answer":"360","source":"manual"}
+{"id":"frm-017","text":"смотри, корень из 144","connector":"calc","intent":"calc.evaluate","answer":"12","source":"manual"}
+{"id":"frm-018","text":"короче, привет","connector":"talk","intent":"talk.greet","source":"manual","note":"фразу как есть не понял никто — берётся без обёртки, хоть это и запасной ответ беседы"}
+{"id":"frm-019","text":"будьте любезны, покажи пароль от вк","connector":"passwords","intent":"passwords.reveal","source":"manual"}
+{"id":"frm-020","text":"а можешь запереть пароли?","connector":"passwords","intent":"passwords.lock","source":"manual"}
+{"id":"frm-021","text":"не мог бы ты сделать бэкап?","connector":"data","intent":"data.clarify","source":"manual"}
+{"id":"frm-022","text":"слушай, а сконвертируй видео в mp3","connector":"converter","intent":"converter.convert","form":{"target":"mp3"},"source":"manual"}
+{"id":"frm-023","text":"а можешь сжать файлы в zip?","connector":"archiver","intent":"archiver.zip","source":"manual"}
+{"id":"frm-024","text":"плиз, сожми файлы в zip","connector":"archiver","intent":"archiver.zip","source":"manual"}
+{"id":"frm-025","text":"будь добр, скачай ролик https://youtu.be/abc","connector":"ytdl","intent":"ytdl.download","source":"manual"}
+{"id":"frm-026","text":"слышь, где лежит 64115","connector":"warehouse","intent":"warehouse.where","form":{"q":"64115"},"source":"manual"}
+{"id":"frm-027","text":"короче, что пришло за неделю","connector":"warehouse","intent":"warehouse.week","source":"manual"}
+{"id":"frm-028","text":"что умеет склад, пожалуйста","connector":"warehouse","intent":"warehouse.help","source":"manual"}
+{"id":"frm-029","text":"ладно, удали этот файл","connector":"files","intent":"files.delete","after":"converter","source":"manual"}
+{"id":"frm-030","text":"так держать","connector":"talk","intent":"talk.reaction","source":"manual","note":"«так» без запятой — не вступление"}
+{"id":"frm-031","text":"короче говоря, отчёт готов","intent":"unknown","route":"none","source":"manual","note":"«короче говоря» — часть фразы"}
+{"id":"frm-032","text":"будь добр к людям","intent":"unknown","route":"none","source":"manual","note":"«будь добр» без команды после — не обёртка"}
+{"id":"frm-033","text":"напомни сказать маме спасибо","intent":"createTask","title":"Сказать маме спасибо","source":"manual","note":"«спасибо» после «сказать» — часть дела"}
+{"id":"frm-034","text":"ок, всё понял, спасибо!","connector":"talk","intent":"talk.thanks","source":"manual","note":"без обёртки было бы «всё понял» — догадка о сделанном; фраза как есть — реплика беседы"}
+{"id":"frm-035","text":"ну спасибо","connector":"talk","intent":"talk.thanks","source":"manual"}
+{"id":"frm-036","text":"слушай музыку","intent":"unknown","route":"none","source":"manual"}
+{"id":"frm-037","text":"не мог бы ты напомнить мне, как тебя зовут?","intent":"unknown","route":"none","source":"manual","note":"вопрос после инфинитива — фраза как есть, не задача"}
+{"id":"frm-038","text":"а можешь рассказать анекдот?","intent":"unknown","route":"none","source":"manual"}
+{"id":"frm-039","text":"добавь заметку: проверить накладные, пожалуйста","intent":"task.edit","form":{"kind":"note","text":"проверить накладные"},"after":"tasks","source":"manual"}

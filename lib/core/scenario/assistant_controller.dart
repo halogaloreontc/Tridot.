@@ -16,6 +16,7 @@ import '../replies/reply_library.dart';
 import '../services/clock.dart';
 import '../skills/passwords/passwords_phrases.dart';
 import 'command_spans.dart';
+import 'command_frame.dart';
 import 'route_policy.dart';
 
 export 'command_spans.dart';
@@ -954,7 +955,7 @@ final class AssistantController {
     }
     final connectors = _connectors;
     final recent = _recentConnectorId;
-    final utterance =
+    var utterance =
         Utterance.analyze(message, now: session.clock.now()).withChat(
       session.chatTaskId,
       awaitingAnswer: _awaitingAnswer || session.pendingConfirmation != null,
@@ -963,7 +964,7 @@ final class AssistantController {
     // Фраза о паролях или просто со словом «пароль» (раздел 5.9): её не
     // получает ни один сетевой коннектор — ни в match, ни в уточнении
     // ответа, при любой уверенности, включён навык или нет.
-    final hideFromNetwork = PasswordPhrases.looksLike(utterance);
+    var hideFromNetwork = PasswordPhrases.looksLike(utterance);
     final pendingAsker = session.pendingSpeaker;
     final pending = session.takePendingConfirmation();
     final asker = pending == null
@@ -1086,19 +1087,24 @@ final class AssistantController {
         status: AssistantStatus.noAction,
       );
     }
-    final candidates = <(Connector, ConnectorMatch)>[];
-    for (final connector in connectors) {
-      if (hideFromNetwork && connector.info.requiresNetwork) continue;
-      final ConnectorMatch? match;
-      try {
-        match = connector.match(utterance);
-      } catch (error) {
-        // Ошибка в одном коннекторе не должна ломать остальные.
-        continue;
+    List<(Connector, ConnectorMatch)> collect(Utterance u, bool hide) {
+      final found = <(Connector, ConnectorMatch)>[];
+      for (final connector in connectors) {
+        if (hide && connector.info.requiresNetwork) continue;
+        final ConnectorMatch? match;
+        try {
+          match = connector.match(u);
+        } catch (error) {
+          // Ошибка в одном коннекторе не должна ломать остальные.
+          continue;
+        }
+        if (match == null || match.confidence <= 0) continue;
+        found.add((connector, match));
       }
-      if (match == null || match.confidence <= 0) continue;
-      candidates.add((connector, match));
+      return found;
     }
+
+    var candidates = collect(utterance, hideFromNetwork);
     if (confirming != null && owner != null) {
       // «Да, купил хлеб», «нет, не купил»: ответ с пояснением. Если в
       // пояснении явная команда («нет, добавь задачу молоко»), это уже
@@ -1146,10 +1152,37 @@ final class AssistantController {
         );
       }
     }
-    final decision = RoutePolicy.pick(
+    var decision = RoutePolicy.pick(
       <ConnectorMatch>[for (final (_, m) in candidates) m],
       recentConnectorId: recent,
     );
+    // «Так, поставь будильник на 7», «будь добр, покажи пароль от вк»:
+    // разговорная обёртка (CommandFrame). Только без ждущего вопроса —
+    // ответ «да, купил хлеб» разобран выше по исходной фразе.
+    if (pending == null) {
+      final framedText =
+          CommandFrame.strip(message, fromVoice: session.fromVoice);
+      if (framedText != null) {
+        final framed =
+            Utterance.analyze(framedText, now: session.clock.now()).withChat(
+          session.chatTaskId,
+          awaitingAnswer: _awaitingAnswer,
+          recentConnectorId: recent,
+        );
+        final framedHide = hideFromNetwork || PasswordPhrases.looksLike(framed);
+        final framedCandidates = collect(framed, framedHide);
+        final framedDecision = RoutePolicy.pick(
+          <ConnectorMatch>[for (final (_, m) in framedCandidates) m],
+          recentConnectorId: recent,
+        );
+        if (CommandFrame.prefer(decision, framedDecision)) {
+          utterance = framed;
+          hideFromNetwork = framedHide;
+          candidates = framedCandidates;
+          decision = framedDecision;
+        }
+      }
+    }
     final best = decision.winner;
     if (decision.isAmbiguous) {
       session.lastConnectorId = null;

@@ -93,6 +93,30 @@ void main() {
     });
   });
 
+  group('разговорная обёртка (CommandFrame)', () {
+    test('«будь добр, …» — задача без обёртки в названии', () async {
+      final created = await assistant
+          .handle('будь добр, запиши встречу с клиентом завтра в 15:00');
+      expect(created.status, AssistantStatus.completed);
+      expect(created.task?.title, 'Встреча с клиентом');
+      expect(created.task?.dueAt, DateTime(2026, 11, 3, 15));
+    });
+
+    test('ответ на вопрос разбирается по исходной фразе', () async {
+      await assistant.handle('Добавь задачу «Купить хлеб»');
+      final asked = await assistant.handle('я купил хлеб');
+      expect(asked.status, AssistantStatus.needsClarification);
+      // «нет, …» — ответ «нет», а не команда без обёртки.
+      final answer = await assistant.handle('нет, не купил');
+      expect(answer.status, isNot(AssistantStatus.completed));
+      expect(
+        (await service.listActive()).single.title,
+        'Купить хлеб',
+        reason: 'задача не закрыта',
+      );
+    });
+  });
+
   group('дело от первого лица (ADR-033)', () {
     test('без команды — только с вопросом «Создать?»', () async {
       final asked = await assistant.handle('завтра я позвоню маме');

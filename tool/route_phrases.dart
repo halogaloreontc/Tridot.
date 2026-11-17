@@ -37,6 +37,7 @@ import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/personas/persona_address.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
+import 'package:local_assistant/core/scenario/command_frame.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
@@ -120,7 +121,25 @@ Map<String, Object?> routePhrase(
     if (match == null) continue;
     candidates.add(match);
   }
-  final decision = RoutePolicy.pick(candidates, recentConnectorId: after);
+  var decision = RoutePolicy.pick(candidates, recentConnectorId: after);
+  // Разговорная обёртка («так, …», «будь добр, …»): то же правило, что в
+  // маршрутизаторе и корпусном тесте (CommandFrame.prefer).
+  if (CommandFrame.strip(text) case final String framedText) {
+    final framed = Utterance.analyze(framedText, now: now)
+        .withChat(null, recentConnectorId: after);
+    final framedHidden = passwordsPhrase || PasswordPhrases.looksLike(framed);
+    final framedCandidates = <ConnectorMatch>[
+      for (final connector in appConnectors(now))
+        if (!(framedHidden && connector.info.requiresNetwork))
+          if (connector.match(framed) case final ConnectorMatch match) match,
+    ];
+    final framedDecision =
+        RoutePolicy.pick(framedCandidates, recentConnectorId: after);
+    if (CommandFrame.prefer(decision, framedDecision)) {
+      final resolved = routePhrase(framedText, now, after: after);
+      return <String, Object?>{...resolved, 'frame': framedText};
+    }
+  }
   final winner = decision.winner;
   // Фраза понята по контексту как фраза другого навыка: ответ — разбор
   // канонической фразы (один раз, как в маршрутизаторе).

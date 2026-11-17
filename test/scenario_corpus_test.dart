@@ -12,6 +12,7 @@ import 'package:local_assistant/core/models/bulk.dart';
 import 'package:local_assistant/core/models/task.dart';
 import 'package:local_assistant/core/personas/persona_address.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
+import 'package:local_assistant/core/scenario/command_frame.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
@@ -519,6 +520,21 @@ final class _Case {
         .withChat(null, recentConnectorId: after);
     var matches = matchesOf(utterance);
     var decision = RoutePolicy.pick(matches, recentConnectorId: after);
+    // Разговорная обёртка («так, …», «будь добр, …», «…, пожалуйста»):
+    // то же правило, что в маршрутизаторе (CommandFrame.prefer).
+    if (CommandFrame.strip(phrase) case final String framedText) {
+      final framed = Utterance.analyze(framedText, now: now)
+          .withChat(null, recentConnectorId: after);
+      final framedMatches = matchesOf(framed);
+      final framedDecision =
+          RoutePolicy.pick(framedMatches, recentConnectorId: after);
+      if (CommandFrame.prefer(decision, framedDecision)) {
+        phrase = framedText;
+        utterance = framed;
+        matches = framedMatches;
+        decision = framedDecision;
+      }
+    }
     // Фраза понята по контексту как фраза другого навыка: проверяется
     // разбор канонической фразы, как её разберёт маршрутизатор.
     if (decision.winner?.payload case final Reroute reroute) {
