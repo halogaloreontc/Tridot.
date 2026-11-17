@@ -10,6 +10,8 @@
 /// своих частей.
 library;
 
+import '../core/models/warehouse_card.dart';
+
 /// Версия договора склад ↔ помощник: склад сверяет её с `minApi` выпуска
 /// (`ASSIST_WEB_API` на сервере).
 const int widgetApi = 1;
@@ -253,8 +255,24 @@ abstract final class WidgetMessages {
     'download',
   };
 
-  /// Только `#/…` из букв, цифр и `/._-=&?`: страница склада переходит
-  /// внутри себя, а не по чужому адресу.
+  /// Позиция или приход из карточки ответа: `#/sku/<артикул>`,
+  /// `#/entry/<id>` (склад: `onOpenHash`). Id — %-кодом всё, кроме букв,
+  /// цифр и `._-`: кириллица, `/` и скобки в артикуле не ломают адрес,
+  /// склад раскодирует (`decodeURIComponent`). Другое — пусто (главная).
+  static String linkHash(String kind, String id) =>
+      WarehouseCard.openKinds.contains(kind) && id.isNotEmpty
+          ? safeHash('#/$kind/${_encodeId(id)}')
+          : '';
+
+  static String _encodeId(String id) =>
+      Uri.encodeComponent(id).replaceAllMapped(
+        RegExp(r"[!*'()~]"),
+        (Match m) => '%${m[0]!.codeUnitAt(0).toRadixString(16).toUpperCase()}',
+      );
+
+  /// Только `#/…` из букв, цифр и `/._-=&?%`: страница склада переходит
+  /// внутри себя, а не по чужому адресу. `%` — закодированный id
+  /// ([linkHash]): склад раскодирует его сам.
   static String safeHash(String hash) =>
-      RegExp(r'^#/[A-Za-z0-9/._=&?-]{0,200}$').hasMatch(hash) ? hash : '';
+      RegExp(r'^#/[A-Za-z0-9/._=&?%-]{0,200}$').hasMatch(hash) ? hash : '';
 }

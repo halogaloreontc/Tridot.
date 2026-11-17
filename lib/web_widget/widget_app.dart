@@ -252,6 +252,7 @@ final class _WidgetChatState extends State<WidgetChat> {
             card: warehouse,
             showSay: false,
             onOpen: _session.openWarehouse,
+            onOpenLink: _session.openWarehouseLink,
           ),
         ],
         if (card != null) ...<Widget>[

@@ -12,6 +12,7 @@ final class WarehouseCardView extends StatefulWidget {
     super.key,
     required this.card,
     this.onOpen,
+    this.onOpenLink,
     this.showSay = true,
   });
 
@@ -24,6 +25,12 @@ final class WarehouseCardView extends StatefulWidget {
   /// «Открыть склад»: страница склада из подключения; `null` — склад
   /// не подключён, кнопки нет.
   final VoidCallback? onOpen;
+
+  /// Открыть в складе вещь из строки: позицию или приход
+  /// ([WarehouseCard.openKinds]). Задан — строки с такой ссылкой нажимаются,
+  /// а у ответа про одну вещь кнопка внизу — «Открыть в складе» и ведёт к
+  /// ней. `null` — склад по ссылке не открыть (только «Открыть склад»).
+  final void Function(String kind, String id)? onOpenLink;
 
   static const double maxWidth = 460;
 
@@ -58,6 +65,7 @@ final class _WarehouseCardViewState extends State<WarehouseCardView> {
         ? card.rows
         : card.rows.take(WarehouseCardView.folded).toList();
     final folded = card.rows.length - rows.length;
+    final only = widget.onOpenLink == null ? null : card.onlyLink;
     return Align(
       alignment: AlignmentDirectional.centerStart,
       child: ConstrainedBox(
@@ -134,7 +142,17 @@ final class _WarehouseCardViewState extends State<WarehouseCardView> {
                         style: _style(13, color: colors.muted),
                       ),
                     ),
-                  if (widget.onOpen != null)
+                  if (only != null)
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton.icon(
+                        key: const ValueKey<String>('warehouse-card-open'),
+                        onPressed: () => widget.onOpenLink!(only.kind, only.id),
+                        icon: const Icon(Icons.open_in_new, size: 18),
+                        label: const Text('Открыть в складе'),
+                      ),
+                    )
+                  else if (widget.onOpen != null)
                     Align(
                       alignment: AlignmentDirectional.centerStart,
                       child: TextButton.icon(
@@ -153,54 +171,80 @@ final class _WarehouseCardViewState extends State<WarehouseCardView> {
     );
   }
 
+  /// Строка со ссылкой — нажимается целиком и открывает вещь в складе
+  /// (артикул — цветом ссылки); без ссылки — как была.
+  Widget _linked(VoidCallback? onTap, int index, String head, Widget child) {
+    if (onTap == null) return child;
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Открыть в складе: $head',
+      child: InkWell(
+        key: ValueKey<String>('warehouse-card-link-$index'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: child,
+      ),
+    );
+  }
+
   Widget _row(WarehouseRow row, int index) {
     final colors = context.colors;
     final head = row.title.isEmpty ? row.text : row.title;
     final sub = row.title.isEmpty ? '' : row.text;
+    final open = widget.onOpenLink;
+    final linked = open != null &&
+        WarehouseCard.openKinds.contains(row.linkKind) &&
+        row.linkId.isNotEmpty;
     return Padding(
       key: ValueKey<String>('warehouse-card-row-$index'),
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    if (head.isNotEmpty)
-                      WholeWordText(
-                        head,
-                        style: _style(
-                          14,
-                          color: colors.textStrong,
-                          weight: FontWeight.w600,
+          _linked(
+            linked ? () => open(row.linkKind, row.linkId) : null,
+            index,
+            head,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      if (head.isNotEmpty)
+                        WholeWordText(
+                          head,
+                          style: _style(
+                            14,
+                            color: linked ? colors.accent : colors.textStrong,
+                            weight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                    if (sub.isNotEmpty) WholeWordText(sub, style: _style(14)),
-                    if (row.note.isNotEmpty)
-                      WholeWordText(
-                        row.note,
-                        style: _style(13, color: colors.muted),
-                      ),
-                  ],
-                ),
-              ),
-              if (row.badge.isNotEmpty) ...<Widget>[
-                const SizedBox(width: 8),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 140),
-                  child: Text(
-                    row.badge,
-                    textAlign: TextAlign.end,
-                    style: _style(14, color: colors.textStrong)
-                        .copyWith(fontFeatures: _tabular),
+                      if (sub.isNotEmpty) WholeWordText(sub, style: _style(14)),
+                      if (row.note.isNotEmpty)
+                        WholeWordText(
+                          row.note,
+                          style: _style(13, color: colors.muted),
+                        ),
+                    ],
                   ),
                 ),
+                if (row.badge.isNotEmpty) ...<Widget>[
+                  const SizedBox(width: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 140),
+                    child: Text(
+                      row.badge,
+                      textAlign: TextAlign.end,
+                      style: _style(14, color: colors.textStrong)
+                          .copyWith(fontFeatures: _tabular),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
           for (final cell in row.rows)
             Padding(
