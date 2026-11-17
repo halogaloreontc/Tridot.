@@ -59,7 +59,7 @@
 {"id":"bulk-043","text":"а можешь перенести все просроченные на завтра?","intent":"rescheduleMany","scope":"overdue","due":"2026-11-03","precision":"date","source":"manual","note":"просьба вопросом — та же массовая команда"}
 {"id":"bulk-044","text":"эээ закрой все просроченные","intent":"completeMany","scope":"overdue","source":"manual","note":"междометие распознавателя не мешает массовой команде"}
 {"id":"bulk-045","text":"слышь, закрой все сегодняшние","intent":"completeMany","scope":"date:2026-11-02","source":"manual"}
-{"id":"bulk-neg-014","text":"заакрой все просроченне","intent":"unknown","route":"none","source":"manual","note":"опечатка в «просроченные»: массовой команды нет, но и одна задача «Просроченне» — не то, о чём просили"}
+{"id":"bulk-neg-014","text":"заакрой все просроченне","intent":"completeMany","scope":"overdue","source":"manual","note":"опечатка в «просроченные»: исправляет спасательный проход (TypoFix), и раз это запись — только после «Да»; не одна задача «Просроченне»"}
 {"id":"bulk-neg-015","text":"заверши всё по отчёту","intent":"unknown","route":"none","source":"manual","note":"«всё» сразу после глагола — не одна задача «По отчёту»"}
 {"id":"bulk-neg-016","text":"закрой все три задачи про отчёт","intent":"unknown","route":"none","source":"manual","note":"не одна задача «Три про отчёт»"}
 {"id":"bulk-neg-017","text":"перенеси всё про отчёт на пятницу","intent":"unknown","route":"none","source":"manual","note":"не одна задача «Всё про отчёт»"}

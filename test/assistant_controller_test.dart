@@ -169,6 +169,33 @@ void main() {
     });
   });
 
+  group('опечатки (TypoFix)', () {
+    test('чтение — сразу, с пояснением', () async {
+      await assistant.handle('Добавь задачу «Отчёт»');
+      final list = await assistant.handle('пакажи заадчи');
+      expect(list.intent, 'task.list');
+      expect(list.message, startsWith('Похоже на опечатку'));
+      expect(list.message, contains('«покажи задачи»'));
+    });
+
+    test('опечатка в сроке при понятой команде — срок на месте', () async {
+      final created =
+          await assistant.handle('напоми заввтра в 10 позвонить маме');
+      expect(created.status, AssistantStatus.completed);
+      expect(created.task?.title, 'Позвонить маме');
+      expect(created.task?.dueAt, DateTime(2026, 11, 3, 10));
+    });
+
+    test('запись по исправленной фразе — только после «да»', () async {
+      await service.create(title: 'Отчёт');
+      final asked = await assistant.handle('заакрой все просроченне');
+      expect(asked.replyId, 'router.typo.confirm');
+      expect((await service.listActive()), hasLength(1));
+      await assistant.handle('нет');
+      expect((await service.listActive()), hasLength(1));
+    });
+  });
+
   group('дело от первого лица (ADR-033)', () {
     test('без команды — только с вопросом «Создать?»', () async {
       final asked = await assistant.handle('завтра я позвоню маме');

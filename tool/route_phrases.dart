@@ -39,6 +39,7 @@ import 'package:local_assistant/core/personas/persona_address.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/command_frame.dart';
 import 'package:local_assistant/core/scenario/layout_fix.dart';
+import 'package:local_assistant/core/scenario/typo_fix.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
@@ -141,6 +142,25 @@ Map<String, Object?> routePhrase(
       return <String, Object?>{...resolved, 'frame': framedText};
     }
   }
+  // Опечатка в слове срока при понятой команде (TypoFix.sameCommand).
+  if (decision.winner != null) {
+    if (TypoFix.repairDue(text) case final String dueText) {
+      final fixed = Utterance.analyze(dueText, now: now)
+          .withChat(null, recentConnectorId: after);
+      final fixedDecision = RoutePolicy.pick(
+        <ConnectorMatch>[
+          for (final connector in appConnectors(now))
+            if (!(passwordsPhrase && connector.info.requiresNetwork))
+              if (connector.match(fixed) case final ConnectorMatch match) match,
+        ],
+        recentConnectorId: after,
+      );
+      if (TypoFix.sameCommand(decision, fixedDecision)) {
+        final resolved = routePhrase(dueText, now, after: after);
+        return <String, Object?>{...resolved, 'typo': dueText};
+      }
+    }
+  }
   // Набрано не в той раскладке (LayoutFix.prefer); фразы о паролях не
   // исправляются.
   for (final fixedText in LayoutFix.candidates(text)) {
@@ -158,6 +178,25 @@ Map<String, Object?> routePhrase(
     if (LayoutFix.prefer(decision, fixedDecision)) {
       final resolved = routePhrase(fixedText, now, after: after);
       return <String, Object?>{...resolved, 'layout': fixedText};
+    }
+  }
+  // Опечатка в слове команды (TypoFix.prefer).
+  if (TypoFix.repair(text) case final String typoText) {
+    final fixed = Utterance.analyze(typoText, now: now)
+        .withChat(null, recentConnectorId: after);
+    if (!PasswordPhrases.looksLike(fixed)) {
+      final fixedDecision = RoutePolicy.pick(
+        <ConnectorMatch>[
+          for (final connector in appConnectors(now))
+            if (!(passwordsPhrase && connector.info.requiresNetwork))
+              if (connector.match(fixed) case final ConnectorMatch match) match,
+        ],
+        recentConnectorId: after,
+      );
+      if (TypoFix.prefer(decision, fixedDecision)) {
+        final resolved = routePhrase(typoText, now, after: after);
+        return <String, Object?>{...resolved, 'typo': typoText};
+      }
     }
   }
   final winner = decision.winner;

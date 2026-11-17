@@ -18,6 +18,7 @@ import '../skills/passwords/passwords_phrases.dart';
 import 'command_spans.dart';
 import 'command_frame.dart';
 import 'layout_fix.dart';
+import 'typo_fix.dart';
 import 'route_policy.dart';
 
 export 'command_spans.dart';
@@ -1194,6 +1195,29 @@ final class AssistantController {
         }
       }
     }
+    // «напоми заввтра в 10 позвонить маме»: опечатка в слове срока при
+    // понятой команде — та же команда с исправленным сроком (TypoFix).
+    if (pending == null && decision.winner != null) {
+      final dueText = TypoFix.repairDue(message);
+      if (dueText != null) {
+        final fixed =
+            Utterance.analyze(dueText, now: session.clock.now()).withChat(
+          session.chatTaskId,
+          awaitingAnswer: _awaitingAnswer,
+          recentConnectorId: recent,
+        );
+        final fixedCandidates = collect(fixed, hideFromNetwork);
+        final fixedDecision = RoutePolicy.pick(
+          <ConnectorMatch>[for (final (_, m) in fixedCandidates) m],
+          recentConnectorId: recent,
+        );
+        if (TypoFix.sameCommand(decision, fixedDecision)) {
+          utterance = fixed;
+          candidates = fixedCandidates;
+          decision = fixedDecision;
+        }
+      }
+    }
     // «yfgjvyb pfdnhf d 10 gjpdjybnm vfvt»: набрано не в той раскладке
     // (LayoutFix). Только если фразу как есть не понял никто явно.
     if (pending == null && depth == 0) {
@@ -1217,6 +1241,34 @@ final class AssistantController {
         );
         if (!LayoutFix.prefer(decision, fixedDecision)) continue;
         return _repaired(repaired, fixedDecision.winner!, addressed: addressed);
+      }
+      // «постпвь будильник на 7», «склоько венских стульев»: опечатка в
+      // слове команды (TypoFix) — тем же путём, что раскладка.
+      final typoFixed = TypoFix.repair(message);
+      if (typoFixed != null) {
+        final fixed =
+            Utterance.analyze(typoFixed, now: session.clock.now()).withChat(
+          session.chatTaskId,
+          awaitingAnswer: _awaitingAnswer,
+          recentConnectorId: recent,
+        );
+        if (!PasswordPhrases.looksLike(fixed) &&
+            !SecretGuard.redact(typoFixed, known: knownSecret).guarded) {
+          final fixedDecision = RoutePolicy.pick(
+            <ConnectorMatch>[
+              for (final (_, m) in collect(fixed, hideFromNetwork)) m,
+            ],
+            recentConnectorId: recent,
+          );
+          if (TypoFix.prefer(decision, fixedDecision)) {
+            return _repaired(
+              typoFixed,
+              fixedDecision.winner!,
+              addressed: addressed,
+              reply: 'router.typo',
+            );
+          }
+        }
       }
     }
     final best = decision.winner;
@@ -1302,18 +1354,19 @@ final class AssistantController {
     String text,
     ConnectorMatch winner, {
     required bool addressed,
+    String reply = 'router.repaired',
   }) async {
     if (_readOnly(winner)) {
       final response = await _route(text, addressed: addressed, depth: 1);
       if (response.status == AssistantStatus.failed) return response;
       return response.withText(
-        '${session.say('router.repaired', <String, String>{'text': text})} '
+        '${session.say(reply, <String, String>{'text': text})} '
         '${response.message}',
         response.values,
       );
     }
     final clarification = Clarification(
-      questionId: 'router.repaired.confirm',
+      questionId: '$reply.confirm',
       options: <ClarifyOption>[
         ClarifyOption(
           label: 'Да',
@@ -1339,9 +1392,9 @@ final class AssistantController {
       ),
     );
     return session.reply(
-      'router.repaired.confirm',
+      '$reply.confirm',
       values: <String, String>{'text': text},
-      intent: 'router.repaired',
+      intent: reply,
       status: AssistantStatus.needsClarification,
       clarification: clarification,
     );

@@ -14,6 +14,7 @@ import 'package:local_assistant/core/personas/persona_address.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
 import 'package:local_assistant/core/scenario/command_frame.dart';
 import 'package:local_assistant/core/scenario/layout_fix.dart';
+import 'package:local_assistant/core/scenario/typo_fix.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
@@ -536,6 +537,22 @@ final class _Case {
         decision = framedDecision;
       }
     }
+    // Опечатка в слове срока при понятой команде (TypoFix.sameCommand).
+    if (decision.winner != null) {
+      if (TypoFix.repairDue(phrase) case final String dueText) {
+        final fixed = Utterance.analyze(dueText, now: now)
+            .withChat(null, recentConnectorId: after);
+        final fixedMatches = matchesOf(fixed);
+        final fixedDecision =
+            RoutePolicy.pick(fixedMatches, recentConnectorId: after);
+        if (TypoFix.sameCommand(decision, fixedDecision)) {
+          phrase = dueText;
+          utterance = fixed;
+          matches = fixedMatches;
+          decision = fixedDecision;
+        }
+      }
+    }
     // Набрано не в той раскладке: то же правило, что в маршрутизаторе
     // (LayoutFix.prefer); фразы о паролях не исправляются.
     for (final fixedText in LayoutFix.candidates(phrase)) {
@@ -551,6 +568,22 @@ final class _Case {
       matches = fixedMatches;
       decision = fixedDecision;
       break;
+    }
+    // Опечатка в слове команды: то же правило, что в маршрутизаторе
+    // (TypoFix.prefer); фразы о паролях не исправляются.
+    if (TypoFix.repair(phrase) case final String typoText) {
+      final fixed = Utterance.analyze(typoText, now: now)
+          .withChat(null, recentConnectorId: after);
+      final fixedMatches = matchesOf(fixed);
+      final fixedDecision =
+          RoutePolicy.pick(fixedMatches, recentConnectorId: after);
+      if (!PasswordPhrases.looksLike(fixed) &&
+          TypoFix.prefer(decision, fixedDecision)) {
+        phrase = typoText;
+        utterance = fixed;
+        matches = fixedMatches;
+        decision = fixedDecision;
+      }
     }
     // Фраза понята по контексту как фраза другого навыка: проверяется
     // разбор канонической фразы, как её разберёт маршрутизатор.
