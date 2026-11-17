@@ -293,7 +293,9 @@ void main() {
 
     test('опечатка: «Не до конца понял. Возможно, подойдёт: …»', () async {
       final assistant = _assistant();
-      final response = await assistant.handle('покажи задчи');
+      // Опечатка в первой букве: её не исправляет TypoFix (ADR-037) —
+      // остаются подсказки.
+      final response = await assistant.handle('покажи садачи');
       expect(response.intent, 'unknown');
       expect(response.replyId, AssistantController.unknownSuggestReply);
       expect(response.message, startsWith('Не до конца понял. Возможно, '));
@@ -303,7 +305,17 @@ void main() {
         <String>['task.list', 'task.today', 'plan.week'],
       );
       // В тексте — только подписи команд, не слова пользователя.
-      expect(response.message, isNot(contains('задчи')));
+      expect(response.message, isNot(contains('садачи')));
+    });
+
+    test(
+        'опечатку, которую можно исправить, исправляет TypoFix, а не '
+        'подсказки', () async {
+      final assistant = _assistant();
+      final response = await assistant.handle('покажи задчи');
+      expect(response.intent, 'task.list');
+      expect(response.suggestions, isNull);
+      expect(response.message, startsWith('Похоже на опечатку'));
     });
 
     test('голосом помощницы — «поняла»', () async {
@@ -367,7 +379,7 @@ void main() {
     test('счётчики выбора команд задают порядок равных', () async {
       final assistant = _assistant()
         ..commandUsage = const <String, int>{'task.today': 3};
-      final response = await assistant.handle('покажи задчи');
+      final response = await assistant.handle('покажи садачи');
       expect(response.suggestions!.commands.first.entryId, 'task.today');
     });
   });

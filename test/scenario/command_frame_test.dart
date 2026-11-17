@@ -47,6 +47,49 @@ void main() {
       test('«$input»', () => expect(CommandFrame.strip(input), expected));
     });
 
+    test('разговорные формы — словами команд', () {
+      const colloquial = <String, String>{
+        'кинь напоминалку на завтра позвонить маме':
+            'Напомни на завтра позвонить маме',
+        'не дай мне забыть позвонить маме': 'Напомни позвонить маме',
+        'закинь в задачи купить хлеб': 'Добавь задачу купить хлеб',
+        'вычеркни купить хлеб': 'Заверши купить хлеб',
+        'перекинь встречу на завтра': 'Перенеси встречу на завтра',
+        'поставь будилку на 7': 'Поставь будильник на 7',
+        'на 7 будильник поставь': 'Поставь будильник на 7',
+        'архив распакуй': 'Распакуй архив',
+        'купить хлеб добавь в задачи': 'Добавь задачу купить хлеб',
+        'в чём завтра идти на улицу': 'Что надеть завтра',
+      };
+      colloquial.forEach((String input, String expected) {
+        expect(CommandFrame.strip(input), expected, reason: input);
+      });
+    });
+
+    test('разговорное слово без своего сочетания — как есть', () {
+      for (final text in <String>[
+        'кинь мяч',
+        'перекинь деньги маме',
+        'вычеркни',
+        'всё, закрой',
+        'ну, перенеси',
+      ]) {
+        expect(
+          CommandFrame.strip(text),
+          anyOf(isNull, isNot(startsWith('Закрой'))),
+          reason: text,
+        );
+        expect(
+          CommandFrame.strip(text),
+          isNot(anyOf(startsWith('Добавь'), startsWith('Перенеси д'))),
+          reason: text,
+        );
+      }
+      expect(CommandFrame.strip('кинь мяч'), isNull);
+      expect(CommandFrame.strip('перекинь деньги маме'), isNull);
+      expect(CommandFrame.strip('всё, закрой'), isNull);
+    });
+
     test('не обёртка — фраза как есть', () {
       for (final text in <String>[
         'так держать',
