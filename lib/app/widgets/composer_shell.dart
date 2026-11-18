@@ -61,6 +61,7 @@ final class ComposerShell extends StatefulWidget {
     this.hasAttachments = false,
     this.hintText = 'Сообщение',
     this.maxLength,
+    this.onEditingComplete,
     this.voiceMode = VoiceButtonMode.hidden,
     this.onVoiceTap,
     this.onVoiceLongPress,
@@ -101,6 +102,11 @@ final class ComposerShell extends StatefulWidget {
 
   /// Предел длины текста; счётчик под полем не показываем.
   final int? maxLength;
+
+  /// Что делать после «Отправить» на клавиатуре; `null` — как у поля
+  /// Flutter (фокус уходит). Веб-помощник оставляет фокус в поле: иначе
+  /// Enter в пустом поле уводит фокус, и Escape больше не закрывает панель.
+  final VoidCallback? onEditingComplete;
 
   /// Микрофон при пустом поле (ADR-023): голосовой ввод в поле, без
   /// озвучивания ответов.
@@ -224,6 +230,14 @@ final class _ComposerShellState extends State<ComposerShell>
     final selection = value.selection.isValid
         ? value.selection
         : TextSelection.collapsed(offset: value.text.length);
+    // Своя вставка (Shift+Enter) минует ограничитель поля: длину
+    // проверяем сами.
+    final max = widget.maxLength;
+    if (max != null &&
+        value.text.length - (selection.end - selection.start) + text.length >
+            max) {
+      return;
+    }
     final updated =
         value.text.replaceRange(selection.start, selection.end, text);
     widget.controller.value = TextEditingValue(
@@ -395,6 +409,7 @@ final class _ComposerShellState extends State<ComposerShell>
               onSubmitted: (_) {
                 if (!widget.sending) widget.onSend();
               },
+              onEditingComplete: widget.onEditingComplete,
               style: TextStyle(
                 fontSize: 16,
                 color: context.colors.textStrong,

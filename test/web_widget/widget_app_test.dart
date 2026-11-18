@@ -171,6 +171,52 @@ void main() {
     expect(host.sent.last['type'], 'close');
   });
 
+  testWidgets('Enter в пустом поле не уводит фокус — Escape закрывает',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(WidgetApp(session: session));
+    await tester.runAsync(() async {
+      session.start();
+      host.emit(initMessage(device: 'desktop'));
+      await settle();
+    });
+    await tester.pump();
+    final input = find.byKey(const ValueKey<String>('widget-input'));
+    await tester.tap(input);
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.send);
+    await tester.pump();
+    expect(tester.widget<TextField>(input).focusNode!.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(host.sent.last['type'], 'close');
+  });
+
+  testWidgets(
+      'без распознавания речи долгое нажатие на поле не включает '
+      'голос', (WidgetTester tester) async {
+    await openPanel(
+      tester,
+      voice: const <String, Object?>{'available': false, 'reason': 'no-lang'},
+    );
+    final sent = host.sent.length;
+    await tester.longPress(find.byKey(const ValueKey<String>('widget-input')));
+    await tester.pump();
+    expect(host.sent.skip(sent).where((m) => m['type'] == 'voice'), isEmpty);
+  });
+
+  testWidgets('Shift+Enter не выводит текст за 500 знаков',
+      (WidgetTester tester) async {
+    await openPanel(tester);
+    final input = find.byKey(const ValueKey<String>('widget-input'));
+    await tester.tap(input);
+    await tester.enterText(input, 'а' * 500);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(tester.widget<TextField>(input).controller!.text, hasLength(500));
+  });
+
   testWidgets('смена темы склада доходит без нового входа',
       (WidgetTester tester) async {
     await openPanel(tester);

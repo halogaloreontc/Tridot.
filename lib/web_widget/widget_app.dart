@@ -367,7 +367,8 @@ final class _WidgetChatState extends State<WidgetChat> {
   /// «Диалог / Документ»: у помощника склада их нет. Глагол команды
   /// подсвечивается, как в приложении.
   Widget _composer(BuildContext context) {
-    _input.highlighter ??= _session.controller?.highlight;
+    // Помощник пересоздаётся при смене входа: подсветка — от текущего.
+    _input.highlighter = _session.controller?.highlight;
     final voice = _session.voice;
     final VoiceButtonMode mode;
     if (!voice.showButton) {
@@ -391,9 +392,14 @@ final class _WidgetChatState extends State<WidgetChat> {
         onSend: _submit,
         hintText: 'Спросите склад…',
         maxLength: 500,
+        // Enter не снимает фокус: следующий вопрос печатается сразу, и
+        // Escape по-прежнему закрывает панель.
+        onEditingComplete: () {},
         voiceMode: mode,
         onVoiceTap: _session.startVoice,
-        onVoiceLongPress: _session.startVoice,
+        // Долгое нажатие на пустое поле — голос, только если распознавание
+        // есть: иначе оно отняло бы у поля меню «Вставить».
+        onVoiceLongPress: voice.available ? _session.startVoice : null,
         onVoiceCancel: _session.cancelVoice,
         voicePartial: _session.listening
             ? (_session.partial.isEmpty ? 'Слушаю…' : _session.partial)
