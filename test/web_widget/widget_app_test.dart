@@ -66,7 +66,8 @@ void main() {
       await settle();
     });
     await tester.pump();
-    expect(find.text('что умеет склад'), findsOneWidget);
+    // Пузырь, строка разговора слева и название в заголовке.
+    expect(find.text('что умеет склад'), findsWidgets);
     expect(session.messages, hasLength(2));
   });
 
@@ -163,5 +164,110 @@ void main() {
     await tester.pump();
     expect(find.textContaining('шапке склада'), findsOneWidget);
     alone.dispose();
+  });
+
+  group('разговоры, проекты, задачи (ADR-038)', () {
+    Future<void> sized(WidgetTester tester, Size size) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
+
+    testWidgets('панель 420: меню по кнопке, разговор и задача в нём',
+        (WidgetTester tester) async {
+      await sized(tester, const Size(420, 800));
+      await openPanel(tester);
+      expect(find.byKey(const ValueKey<String>('widget-side')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey<String>('widget-menu')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey<String>('widget-side')), findsOneWidget);
+      expect(find.text('Новый разговор'), findsOneWidget);
+      expect(find.text('Задачи'), findsOneWidget);
+      expect(find.text('Проекты'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('side-sync')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('широкая панель: колонка слева без кнопки меню',
+        (WidgetTester tester) async {
+      await sized(tester, const Size(900, 800));
+      await openPanel(tester);
+      expect(find.byKey(const ValueKey<String>('widget-side')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('widget-menu')), findsNothing);
+      await tester.runAsync(() async {
+        await session.send('добавь задачу проверить акт 12-26');
+        await settle();
+      });
+      await tester.pump();
+      final task = session.taskList.single;
+      expect(find.byKey(ValueKey<String>('task-${task.id}')), findsOneWidget);
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(ValueKey<String>('task-done-${task.id}')));
+        await settle();
+      });
+      await tester.pump();
+      expect(session.taskList.single.status.name, 'done');
+    });
+
+    testWidgets('напоминание склада над лентой, «Отложить» убирает',
+        (WidgetTester tester) async {
+      await sized(tester, const Size(420, 800));
+      await openPanel(tester);
+      await tester.runAsync(() async {
+        host.emit(<String, Object?>{
+          'svz': 1,
+          'type': 'signal',
+          'items': <Object?>[
+            <String, Object?>{
+              'id': 'ship.collect:gr9:1',
+              'title': 'Отгрузка ГР-00009 не собрана 26 ч',
+              'actions': <Object?>[
+                <String, Object?>{
+                  'id': 'open',
+                  'label': 'Открыть',
+                  'open': '#/ship/gr9',
+                },
+              ],
+            },
+          ],
+        });
+        await settle();
+      });
+      await tester.pump();
+      expect(
+        find.text('Напоминание: Отгрузка ГР-00009 не собрана 26 ч'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey<String>('reminder-open')));
+      await tester.pump();
+      expect(host.sent.last['hash'], '#/ship/gr9');
+      await tester.tap(find.byKey(const ValueKey<String>('reminder-close')));
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey<String>('widget-reminders')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('склад умеет широкую панель — кнопка просит layout',
+        (WidgetTester tester) async {
+      await sized(tester, const Size(420, 800));
+      await tester.pumpWidget(WidgetApp(session: session));
+      await tester.runAsync(() async {
+        session.start();
+        host.emit(<String, Object?>{
+          ...initMessage(device: 'desktop'),
+          'layout': <String, Object?>{'can': true, 'wide': false},
+        });
+        await settle();
+      });
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey<String>('widget-wide')));
+      await tester.pump();
+      expect(host.sent.last['type'], 'layout');
+      expect(host.sent.last['wide'], isTrue);
+    });
   });
 }

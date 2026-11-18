@@ -13,8 +13,19 @@ library;
 import '../core/models/warehouse_card.dart';
 
 /// Версия договора склад ↔ помощник: склад сверяет её с `minApi` выпуска
-/// (`ASSIST_WEB_API` на сервере).
-const int widgetApi = 1;
+/// (`ASSIST_WEB_API` на сервере). 2 — напоминания (`signal`), открыть
+/// разговор (`open-chat`), «изменилось» (`changed`); выпуск по-прежнему с
+/// `minApi: 1` — открывается и на складе с договором 1.
+const int widgetApi = 2;
+
+/// Что умеет помощник сверх договора 1 — в `hello.caps`. `layout` —
+/// помощник просит у склада широкую панель на компьютере ([WidgetMessages.layout]).
+const List<String> widgetCaps = <String>[
+  'signal',
+  'open-chat',
+  'changed',
+  'layout',
+];
 
 /// Отметка сообщения договора.
 const String widgetMarker = 'svz';
@@ -93,6 +104,14 @@ sealed class HostEvent {
           },
           phone: data['device'] == 'phone',
           voice: VoiceCaps.fromJson(data['voice']),
+          canWide: switch (data['layout']) {
+            {'can': true} => true,
+            _ => false,
+          },
+          wide: switch (data['layout']) {
+            {'wide': true} => true,
+            _ => false,
+          },
         );
       case 'key':
         final sid = text('sid');
@@ -107,6 +126,21 @@ sealed class HostEvent {
         return const HostLogout();
       case 'visible':
         return HostVisible(data['on'] == true);
+      case 'signal':
+        final items = data['items'];
+        if (items is! List) return null;
+        return HostSignal(
+          reason: text('reason', 20),
+          focus: text('focus', 120),
+          items: <WidgetSignal>[
+            for (final item in items.take(5))
+              if (WidgetSignal.fromJson(item) case final WidgetSignal s) s,
+          ],
+        );
+      case 'open-chat':
+        final id = text('id', 80);
+        if (!RegExp(r'^[a-z0-9][a-z0-9:_\-.]{2,79}$').hasMatch(id)) return null;
+        return HostOpenChat(id);
       case 'voice-ev':
         final id = data['id'];
         final ev = data['ev'];
@@ -140,6 +174,8 @@ final class HostInit extends HostEvent {
     this.theme = '',
     this.phone = false,
     this.voice = const VoiceCaps(),
+    this.canWide = false,
+    this.wide = false,
   });
 
   /// Адрес склада, где лежат `assistant.json` и `api.php`.
@@ -157,6 +193,148 @@ final class HostInit extends HostEvent {
   /// Телефон: панель во весь экран.
   final bool phone;
   final VoiceCaps voice;
+
+  /// Склад умеет расширять панель на компьютере (`layout: {can: true}`).
+  final bool canWide;
+
+  /// Панель сейчас широкая (`layout: {wide: true}`).
+  final bool wide;
+}
+
+/// Напоминания склада (договор 2): до 5 штук, [focus] — какое показать
+/// первым; `reason` — `open`, `bell`, `badge`.
+final class HostSignal extends HostEvent {
+  const HostSignal({this.reason = '', this.focus = '', this.items = const []});
+  final String reason;
+  final String focus;
+  final List<WidgetSignal> items;
+}
+
+/// Открыть разговор [id] из личного хранилища склада.
+final class HostOpenChat extends HostEvent {
+  const HostOpenChat(this.id);
+  final String id;
+}
+
+/// Действие напоминания: ровно одно из [ask], [open], [ack], [my], [call],
+/// [date] (README склада, «Объект напоминания»).
+final class SignalAction {
+  const SignalAction({
+    required this.id,
+    required this.label,
+    this.ask,
+    this.open,
+    this.ack,
+    this.my,
+    this.call,
+    this.dateLabel,
+    this.confirmBy = 'button',
+  });
+
+  final String id;
+  final String label;
+
+  /// Вопрос помощнику — как будто его написали.
+  final String? ask;
+
+  /// Адрес на странице склада (`#/act/…`).
+  final String? open;
+
+  /// `my_signal_ack` с этим `op` (`snooze`, `dismiss`).
+  final String? ack;
+
+  /// Вызов `my_*`: `{action, body}`.
+  final Map<String, Object?>? my;
+
+  /// Расчёт действия склада (`*_check`) → карточка.
+  final Map<String, Object?>? call;
+
+  /// Выбор даты: подпись; дата подставляется в `{date}` тела [my].
+  final String? dateLabel;
+  final String confirmBy;
+
+  static SignalAction? fromJson(Object? json) {
+    if (json is! Map) return null;
+    String? str(Object? v, [int max = 200]) {
+      if (v is! String) return null;
+      final t = v.replaceAll(HostEvent._controls, ' ').trim();
+      if (t.isEmpty) return null;
+      return t.length > max ? t.substring(0, max) : t;
+    }
+
+    final id = str(json['id'], 40);
+    final label = str(json['label'], 60);
+    if (id == null || label == null) return null;
+    final ack = json['ack'];
+    final my = json['my'];
+    final call = json['call'];
+    final date = json['date'];
+    final open = str(json['open'], 256);
+    return SignalAction(
+      id: id,
+      label: label,
+      ask: str(json['ask'], 300),
+      open: open == null ? null : WidgetMessages.safeHash(open),
+      ack: ack is Map && ack['op'] is String ? ack['op']! as String : null,
+      my: my is Map && my['action'] is String && my['body'] is Map
+          ? Map<String, Object?>.from(my)
+          : null,
+      call: call is Map && call['action'] is String
+          ? Map<String, Object?>.from(call)
+          : null,
+      dateLabel: date is Map ? str(date['label'], 60) ?? 'Дата' : null,
+      confirmBy: json['confirmBy'] == 'word' ? 'word' : 'button',
+    );
+  }
+}
+
+/// Напоминание склада — один вид для колокольчика, помощника и Связного.
+final class WidgetSignal {
+  const WidgetSignal({
+    required this.id,
+    required this.title,
+    this.text = '',
+    this.level = 'info',
+    this.open = '',
+    this.seen = false,
+    this.actions = const <SignalAction>[],
+  });
+
+  final String id;
+  final String title;
+  final String text;
+  final String level;
+  final String open;
+  final bool seen;
+  final List<SignalAction> actions;
+
+  static WidgetSignal? fromJson(Object? json) {
+    if (json is! Map) return null;
+    String clean(Object? v, int max) {
+      if (v is! String) return '';
+      final t = v.replaceAll(HostEvent._controls, ' ').trim();
+      return t.length > max ? t.substring(0, max) : t;
+    }
+
+    final id = clean(json['id'], 120);
+    final title = clean(json['title'], 200);
+    if (id.isEmpty || title.isEmpty) return null;
+    final state = json['state'];
+    final actions = json['actions'];
+    return WidgetSignal(
+      id: id,
+      title: title,
+      text: clean(json['text'], 600),
+      level: json['level'] == 'warn' ? 'warn' : 'info',
+      open: WidgetMessages.safeHash(clean(json['open'], 256)),
+      seen: state is Map && state['seen'] == true,
+      actions: <SignalAction>[
+        if (actions is List)
+          for (final a in actions.take(8))
+            if (SignalAction.fromJson(a) case final SignalAction x) x,
+      ],
+    );
+  }
 }
 
 /// Новый ключ помощника после [WidgetMessages.needKey] — или почему его нет.
@@ -224,7 +402,28 @@ abstract final class WidgetMessages {
 
   /// Помощник загрузился и ждёт `init`.
   static Map<String, Object?> hello(String version) =>
-      _m('hello', <String, Object?>{'version': version, 'api': widgetApi});
+      _m('hello', <String, Object?>{
+        'version': version,
+        'api': widgetApi,
+        'caps': widgetCaps,
+      });
+
+  /// Что-то изменилось: `data` — склад, `sig` — напоминания, `my` — личные
+  /// записи. Склад перечитывает своё.
+  static Map<String, Object?> changed(List<String> what) => _m(
+        'changed',
+        <String, Object?>{
+          'what': <String>[
+            for (final w in what)
+              if (w == 'data' || w == 'sig' || w == 'my') w,
+          ],
+        },
+      );
+
+  /// Широкая панель на компьютере ([HostInit.canWide]): список разговоров
+  /// слева, разговор справа.
+  static Map<String, Object?> layout({required bool wide}) =>
+      _m('layout', <String, Object?>{'wide': wide});
 
   /// Ключ устарел или отозван (403 `need: login`, 401 без пароля склада):
   /// странице — получить новый `assist_web_key`.
