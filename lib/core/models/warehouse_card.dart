@@ -102,6 +102,22 @@ final class WarehouseCard {
   static const int maxNested = 8;
   static const int maxText = 120;
 
+  /// Что склад умеет открыть по ссылке из карточки: позицию (`sku`) и
+  /// приход (`entry`). Ячейку — нет, она остаётся текстом.
+  static const Set<String> openKinds = <String>{'sku', 'entry'};
+
+  /// Ответ про одну вещь (одна позиция или один приход, склад показал
+  /// всё) — ссылка на неё: «Открыть в складе» ведёт прямо к ней.
+  ({String kind, String id})? get onlyLink {
+    if (hidden > 0 || more) return null;
+    final links = <({String kind, String id})>{
+      for (final r in rows)
+        if (openKinds.contains(r.linkKind) && r.linkId.isNotEmpty)
+          (kind: r.linkKind, id: r.linkId),
+    };
+    return links.length == 1 && rows.length == 1 ? links.first : null;
+  }
+
   static final RegExp _controls = RegExp(
     '[\\u0000-\\u001f\\u007f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]',
   );

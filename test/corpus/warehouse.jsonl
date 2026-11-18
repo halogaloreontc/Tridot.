@@ -37,41 +37,41 @@
 {"id":"wh-037","text":"без места","connector":"warehouse","intent":"warehouse.cell","source":"manual"}
 {"id":"wh-038","text":"что умеет склад","connector":"warehouse","intent":"warehouse.help","note":"своя фраза справки Tridot","source":"manual"}
 {"id":"wh-039","text":"найти 64115","connector":"warehouse","intent":"warehouse.where","note":"явная фраза склада сильнее неявной задачи по инфинитиву","source":"manual"}
-{"id":"wh-040","text":"сегодня","connector":"warehouse","intent":"unknown","note":"однословные фразы без поля склад не берёт","source":"manual"}
-{"id":"wh-041","text":"вчера","connector":"warehouse","intent":"unknown","source":"manual"}
+{"id":"wh-040","text":"сегодня","connector":"warehouse","intent":"unknown","route":"none","note":"однословные фразы без поля склад не берёт","source":"manual"}
+{"id":"wh-041","text":"вчера","connector":"warehouse","intent":"unknown","route":"none","source":"manual"}
 {"id":"wh-042","text":"помощь","connector":"talk","intent":"talk.capabilities","note":"«помощь» описания — слишком общее слово: отвечает беседа","source":"manual"}
 {"id":"wh-043","text":"привет","connector":"talk","intent":"talk.greet","note":"«привет» в help описания не перехватывает приветствие беседы","source":"manual"}
 {"id":"wh-044","text":"что ты умеешь","connector":"talk","intent":"talk.capabilities","note":"справка склада — только своими фразами","source":"manual"}
 {"id":"wh-045","text":"сколько будет 2+2","connector":"calc","intent":"calc.evaluate","note":"пример — калькулятору","source":"manual"}
-{"id":"wh-046","text":"сколько у меня задач","connector":"warehouse","intent":"unknown","note":"слова задач — не товар","source":"manual"}
-{"id":"wh-047","text":"найди задачу отчёт","connector":"warehouse","intent":"unknown","source":"manual"}
+{"id":"wh-046","text":"сколько у меня задач","connector":"warehouse","intent":"unknown","route":"none","note":"слова задач — не товар","source":"manual"}
+{"id":"wh-047","text":"найди задачу отчёт","connector":"warehouse","intent":"unknown","route":"none","source":"manual"}
 {"id":"wh-048","text":"Добавь задачу проверить, где лежит 64115","intent":"createTask","note":"образцы склада привязаны к началу и концу фразы","source":"manual"}
 {"id":"wh-049","text":"через 2 часа позвонить","intent":"createTask","note":"срок — не товар","source":"manual"}
-{"id":"wh-050","text":"найди время завтра","connector":"warehouse","intent":"unknown","note":"поле со сроком — не товар","source":"manual"}
-{"id":"wh-051","text":"где лежит 15.11","connector":"warehouse","intent":"unknown","note":"дата — не артикул","source":"manual"}
-{"id":"wh-052","text":"сколько тебе лет","connector":"warehouse","intent":"unknown","note":"вопрос помощнику — беседе","source":"manual"}
-{"id":"wh-053","text":"сколько сейчас времени","connector":"warehouse","intent":"unknown","source":"manual"}
+{"id":"wh-050","text":"найди время завтра","connector":"warehouse","intent":"unknown","route":"none","note":"поле со сроком — не товар","source":"manual"}
+{"id":"wh-051","text":"где лежит 15.11","connector":"warehouse","intent":"unknown","route":"talk","note":"дата — не артикул","source":"manual"}
+{"id":"wh-052","text":"сколько тебе лет","connector":"warehouse","intent":"unknown","route":"none","note":"вопрос помощнику — беседе","source":"manual"}
+{"id":"wh-053","text":"сколько сейчас времени","connector":"warehouse","intent":"unknown","route":"talk","source":"manual"}
 {"id":"wh-054","text":"215 - 3","connector":"calc","intent":"calc.evaluate","note":"с пробелами вокруг «-» — пример","source":"manual"}
-{"id":"wh-055","text":"где ты","connector":"warehouse","intent":"unknown","source":"manual"}
+{"id":"wh-055","text":"где ты","connector":"warehouse","intent":"unknown","route":"none","source":"manual"}
 {"id":"wh-056","text":"склад, напомни купить хлеб","intent":"createTask","note":"после обращения к складу — команда задач: склад её не берёт","source":"manual"}
 {"id":"wh-057","text":"на складе напомни проверить стулья","intent":"createTask","note":"обращение не отнимает «напомни»","source":"manual"}
 {"id":"wh-058","text":"склад, запиши купить хлеб","intent":"createTask","source":"manual"}
-{"id":"wh-059","text":"склад, напомнить купить хлеб","connector":"warehouse","intent":"unknown","note":"«напомнить» — слово задач, не товар","source":"manual"}
-{"id":"wh-060","text":"склад, спасибо","connector":"warehouse","intent":"unknown","note":"реплика после обращения — не товар","source":"manual"}
-{"id":"wh-061","text":"склад, готово","connector":"warehouse","intent":"unknown","source":"manual"}
-{"id":"wh-062","text":"склад, да","connector":"warehouse","intent":"unknown","source":"manual"}
-{"id":"wh-063","text":"склад, хорошо","connector":"warehouse","intent":"unknown","source":"manual"}
+{"id":"wh-059","text":"склад, напомнить купить хлеб","connector":"warehouse","intent":"unknown","route":"none","note":"«напомнить» — слово задач, не товар","source":"manual"}
+{"id":"wh-060","text":"склад, спасибо","connector":"warehouse","intent":"unknown","route":"none","note":"реплика после обращения — не товар","source":"manual"}
+{"id":"wh-061","text":"склад, готово","connector":"warehouse","intent":"unknown","route":"tasks","source":"manual"}
+{"id":"wh-062","text":"склад, да","connector":"warehouse","intent":"unknown","route":"none","source":"manual"}
+{"id":"wh-063","text":"склад, хорошо","connector":"warehouse","intent":"unknown","route":"none","source":"manual"}
 {"id":"wh-064","text":"сегодня","connector":"warehouse","intent":"warehouse.today","connected":true,"note":"роль «Кладовщик» и подключённый склад: «сегодня» — приходы без «склад, …»","source":"manual"}
 {"id":"wh-065","text":"вчера","connector":"warehouse","intent":"warehouse.yesterday","connected":true,"note":"роль «Кладовщик» и подключённый склад","source":"manual"}
 {"id":"wh-066","text":"64115","connector":"warehouse","intent":"warehouse.where","connected":true,"note":"роль «Кладовщик» и подключённый склад: голый артикул уверенно — «где лежит»","source":"manual"}
-{"id":"wh-067","text":"64115","connector":"warehouse","intent":"unknown","roles":["personal"],"connected":true,"note":"роль «Кладовщик» выключена: склад не отвечает, даже подключённый","source":"manual"}
-{"id":"wh-068","text":"где лежит 64115","connector":"warehouse","intent":"unknown","roles":["personal"],"connected":true,"note":"роль «Кладовщик» выключена","source":"manual"}
-{"id":"wh-069","text":"сегодня","connector":"warehouse","intent":"unknown","roles":["personal"],"connected":true,"note":"роль «Кладовщик» выключена","source":"manual"}
+{"id":"wh-067","text":"64115","connector":"warehouse","intent":"unknown","route":"none","roles":["personal"],"connected":true,"note":"роль «Кладовщик» выключена: склад не отвечает, даже подключённый","source":"manual"}
+{"id":"wh-068","text":"где лежит 64115","connector":"warehouse","intent":"unknown","route":"talk","roles":["personal"],"connected":true,"note":"роль «Кладовщик» выключена","source":"manual"}
+{"id":"wh-069","text":"сегодня","connector":"warehouse","intent":"unknown","route":"none","roles":["personal"],"connected":true,"note":"роль «Кладовщик» выключена","source":"manual"}
 {"id":"wh-070","text":"где лежит 64115","connector":"warehouse","intent":"warehouse.where","roles":["storekeeper"],"connected":true,"note":"только «Кладовщик», без «Личного»","source":"manual"}
 {"id":"wh-071","text":"Добавь задачу проверить приход на сегодня","intent":"createTask","connected":true,"note":"задачи с ролью «Кладовщик» и подключённым складом не меняются","source":"manual"}
 {"id":"wh-072","text":"сколько будет 2+2","connector":"calc","intent":"calc.evaluate","connected":true,"note":"калькулятор с подключённым складом не меняется","source":"manual"}
 {"id":"wh-073","text":"привет","connector":"talk","intent":"talk.greet","connected":true,"note":"беседа с подключённым складом: «привет» из справки описания не перехватывает","source":"manual"}
-{"id":"wh-074","text":"сегодня","connector":"warehouse","intent":"unknown","roles":["personal","storekeeper"],"note":"без подключения «сегодня» — не приходы","source":"manual"}
+{"id":"wh-074","text":"сегодня","connector":"warehouse","intent":"unknown","route":"none","roles":["personal","storekeeper"],"note":"без подключения «сегодня» — не приходы","source":"manual"}
 {"id":"wh-075","text":"перемести 3 венских стула из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","note":"пример действия перемещения (1.4.57)","source":"manual"}
 {"id":"wh-076","text":"переложи 64115 из 215-1-1-1","connector":"warehouse","intent":"warehouse.act.move","note":"куда — вопрос по ходу","source":"manual"}
 {"id":"wh-077","text":"перемести 3 стула в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","note":"без «откуда»: поиск по всем ячейкам (К16)","source":"manual"}
@@ -87,11 +87,11 @@
 {"id":"wh-087","text":"приход 318 проведён в 1с","connector":"warehouse","intent":"warehouse.act.post","note":"сообщение о сделанном","source":"manual"}
 {"id":"wh-089","text":"перенеси отчёт на завтра","intent":"rescheduleTask","note":"«перенеси» — глагол задач, не действие склада","source":"manual"}
 {"id":"wh-090","text":"закрой задачу отчёт","intent":"completeTask","note":"«закрой» — задачи","source":"manual"}
-{"id":"wh-091","text":"перемести задачу из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"unknown","note":"слово задач в {what} — не товар","source":"manual"}
+{"id":"wh-091","text":"перемести задачу из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"unknown","route":"none","note":"слово задач в {what} — не товар","source":"manual"}
 {"id":"wh-092","text":"закрой приход 318","connector":"warehouse","intent":"warehouse.act.post","status":"known_gap","note":"«закрой» — слово задач; правка маршрутизатора отложена (ADR-013)","source":"manual"}
 {"id":"wh-093","text":"перенеси 3 стула из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","status":"known_gap","note":"«перенеси» — слово задач; правка маршрутизатора отложена (ADR-013)","source":"manual"}
 {"id":"wh-094","text":"отметь проведение прихода утром","intent":"createTask","title":"Отметь проведение прихода","due":"2026-11-03T09:00","precision":"partOfDay","note":"слово срока — не номер прихода: в {no} нужна цифра (ревью 1.4.57)","source":"manual"}
-{"id":"wh-095","text":"проведи приход завтра","intent":"unknown","note":"«завтра» — не номер прихода, действие склада не берёт (ревью 1.4.57)","source":"manual"}
+{"id":"wh-095","text":"проведи приход завтра","intent":"unknown","route":"none","note":"«завтра» — не номер прихода, действие склада не берёт (ревью 1.4.57)","source":"manual"}
 {"id":"wh-096","text":"проведи приход ВЗ12","connector":"warehouse","intent":"warehouse.act.post","note":"номер с буквами и цифрой","source":"manual"}
 {"id":"wh-097","text":"перемести 3 стула в 303-зона приёмки","connector":"warehouse","intent":"warehouse.act.move","note":"зона с пробелом в имени — ячейка «куда»","source":"manual"}
 {"id":"wh-098","text":"переложи пуф из 303-зона приемки в 101-1-1","connector":"warehouse","intent":"warehouse.act.move","note":"зона с пробелом — ячейка «откуда»","source":"manual"}
@@ -114,4 +114,46 @@
 {"id":"wh-115","text":"стеллаж 303-2","connector":"warehouse","intent":"warehouse.cell","note":"стеллаж","source":"manual"}
 {"id":"wh-116","text":"перемести 2 стула в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","note":"без «откуда» — помощник спросит ячейку сам (DepotDesk требует from)","source":"manual"}
 {"id":"wh-117","text":"переложи 64115 из 215-1-1-1 в 215-1-1-2","connector":"warehouse","intent":"warehouse.act.move","note":"перемещение под своим логином; право moves проверяется по ask_me","source":"manual"}
-{"id":"wh-118","text":"кто я","connector":"warehouse","intent":"unknown","roles":["personal"],"note":"без роли «Кладовщик» склад не отвечает на «кто я»","source":"manual"}
+{"id":"wh-118","text":"кто я","connector":"warehouse","intent":"unknown","route":"talk","roles":["personal"],"note":"без роли «Кладовщик» склад не отвечает на «кто я»","source":"manual"}
+{"id":"wh-119","text":"сколько позиций на складе","connector":"warehouse","intent":"warehouse.count","form":{"how":"total"},"note":"вопрос обо всём складе, а не поиск товара «позиций на складе» (замечание владельца); склад общего числа не считает — честный ответ без запроса","source":"manual"}
+{"id":"wh-120","text":"сколько всего позиций на складе","connector":"warehouse","intent":"warehouse.count","form":{"how":"total"},"source":"manual"}
+{"id":"wh-121","text":"сколько товаров на складе","connector":"warehouse","intent":"warehouse.count","form":{"how":"total"},"source":"manual"}
+{"id":"wh-122","text":"сколько у нас всего товара","connector":"warehouse","intent":"warehouse.count","form":{"how":"total"},"source":"manual"}
+{"id":"wh-123","text":"сколько наименований на складе","connector":"warehouse","intent":"warehouse.count","form":{"how":"total"},"source":"manual"}
+{"id":"wh-124","text":"сколько венских стульев на складе","connector":"warehouse","intent":"warehouse.count","form":{"q":"венских стульев"},"source":"manual"}
+{"id":"wh-125","text":"сколько на складе 64115","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-126","text":"покажи остатки по 64115","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-127","text":"где лежит 64115, пожалуйста","connector":"warehouse","intent":"warehouse.where","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-128","text":"где лежит 64 115","connector":"warehouse","intent":"warehouse.where","form":{"q":"64115"},"note":"голос пишет артикул группами","source":"manual"}
+{"id":"wh-129","text":"где у нас лежат венские стулья","connector":"warehouse","intent":"warehouse.where","form":{"q":"венские стулья"},"source":"manual"}
+{"id":"wh-130","text":"где хранится 64115","connector":"warehouse","intent":"warehouse.where","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-131","text":"а где 64115 лежит?","connector":"warehouse","intent":"warehouse.where","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-132","text":"где найти стул венский","connector":"warehouse","intent":"warehouse.where","form":{"q":"стул венский"},"source":"manual"}
+{"id":"wh-133","text":"цена на 64115","connector":"warehouse","intent":"warehouse.price","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-134","text":"сколько на складе","connector":"warehouse","intent":"warehouse.count","form":{"how":"ask"},"note":"искать нечего — спросить, а не искать товар «на складе»","source":"manual"}
+{"id":"wh-135","text":"есть ли на складе 64115","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-136","text":"есть ли стул венский на складе","connector":"warehouse","intent":"warehouse.count","form":{"q":"стул венский"},"source":"manual"}
+{"id":"wh-137","text":"есть в наличии 64115?","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-138","text":"наличие 64115","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-139","text":"а венские стулья есть?","connector":"warehouse","intent":"warehouse.count","form":{"q":"венские стулья"},"connected":true,"note":"наличие без склада и артикула — только с подключённым складом роли «Кладовщик»","source":"manual"}
+{"id":"wh-140","text":"а венские стулья есть?","connector":"warehouse","intent":"unknown","route":"none","note":"склад не подключён: «а X есть?» — обычный вопрос","source":"manual"}
+{"id":"wh-141","text":"поищи 64115","connector":"warehouse","intent":"warehouse.where","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-142","text":"где мне найти 64115","connector":"warehouse","intent":"warehouse.where","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-143","text":"в какой ячейке лежит 64115","connector":"warehouse","intent":"warehouse.where","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-144","text":"по чём 64115","connector":"warehouse","intent":"warehouse.price","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-145","text":"какой остаток по артикулу 64115","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"source":"manual"}
+{"id":"wh-146","text":"венских стульев сколько осталось","connector":"warehouse","intent":"warehouse.count","form":{"q":"венских стульев"},"source":"manual"}
+{"id":"wh-147","text":"покажи ячейку 215-1-1-1","connector":"warehouse","intent":"warehouse.cell","form":{"cell":"215-1-1-1"},"source":"manual"}
+{"id":"wh-148","text":"какие поступления сегодня","connector":"warehouse","intent":"warehouse.today","source":"manual"}
+{"id":"wh-149","text":"приходы за последнюю неделю","connector":"warehouse","intent":"warehouse.week","source":"manual"}
+{"id":"wh-150","text":"что пришло за последние 7 дней","connector":"warehouse","intent":"warehouse.week","source":"manual"}
+{"id":"wh-151","text":"какие приходы без фотографий","connector":"warehouse","intent":"warehouse.nophoto","source":"manual"}
+{"id":"wh-152","text":"что сегодня пришло на склад","connector":"warehouse","intent":"warehouse.today","source":"manual"}
+{"id":"wh-153","text":"есть ли у меня задачи на завтра","intent":"listTasks","note":"«есть ли» — не наличие на складе","source":"manual"}
+{"id":"wh-154","text":"есть ли смысл ждать","connector":"warehouse","intent":"unknown","route":"none","connected":true,"source":"manual"}
+{"id":"wh-155","text":"есть ли резервная копия для восстановления?","connector":"warehouse","intent":"unknown","route":"none","connected":true,"source":"manual"}
+{"id":"wh-156","text":"сколько осталось до отпуска","connector":"warehouse","intent":"unknown","route":"talk","note":"не остаток товара «до отпуска»","source":"manual"}
+{"id":"wh-157","text":"сколько осталось до конца дня","connector":"warehouse","intent":"unknown","route":"talk","source":"manual"}
+{"id":"wh-158","text":"сколько стоит доллар","connector":"warehouse","intent":"unknown","route":"talk","note":"курс валюты, не цена товара","source":"manual"}
+{"id":"wh-159","text":"наличие задач","connector":"warehouse","intent":"unknown","route":"none","source":"manual"}
+{"id":"wh-160","text":"где лежит парль от почты","connector":"warehouse","intent":"unknown","route":"talk","connected":true,"note":"фраза о паролях и с опечаткой не уходит сетевому складу (раздел 5.9)","source":"review"}

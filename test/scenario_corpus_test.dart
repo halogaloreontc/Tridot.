@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/manifest/connection_slots.dart';
+import 'package:local_assistant/core/connectors/manifest/manifest_connector.dart';
 import 'package:local_assistant/core/connectors/manifest/manifest_format.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/extensions/extension_registry.dart';
@@ -11,6 +12,7 @@ import 'package:local_assistant/core/models/bulk.dart';
 import 'package:local_assistant/core/models/task.dart';
 import 'package:local_assistant/core/personas/persona_address.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
+import 'package:local_assistant/core/scenario/recognition_layers.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
@@ -128,6 +130,7 @@ const Set<String> _allowedKeys = <String>{
   'connected',
   'after',
   'form',
+  'route',
 };
 
 /// Что карточка конвертера получит из фразы: цель и качество, ключи по
@@ -146,6 +149,13 @@ String? _formOf(Object? payload) => switch (payload) {
           if (r.label case final String label) 'label': label,
           if (r.issue == AlarmIssue.date && r.at != null)
             'date': r.at!.toIso8601String().substring(0, 10),
+        }),
+      // Склад (ADR-031): поля запроса («q=64115») и, кроме обычной фразы
+      // описания, как понят вопрос: `how=total` — обо всём складе, `ask` —
+      // спросить, что искать.
+      final ManifestPayload p => _sortedForm(<String, String>{
+          ...p.slots,
+          if (p.how == 'total' || p.how == 'ask') 'how': p.how,
         }),
       // Погода (ADR-030): день (ISO), город в именительном падеже, диапазон.
       final WeatherAsk a => _sortedForm(<String, String>{
@@ -400,10 +410,28 @@ void _validate(Map<String, dynamic> json, String location) {
     if (json['intent'] != TasksConnector.editCommand &&
         connector != ConverterConnector.id &&
         connector != AlarmConnector.id &&
-        connector != WeatherConnector.id) {
-      fail('поле form бывает только у connector «converter», «alarm» и '
-          '«weather»');
+        connector != WeatherConnector.id &&
+        connector != ConnectionSlots.warehouse.id) {
+      fail('поле form бывает только у connector «converter», «alarm», '
+          '«weather» и «warehouse»');
     }
+  }
+  // Кого выберет маршрутизатор для фразы, которую ни один навык не должен
+  // понять как свою команду: `none`, `ambiguous` или id коннектора (беседа
+  // как запасной ответ, справочный вопрос, чужой навык). Обязательно у
+  // каждой строки с `intent: unknown`: иначе отрицательная строка задач,
+  // ушедшая складу или файлам, проходила бы тест.
+  final route = json['route'];
+  if (json['intent'] == 'unknown') {
+    if (route is! String ||
+        !(route == 'none' ||
+            route == 'ambiguous' ||
+            _connectorIds.contains(route))) {
+      fail('у intent: unknown поле route обязательно: none, ambiguous или '
+          'id коннектора ($_connectorIds)');
+    }
+  } else if (route != null) {
+    fail('поле route бывает только у intent: unknown');
   }
   final after = json['after'];
   if (after != null && (after is! String || !_connectorIds.contains(after))) {
@@ -475,7 +503,10 @@ final class _Case {
     // один сетевой коннектор (раздел 5.9) — то же правило, что в
     // AssistantController.
     List<ConnectorMatch> matchesOf(Utterance utterance) {
-      final passwordsPhrase = PasswordPhrases.looksLike(utterance);
+      final passwordsPhrase = RecognitionLayers.hidesFromNetwork(
+        utterance,
+        (String text) => Utterance.analyze(text, now: now),
+      );
       return <ConnectorMatch>[
         for (final connector in registry.enabledConnectors)
           if (!(passwordsPhrase && connector.info.requiresNetwork))
@@ -492,6 +523,28 @@ final class _Case {
         .withChat(null, recentConnectorId: after);
     var matches = matchesOf(utterance);
     var decision = RoutePolicy.pick(matches, recentConnectorId: after);
+    // Слои распознавания (ADR-037) — тот же код, что в маршрутизаторе
+    // (RecognitionLayers): обёртка, опечатка в слове срока, раскладка и
+    // опечатки, если как есть не понял никто явно.
+    final layered = RecognitionLayers.route<List<ConnectorMatch>>(
+      message: phrase,
+      utterance: utterance,
+      hide: false,
+      first: (found: matches, decision: decision),
+      router: (Utterance u, bool hide) {
+        final found = matchesOf(u);
+        return (
+          found: found,
+          decision: RoutePolicy.pick(found, recentConnectorId: after),
+        );
+      },
+      analyze: (String text) => Utterance.analyze(text, now: now)
+          .withChat(null, recentConnectorId: after),
+    );
+    phrase = layered.text;
+    utterance = layered.utterance;
+    matches = layered.found;
+    decision = layered.decision;
     // Фраза понята по контексту как фраза другого навыка: проверяется
     // разбор канонической фразы, как её разберёт маршрутизатор.
     if (decision.winner?.payload case final Reroute reroute) {
@@ -502,6 +555,8 @@ final class _Case {
     }
     if (expectedIntent != 'unknown') {
       compare('connector', _routed(decision), connectorId);
+    } else {
+      compare('route', _routed(decision) ?? 'none', json['route']);
     }
     if (connectorId != TasksConnector.id) {
       final own = matches

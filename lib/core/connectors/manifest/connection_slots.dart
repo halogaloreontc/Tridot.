@@ -59,6 +59,9 @@ abstract final class ConnectionSlots {
       'warehouse.help': 'Склад понимает: {list}.',
       'warehouse.ask': '{вы:Уточните|ты:Уточни}, что искать: {label}. '
           'Например: «{example}».',
+      'warehouse.total': 'Сколько всего позиций, склад пока не считает — '
+          'он отвечает про конкретный товар. {вы:Спросите|ты:Спроси}, '
+          'например: «{example}».',
       'warehouse.serverSaid': 'Склад ответил: {error}',
       'warehouse.notConnected': 'Склад не подключён. {вы:Подключите|ты:'
           'Подключи} его: $warehousePath.',

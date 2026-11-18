@@ -37,15 +37,19 @@ import 'package:local_assistant/core/connectors/connector.dart';
 import 'package:local_assistant/core/connectors/tasks_connector.dart';
 import 'package:local_assistant/core/personas/persona_address.dart';
 import 'package:local_assistant/core/scenario/assistant_controller.dart';
+import 'package:local_assistant/core/scenario/recognition_layers.dart';
 import 'package:local_assistant/core/scenario/scenario_parser.dart';
 import 'package:local_assistant/core/services/clock.dart';
 import 'package:local_assistant/core/services/task_service.dart';
+import 'package:local_assistant/core/skills/alarm/alarm_connector.dart';
 import 'package:local_assistant/core/skills/archiver/archiver_connector.dart';
 import 'package:local_assistant/core/skills/calculator/calculator_connector.dart';
 import 'package:local_assistant/core/skills/converter/converter_connector.dart';
 import 'package:local_assistant/core/skills/data/data_connector.dart';
+import 'package:local_assistant/core/skills/files/files_connector.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
+import 'package:local_assistant/core/skills/weather/weather_connector.dart';
 import 'package:local_assistant/core/skills/ytdl/ytdl_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
@@ -81,7 +85,11 @@ List<Connector> appConnectors(DateTime now) {
   final tasks = TaskService(repository: InMemoryTaskRepository(), clock: clock);
   return <Connector>[
     TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
-    warehouseConnector(builtIn: builtInManifest()),
+    // Тот же склад, что в корпусном тесте: описание DepotDesk 1.4.62.
+    warehouseConnector(
+      path: builtInManifestPath,
+      builtIn: builtInManifest(builtInManifestPath),
+    ),
     const CalculatorConnector(),
     TalkConnector(taskService: tasks),
     PasswordsConnector(),
@@ -93,6 +101,14 @@ List<Connector> appConnectors(DateTime now) {
     ConverterConnector(),
     // Загрузчик видео (ADR-024, шаг 3) — так же, на любой платформе.
     YtdlConnector(),
+    // Будильник, файлы и погода — как в корпусном тесте: без них promote
+    // записал бы отрицательной строке другой маршрут (поле route).
+    AlarmConnector(clock: clock),
+    FilesConnector(),
+    WeatherConnector(
+      backend: WeatherService.memory(clock: clock),
+      clock: clock,
+    ),
   ];
 }
 
@@ -102,6 +118,7 @@ Map<String, Object?> routePhrase(
   String message,
   DateTime now, {
   String? after,
+  bool layers = true,
 }) {
   // Обращение по имени в начале («Связной, …») маршрутизатор снимает до
   // разбора (AssistantController.resolve), корпусный тест — тоже.
@@ -111,7 +128,10 @@ Map<String, Object?> routePhrase(
   final candidates = <ConnectorMatch>[];
   // Фразу о паролях или со словом «пароль» не получает ни один сетевой
   // коннектор — ни в каком виде (раздел 5.9, AssistantController).
-  final passwordsPhrase = PasswordPhrases.looksLike(utterance);
+  final passwordsPhrase = RecognitionLayers.hidesFromNetwork(
+    utterance,
+    (String t) => Utterance.analyze(t, now: now),
+  );
   for (final connector in appConnectors(now)) {
     if (passwordsPhrase && connector.info.requiresNetwork) continue;
     // Как в корпусном тесте: ошибка коннектора — ошибка всей фразы (ответ
@@ -121,6 +141,43 @@ Map<String, Object?> routePhrase(
     candidates.add(match);
   }
   final decision = RoutePolicy.pick(candidates, recentConnectorId: after);
+  // Слои распознавания (ADR-037) — тот же код, что в маршрутизаторе и
+  // корпусном тесте (RecognitionLayers). Понятый текст разбирается заново
+  // без слоёв, как в маршрутизаторе.
+  if (layers) {
+    final layered = RecognitionLayers.route<List<ConnectorMatch>>(
+      message: text,
+      utterance: utterance,
+      hide: passwordsPhrase,
+      first: (found: candidates, decision: decision),
+      router: (Utterance u, bool hide) {
+        final hidden = hide ||
+            RecognitionLayers.hidesFromNetwork(
+              u,
+              (String t) => Utterance.analyze(t, now: now),
+            );
+        final found = <ConnectorMatch>[
+          for (final connector in appConnectors(now))
+            if (!(hidden && connector.info.requiresNetwork))
+              if (connector.match(u) case final ConnectorMatch match) match,
+        ];
+        return (
+          found: found,
+          decision: RoutePolicy.pick(found, recentConnectorId: after),
+        );
+      },
+      analyze: (String t) => Utterance.analyze(t, now: now)
+          .withChat(null, recentConnectorId: after),
+    );
+    if (layered.text != text) {
+      final resolved =
+          routePhrase(layered.text, now, after: after, layers: false);
+      return <String, Object?>{
+        ...resolved,
+        layered.repair == null ? 'frame' : 'repair': layered.text,
+      };
+    }
+  }
   final winner = decision.winner;
   // Фраза понята по контексту как фраза другого навыка: ответ — разбор
   // канонической фразы (один раз, как в маршрутизаторе).

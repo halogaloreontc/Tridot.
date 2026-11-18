@@ -1,0 +1,31 @@
+{"id":"typo-001","text":"пакажи заадчи","intent":"listTasks","source":"manual","note":"опечатки вне глагола задач исправляет спасательный проход (TypoFix): только если фразу как есть не понял никто; чтение — сразу, с пояснением"}
+{"id":"typo-002","text":"кааие у меня задачи","intent":"listTasks","source":"manual"}
+{"id":"typo-003","text":"напоми заввтра в 10 позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T10:00","precision":"dateTime","source":"manual","note":"запись после исправления — только после «Да»"}
+{"id":"typo-004","text":"постпвь будильник на 7","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual"}
+{"id":"typo-005","text":"поставвь будибьник на 7","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual"}
+{"id":"typo-006","text":"поставь тайймер на 5 минут","connector":"alarm","intent":"alarm.timer","form":{"seconds":"300"},"source":"manual"}
+{"id":"typo-007","text":"заспки 10 минют","connector":"alarm","intent":"alarm.timer","form":{"seconds":"600"},"source":"manual"}
+{"id":"typo-008","text":"сколькко будет 2+2*2","connector":"calc","intent":"calc.evaluate","answer":"6","source":"manual"}
+{"id":"typo-009","text":"скоько будет 125 умножирь на 4","connector":"calc","intent":"calc.evaluate","answer":"500","source":"manual"}
+{"id":"typo-010","text":"какая поггда завтра","connector":"weather","intent":"weather.day","form":{"day":"2026-11-03"},"source":"manual"}
+{"id":"typo-011","text":"прогнтз на неелю","connector":"weather","intent":"weather.week","form":{"range":"week"},"source":"manual"}
+{"id":"typo-012","text":"приивет","connector":"talk","intent":"talk.greet","source":"manual"}
+{"id":"typo-013","text":"рсскажи аенкдот","connector":"talk","intent":"talk.joke","source":"manual"}
+{"id":"typo-014","text":"сделай резирвную коппию всех данных","connector":"data","intent":"data.backup","source":"manual"}
+{"id":"typo-015","text":"отткрой даные приложения","connector":"data","intent":"data.open","source":"manual"}
+{"id":"typo-016","text":"удвли этот файл","connector":"files","intent":"files.delete","after":"converter","source":"manual"}
+{"id":"typo-017","text":"сконверитруй видео в mp3","connector":"converter","intent":"converter.convert","form":{"target":"mp3"},"source":"manual"}
+{"id":"typo-018","text":"скавай виедо https://example.com/v/1","connector":"ytdl","intent":"ytdl.download","source":"manual"}
+{"id":"typo-019","text":"рааспакуй арххив","connector":"archiver","intent":"archiver.extract","source":"manual"}
+{"id":"typo-020","text":"склоько венских стульев","connector":"warehouse","intent":"warehouse.count","form":{"q":"венских стульев"},"source":"manual"}
+{"id":"typo-021","text":"что в ячеке 215-1-1-1","connector":"warehouse","intent":"warehouse.cell","form":{"cell":"215-1-1-1"},"source":"manual"}
+{"id":"typo-022","text":"что пишло сегодня","connector":"warehouse","intent":"warehouse.today","source":"manual"}
+{"id":"typo-023","text":"непровдённые приходы","connector":"warehouse","intent":"warehouse.unposted","source":"manual"}
+{"id":"typo-024","text":"выключи будильник","intent":"unknown","route":"none","source":"manual","note":"«выключи» — не опечатка «включи»: приставка меняет смысл"}
+{"id":"typo-025","text":"наполни ванну вечером","intent":"unknown","route":"none","source":"manual","note":"настоящее слово, не «напомни»"}
+{"id":"typo-026","text":"двинь стол","intent":"unknown","route":"none","source":"manual","note":"короткие слова не исправляются («стол» — не «стул»)"}
+{"id":"typo-027","text":"обложи налогом завтра","intent":"unknown","route":"none","source":"manual"}
+{"id":"typo-028","text":"переноси коробки аккуратно","intent":"unknown","route":"none","source":"manual"}
+{"id":"typo-029","text":"напомни пить таблетки по утрам","intent":"createTask","title":"Пить таблетки по утрам","source":"review","note":"«по утрам» — не опечатка «утром»"}
+{"id":"typo-030","text":"запиши гулять с собакой по вечерам","intent":"createTask","title":"Гулять с собакой по вечерам","source":"review"}
+{"id":"typo-031","text":"добавь задачу «проверить заввтра склад»","intent":"createTask","title":"проверить заввтра склад","source":"review","note":"внутри кавычек опечатки не исправляются"}

@@ -134,7 +134,8 @@ void main() {
       final all = await tasks.listActive();
       expect(all, hasLength(1));
       expect(all.single.dueAt, DateTime(2026, 11, 3, 9));
-      expect(all.single.duePrecision, DuePrecision.partOfDay);
+      // Срок в кнопке — числами («3 ноября в 9:00»), поэтому время точное.
+      expect(all.single.duePrecision, DuePrecision.dateTime);
     });
 
     test('чат задачи: «напомни про них» — не задача «Них»', () async {
@@ -269,4 +270,118 @@ void main() {
       expect(Task.fromJson(broken).notes, isEmpty);
     });
   });
+
+  group('«Когда напомнить?» по времени суток (ReminderChoices)', () {
+    late _Clock clock;
+    late TaskService tasks;
+    late AssistantController assistant;
+
+    void at(int hour, [int minute = 0, int day = 2]) =>
+        clock.now_ = DateTime(2026, 11, day, hour, minute);
+
+    setUp(() {
+      clock = _Clock(DateTime(2026, 11, 2, 16, 30));
+      tasks = TaskService(repository: InMemoryTaskRepository(), clock: clock);
+      assistant = AssistantController(
+        connectors: <Connector>[
+          TasksConnector(
+            taskService: tasks,
+            parser: ScenarioParser(clock: clock),
+          ),
+          TalkConnector(taskService: tasks),
+        ],
+        clock: clock,
+      );
+    });
+
+    Future<List<String>> labels() async {
+      final asked = await assistant.handle('Напомни позвонить поставщику');
+      return <String>[
+        for (final option in asked.clarification!.options) option.label,
+      ];
+    }
+
+    test('днём — вечер сегодня и утро завтра', () async {
+      at(16, 30);
+      expect(
+        await labels(),
+        <String>['Сегодня вечером', 'Завтра утром', 'Выбрать время'],
+      );
+    });
+
+    test('с 18:00 — через час; после 21:00 — завтра утром и вечером', () async {
+      at(18, 40);
+      expect(
+        await labels(),
+        <String>['Через час', 'Завтра утром', 'Выбрать время'],
+      );
+      final hour = await assistant.handle('Через час');
+      expect(hour.status, AssistantStatus.completed);
+      expect(
+        (await tasks.listActive()).single.dueAt,
+        DateTime(2026, 11, 2, 19, 40),
+      );
+
+      at(23, 30);
+      final asked = await assistant.handle('Напомни купить корм');
+      expect(
+        <String>[for (final o in asked.clarification!.options) o.label],
+        <String>['Завтра утром', 'Завтра вечером', 'Выбрать время'],
+        reason: '«через час» в 23:30 — напоминание ночью',
+      );
+    });
+
+    test('ночью «утром» — сегодняшнее утро', () async {
+      at(1, 10, 3);
+      expect(await labels(), <String>['Утром', 'Вечером', 'Выбрать время']);
+      await assistant.handle('Утром');
+      expect(
+        (await tasks.listActive()).single.dueAt,
+        DateTime(2026, 11, 3, 9),
+      );
+    });
+
+    test('кнопка нажата поздно — вопрос, а не прошедший срок', () async {
+      at(16, 30);
+      final asked = await assistant.handle('Напомни позвонить поставщику');
+      final evening = asked.clarification!.options.first;
+      expect(evening.label, 'Сегодня вечером');
+      // Кнопку нажали в 20:30: «сегодня вечером» было бы 19:00 — прошло.
+      at(20, 30);
+      final late = await assistant.handle(evening.text);
+      expect(late.status, isNot(AssistantStatus.completed));
+      expect((await tasks.listActive()).single.dueAt, isNull);
+    });
+
+    test('после 21:00 набранное «сегодня» не выбирает «Завтра вечером»',
+        () async {
+      at(22, 15);
+      await assistant.handle('Напомни позвонить поставщику');
+      await assistant.handle('сегодня');
+      final due = (await tasks.listActive()).single.dueAt;
+      expect(due, isNot(DateTime(2026, 11, 3, 19)));
+    });
+
+    test('после полуночи «Завтра утром» не уезжает на день', () async {
+      at(22, 15);
+      final asked = await assistant.handle('Напомни позвонить поставщику');
+      final morning = asked.clarification!.options.first;
+      expect(morning.label, 'Завтра утром');
+      at(0, 10, 3);
+      await assistant.handle(morning.text);
+      expect(
+        (await tasks.listActive()).single.dueAt,
+        DateTime(2026, 11, 3, 9),
+      );
+    });
+  });
+}
+
+final class _Clock implements Clock {
+  _Clock(this.now_);
+
+  DateTime now_;
+
+  @override
+  DateTime now() => now_;
 }

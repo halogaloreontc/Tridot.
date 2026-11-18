@@ -1355,9 +1355,29 @@ final class _Lexer {
     return false;
   }
 
+  static final RegExp _oneAndHalf = RegExp(
+    r'полтор[аы](\s+тысяч[аи]?)?(?![а-я])',
+  );
+
   /// «двадцать пять», «сто двадцать», «две тысячи», «тысяча». Слова
   /// идут от старших разрядов к младшим: «пять двадцать» — не число.
   bool _readNumberWords() {
+    // «Полтора плюс два»: полтора — одно слово, 3/2.
+    // «Полторы тысячи» — 1500.
+    final half = _oneAndHalf.matchAsPrefix(text, _pos);
+    if (half != null) {
+      final thousand = half.group(1) != null;
+      _tokens.add(
+        _Token(
+          _Kind.number,
+          value: thousand
+              ? Rational.fromInt(1500)
+              : Rational(BigInt.from(3), BigInt.two),
+        ),
+      );
+      _pos = half.end;
+      return true;
+    }
     var total = 0;
     var current = 0;
     // Следующее слово должно быть младше этого ранга.

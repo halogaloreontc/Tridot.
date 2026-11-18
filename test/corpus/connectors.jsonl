@@ -3,4 +3,4 @@
 {"id":"conn-003","text":"64115 где лежит","connector":"warehouse","intent":"warehouse.where","source":"manual"}
 {"id":"conn-004","text":"Где лежит отчёт","connector":"warehouse","intent":"warehouse.where","note":"склад ищет и по названию: «отчёт» — тоже товар","source":"manual"}
 {"id":"conn-005","text":"Добавь задачу проверить, где лежит 64115","connector":"tasks","intent":"createTask","title":"Проверить, где лежит 64115","note":"команда создания сильнее вопроса склада","source":"manual"}
-{"id":"conn-006","text":"Где лежит 15.11","connector":"warehouse","intent":"unknown","note":"дата — не артикул","source":"manual"}
+{"id":"conn-006","text":"Где лежит 15.11","connector":"warehouse","intent":"unknown","route":"talk","note":"дата — не артикул","source":"manual"}

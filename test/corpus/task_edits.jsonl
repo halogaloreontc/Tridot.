@@ -52,12 +52,12 @@
 {"id": "edit-052", "text": "поставь будильник на 7", "connector": "alarm", "intent": "alarm.set", "form": {"hour": "7", "minute": "0"}}
 {"id": "edit-053", "text": "поставь задачу купить хлеб на завтра", "intent": "createTask", "title": "Купить хлеб", "due": "2026-11-03", "precision": "date"}
 {"id": "edit-054", "text": "добавь задачу купить молоко", "intent": "createTask", "title": "Купить молоко", "due": null}
-{"id": "edit-055", "text": "на завтра", "intent": "unknown", "note": "без разговора о задаче — не правка"}
-{"id": "edit-056", "text": "сегодня", "intent": "unknown", "after": "tasks", "note": "одно слово — подсказка роли, не срок задачи"}
+{"id": "edit-055", "text": "на завтра", "intent": "unknown", "route": "none", "note": "без разговора о задаче — не правка"}
+{"id": "edit-056", "text": "сегодня", "intent": "unknown", "route": "none", "after": "tasks", "note": "одно слово — подсказка роли, не срок задачи"}
 {"id": "edit-057", "text": "напомни мне позвонить маме", "intent": "createTask", "title": "Позвонить маме", "due": null}
 {"id": "edit-058", "text": "запиши задачу позвонить в банк", "intent": "createTask", "title": "Позвонить в банк", "due": null}
 {"id": "edit-059", "text": "добавь задачу «Пункт выдачи»", "intent": "createTask", "title": "Пункт выдачи", "due": null}
-{"id": "edit-060", "text": "отметь", "intent": "unknown"}
-{"id": "edit-061", "text": "переименуй", "intent": "unknown"}
+{"id": "edit-060", "text": "отметь", "intent": "unknown", "route": "none"}
+{"id": "edit-061", "text": "переименуй", "intent": "unknown", "route": "none"}
 {"id": "edit-063", "text": "Добавь задачу купить хлеб и молоко", "intent": "createTask", "title": "Купить хлеб и молоко", "due": null}
 {"id": "edit-064", "text": "поставь «Оплатить интернет» на послезавтра", "intent": "createTask", "title": "Оплатить интернет", "due": "2026-11-04", "precision": "date"}

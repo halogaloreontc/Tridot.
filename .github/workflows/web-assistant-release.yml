@@ -2,13 +2,15 @@
 #
 # Actions → «Выпуск веб-помощника» → Run workflow → версия и «что нового».
 # Сборка, подпись ключом из секрета SVYAZNOY_SIGN_KEY, проверка — как на
-# складе, загрузка в бакет (если заданы его секреты) и выпуск web-v<версия>
-# в Releases с архивом. Кнопка Run workflow появляется, когда этот файл
-# есть в основной ветке. Подробно: tool/widget_release/README.md.
+# складе, выпуск web-v<версия> в Releases с архивом и обновление
+# постоянного выпуска web-latest: оттуда склады сами берут обновления
+# (репозиторий публичный, бакет не нужен). Бакет — по желанию, если заданы
+# его секреты. Кнопка Run workflow появляется, когда этот файл есть в
+# основной ветке. Подробно: tool/widget_release/README.md.
 #
 # Секреты (Settings → Secrets and variables → Actions):
 #   SVYAZNOY_SIGN_KEY      обязательно: закрытый ключ PEM (создаётся на складе)
-#   SVYAZNOY_BUCKET        для автообновлений складов: имя бакета
+#   SVYAZNOY_BUCKET        по желанию — копия выпуска в бакете: имя бакета
 #   AWS_ACCESS_KEY_ID      статический ключ сервисного аккаунта Yandex Cloud
 #   AWS_SECRET_ACCESS_KEY  его секрет
 # Значения секретов в журнал не печатаются; ввод формы попадает в команды
@@ -102,7 +104,7 @@ jobs:
             3) echo 'upload=no' >> "$GITHUB_OUTPUT" ;;
             *)
               printf -v list '%s, ' "${missing[@]}"
-              fail 'Бакет настроен не до конца' "Для загрузки в бакет нужны все три секрета: SVYAZNOY_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Не хватает: ${list%, }. Без бакета удалите и остальные — выпуск будет только в Releases."
+              fail 'Бакет настроен не до конца' "Для загрузки в бакет нужны все три секрета: SVYAZNOY_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Не хватает: ${list%, }. Без бакета удалите и остальные — склады и так берут выпуск из Releases (web-latest)."
               ;;
           esac
 
@@ -182,7 +184,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           FP: ${{ steps.key.outputs.fingerprint }}
-          UPLOAD: ${{ steps.check.outputs.upload }}
         run: |
           set -euo pipefail
           zip="$OUT/svyaznoy-web-$VERSION.zip"
@@ -194,10 +195,8 @@ jobs:
             if [[ -n "$NOTES" ]]; then printf '%s\n\n' "$NOTES"; fi
             echo "Ключ издателя: $FP"
             echo
-            if [[ "$UPLOAD" == yes ]]; then
-              echo 'Склады с бакетом увидят обновление сами: Управление → Инструменты → Помощник → «Установить».'
-            fi
-            echo "Без бакета: скачайте svyaznoy-web-$VERSION.zip, на складе Управление → Инструменты → Помощник → «Загрузить архив…» → этот файл → «Установить». В первый раз «Загрузить архив…» — рядом с «Установить помощника» и ставит сразу."
+            echo 'Склады увидят обновление сами (выпуск web-latest): Управление → Инструменты → Помощник → «Установить».'
+            echo "Без автообновлений: скачайте svyaznoy-web-$VERSION.zip, на складе Управление → Инструменты → Помощник → «Загрузить архив…» → этот файл → «Установить». В первый раз «Загрузить архив…» — рядом с «Установить помощника» и ставит сразу."
           } > "$RUNNER_TEMP/notes.md"
           gh release create "$TAG" "$zip" "$OUT/latest.json" \
             --title "Веб-помощник $VERSION" \
@@ -209,7 +208,37 @@ jobs:
             echo "## Выпуск $VERSION"
             echo
             echo "- Releases → [$TAG]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG): svyaznoy-web-$VERSION.zip ($(( (size + 524288) / 1048576 )) МБ) и latest.json."
-            if [[ "$UPLOAD" != yes ]]; then
-              echo '- Бакет не настроен: на складе «Загрузить архив…» → этот zip → «Установить» (в первый раз — кнопка рядом с «Установить помощника», ставит сразу).'
-            fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Постоянный выпуск web-latest: один и тот же адрес latest.json для всех
+      # складов (AW_DEFAULT_UPDATES): .../releases/download/web-latest/latest.json.
+      # Предвыпуск — чтобы /releases/latest и выпуски приложения его не трогали.
+      # Сначала архив, потом latest.json: склад не увидит версию без архива.
+      - name: Постоянный выпуск web-latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          zip="$OUT/svyaznoy-web-$VERSION.zip"
+          if ! gh release view web-latest >/dev/null 2>&1; then
+            gh release create web-latest --prerelease --target "$GITHUB_SHA" \
+              --title 'Веб-помощник: последний выпуск' \
+              --notes 'Отсюда склады берут обновления сами. Выпуски по версиям — web-v<версия>.'
+          fi
+          gh release upload web-latest "$zip" --clobber
+          gh release upload web-latest "$OUT/latest.json" --clobber
+          # Прежние архивы не копятся: остаются latest.json и архив этой версии.
+          gh release view web-latest --json assets --jq '.assets[].name' | while read -r name; do
+            if [[ "$name" != latest.json && "$name" != "$(basename "$zip")" ]]; then
+              gh release delete-asset web-latest "$name" --yes
+            fi
+          done
+          url="$GITHUB_SERVER_URL/$GH_REPO/releases/download/web-latest/latest.json"
+          got="$(curl -fsSL --max-time 30 "$url" | jq -r .version || true)"
+          if [[ "$got" == "$VERSION" ]]; then
+            echo "- Склады увидят $VERSION сами (раз в сутки или кнопкой «Проверить»): $url" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning title=web-latest не отдаёт latest.json::Без входа latest.json не читается — репозиторий публичный? Склады возьмут выпуск только архивом («Загрузить архив…»)."
+            echo '- web-latest: latest.json без входа не читается — проверьте, что репозиторий публичный.' >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -485,6 +485,11 @@ final class WidgetSession extends ChangeNotifier {
   void openWarehouse([String hash = '']) =>
       host.post(WidgetMessages.open(hash));
 
+  /// Строка карточки или «Открыть в складе»: позиция или приход на
+  /// странице склада, панель на телефоне сворачивается.
+  void openWarehouseLink(String kind, String id) =>
+      openWarehouse(WidgetMessages.linkHash(kind, id));
+
   // ------------------------------------------------------------- голос
 
   /// Кнопка микрофона.

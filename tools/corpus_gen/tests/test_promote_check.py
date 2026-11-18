@@ -117,3 +117,45 @@ def test_fixture_matches_real_router(project: Path) -> None:
         match_keys = {"connector", "command", "confidence", "implicit", "fallback"}
         for match in got["matches"] + recorded["matches"]:
             assert set(match) == match_keys, case["text"]
+
+
+def test_negative_rows_record_who_routed_them(project: Path) -> None:
+    """У отрицательной строки (intent: unknown) promote пишет route — кого выбрал маршрутизатор.
+
+    Корпусный тест требует route у каждой такой строки и сверяет его с приложением: иначе
+    отрицательная фраза задач, ушедшая складу или файлам, проходила бы проверку.
+    """
+    config = config_for(project)
+    store = CandidateStore(config.work_dir)
+    texts = ["привет, как дела", "что-то совсем непонятное"]
+    pipeline.import_manual(config, store, texts, "ollama", "manual")
+    final = {"intent": "unknown", "title": None, "due": None, "precision": None, "issue": "none", "titleIssue": "none"}
+    for row in store.rows:
+        row.update(status="accepted", final=dict(final), final_by=["manual"], labels={})
+    store.save()
+    parse = {
+        "intent": "unknown",
+        "title": None,
+        "targetQuery": None,
+        "due": None,
+        "precision": None,
+        "issue": "none",
+        "titleIssue": "none",
+        "projects": [],
+        "scope": None,
+        "shift": None,
+    }
+    talk = {"connector": "talk", "command": "talk.greet", "confidence": 0.9, "implicit": False, "fallback": True}
+    router = FakeRouter(
+        {
+            texts[0]: {"connector": "talk", "command": "talk.greet", "matches": [talk], "parse": parse},
+            texts[1]: {"connector": None, "command": None, "matches": [], "parse": parse},
+        }
+    )
+
+    counts = pipeline.promote(config, store, router=router)
+
+    assert counts == {"active": 2}
+    lines = {line["text"]: line for line in read_jsonl(config.corpus_dir / pipeline.GENERATED_FILE)}
+    assert lines[texts[0]]["route"] == "talk"
+    assert lines[texts[1]]["route"] == "none"

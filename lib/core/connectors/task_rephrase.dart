@@ -1,3 +1,4 @@
+import 'first_person_verbs.dart';
 import 'verb_forms.dart';
 
 /// Перефразирование названий задач и заметок к ним (ADR-033) — только
@@ -93,15 +94,26 @@ abstract final class TaskRephrase {
     }
     if (i > 0 && i < words.length) {
       final next = keys[i];
-      final pastToInfinitive =
-          keys.take(i).any((String k) => k == 'я' || k == 'мы') &&
-                  VerbForms.isPastVerb(next)
-              ? VerbForms.toInfinitive(next)
-              : null;
+      final subject = keys.take(i).any((String k) => k == 'я' || k == 'мы');
+      final pastToInfinitive = subject && VerbForms.isPastVerb(next)
+          ? VerbForms.toInfinitive(next)
+          : null;
+      // «Я позвоню маме» → «Позвонить маме»: будущее время — только по
+      // закрытой таблице (ADR-033), «я кашу» — не глагол.
+      final futureToInfinitive =
+          subject ? FirstPersonVerbs.infinitive(next) : null;
       if (VerbForms.isInfinitive(next)) {
         words = words.sublist(i);
       } else if (pastToInfinitive != null) {
         words = <String>[pastToInfinitive, ...words.sublist(i + 1)];
+      } else if (futureToInfinitive != null) {
+        words = <String>[futureToInfinitive, ...words.sublist(i + 1)];
+      } else if (subject &&
+          (next == 'буду' || next == 'будем') &&
+          i + 1 < words.length &&
+          VerbForms.isInfinitive(keys[i + 1])) {
+        // «Я буду звонить маме по пятницам» → «Звонить маме по пятницам».
+        words = words.sublist(i + 1);
       }
     }
     text = words.join(' ').replaceAll(_edgeJunk, '');

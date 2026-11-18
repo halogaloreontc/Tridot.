@@ -228,7 +228,8 @@ void main() {
     testWidgets('опечатка: кнопки команд, выбор вставляет шаблон',
         (WidgetTester tester) async {
       final store = await _pump(tester);
-      await send(tester, 'сделй задачу купить хлеб');
+      // Опечатка в первой букве: TypoFix её не трогает (ADR-037).
+      await send(tester, 'зделай задачу купить хлеб');
       expect(find.textContaining('Не до конца понял'), findsOneWidget);
       expect(find.byKey(const Key('suggest-task.new')), findsOneWidget);
       expect(find.byKey(const Key('suggest-find')), findsOneWidget);

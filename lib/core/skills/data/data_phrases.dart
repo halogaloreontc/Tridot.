@@ -211,6 +211,12 @@ abstract final class DataPhrases {
     r'коп(?:ию|ия|ии|ировать|ируй|ирую|ирование)(?![а-я]))',
   );
 
+  /// «Из копии», «из последнего бэкапа», «из резервной копии».
+  static final RegExp _fromCopy = RegExp(
+    r'(?<![а-я])из\s+(?:[а-я]+\s+)?'
+    r'(?:бэкап|бекап|backup|резервн[а-я]*\s+коп|коп(?:ии|ий)(?![а-я]))',
+  );
+
   static final RegExp _device = RegExp(
     r'(?<![а-я])(?:телефон|смартфон|мобил|ноутбук|ноут|компьютер|комп|'
     r'планшет|айфон|устройств)[а-я]*',
@@ -258,9 +264,13 @@ abstract final class DataPhrases {
   );
 
   /// Действие по глаголу или существительному, без требований к форме.
+  /// «Из копии» — направление восстановления, какой бы ни был глагол:
+  /// «вытащи все данные из копии», «загрузи данные из бэкапа» — не новая
+  /// копия поверх старой.
   static DataAction? _looseAction(String text) {
     if (_restoreWord.hasMatch(text)) return DataAction.restore;
     if (_lockWord.hasMatch(text)) return DataAction.lock;
+    if (_fromCopy.hasMatch(text)) return DataAction.restore;
     if (_backupWord.hasMatch(text)) return DataAction.backup;
     if (_openWord.hasMatch(text)) return DataAction.open;
     return null;

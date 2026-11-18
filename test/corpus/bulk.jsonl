@@ -50,8 +50,17 @@
 {"id":"bulk-neg-006","text":"добавь задачу перенести все встречи на пятницу","intent":"createTask","title":"Перенести все встречи","due":"2026-11-06","precision":"date","source":"manual","note":"глагол переноса внутри названия новой задачи"}
 {"id":"bulk-neg-007","text":"заверши отчёт","intent":"completeTask","title":"Отчёт","source":"manual"}
 {"id":"bulk-neg-008","text":"закрой «Все задачи по ремонту»","intent":"completeTask","title":"Все задачи по ремонту","source":"manual","note":"«все» внутри кавычек — название"}
-{"id":"bulk-neg-009","text":"отменить","now":"2026-11-05T12:00","intent":"unknown","source":"manual","note":"отмена — «отмени», а инфинитив без предмета — не команда"}
+{"id":"bulk-neg-009","text":"отменить","now":"2026-11-05T12:00","intent":"unknown","route":"none","source":"manual","note":"отмена — «отмени», а инфинитив без предмета — не команда"}
 {"id":"bulk-neg-010","text":"перенеси задачу на завтра","intent":"rescheduleTask","title":null,"due":"2026-11-03","precision":"date","source":"manual"}
 {"id":"bulk-neg-011","text":"всё, закрой задачу","intent":"completeTask","title":null,"source":"manual","note":"«всё,» перед глаголом — конец реплики: завершение задачи из разговора"}
-{"id":"bulk-neg-013","text":"всё, закрой","intent":"unknown","source":"manual","note":"как и «закрой» без предмета — не команда и тем более не «закрой все задачи»"}
+{"id":"bulk-neg-013","text":"всё, закрой","intent":"unknown","route":"none","source":"manual","note":"как и «закрой» без предмета — не команда и тем более не «закрой все задачи»"}
 {"id":"bulk-neg-012","text":"всё, перенеси на пятницу","intent":"rescheduleTask","title":null,"due":"2026-11-06","precision":"date","source":"manual","note":"перенос задачи из разговора, не всех"}
+{"id":"bulk-042","text":"будь добр, перенеси все просроченные на завтра","intent":"rescheduleMany","scope":"overdue","due":"2026-11-03","precision":"date","source":"manual","note":"вступление перед глаголом не превращает массовую команду в перенос одной задачи «Будь добр, все просроченные»"}
+{"id":"bulk-043","text":"а можешь перенести все просроченные на завтра?","intent":"rescheduleMany","scope":"overdue","due":"2026-11-03","precision":"date","source":"manual","note":"просьба вопросом — та же массовая команда"}
+{"id":"bulk-044","text":"эээ закрой все просроченные","intent":"completeMany","scope":"overdue","source":"manual","note":"междометие распознавателя не мешает массовой команде"}
+{"id":"bulk-045","text":"слышь, закрой все сегодняшние","intent":"completeMany","scope":"date:2026-11-02","source":"manual"}
+{"id":"bulk-neg-014","text":"заакрой все просроченне","intent":"completeMany","scope":"overdue","source":"manual","note":"опечатка в «просроченные»: исправляет спасательный проход (TypoFix), и раз это запись — только после «Да»; не одна задача «Просроченне»"}
+{"id":"bulk-neg-015","text":"заверши всё по отчёту","intent":"unknown","route":"none","source":"manual","note":"«всё» сразу после глагола — не одна задача «По отчёту»"}
+{"id":"bulk-neg-016","text":"закрой все три задачи про отчёт","intent":"unknown","route":"none","source":"manual","note":"не одна задача «Три про отчёт»"}
+{"id":"bulk-neg-017","text":"перенеси всё про отчёт на пятницу","intent":"unknown","route":"none","source":"manual","note":"не одна задача «Всё про отчёт»"}
+{"id":"bulk-neg-018","text":"я закрыл все задачи по отчёту","intent":"completeTask","targetQuery":"По отчёту","source":"manual","note":"сообщение о сделанном (прошедшее время) — с подтверждением, «все» после него не запрещает"}

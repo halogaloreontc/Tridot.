@@ -222,8 +222,10 @@ abstract final class AlarmPhrases {
   };
 
   static const Map<String, int> _numberWords = <String, int>{
+    'ноль': 0,
     'один': 1,
     'одну': 1,
+    'одна': 1,
     'два': 2,
     'две': 2,
     'три': 3,
@@ -236,7 +238,13 @@ abstract final class AlarmPhrases {
     'десять': 10,
     'одиннадцать': 11,
     'двенадцать': 12,
+    'тринадцать': 13,
+    'четырнадцать': 14,
     'пятнадцать': 15,
+    'шестнадцать': 16,
+    'семнадцать': 17,
+    'восемнадцать': 18,
+    'девятнадцать': 19,
     'двадцать': 20,
     'тридцать': 30,
     'сорок': 40,
@@ -335,6 +343,15 @@ abstract final class AlarmPhrases {
       timer: kind == AlarmKind.timer,
     );
     reader.read();
+    // Число, которое не вошло ни во время, ни в длительность («на 5 и 6»,
+    // «в 7 через 2 дня»): лучше спросить, чем молча поставить не то.
+    if (reader.strayNumber && setVerb) {
+      return AlarmRequest(
+        kind: kind,
+        issue:
+            kind == AlarmKind.timer ? AlarmIssue.noDuration : AlarmIssue.noTime,
+      );
+    }
     // Время после будильника не названо, а вместо него — посторонние слова
     // («будильник не прозвенел», «поставь будильник на полку»): не его.
     if (reader.leftover && !reader.hasTime && !reader.hasDuration) {
@@ -518,6 +535,10 @@ final class _Reader {
   /// Остались непонятные слова.
   bool leftover = false;
 
+  /// Среди непонятых слов есть число: время или длительность прочитаны не
+  /// целиком.
+  bool strayNumber = false;
+
   bool get hasTime => hour != null || relative != null;
   bool get hasDuration => duration != null;
 
@@ -571,8 +592,14 @@ final class _Reader {
 
   void read() {
     while (_i < words.length) {
+      final start = _i;
       if (!_step()) {
-        if (!AlarmPhrases._tailFillers.contains(_word)) leftover = true;
+        _i = start;
+        final word = _word!;
+        if (!AlarmPhrases._tailFillers.contains(word)) leftover = true;
+        if (AlarmPhrases.number(word) != null || _clock.hasMatch(word)) {
+          strayNumber = true;
+        }
         _i++;
       }
     }
@@ -719,10 +746,12 @@ final class _Reader {
     return false;
   }
 
-  /// «7», «7:30», «семь», «7 часов 30 минут», «7 30».
+  /// «7», «7:30», «семь», «7 часов 30 минут», «7 30», «пять сорок пять»,
+  /// «шесть ноль пять», «без четверти семь».
   bool _time() {
     final word = _word;
     if (word == null || hour != null) return false;
+    if (word == 'без') return _minutesTo();
     final clock = _clock.firstMatch(word);
     if (clock != null) {
       hour = int.parse(clock.group(1)!);
@@ -735,15 +764,86 @@ final class _Reader {
     hour = h == 24 ? 0 : h;
     _i++;
     if (const <String>{'час', 'часа', 'часов'}.contains(_word)) _i++;
-    // «7 30», «7 часов 30 минут», «семь тридцать».
+    // «7 30», «7 часов 30 минут», «семь тридцать», «пять сорок пять»,
+    // «шесть ноль пять».
     final m = AlarmPhrases.number(_word ?? '');
-    if (m != null && m < 60 && m >= 0 && (_word!.length == 2 || m >= 10)) {
+    final next = AlarmPhrases.number(_peek(1) ?? '');
+    if (m == 0 && _word == 'ноль' && next != null && next > 0 && next < 10) {
+      minute = next;
+      _i += 2;
+    } else if (m != null &&
+        m < 60 &&
+        m >= 0 &&
+        (_word!.length == 2 || m >= 10)) {
       minute = m;
       _i++;
-      if (const <String>{'минут', 'минуты', 'минута'}.contains(_word)) _i++;
+      // «сорок пять»: десятки словом и единицы следом.
+      if (m >= 20 &&
+          m % 10 == 0 &&
+          _numberWord(_word) &&
+          next != null &&
+          next > 0 &&
+          next < 10) {
+        minute = m + next;
+        _i++;
+      }
+    }
+    if (minute != null &&
+        const <String>{'минут', 'минуты', 'минута'}.contains(_word)) {
+      _i++;
     }
     return true;
   }
+
+  static bool _numberWord(String? word) =>
+      word != null && AlarmPhrases._numberWords.containsKey(word);
+
+  /// Минуты до часа после «без»: «без четверти семь» — 6:45, «без десяти
+  /// восемь», «без двадцати пяти девять», «без 15 7».
+  bool _minutesTo() {
+    final start = _i;
+    _i++;
+    var minutes = _minutesBefore[_word ?? ''];
+    if (minutes == null) {
+      final n = int.tryParse(_word ?? '');
+      if (n == null || n <= 0 || n >= 60) {
+        _i = start;
+        return false;
+      }
+      minutes = n;
+    }
+    _i++;
+    // «без двадцати пяти»
+    if (minutes == 20 && _minutesBefore[_word ?? ''] == 5) {
+      minutes = 25;
+      _i++;
+    }
+    if (const <String>{'минут', 'минуты'}.contains(_word)) _i++;
+    final h = AlarmPhrases.number(_word ?? '');
+    if (h == null || h < 1 || h > 24) {
+      _i = start;
+      return false;
+    }
+    _i++;
+    if (const <String>{'час', 'часа', 'часов'}.contains(_word)) _i++;
+    final previous = h - 1;
+    hour = previous == 0 ? 12 : previous;
+    minute = 60 - minutes;
+    return true;
+  }
+
+  static const Map<String, int> _minutesBefore = <String, int>{
+    'четверти': 15,
+    'одной': 1,
+    'минуты': 1,
+    'двух': 2,
+    'трех': 3,
+    'четырех': 4,
+    'пяти': 5,
+    'десяти': 10,
+    'пятнадцати': 15,
+    'двадцати': 20,
+  };
 
   static const Map<String, int> _unitSeconds = <String, int>{
     'секунда': 1,
@@ -790,6 +890,7 @@ final class _Reader {
           total += unitOnly;
           _i++;
           any = true;
+          _afterHours = word == 'час';
           continue;
         }
         break;
@@ -815,12 +916,28 @@ final class _Reader {
         used = 2;
       }
       final unit = _unitSeconds[_peek(used) ?? ''];
-      if (unit == null) break;
+      if (unit == null) {
+        // «на час двадцать», «два часа десять»: минуты без слова после
+        // часов.
+        if (_afterHours &&
+            value > 0 &&
+            value < 60 &&
+            used + _i == words.length) {
+          total += value * 60;
+          _i += used;
+        }
+        break;
+      }
       total += value * unit;
       _i += used + 1;
       any = true;
+      _afterHours = unit == 3600;
       if (_word == 'и') _i++;
     }
+    _afterHours = false;
     return any ? Duration(seconds: total) : null;
   }
+
+  /// Последним в длительности прочитан час: число следом — минуты.
+  bool _afterHours = false;
 }

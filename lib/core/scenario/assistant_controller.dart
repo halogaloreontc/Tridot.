@@ -16,6 +16,8 @@ import '../replies/reply_library.dart';
 import '../services/clock.dart';
 import '../skills/passwords/passwords_phrases.dart';
 import 'command_spans.dart';
+import 'layout_fix.dart';
+import 'recognition_layers.dart';
 import 'route_policy.dart';
 
 export 'command_spans.dart';
@@ -927,6 +929,7 @@ final class AssistantController {
     required bool addressed,
     bool secretRedacted = false,
     int depth = 0,
+    bool layers = true,
   }) async {
     // Пароль, вставленный в чат (D12): ни один коннектор фразу не
     // получает, задача не создаётся. Вопрос, если ждал ответа, остаётся.
@@ -954,7 +957,7 @@ final class AssistantController {
     }
     final connectors = _connectors;
     final recent = _recentConnectorId;
-    final utterance =
+    var utterance =
         Utterance.analyze(message, now: session.clock.now()).withChat(
       session.chatTaskId,
       awaitingAnswer: _awaitingAnswer || session.pendingConfirmation != null,
@@ -963,7 +966,10 @@ final class AssistantController {
     // Фраза о паролях или просто со словом «пароль» (раздел 5.9): её не
     // получает ни один сетевой коннектор — ни в match, ни в уточнении
     // ответа, при любой уверенности, включён навык или нет.
-    final hideFromNetwork = PasswordPhrases.looksLike(utterance);
+    var hideFromNetwork = RecognitionLayers.hidesFromNetwork(
+      utterance,
+      (String text) => Utterance.analyze(text, now: session.clock.now()),
+    );
     final pendingAsker = session.pendingSpeaker;
     final pending = session.takePendingConfirmation();
     final asker = pending == null
@@ -990,9 +996,19 @@ final class AssistantController {
     final named = trailing == null
         ? null
         : session.personas.cast.byId(trailing.persona.id);
-    final answerUtterance = trailing == null
+    var answerUtterance = trailing == null
         ? utterance
         : Utterance.analyze(trailing.rest, now: session.clock.now());
+    // «lf», «ytn» — «да» и «нет», набранные не в той раскладке.
+    if (pending != null && ConfirmationReply.of(answerUtterance) == null) {
+      for (final fixed in LayoutFix.candidates(message)) {
+        final answer = Utterance.analyze(fixed, now: session.clock.now());
+        if (ConfirmationReply.of(answer) != null) {
+          answerUtterance = answer;
+          break;
+        }
+      }
+    }
     // Уточняющий вопрос с вариантами (Clarification): выбранный вариант
     // разбирается заново как его каноническая команда — со всеми
     // правилами, в том числе «фраза о паролях не уходит в сеть»; «нет» —
@@ -1086,19 +1102,24 @@ final class AssistantController {
         status: AssistantStatus.noAction,
       );
     }
-    final candidates = <(Connector, ConnectorMatch)>[];
-    for (final connector in connectors) {
-      if (hideFromNetwork && connector.info.requiresNetwork) continue;
-      final ConnectorMatch? match;
-      try {
-        match = connector.match(utterance);
-      } catch (error) {
-        // Ошибка в одном коннекторе не должна ломать остальные.
-        continue;
+    List<(Connector, ConnectorMatch)> collect(Utterance u, bool hide) {
+      final found = <(Connector, ConnectorMatch)>[];
+      for (final connector in connectors) {
+        if (hide && connector.info.requiresNetwork) continue;
+        final ConnectorMatch? match;
+        try {
+          match = connector.match(u);
+        } catch (error) {
+          // Ошибка в одном коннекторе не должна ломать остальные.
+          continue;
+        }
+        if (match == null || match.confidence <= 0) continue;
+        found.add((connector, match));
       }
-      if (match == null || match.confidence <= 0) continue;
-      candidates.add((connector, match));
+      return found;
     }
+
+    var candidates = collect(utterance, hideFromNetwork);
     if (confirming != null && owner != null) {
       // «Да, купил хлеб», «нет, не купил»: ответ с пояснением. Если в
       // пояснении явная команда («нет, добавь задачу молоко»), это уже
@@ -1146,10 +1167,64 @@ final class AssistantController {
         );
       }
     }
-    final decision = RoutePolicy.pick(
+    var decision = RoutePolicy.pick(
       <ConnectorMatch>[for (final (_, m) in candidates) m],
       recentConnectorId: recent,
     );
+    if (layers) {
+      // Слои распознавания (ADR-037, RecognitionLayers): обёртка, опечатка
+      // в слове срока, а если как есть не понял никто явно, — раскладка и
+      // опечатка. Ответ на вопрос («да, купил хлеб») разобран выше по
+      // исходной фразе.
+      RouteDecision pick(List<(Connector, ConnectorMatch)> found) =>
+          RoutePolicy.pick(
+            <ConnectorMatch>[for (final (_, m) in found) m],
+            recentConnectorId: recent,
+          );
+      final layered =
+          RecognitionLayers.route<List<(Connector, ConnectorMatch)>>(
+        message: message,
+        utterance: utterance,
+        hide: hideFromNetwork,
+        first: (found: candidates, decision: decision),
+        router: (Utterance u, bool hide) {
+          final found = collect(u, hide);
+          return (found: found, decision: pick(found));
+        },
+        analyze: (String text) =>
+            _analyze(text, recent, awaiting: utterance.awaitingAnswer),
+        fromVoice: session.fromVoice,
+        knownSecret: knownSecret,
+      );
+      if (layered.repair case final String reply) {
+        return _repaired(
+          layered.text,
+          layered.decision.winner!,
+          addressed: addressed,
+          depth: depth,
+          reply: reply,
+        );
+      }
+      if (layered.text != message) {
+        utterance = layered.utterance;
+        hideFromNetwork = layered.hide;
+        candidates = layered.found;
+        decision = layered.decision;
+        // Фраза о паролях без обёртки при выключенном навыке — тот же
+        // ответ, что и как есть, а не задача с паролем в названии.
+        final framedPasswords = PasswordPhrases.parse(utterance);
+        if (_passwordsOff &&
+            framedPasswords != null &&
+            framedPasswords.confidence >= PasswordPhrases.firm) {
+          session.lastConnectorId = null;
+          return session.reply(
+            'passwords.off',
+            intent: 'passwords.off',
+            status: AssistantStatus.noAction,
+          );
+        }
+      }
+    }
     final best = decision.winner;
     if (decision.isAmbiguous) {
       session.lastConnectorId = null;
@@ -1223,6 +1298,89 @@ final class AssistantController {
 
     _leadByDuty(bestConnector);
     return _run(bestConnector, best);
+  }
+
+  Utterance _analyze(String text, String? recent, {bool? awaiting}) =>
+      Utterance.analyze(text, now: session.clock.now()).withChat(
+        session.chatTaskId,
+        awaitingAnswer: awaiting ?? _awaitingAnswer,
+        recentConnectorId: recent,
+      );
+
+  /// Ответ на фразу, набранную не в той раскладке: чтение — сразу, с
+  /// пояснением «понял как «…»»; запись (задача, будильник, файлы,
+  /// действия склада…) — только после «Да»: исправление могло понять не
+  /// то, и ошибка должна стоить вопроса, а не действия.
+  Future<AssistantResponse> _repaired(
+    String text,
+    ConnectorMatch winner, {
+    required bool addressed,
+    required int depth,
+    String reply = 'router.repaired',
+  }) async {
+    // [winner] — команда, которая выполнится: [text] уже без обёртки и с
+    // исправленным сроком (_decide), и разбирается ещё раз без слоёв —
+    // тем же выбором.
+    if (_readOnly(winner)) {
+      final response = await _route(
+        text,
+        addressed: addressed,
+        depth: depth,
+        layers: false,
+      );
+      if (response.status == AssistantStatus.failed) return response;
+      return response.withText(
+        '${session.say(reply, <String, String>{'text': text})} '
+        '${response.message}',
+        response.values,
+      );
+    }
+    final clarification = Clarification(
+      questionId: '$reply.confirm',
+      options: <ClarifyOption>[
+        ClarifyOption(
+          label: 'Да',
+          text: text,
+          answers: const <String>{
+            'выполни',
+            'выполнить',
+            'давай',
+            'ага',
+            'верно',
+            'lf',
+          },
+          connectorId: winner.connectorId,
+        ),
+        const ClarifyOption(label: 'Нет', text: 'нет'),
+      ],
+    );
+    session.requestConfirmation(
+      PendingConfirmation(
+        connectorId: winner.connectorId,
+        commandId: winner.commandId,
+        payload: clarification,
+      ),
+    );
+    return session.reply(
+      '$reply.confirm',
+      values: <String, String>{'text': text},
+      intent: reply,
+      status: AssistantStatus.needsClarification,
+      clarification: clarification,
+    );
+  }
+
+  /// Команды без записи: список задач, калькулятор, беседа, погода,
+  /// вопросы складу.
+  static bool _readOnly(ConnectorMatch match) {
+    final command = match.commandId;
+    if (command == 'task.list') return true;
+    if (command.startsWith('warehouse.')) {
+      return !command.startsWith('warehouse.act.');
+    }
+    return command.startsWith('calc.') ||
+        command.startsWith('talk.') ||
+        command.startsWith('weather.');
   }
 
   /// Выключенное расширение с подсказкой ([ConnectorInfo.offHint]), которое

@@ -93,6 +93,136 @@ void main() {
     });
   });
 
+  group('разговорная обёртка (CommandFrame)', () {
+    test('«будь добр, …» — задача без обёртки в названии', () async {
+      final created = await assistant
+          .handle('будь добр, запиши встречу с клиентом завтра в 15:00');
+      expect(created.status, AssistantStatus.completed);
+      expect(created.task?.title, 'Встреча с клиентом');
+      expect(created.task?.dueAt, DateTime(2026, 11, 3, 15));
+    });
+
+    test('ответ на вопрос разбирается по исходной фразе', () async {
+      await assistant.handle('Добавь задачу «Купить хлеб»');
+      final asked = await assistant.handle('я купил хлеб');
+      expect(asked.status, AssistantStatus.needsClarification);
+      // «нет, …» — ответ «нет», а не команда без обёртки.
+      final answer = await assistant.handle('нет, не купил');
+      expect(answer.status, isNot(AssistantStatus.completed));
+      expect(
+        (await service.listActive()).single.title,
+        'Купить хлеб',
+        reason: 'задача не закрыта',
+      );
+    });
+  });
+
+  group('не та раскладка (LayoutFix)', () {
+    test('чтение — сразу, с пояснением', () async {
+      await assistant.handle('Добавь задачу «Отчёт»');
+      final list = await assistant.handle('gjrf;b pflfxb');
+      expect(list.intent, 'task.list');
+      expect(list.message, startsWith('Набрано в английской раскладке'));
+      expect(list.message, contains('«покажи задачи»'));
+    });
+
+    test('запись — только после «да»', () async {
+      final asked =
+          await assistant.handle('yfgjvyb pfdnhf d 10 gjpdjybnm vfvt');
+      expect(asked.status, AssistantStatus.needsClarification);
+      expect(asked.replyId, 'router.repaired.confirm');
+      expect(
+        asked.message,
+        contains('«напомни завтра в 10 позвонить маме»'),
+      );
+      expect(
+        asked.clarification?.options.map((o) => o.label),
+        <String>['Да', 'Нет'],
+      );
+      expect(await repository.list(), isEmpty);
+      final created = await assistant.handle('да');
+      expect(created.status, AssistantStatus.completed);
+      expect(created.task?.title, 'Позвонить маме');
+      expect(created.task?.dueAt, DateTime(2026, 11, 3, 10));
+    });
+
+    test('«нет» и «ytn» — отмена; «lf» — «да»', () async {
+      await assistant.handle('yfgjvyb pfdnhf d 10 gjpdjybnm vfvt');
+      final cancelled = await assistant.handle('нет');
+      expect(cancelled.status, AssistantStatus.noAction);
+      expect(await repository.list(), isEmpty);
+
+      await assistant.handle('yfgjvyb pfdnhf d 10 gjpdjybnm vfvt');
+      final layoutNo = await assistant.handle('ytn');
+      expect(layoutNo.status, AssistantStatus.noAction);
+      expect(await repository.list(), isEmpty);
+
+      await assistant.handle('yfgjvyb pfdnhf d 10 gjpdjybnm vfvt');
+      final layoutYes = await assistant.handle('lf');
+      expect(layoutYes.task?.title, 'Позвонить маме');
+    });
+
+    test('английская фраза — не понята, без исправления', () async {
+      final response = await assistant.handle('buy milk tomorrow');
+      expect(response.intent, 'unknown');
+      expect(response.message, isNot(contains('раскладке')));
+    });
+  });
+
+  group('опечатки (TypoFix)', () {
+    test('чтение — сразу, с пояснением', () async {
+      await assistant.handle('Добавь задачу «Отчёт»');
+      final list = await assistant.handle('пакажи заадчи');
+      expect(list.intent, 'task.list');
+      expect(list.message, startsWith('Похоже на опечатку'));
+      expect(list.message, contains('«покажи задачи»'));
+    });
+
+    test('опечатка в сроке при понятой команде — срок на месте', () async {
+      final created =
+          await assistant.handle('напоми заввтра в 10 позвонить маме');
+      expect(created.status, AssistantStatus.completed);
+      expect(created.task?.title, 'Позвонить маме');
+      expect(created.task?.dueAt, DateTime(2026, 11, 3, 10));
+    });
+
+    test('запись по исправленной фразе — только после «да»', () async {
+      await service.create(title: 'Отчёт');
+      final asked = await assistant.handle('заакрой все просроченне');
+      expect(asked.replyId, 'router.typo.confirm');
+      expect((await service.listActive()), hasLength(1));
+      await assistant.handle('нет');
+      expect((await service.listActive()), hasLength(1));
+    });
+  });
+
+  group('дело от первого лица (ADR-033)', () {
+    test('без команды — только с вопросом «Создать?»', () async {
+      final asked = await assistant.handle('завтра я позвоню маме');
+      expect(asked.status, AssistantStatus.needsClarification);
+      expect(asked.message, contains('Позвонить маме'));
+      expect(await repository.list(), isEmpty);
+      final created = await assistant.handle('Создать');
+      expect(created.status, AssistantStatus.completed);
+      expect(created.task?.title, 'Позвонить маме');
+      expect(created.task?.dueAt, DateTime(2026, 11, 3));
+    });
+
+    test('с командой — сразу задача с инфинитивом', () async {
+      final created =
+          await assistant.handle('напомни завтра, что я позвоню маме');
+      expect(created.status, AssistantStatus.completed);
+      expect(created.task?.title, 'Позвонить маме');
+    });
+
+    test('в чате задачи «я сделаю это завтра» — не новая задача', () async {
+      final task = (await assistant.handle('Добавь задачу «Отчёт»')).task!;
+      assistant.enterChat(taskId: task.id);
+      await assistant.handle('я сделаю это завтра');
+      expect(await repository.list(), hasLength(1));
+    });
+  });
+
   test('запрашивает контекст вместо угадывания задачи', () async {
     final response = await assistant.handle('Заверши её');
 

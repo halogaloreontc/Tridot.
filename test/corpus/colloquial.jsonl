@@ -1,0 +1,41 @@
+{"id":"col-001","text":"кинь напоминалку на завтра на 10 позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T10:00","precision":"dateTime","source":"manual","note":"разговорная форма команды — словами команды (CommandFrame), по правилу «фраза как есть — главная»"}
+{"id":"col-002","text":"не дай мне забыть завтра в 10 позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T10:00","precision":"dateTime","source":"manual"}
+{"id":"col-003","text":"запомни: завтра в 10 позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T10:00","precision":"dateTime","source":"manual"}
+{"id":"col-004","text":"черкани на завтра в 10 позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T10:00","precision":"dateTime","source":"manual"}
+{"id":"col-005","text":"закинь в задачи купить хлеб","intent":"createTask","title":"Купить хлеб","source":"manual"}
+{"id":"col-006","text":"в список дел: купить хлеб","intent":"createTask","title":"Купить хлеб","source":"manual"}
+{"id":"col-007","text":"купить хлеб добавь в задачи","intent":"createTask","title":"Купить хлеб","source":"manual","note":"глагол в конце"}
+{"id":"col-008","text":"вычеркни купить хлеб","intent":"completeTask","targetQuery":"Купить хлеб","source":"manual"}
+{"id":"col-009","text":"перекинь встречу на завтра","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"col-010","text":"покажи туду","intent":"listTasks","source":"manual"}
+{"id":"col-011","text":"чё там у меня по делам","intent":"listTasks","source":"manual"}
+{"id":"col-012","text":"поставь будилку на 7","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual"}
+{"id":"col-013","text":"буди меня в 7","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual"}
+{"id":"col-014","text":"кинь таймер на 5 минут","connector":"alarm","intent":"alarm.timer","form":{"seconds":"300"},"source":"manual"}
+{"id":"col-015","text":"отсчитай 5 минут","connector":"alarm","intent":"alarm.timer","form":{"seconds":"300"},"source":"manual"}
+{"id":"col-016","text":"на 7 будильник поставь","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual","note":"глагол в конце"}
+{"id":"col-017","text":"покеда","connector":"talk","intent":"talk.bye","source":"manual"}
+{"id":"col-018","text":"как тобой пользоваться","connector":"talk","intent":"talk.capabilities","source":"manual"}
+{"id":"col-019","text":"сгенери пароль","connector":"passwords","intent":"passwords.generate","source":"manual"}
+{"id":"col-020","text":"от вк пароль скинь","connector":"passwords","intent":"passwords.reveal","source":"manual"}
+{"id":"col-021","text":"забэкапь все данные","connector":"data","intent":"data.backup","source":"manual"}
+{"id":"col-022","text":"переделай видео в mp3","connector":"converter","intent":"converter.convert","form":{"target":"mp3"},"source":"manual"}
+{"id":"col-023","text":"вытащи звук из видео в mp3","connector":"converter","intent":"converter.convert","form":{"target":"mp3"},"source":"manual"}
+{"id":"col-024","text":"вытащи файлы из архива","connector":"archiver","intent":"archiver.extract","source":"manual"}
+{"id":"col-025","text":"архив распакуй","connector":"archiver","intent":"archiver.extract","source":"manual","note":"глагол в конце"}
+{"id":"col-026","text":"в чём завтра идти на улицу","connector":"weather","intent":"weather.wear","form":{"day":"2026-11-03"},"source":"manual"}
+{"id":"col-027","text":"кинь мяч","intent":"unknown","route":"none","source":"manual","note":"«кинь» без «напоминалки» — не команда"}
+{"id":"col-028","text":"перекинь деньги маме","intent":"unknown","route":"none","source":"manual","note":"«перекинь» без срока — не перенос задачи"}
+{"id":"col-029","text":"буди","intent":"unknown","route":"none","source":"manual"}
+{"id":"col-030","text":"вычеркни","intent":"unknown","route":"none","source":"manual","note":"без предмета — не команда"}
+{"id":"col-031","text":"всё, закрой","intent":"unknown","route":"none","source":"manual","note":"глагол в конце не переставляется у записей над задачами: не «закрой всё»"}
+{"id":"col-032","text":"всё, перенеси","intent":"rescheduleTask","title":null,"due":null,"source":"manual","note":"перенос задачи из разговора (как bulk-neg-012), не всех"}
+{"id":"col-033","text":"напомнить завтра в 9 купить корм коту","intent":"createTask","title":"Купить корм коту","due":"2026-11-03T09:00","precision":"dateTime","source":"manual","note":"заметка себе инфинитивом — как «напомни», а не задача «Напомнить купить корм коту»"}
+{"id":"col-034","text":"хорошо, запиши","intent":"createTask","title":null,"source":"review","note":"«запиши» без названия — вопрос «что записать?», а не дело «Хорошо»: глагол в конце не переставляется после слов ответа"}
+{"id":"col-035","text":"да, добавь","intent":"createTask","title":null,"source":"review"}
+{"id":"col-036","text":"нет, не запиши","intent":"unknown","route":"none","source":"review","note":"отрицание — не команда"}
+{"id":"col-037","text":"купить хлеб не добавь в задачи","intent":"unknown","route":"none","source":"review","note":"с «не» правило «X добавь в задачи» не действует"}
+{"id":"col-038","text":"напомнить маме позвонить?","intent":"unknown","route":"none","source":"review","note":"вопрос-раздумье, а не «напомни»"}
+{"id":"col-039","text":"напомнить ли ему сдать отчёт","intent":"unknown","route":"none","source":"review"}
+{"id":"col-040","text":"запомни: путь домой","intent":"unknown","route":"none","source":"review","note":"«путь» — не глагол: «запомни:» без дела и срока — как есть"}
+{"id":"col-041","text":"перекинь фото на вечеринку","intent":"unknown","route":"none","source":"review","note":"«на вечеринку» — не срок «на вечер»"}

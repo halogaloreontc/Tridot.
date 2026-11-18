@@ -36,7 +36,7 @@
 {"id":"vox-036","text":"напомни завтра на 10 минут позвонить маме","intent":"createTask","title":"На 10 минут позвонить маме","due":"2026-11-03","precision":"date","source":"manual","note":"«на 10 минут» после дня — длительность, а не 10:00"}
 {"id":"vox-037","text":"напомни чтобы я принёс зарядку","intent":"createTask","title":"Принести зарядку","due":null,"source":"manual"}
 {"id":"vox-038","text":"поставь напоминание чтобы я сходил в аптеку","intent":"createTask","title":"Сходить в аптеку","due":null,"source":"manual"}
-{"id":"vox-039","text":"напомни что я обещал перезвонить вере","intent":"unknown","source":"manual","note":"вспомнить за пользователя без срока — вопрос"}
+{"id":"vox-039","text":"напомни что я обещал перезвонить вере","intent":"unknown","route":"talk","source":"manual","note":"вспомнить за пользователя без срока — вопрос"}
 {"id":"vox-040","text":"напомни вечером купить хлеб для мамы","intent":"createTask","title":"Купить хлеб для мамы","due":"2026-11-02T19:00","precision":"partOfDay","source":"manual"}
 {"id":"vox-041","text":"напомни купить марку и семена","intent":"createTask","title":"Купить марку и семена","due":null,"source":"manual","note":"имена-омонимы без глагола общения остаются со строчной"}
 {"id":"vox-042","text":"напомни позвонить вере","intent":"createTask","title":"Позвонить Вере","due":null,"source":"manual"}
@@ -45,9 +45,9 @@
 {"id":"vox-045","text":"напоминание про встречу перенеси на завтра","intent":"rescheduleTask","source":"manual","note":"о существующем напоминании — не новое"}
 {"id":"vox-046","text":"надо напомнить маме про лекарства","intent":"createTask","title":"Напомнить маме про лекарства","source":"manual","note":"«напомнить» без «можешь» — само дело"}
 {"id":"vox-047","text":"напомни завтра в 9 какая формула суммы","intent":"createTask","title":"Узнать, какая формула суммы","due":"2026-11-03T09:00","precision":"dateTime","source":"manual","note":"вопрос со сроком — дело «узнать», с переспросом"}
-{"id":"vox-048","text":"Нужен напомни пожалуйста какая формула суммы в гугл таблицах?","intent":"unknown","source":"manual","note":"снимок владельца: вопрос, а не задача «Нужен какая формула …»"}
-{"id":"vox-049","text":"напомни как называется столица австралии","intent":"unknown","source":"manual"}
-{"id":"vox-050","text":"напомни где лежат ключи от гаража?","intent":"unknown","source":"manual"}
+{"id":"vox-048","text":"Нужен напомни пожалуйста какая формула суммы в гугл таблицах?","intent":"unknown","route":"talk","source":"manual","note":"снимок владельца: вопрос, а не задача «Нужен какая формула …»"}
+{"id":"vox-049","text":"напомни как называется столица австралии","intent":"unknown","route":"talk","source":"manual"}
+{"id":"vox-050","text":"напомни где лежат ключи от гаража?","intent":"unknown","route":"talk","source":"manual"}
 {"id":"vox-051","text":"добавь задачу купить сверло 6 мм","intent":"createTask","title":"Купить сверло 6 мм","note":"«мм» после числа — миллиметры, не шум","source":"manual"}
 {"id":"vox-052","text":"напомни купить саморезы 4 мм","intent":"createTask","title":"Купить саморезы 4 мм","source":"manual"}
 {"id":"vox-053","text":"купить футболку размер эм","intent":"createTask","title":"Купить футболку размер эм","source":"manual"}
@@ -59,7 +59,7 @@
 {"id":"vox-059","text":"напомни как приеду позвонить маме","intent":"createTask","title":"Как приеду позвонить маме","source":"manual"}
 {"id":"vox-060","text":"напомни как только проснусь выпить таблетку","intent":"createTask","title":"Как только проснусь выпить таблетку","source":"manual"}
 {"id":"vox-061","text":"напомни, когда придёт посылка, забрать её","intent":"createTask","title":"Когда придёт посылка, забрать её","source":"manual"}
-{"id":"vox-062","text":"напомни когда день рождения у андрея","intent":"unknown","note":"без дела после — вопрос","source":"manual"}
+{"id":"vox-062","text":"напомни когда день рождения у андрея","intent":"unknown","route":"talk","note":"без дела после — вопрос","source":"manual"}
 {"id":"vox-063","text":"напомни чтобы я перевёл деньги андрею","intent":"createTask","title":"Перевести деньги Андрею","source":"manual"}
 {"id":"vox-064","text":"напомни чтобы я провёл встречу","intent":"createTask","title":"Провести встречу","source":"manual"}
 {"id":"vox-065","text":"напомни чтобы я сел за отчёт","intent":"createTask","title":"Сесть за отчёт","source":"manual"}
@@ -72,8 +72,8 @@
 {"id":"vox-073","text":"напомни двадцать пятого ноября оплатить кредит","intent":"createTask","title":"Оплатить кредит","due":"2026-11-25","precision":"date","source":"manual"}
 {"id":"vox-074","text":"напомни первого декабря оплатить кредит","intent":"createTask","title":"Оплатить кредит","due":"2026-12-01","precision":"date","source":"manual"}
 {"id":"vox-075","text":"ок гугл напомни утром выпить таблетки","intent":"createTask","title":"Выпить таблетки","due":"2026-11-03T09:00","precision":"partOfDay","note":"обращение к другому помощнику по привычке","source":"manual"}
-{"id":"vox-076","text":"напомни какой сегодня день недели","intent":"unknown","note":"вопрос к часам устройства, не задача","source":"manual"}
-{"id":"vox-077","text":"напомни, какая погода завтра","intent":"unknown","note":"вопрос о погоде — к «Погоде»","source":"manual"}
+{"id":"vox-076","text":"напомни какой сегодня день недели","intent":"unknown","route":"talk","note":"вопрос к часам устройства, не задача","source":"manual"}
+{"id":"vox-077","text":"напомни, какая погода завтра","intent":"unknown","route":"weather","note":"вопрос о погоде — к «Погоде»","source":"manual"}
 {"id":"vox-090","text":"Можешь поставить зэд напоминание с утра чтобы я написал андрею","now":"2026-11-03T09:31","intent":"createTask","title":"Написать Андрею","due":"2026-11-04T09:00","precision":"partOfDay","source":"manual","note":"условный час утра прошёл, день не назван — следующее утро (иначе напоминание не придёт)"}
 {"id":"vox-091","text":"напомни утром позвонить маме","now":"2026-11-03T11:50","intent":"createTask","title":"Позвонить маме","due":"2026-11-04T09:00","precision":"partOfDay","source":"manual","note":"«утром» в 11:50 без дня — завтра"}
 {"id":"vox-092","text":"напомни сегодня утром позвонить маме","now":"2026-11-03T08:10","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T09:00","precision":"partOfDay","source":"manual","note":"явный день и час утра ещё впереди — сегодня"}

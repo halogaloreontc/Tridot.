@@ -139,6 +139,31 @@ void main() {
       expect(WidgetMessages.hello('1.0.0')['api'], widgetApi);
     });
 
+    test('linkHash: позиция и приход из карточки, id закодирован', () {
+      expect(WidgetMessages.linkHash('sku', '67432'), '#/sku/67432');
+      expect(WidgetMessages.linkHash('entry', '412'), '#/entry/412');
+      // Кириллица и «/» в артикуле — %-кодом; склад раскодирует сам.
+      expect(
+        WidgetMessages.linkHash('sku', '101БРАК/2'),
+        '#/sku/101%D0%91%D0%A0%D0%90%D0%9A%2F2',
+      );
+      expect(
+        WidgetMessages.open(WidgetMessages.linkHash('sku', 'Ж 1'))['hash'],
+        '#/sku/%D0%96%201',
+      );
+      // Ячейку и чужие виды склад не открывает — главная.
+      expect(WidgetMessages.linkHash('cell', 'A-1'), '');
+      expect(WidgetMessages.linkHash('url', 'https://evil.example/'), '');
+      expect(WidgetMessages.linkHash('sku', ''), '');
+      // Попытка выйти из адреса склада остаётся частью id.
+      expect(
+        WidgetMessages.linkHash('sku', 'javascript:alert(1)'),
+        '#/sku/javascript%3Aalert%281%29',
+      );
+      // Слишком длинный — главная, а не обрезанный адрес.
+      expect(WidgetMessages.linkHash('sku', 'Ж' * 60), '');
+    });
+
     test('open: только переход внутри склада', () {
       expect(WidgetMessages.open('#/entry/12')['hash'], '#/entry/12');
       expect(WidgetMessages.open('https://evil.example/')['hash'], '');

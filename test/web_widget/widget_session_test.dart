@@ -342,6 +342,16 @@ void main() {
     );
   });
 
+  test('строка карточки — позиция на странице склада', () async {
+    make();
+    await open();
+    session.openWarehouseLink('sku', '67432');
+    expect(host.types.last, 'open');
+    expect(host.sent.last['hash'], '#/sku/67432');
+    session.openWarehouseLink('cell', 'A-1');
+    expect(host.sent.last['hash'], '');
+  });
+
   test('«Открыть склад» и «Закрыть» — сообщения странице', () async {
     make();
     await open();

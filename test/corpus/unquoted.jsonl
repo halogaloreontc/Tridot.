@@ -35,8 +35,8 @@
 {"id":"unq-036","text":"добавь задачу сходить в зал к 9 утра","intent":"createTask","title":"Сходить в зал","due":"2026-11-03T09:00","precision":"dateTime"}
 {"id":"unq-037","text":"Добавь задачу купить хлеб в 10 или в 11","intent":"createTask","issue":"conflictingTimes"}
 {"id":"tgt-001","text":"Заверши не забыть купить хлеб","intent":"completeTask","targetQuery":"Не забыть купить хлеб","note":"отрицание внутри названия не отменяет завершение"}
-{"id":"tgt-002","text":"не выполнил отчёт","intent":"unknown","note":"«не» первым словом"}
-{"id":"tgt-003","text":"Я не сделал?","intent":"unknown"}
+{"id":"tgt-002","text":"не выполнил отчёт","intent":"unknown","route":"none","note":"«не» первым словом"}
+{"id":"tgt-003","text":"Я не сделал?","intent":"unknown","route":"none"}
 {"id":"tgt-004","text":"Перенеси отчёт на завтра","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-11-03","precision":"date"}
 {"id":"tgt-005","text":"Перенеси встречу с 15:00 на 17:00","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-02T17:00","precision":"dateTime","note":"исходный срок «с 15:00» тоже вырезается"}
 {"id":"tgt-006","text":"Перенеси задачу купить хлеб на послезавтра в 10:00","intent":"rescheduleTask","targetQuery":"Купить хлеб","due":"2026-11-04T10:00","precision":"dateTime"}

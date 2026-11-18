@@ -1,0 +1,22 @@
+{"id":"fp-001","text":"напомни завтра, что я позвоню маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03","precision":"date","source":"manual","note":"будущее от первого лица — инфинитив по закрытой таблице (замечание владельца, ADR-033)"}
+{"id":"fp-002","text":"добавь задачу я схожу в магазин","intent":"createTask","title":"Сходить в магазин","due":null,"source":"manual"}
+{"id":"fp-003","text":"я завтра напишу Андрею, напомни","intent":"createTask","title":"Написать Андрею","due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"fp-004","text":"напомни, что мы заберём посылку в пятницу","intent":"createTask","title":"Забрать посылку","due":"2026-11-06","precision":"date","source":"manual"}
+{"id":"fp-005","text":"запиши: я куплю подарок маме","intent":"createTask","title":"Купить подарок маме","due":null,"source":"manual"}
+{"id":"fp-006","text":"напомни в 10, что я отправлю отчёт","intent":"createTask","title":"Отправить отчёт","due":"2026-11-03T10:00","precision":"dateTime","source":"manual"}
+{"id":"fp-007","text":"напомни, что я буду звонить маме по пятницам","intent":"createTask","title":"Звонить маме","due":"2026-11-06","precision":"date","source":"manual","note":"«буду + инфинитив»"}
+{"id":"fp-008","text":"завтра я позвоню маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03","precision":"date","source":"manual","note":"без команды — только со сроком и с вопросом «Понял так: … Создать?»"}
+{"id":"fp-009","text":"в пятницу я заплачу за интернет","intent":"createTask","title":"Заплатить за интернет","due":"2026-11-06","precision":"date","source":"manual"}
+{"id":"fp-010","text":"я позвоню врачу завтра в 10 утра","intent":"createTask","title":"Позвонить врачу","due":"2026-11-03T10:00","precision":"dateTime","source":"manual"}
+{"id":"fp-011","text":"мы купим хлеб завтра","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date","source":"manual"}
+{"id":"fp-012","text":"я позвоню маме","intent":"unknown","route":"none","source":"manual","note":"без срока — рассказ, а не просьба"}
+{"id":"fp-013","text":"я не позвоню маме завтра","intent":"unknown","route":"none","source":"manual"}
+{"id":"fp-014","text":"я позвоню маме завтра?","intent":"unknown","route":"none","source":"manual"}
+{"id":"fp-015","text":"он позвонит завтра","intent":"unknown","route":"none","source":"manual","note":"третье лицо — не дело пользователя"}
+{"id":"fp-016","text":"я иду в магазин завтра","intent":"unknown","route":"none","source":"manual","note":"«иду» нет в таблице: суффиксного правила нет"}
+{"id":"fp-017","text":"я напишу тебе завтра","intent":"unknown","route":"none","source":"manual","note":"обращение к помощнику, а не дело"}
+{"id":"fp-018","text":"я сделаю это завтра","intent":"unknown","route":"none","source":"manual","note":"дело не названо («это»); в чате задачи — о ней же"}
+{"id":"fp-019","text":"завтра я позвоню маме и всё ей расскажу","intent":"unknown","route":"none","source":"manual","note":"рассказ с местоимением"}
+{"id":"fp-020","text":"напомни, что я кашу сварю","intent":"createTask","title":"Я кашу сварю","due":null,"source":"manual","note":"за «я» — не глагол из таблицы: название как сказано, «кашу» глаголом не становится"}
+{"id":"fp-021","text":"напомни, что я позвонил маме","intent":"unknown","route":"talk","source":"manual","note":"прошедшее время без срока — «вспомни за меня», как и раньше"}
+{"id":"fp-022","text":"завтра я поменяю пароль от почты на CANARYzz","intent":"unknown","route":"passwords","source":"review","note":"о паролях — не задача: вопрос «Создать?» повторил бы новый пароль"}

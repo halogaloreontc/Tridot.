@@ -13,7 +13,7 @@
 {"id": "ext-012", "text": "добавь задачу сжать отчёт", "intent": "createTask", "title": "Сжать отчёт", "source": "manual"}
 {"id": "ext-013", "text": "напомни распаковать коробки завтра", "intent": "createTask", "source": "manual"}
 {"id": "ext-014", "text": "добавь задачу сделать архив фотографий", "intent": "createTask", "source": "manual"}
-{"id": "ext-015", "text": "распакуй коробки", "connector": "archiver", "intent": "unknown", "source": "manual"}
+{"id": "ext-015", "text": "распакуй коробки", "connector": "archiver", "intent": "unknown", "route": "none", "source": "manual"}
 {"id": "ext-016", "text": "сконвертируй в mp3", "connector": "converter", "intent": "converter.convert", "source": "manual"}
 {"id": "ext-017", "text": "конвертируй фото в png", "connector": "converter", "intent": "converter.convert", "source": "manual"}
 {"id": "ext-018", "text": "переведи видео в mp3", "connector": "converter", "intent": "converter.convert", "source": "manual"}
@@ -22,11 +22,11 @@
 {"id": "ext-021", "text": "перегони видео в mp4", "connector": "converter", "intent": "converter.convert", "source": "manual"}
 {"id": "ext-022", "text": "Лиорио, сконвертируй фото в jpg", "connector": "converter", "intent": "converter.convert", "source": "manual"}
 {"id": "ext-023", "text": "конвертируй звук из видео в mp3", "connector": "converter", "intent": "converter.convert", "source": "manual"}
-{"id": "ext-024", "text": "переведи 100 долларов в рубли", "connector": "converter", "intent": "unknown", "note": "не формат файла", "source": "manual"}
-{"id": "ext-025", "text": "переведи файл на английский", "connector": "converter", "intent": "unknown", "note": "перевод текста, а не формата", "source": "manual"}
-{"id": "ext-026", "text": "конвертируй доллары в рубли", "connector": "converter", "intent": "unknown", "note": "валюта, а не файл", "source": "manual"}
-{"id": "ext-027", "text": "переведи 10 градусов в фаренгейты", "connector": "converter", "intent": "unknown", "note": "единицы измерения", "source": "manual"}
-{"id": "ext-028", "text": "запили видео про котиков", "connector": "converter", "intent": "unknown", "note": "не команда конвертеру", "source": "manual"}
+{"id": "ext-024", "text": "переведи 100 долларов в рубли", "connector": "converter", "intent": "unknown", "route": "none", "note": "не формат файла", "source": "manual"}
+{"id": "ext-025", "text": "переведи файл на английский", "connector": "converter", "intent": "unknown", "route": "none", "note": "перевод текста, а не формата", "source": "manual"}
+{"id": "ext-026", "text": "конвертируй доллары в рубли", "connector": "converter", "intent": "unknown", "route": "none", "note": "валюта, а не файл", "source": "manual"}
+{"id": "ext-027", "text": "переведи 10 градусов в фаренгейты", "connector": "converter", "intent": "unknown", "route": "weather", "note": "единицы измерения", "source": "manual"}
+{"id": "ext-028", "text": "запили видео про котиков", "connector": "converter", "intent": "unknown", "route": "none", "note": "не команда конвертеру", "source": "manual"}
 {"id": "ext-029", "text": "добавь задачу сконвертировать отчёт в pdf", "intent": "createTask", "title": "Сконвертировать отчёт в pdf", "source": "manual"}
 {"id": "ext-030", "text": "сконвертировать видео", "intent": "createTask", "title": "Сконвертировать видео", "source": "manual"}
 {"id": "ext-031", "text": "напомни перегнать видео в mp4 завтра", "intent": "createTask", "source": "manual"}
@@ -36,12 +36,12 @@
 {"id": "ext-035", "text": "Лиорио, скачай видео в 720p https://example.com/v/3", "connector": "ytdl", "intent": "ytdl.download", "source": "manual"}
 {"id": "ext-036", "text": "скачай видео", "connector": "ytdl", "intent": "ytdl.download", "note": "ссылку вставят в карточку", "source": "manual"}
 {"id": "ext-037", "text": "сохрани видео https://example.com/v/4", "connector": "ytdl", "intent": "ytdl.download", "source": "manual"}
-{"id": "ext-038", "text": "https://youtu.be/abc", "connector": "ytdl", "intent": "unknown", "note": "голая ссылка без глагола", "source": "manual"}
-{"id": "ext-039", "text": "видеозвонок", "connector": "ytdl", "intent": "unknown", "source": "manual"}
-{"id": "ext-040", "text": "скачай музыку", "connector": "ytdl", "intent": "unknown", "note": "без ссылки — не ролик", "source": "manual"}
-{"id": "ext-041", "text": "загрузи видео на ютуб https://example.com/v/5", "connector": "ytdl", "intent": "unknown", "note": "выложить, а не скачать", "source": "manual"}
+{"id": "ext-038", "text": "https://youtu.be/abc", "connector": "ytdl", "intent": "unknown", "route": "none", "note": "голая ссылка без глагола", "source": "manual"}
+{"id": "ext-039", "text": "видеозвонок", "connector": "ytdl", "intent": "unknown", "route": "none", "source": "manual"}
+{"id": "ext-040", "text": "скачай музыку", "connector": "ytdl", "intent": "unknown", "route": "none", "note": "без ссылки — не ролик", "source": "manual"}
+{"id": "ext-041", "text": "загрузи видео на ютуб https://example.com/v/5", "connector": "ytdl", "intent": "unknown", "route": "none", "note": "выложить, а не скачать", "source": "manual"}
 {"id": "ext-042", "text": "сохрани видео в mp3", "connector": "converter", "intent": "converter.convert", "note": "файл конвертеру, не загрузчику", "source": "manual"}
-{"id": "ext-043", "text": "сохрани видео https://example.com/v/6 в mp3", "connector": "converter", "intent": "unknown", "note": "со ссылкой — загрузчик", "source": "manual"}
+{"id": "ext-043", "text": "сохрани видео https://example.com/v/6 в mp3", "connector": "converter", "intent": "unknown", "route": "ytdl", "note": "со ссылкой — загрузчик", "source": "manual"}
 {"id": "ext-044", "text": "скачать музыку", "intent": "createTask", "source": "manual"}
 {"id": "ext-045", "text": "напомни скачать видео завтра", "intent": "createTask", "source": "manual"}
 {"id": "ext-046", "text": "сконвертируй видео в mp3 320", "connector": "converter", "intent": "converter.convert", "form": {"target": "mp3", "audio_kbps": "320"}, "note": "битрейт из фразы", "source": "manual"}
@@ -55,9 +55,9 @@
 {"id": "ext-054", "text": "сконвертируй запись в wav", "connector": "converter", "intent": "converter.convert", "form": {"target": "wav"}, "source": "manual"}
 {"id": "ext-055", "text": "сконвертируй видео в webm", "connector": "converter", "intent": "converter.convert", "form": {"target": "webm"}, "note": "цель понята; на телефоне и Mac ответ честный: WebM там не делается (converter_connector_test)", "source": "manual"}
 {"id": "ext-056", "text": "сконвертируй песню в flac", "connector": "converter", "intent": "converter.convert", "form": {"unoffered": "FLAC"}, "note": "формата нет нигде — честный ответ, а не молчание", "source": "manual"}
-{"id": "ext-057", "text": "переведи 320 рублей в доллары", "connector": "converter", "intent": "unknown", "note": "деньги, а не битрейт", "source": "manual"}
-{"id": "ext-058", "text": "сконвертируй 1080 рублей", "connector": "converter", "intent": "unknown", "note": "деньги, а не разрешение", "source": "manual"}
+{"id": "ext-057", "text": "переведи 320 рублей в доллары", "connector": "converter", "intent": "unknown", "route": "none", "note": "деньги, а не битрейт", "source": "manual"}
+{"id": "ext-058", "text": "сконвертируй 1080 рублей", "connector": "converter", "intent": "unknown", "route": "none", "note": "деньги, а не разрешение", "source": "manual"}
 {"id": "ext-059", "text": "сожми файлы до 10 мегабайт", "connector": "archiver", "intent": "archiver.zip", "note": "файлы — архиватор, не конвертер", "source": "manual"}
-{"id": "ext-060", "text": "сделай из файлов архив", "connector": "converter", "intent": "unknown", "note": "архив — не формат конвертера", "source": "manual"}
+{"id": "ext-060", "text": "сделай из файлов архив", "connector": "converter", "intent": "unknown", "route": "none", "note": "архив — не формат конвертера", "source": "manual"}
 {"id": "ext-061", "text": "сконвертируй видео в формат mp3 320", "connector": "converter", "intent": "converter.convert", "form": {"target": "mp3", "audio_kbps": "320"}, "note": "«в формат mp3» — формат после слова «формат»", "source": "manual"}
 {"id": "ext-062", "text": "сконвертируй видео в jpg качество 75", "connector": "converter", "intent": "converter.convert", "form": {"target": "frame-jpeg", "jpeg_quality": "75"}, "note": "картинка из видео — кадр", "source": "manual"}

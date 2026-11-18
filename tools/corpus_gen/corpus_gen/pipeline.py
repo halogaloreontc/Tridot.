@@ -863,6 +863,10 @@ def promote(
             row.setdefault("errors", []).append("проверка приложением не удалась: " + reason)
             continue
         line = corpus_line(row, connector)
+        if line["intent"] == "unknown":
+            # Отрицательной строке корпус проверяет, кому её отдал маршрутизатор
+            # (поле route, docs/CORPUS.md): записывается то, что видит приложение.
+            line["route"] = result.get("connector") or "none"
         try:
             mismatches = app_mismatches(row["final"], connector, result)
         except (AttributeError, KeyError, TypeError) as error:

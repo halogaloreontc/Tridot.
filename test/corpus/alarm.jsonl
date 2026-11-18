@@ -50,8 +50,19 @@
 {"id": "alm-050", "text": "починить будильник", "intent": "createTask", "title": "Починить будильник", "note": "не будильник", "source": "manual"}
 {"id": "alm-051", "text": "напомни поставить будильник", "intent": "createTask", "note": "не будильник", "source": "manual"}
 {"id": "alm-052", "text": "напомни завтра в 7 позвонить маме", "intent": "createTask", "title": "Позвонить маме", "due": "2026-11-03T07:00", "precision": "dateTime", "note": "не будильник", "source": "manual"}
-{"id": "alm-053", "text": "будильник не прозвенел", "intent": "unknown", "note": "не будильник", "source": "manual"}
+{"id": "alm-053", "text": "будильник не прозвенел", "intent": "unknown", "route": "none", "note": "не будильник", "source": "manual"}
 {"id": "alm-054", "text": "выбрать новый будильник", "intent": "createTask", "title": "Выбрать новый будильник", "note": "не будильник", "source": "manual"}
 {"id": "alm-055", "text": "напомни через 5 минут выключить духовку", "intent": "createTask", "title": "Выключить духовку", "note": "не будильник", "source": "manual"}
 {"id":"alm-v01","text":"нужен будильник на семь","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual"}
 {"id":"alm-v02","text":"мне нужен таймер на пять минут","connector":"alarm","intent":"alarm.timer","form":{"seconds":"300"},"source":"manual"}
+{"id":"alm-056","text":"поставь будильник на без четверти семь","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"45"},"source":"manual","note":"раньше молча ставилось 7:00"}
+{"id":"alm-057","text":"разбуди меня в пять сорок пять","connector":"alarm","intent":"alarm.set","form":{"hour":"5","minute":"45"},"source":"manual","note":"раньше молча ставилось 5:40"}
+{"id":"alm-058","text":"разбуди в шесть ноль пять","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"5"},"source":"manual"}
+{"id":"alm-059","text":"разбуди в семь тридцать пять","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"35"},"source":"manual"}
+{"id":"alm-060","text":"будильник на без десяти восемь утра","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"50"},"source":"manual"}
+{"id":"alm-061","text":"будильник на без двадцати пяти девять","connector":"alarm","intent":"alarm.set","form":{"hour":"8","minute":"35"},"source":"manual"}
+{"id":"alm-062","text":"разбуди меня в 7 через 2 дня","connector":"alarm","intent":"alarm.clarify","source":"manual","note":"число вне времени: спросить, а не поставить 7:00 на завтра"}
+{"id":"alm-063","text":"поставь будильник через 2 дня на 7","connector":"alarm","intent":"alarm.clarify","source":"manual"}
+{"id":"alm-064","text":"поставь будильник на 5 и 6","connector":"alarm","intent":"alarm.clarify","source":"manual","note":"два времени — вопрос, а не 5:00"}
+{"id":"alm-065","text":"таймер на час двадцать","connector":"alarm","intent":"alarm.timer","form":{"seconds":"4800"},"source":"manual"}
+{"id":"alm-066","text":"поставь таймер на два часа десять","connector":"alarm","intent":"alarm.timer","form":{"seconds":"7800"},"source":"manual"}

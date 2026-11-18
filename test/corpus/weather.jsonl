@@ -29,13 +29,13 @@
 {"id": "wth-028", "text": "погодка завтра как?", "connector": "weather", "intent": "weather.day", "form": {"day": "2026-11-03"}}
 {"id": "wth-029", "text": "гроза будет?", "connector": "weather", "intent": "weather.rain"}
 {"id": "wth-030", "text": "будет мороз завтра?", "connector": "weather", "intent": "weather.day", "form": {"day": "2026-11-03"}}
-{"id": "wth-n01", "text": "погоди минутку", "intent": "unknown", "connector": "talk"}
-{"id": "wth-n02", "text": "погодите", "intent": "unknown", "connector": "talk"}
+{"id": "wth-n01", "text": "погоди минутку", "intent": "unknown", "route": "none", "connector": "talk"}
+{"id": "wth-n02", "text": "погодите", "intent": "unknown", "route": "none", "connector": "talk"}
 {"id": "wth-n03", "text": "напомни взять зонт, если будет дождь", "intent": "createTask"}
 {"id": "wth-n04", "text": "купить зонт", "intent": "createTask"}
-{"id": "wth-n05", "text": "температура от -5 до 12 градусов, нормально?", "intent": "unknown", "connector": "calc"}
-{"id": "wth-n06", "text": "погода в доме", "intent": "unknown", "connector": "talk"}
-{"id": "wth-n08", "text": "у меня температура", "intent": "unknown"}
+{"id": "wth-n05", "text": "температура от -5 до 12 градусов, нормально?", "intent": "unknown", "route": "none", "connector": "calc"}
+{"id": "wth-n06", "text": "погода в доме", "intent": "unknown", "route": "none", "connector": "talk"}
+{"id": "wth-n08", "text": "у меня температура", "intent": "unknown", "route": "none"}
 {"id": "wth-n09", "text": "написать статью о погоде", "intent": "createTask"}
 {"id": "wth-n10", "text": "сдать отчёт о погоде завтра", "intent": "createTask"}
 {"id": "wth-n11", "text": "прочитать прогноз погоды для отчёта", "intent": "createTask"}
@@ -44,3 +44,10 @@
 {"id": "wth-n14", "text": "перенеси задачу про зонт на завтра", "intent": "rescheduleTask"}
 {"id": "wth-n15", "text": "выполнил задачу про зонт", "intent": "completeTask"}
 {"id":"wth-v01","text":"напомни, какая погода завтра","connector":"weather","intent":"weather.day","form":{"day":"2026-11-03"},"source":"manual"}
+{"id":"wth-f01","text":"а завтра?","connector":"weather","intent":"weather.day","form":{"day":"2026-11-03"},"after":"weather","source":"manual","note":"продолжение сразу после ответа о погоде"}
+{"id":"wth-f02","text":"а в пятницу?","connector":"weather","intent":"weather.day","form":{"day":"2026-11-06"},"after":"weather","source":"manual"}
+{"id":"wth-f03","text":"а послезавтра?","connector":"weather","intent":"weather.day","form":{"day":"2026-11-04"},"after":"weather","source":"manual"}
+{"id":"wth-f04","text":"а в Сочи?","connector":"weather","intent":"weather.now","form":{"place":"Сочи"},"after":"weather","source":"manual"}
+{"id":"wth-f05","text":"а на выходных?","connector":"weather","intent":"weather.week","form":{"day":"2026-11-07","range":"weekend"},"after":"weather","source":"manual"}
+{"id":"wth-f06","text":"а завтра?","intent":"unknown","route":"none","source":"manual","note":"без разговора о погоде — не погода"}
+{"id":"wth-f07","text":"а завтра купить хлеб","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date","after":"weather","source":"manual","note":"не обрывок — дело, хоть погода и отвечала только что"}
