@@ -26,3 +26,6 @@
 {"id":"typo-026","text":"двинь стол","intent":"unknown","route":"none","source":"manual","note":"короткие слова не исправляются («стол» — не «стул»)"}
 {"id":"typo-027","text":"обложи налогом завтра","intent":"unknown","route":"none","source":"manual"}
 {"id":"typo-028","text":"переноси коробки аккуратно","intent":"unknown","route":"none","source":"manual"}
+{"id":"typo-029","text":"напомни пить таблетки по утрам","intent":"createTask","title":"Пить таблетки по утрам","source":"review","note":"«по утрам» — не опечатка «утром»"}
+{"id":"typo-030","text":"запиши гулять с собакой по вечерам","intent":"createTask","title":"Гулять с собакой по вечерам","source":"review"}
+{"id":"typo-031","text":"добавь задачу «проверить заввтра склад»","intent":"createTask","title":"проверить заввтра склад","source":"review","note":"внутри кавычек опечатки не исправляются"}

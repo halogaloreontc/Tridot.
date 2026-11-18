@@ -31,3 +31,11 @@
 {"id":"col-031","text":"всё, закрой","intent":"unknown","route":"none","source":"manual","note":"глагол в конце не переставляется у записей над задачами: не «закрой всё»"}
 {"id":"col-032","text":"всё, перенеси","intent":"rescheduleTask","title":null,"due":null,"source":"manual","note":"перенос задачи из разговора (как bulk-neg-012), не всех"}
 {"id":"col-033","text":"напомнить завтра в 9 купить корм коту","intent":"createTask","title":"Купить корм коту","due":"2026-11-03T09:00","precision":"dateTime","source":"manual","note":"заметка себе инфинитивом — как «напомни», а не задача «Напомнить купить корм коту»"}
+{"id":"col-034","text":"хорошо, запиши","intent":"createTask","title":null,"source":"review","note":"«запиши» без названия — вопрос «что записать?», а не дело «Хорошо»: глагол в конце не переставляется после слов ответа"}
+{"id":"col-035","text":"да, добавь","intent":"createTask","title":null,"source":"review"}
+{"id":"col-036","text":"нет, не запиши","intent":"unknown","route":"none","source":"review","note":"отрицание — не команда"}
+{"id":"col-037","text":"купить хлеб не добавь в задачи","intent":"unknown","route":"none","source":"review","note":"с «не» правило «X добавь в задачи» не действует"}
+{"id":"col-038","text":"напомнить маме позвонить?","intent":"unknown","route":"none","source":"review","note":"вопрос-раздумье, а не «напомни»"}
+{"id":"col-039","text":"напомнить ли ему сдать отчёт","intent":"unknown","route":"none","source":"review"}
+{"id":"col-040","text":"запомни: путь домой","intent":"unknown","route":"none","source":"review","note":"«путь» — не глагол: «запомни:» без дела и срока — как есть"}
+{"id":"col-041","text":"перекинь фото на вечеринку","intent":"unknown","route":"none","source":"review","note":"«на вечеринку» — не срок «на вечер»"}

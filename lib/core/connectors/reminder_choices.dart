@@ -27,14 +27,14 @@ abstract final class ReminderChoices {
         DateTime(now.year, now.month, now.day + dayOffset, hour);
     if (now.hour < nightEndHour) {
       return <ReminderChoice>[
-        ReminderChoice('Утром', at(0, morningHour), _morning),
-        ReminderChoice('Вечером', at(0, eveningHour), _evening),
+        ReminderChoice('Утром', at(0, morningHour), _morningToday),
+        ReminderChoice('Вечером', at(0, eveningHour), _eveningToday),
       ];
     }
     if (now.hour < 18) {
       return <ReminderChoice>[
-        ReminderChoice('Сегодня вечером', at(0, eveningHour), _evening),
-        ReminderChoice('Завтра утром', at(1, morningHour), _morning),
+        ReminderChoice('Сегодня вечером', at(0, eveningHour), _eveningToday),
+        ReminderChoice('Завтра утром', at(1, morningHour), _morningTomorrow),
       ];
     }
     if (now.hour < lateHour) {
@@ -45,17 +45,33 @@ abstract final class ReminderChoices {
           DateTime(hour.year, hour.month, hour.day, hour.hour, hour.minute),
           const <String>{'через', 'час'},
         ),
-        ReminderChoice('Завтра утром', at(1, morningHour), _morning),
+        ReminderChoice('Завтра утром', at(1, morningHour), _morningTomorrow),
       ];
     }
     return <ReminderChoice>[
-      ReminderChoice('Завтра утром', at(1, morningHour), _morning),
-      ReminderChoice('Завтра вечером', at(1, eveningHour), _evening),
+      ReminderChoice('Завтра утром', at(1, morningHour), _morningTomorrow),
+      ReminderChoice('Завтра вечером', at(1, eveningHour), _eveningTomorrow),
     ];
   }
 
-  static const Set<String> _morning = <String>{'утром', 'утро', 'завтра'};
-  static const Set<String> _evening = <String>{'вечером', 'вечер', 'сегодня'};
+  // Слова ответа — только о своём дне: после 21:00 набранное «сегодня» не
+  // выбирает «Завтра вечером», а идёт обычным разбором срока.
+  static const Set<String> _morningToday = <String>{'утром', 'утро'};
+  static const Set<String> _eveningToday = <String>{
+    'вечером',
+    'вечер',
+    'сегодня',
+  };
+  static const Set<String> _morningTomorrow = <String>{
+    'утром',
+    'утро',
+    'завтра',
+  };
+  static const Set<String> _eveningTomorrow = <String>{
+    'вечером',
+    'вечер',
+    'завтра',
+  };
 
   /// Срок числами для текста кнопки: «3 ноября в 9:00».
   static String dueText(DateTime at) {

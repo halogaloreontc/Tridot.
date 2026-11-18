@@ -37,3 +37,7 @@
 {"id":"frm-037","text":"не мог бы ты напомнить мне, как тебя зовут?","intent":"unknown","route":"none","source":"manual","note":"вопрос после инфинитива — фраза как есть, не задача"}
 {"id":"frm-038","text":"а можешь рассказать анекдот?","intent":"unknown","route":"none","source":"manual"}
 {"id":"frm-039","text":"добавь заметку: проверить накладные, пожалуйста","intent":"task.edit","form":{"kind":"note","text":"проверить накладные"},"after":"tasks","source":"manual"}
+{"id":"frm-040","text":"ты могла бы отметить отчёт, но забыла","intent":"unknown","route":"none","source":"review","note":"упрёк, а не просьба: «мог бы» без «не» — только вопросом, «…, но …» — рассказ"}
+{"id":"frm-041","text":"сможешь завершить отчёт до пятницы?","intent":"unknown","route":"none","source":"review","note":"о сроке, а не «заверши сейчас»"}
+{"id":"frm-042","text":"будь добр, добавь задачу «купить будилку»","intent":"createTask","title":"купить будилку","source":"review","note":"внутри кавычек обёртка ничего не меняет"}
+{"id":"frm-043","text":"добавь задачу «перенеси-ка шкаф»","intent":"createTask","title":"перенеси-ка шкаф","source":"review"}

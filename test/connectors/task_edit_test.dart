@@ -353,6 +353,15 @@ void main() {
       expect((await tasks.listActive()).single.dueAt, isNull);
     });
 
+    test('после 21:00 набранное «сегодня» не выбирает «Завтра вечером»',
+        () async {
+      at(22, 15);
+      await assistant.handle('Напомни позвонить поставщику');
+      await assistant.handle('сегодня');
+      final due = (await tasks.listActive()).single.dueAt;
+      expect(due, isNot(DateTime(2026, 11, 3, 19)));
+    });
+
     test('после полуночи «Завтра утром» не уезжает на день', () async {
       at(22, 15);
       final asked = await assistant.handle('Напомни позвонить поставщику');

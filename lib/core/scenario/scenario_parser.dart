@@ -1511,6 +1511,9 @@ final class ScenarioParser {
         )) {
       return null;
     }
+    // «Завтра я поменяю пароль от почты на …» — о паролях: это навык
+    // «Пароли», а вопрос «Создать?» повторил бы новый пароль.
+    if (rest.any((String w) => _privateStems.any(w.startsWith))) return null;
     final text = _titleText(utterance, remove);
     if (text.isEmpty) return null;
     _doubt += 0.5;
@@ -1524,6 +1527,14 @@ final class ScenarioParser {
       implicit: true,
     );
   }
+
+  static const List<String> _privateStems = <String>[
+    'парол',
+    'пин',
+    'логин',
+    'код',
+    'секрет',
+  ];
 
   /// Местоимения после глагола от первого лица: дело не названо («я
   /// сделаю это завтра») или это разговор («я напишу тебе завтра»).

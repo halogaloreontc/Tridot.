@@ -30,8 +30,15 @@ abstract final class TypoFix {
   static String? _repair(String text, Map<String, int> lexicon) {
     if (text.length > 400) return null;
     var changed = false;
+    // Внутри кавычек — название как сказано.
+    final quoted = <(int, int)>[
+      for (final m in _quoted.allMatches(text)) (m.start, m.end),
+    ];
     final fixed = text.replaceAllMapped(_word, (Match m) {
       final word = m.group(0)!;
+      if (quoted.any(((int, int) q) => m.start >= q.$1 && m.end <= q.$2)) {
+        return word;
+      }
       final lower = word.toLowerCase().replaceAll('ё', 'е');
       final replacement = _fix(lower, lexicon);
       if (replacement == null) return word;
@@ -65,9 +72,34 @@ abstract final class TypoFix {
 
   static final RegExp _word = RegExp('[а-яёА-ЯЁ]+');
 
+  static final RegExp _quoted = RegExp('«[^»]*»|"[^"]*"|„[^“”]*[“”]');
+
+  /// Настоящие слова в одной правке от слова срока или команды: «надели»
+  /// — не «недели», «марка» — не «марта», «входных» — не «выходных».
+  static const Set<String> _realWords = <String>{
+    'надели',
+    'наделю',
+    'марка',
+    'марки',
+    'марку',
+    'маркой',
+    'входных',
+    'входные',
+    'входной',
+    'чатов',
+    'чатом',
+    'минус',
+    'утрам',
+    'вечерам',
+    'ночам',
+  };
+
   static String? _fix(String word, Map<String, int> lexicon) {
     if (word.length < 5 || commandLexicon.containsKey(word)) return null;
-    if (Utterance.isRealWord(word)) return null;
+    if (Utterance.isRealWord(word) || _realWords.contains(word)) return null;
+    // «По утрам», «по вечерам», «по средам» — дательный множественного, а
+    // не опечатка в «утром», «вечером».
+    if (word.endsWith('ам') || word.endsWith('ям')) return null;
     String? best;
     var bestCount = 0;
     var second = 0;

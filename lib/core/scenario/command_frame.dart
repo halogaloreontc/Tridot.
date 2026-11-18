@@ -1,3 +1,4 @@
+import '../connectors/verb_forms.dart';
 import 'route_policy.dart';
 
 /// Разговорная обёртка вокруг команды — для всех навыков сразу: «так,
@@ -22,7 +23,13 @@ abstract final class CommandFrame {
   /// часть дела.
   static String? strip(String text, {bool fromVoice = false}) {
     if (text.length > 400) return null;
-    var value = text.trim();
+    // Внутри кавычек — название как сказано: «купить будилку» не
+    // становится «купить будильник».
+    final quotes = <String>[];
+    var value = text.trim().replaceAllMapped(_quoted, (Match m) {
+      quotes.add(m.group(0)!);
+      return '$_quoteMark${quotes.length - 1}$_quoteEnd';
+    });
     final before = value;
     for (var pass = 0; pass < 3; pass++) {
       final next = _stripLead(value);
@@ -43,8 +50,16 @@ abstract final class CommandFrame {
     );
     value = value.replaceAll(_spaces, ' ').trim();
     if (value.isEmpty || value == before) return null;
+    value = value.replaceAllMapped(
+      RegExp('$_quoteMark(\\d+)$_quoteEnd'),
+      (Match m) => quotes[int.parse(m.group(1)!)],
+    );
     return value[0].toUpperCase() + value.substring(1);
   }
+
+  static final RegExp _quoted = RegExp('«[^»]*»|"[^"]*"|„[^“”]*[“”]');
+  static const String _quoteMark = '\uE000';
+  static const String _quoteEnd = '\uE001';
 
   /// Взять ли разбор фразы без обёртки ([framed]) вместо разбора фразы как
   /// есть ([original]):
@@ -85,7 +100,7 @@ abstract final class CommandFrame {
     return text;
   }
 
-  static bool _opensQuote(String text) => '«"“„'.contains(text[0]);
+  static bool _opensQuote(String text) => '«"“„$_quoteMark'.contains(text[0]);
 
   /// Вступления. Неоднозначные слова («так», «короче», «значит», «вот»,
   /// «смотри», «ладно», «окей») — только с запятой или тире: «так держать»,
@@ -127,9 +142,29 @@ abstract final class CommandFrame {
         .replaceAll(RegExp(r'«[^»]*»|"[^"]*"'), ' ')
         .split(RegExp(r'[^а-яёa-z0-9]+'));
     if (words.any(_questionWords.contains)) return text;
+    // «Ты могла бы отметить отчёт, но забыла» — упрёк, а не просьба:
+    // «мог бы» без «не» — только вопросом; «…, но …» — рассказ.
+    final hypothetical = !match.group(0)!.toLowerCase().contains('не ') &&
+        RegExp(r'(?<![а-яё])(?:мог|могла|могли)\s+бы', caseSensitive: false)
+            .hasMatch(match.group(0)!);
+    if (hypothetical && !text.trimRight().endsWith('?')) return text;
+    if (words.contains('но') || words.contains('однако')) return text;
+    // «Сможешь завершить отчёт до пятницы?» — о сроке, а не «заверши
+    // сейчас».
+    if (_completionVerbs.contains(verb.toLowerCase()) &&
+        RegExp(r'(?<![а-яё])(?:до|к)\s', caseSensitive: false).hasMatch(rest)) {
+      return text;
+    }
     final tail = rest.replaceFirst(RegExp(r'\s*\?+\s*$'), '');
     return '$imperative$tail';
   }
+
+  static const Set<String> _completionVerbs = <String>{
+    'завершить',
+    'закрыть',
+    'выполнить',
+    'отметить',
+  };
 
   static final RegExp _modalFrame = RegExp(
     r'^(?:(?:а|и)\s+)?(?:(?:ты|вы)\s+)?'
@@ -172,6 +207,21 @@ abstract final class CommandFrame {
   static String _colloquial(String text) {
     var value = text;
     for (final (pattern, replacement) in _colloquialRules) {
+      // «Дело глаголом» по окончанию — только примерно («путь», «грусть»):
+      // настоящий инфинитив проверяет VerbForms.
+      if (pattern.pattern.contains(_deed)) {
+        final match = pattern.firstMatch(value);
+        if (match == null) continue;
+        final rest = value.substring(match.end);
+        final due = pattern.pattern.contains(_due) &&
+            RegExp('^$_due', caseSensitive: false).hasMatch(rest);
+        final deed = rest
+            .toLowerCase()
+            .replaceAll('ё', 'е')
+            .split(RegExp(r'[^а-я]+'))
+            .any(VerbForms.isInfinitive);
+        if (!due && !deed) continue;
+      }
       value = value.replaceFirstMapped(
         pattern,
         (Match m) => replacement.replaceAllMapped(
@@ -184,9 +234,10 @@ abstract final class CommandFrame {
   }
 
   static const String _due =
-      r'(?=.*(?:(?:на|к|до)\s+(?:завтра|послезавтра|сегодня|понедельник|'
-      r'вторник|среду|четверг|пятницу|субботу|воскресенье|вечер|утро|'
-      r'выходные|неделю|час|\d)|(?:позже|раньше|попозже|пораньше)))';
+      r'(?=.*(?:(?<![а-яё])(?:на|к|до)\s+(?:завтра|послезавтра|сегодня|'
+      r'понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье|'
+      r'вечер|утро|выходные|неделю|час|\d)(?![а-яё])|'
+      r'(?<![а-яё])(?:позже|раньше|попозже|пораньше)(?![а-яё])))';
 
   /// Дальше по фразе — дело глаголом: «… позвонить маме».
   static const String _deed =
@@ -207,7 +258,8 @@ abstract final class CommandFrame {
     ),
     (
       RegExp(
-        r'^(.+?)[\s,]+(?:добавь|запиши|закинь|кинь)\s+в\s+'
+        r'^(?!.*(?<![а-яё])(?:не|нет|ничего)(?![а-яё]))'
+        r'(.+?)[\s,]+(?:добавь|запиши|закинь|кинь)\s+в\s+'
         r'(?:задачи|список(?:\s+дел)?|дела)$',
         caseSensitive: false,
       ),
@@ -261,7 +313,16 @@ abstract final class CommandFrame {
       'запиши:',
     ),
     // «Напомнить завтра в 9 купить корм» — заметка себе: как «напомни».
-    (RegExp('^напомнить$_deed', caseSensitive: false), 'напомни'),
+    // Не вопрос и не раздумье: «Напомнить маме позвонить?», «напомнить ли
+    // ему …», «напомнить тебе …» — как есть.
+    (
+      RegExp(
+        '^напомнить(?![^?]*\\?)(?!.*(?<![а-яё])(?:ли|или|тебе|вам)(?![а-яё]))'
+        '$_deed',
+        caseSensitive: false,
+      ),
+      'напомни',
+    ),
     (
       RegExp(
         '^(?:черкани|черкни)(?![а-яё])$_due',
@@ -348,8 +409,57 @@ abstract final class CommandFrame {
     final match = _lastVerb.firstMatch(text);
     if (match == null) return text;
     final verb = match.group(2)!;
-    return '$verb ${match.group(1)!}';
+    final head = match.group(1)!;
+    final words = head
+        .toLowerCase()
+        .replaceAll('ё', 'е')
+        .split(RegExp(r'[^а-яa-z0-9]+'))
+        .where((String w) => w.isNotEmpty)
+        .toList();
+    // «Хорошо, запиши», «да, добавь», «нет, не запиши» — ответ и согласие,
+    // а не дело «Хорошо»; отрицание — тем более не команда.
+    if (words.isEmpty ||
+        words.every(_discourse.contains) ||
+        words.any(_negations.contains)) {
+      return text;
+    }
+    return '$verb $head';
   }
+
+  static const Set<String> _discourse = <String>{
+    'да',
+    'ага',
+    'угу',
+    'ок',
+    'окей',
+    'хорошо',
+    'ладно',
+    'давай',
+    'тогда',
+    'конечно',
+    'спасибо',
+    'ну',
+    'так',
+    'все',
+    'это',
+    'вот',
+    'можно',
+    'еще',
+    'просто',
+    'сейчас',
+    'потом',
+    'теперь',
+    'а',
+    'и',
+  };
+
+  static const Set<String> _negations = <String>{
+    'не',
+    'нет',
+    'ничего',
+    'никогда',
+    'ни',
+  };
 
   /// Только глаголы, которые не меняют существующие задачи: «всё,
   /// закрой» — конец реплики, а не «закрой всё».

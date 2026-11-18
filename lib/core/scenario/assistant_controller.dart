@@ -16,9 +16,8 @@ import '../replies/reply_library.dart';
 import '../services/clock.dart';
 import '../skills/passwords/passwords_phrases.dart';
 import 'command_spans.dart';
-import 'command_frame.dart';
 import 'layout_fix.dart';
-import 'typo_fix.dart';
+import 'recognition_layers.dart';
 import 'route_policy.dart';
 
 export 'command_spans.dart';
@@ -930,6 +929,7 @@ final class AssistantController {
     required bool addressed,
     bool secretRedacted = false,
     int depth = 0,
+    bool layers = true,
   }) async {
     // Пароль, вставленный в чат (D12): ни один коннектор фразу не
     // получает, задача не создаётся. Вопрос, если ждал ответа, остаётся.
@@ -1168,106 +1168,57 @@ final class AssistantController {
       <ConnectorMatch>[for (final (_, m) in candidates) m],
       recentConnectorId: recent,
     );
-    // «Так, поставь будильник на 7», «будь добр, покажи пароль от вк»:
-    // разговорная обёртка (CommandFrame). Только без ждущего вопроса —
-    // ответ «да, купил хлеб» разобран выше по исходной фразе.
-    if (pending == null) {
-      final framedText =
-          CommandFrame.strip(message, fromVoice: session.fromVoice);
-      if (framedText != null) {
-        final framed =
-            Utterance.analyze(framedText, now: session.clock.now()).withChat(
-          session.chatTaskId,
-          awaitingAnswer: _awaitingAnswer,
-          recentConnectorId: recent,
-        );
-        final framedHide = hideFromNetwork || PasswordPhrases.looksLike(framed);
-        final framedCandidates = collect(framed, framedHide);
-        final framedDecision = RoutePolicy.pick(
-          <ConnectorMatch>[for (final (_, m) in framedCandidates) m],
-          recentConnectorId: recent,
-        );
-        if (CommandFrame.prefer(decision, framedDecision)) {
-          utterance = framed;
-          hideFromNetwork = framedHide;
-          candidates = framedCandidates;
-          decision = framedDecision;
-        }
-      }
-    }
-    // «напоми заввтра в 10 позвонить маме»: опечатка в слове срока при
-    // понятой команде — та же команда с исправленным сроком (TypoFix).
-    if (pending == null && decision.winner != null) {
-      final dueText = TypoFix.repairDue(message);
-      if (dueText != null) {
-        final fixed =
-            Utterance.analyze(dueText, now: session.clock.now()).withChat(
-          session.chatTaskId,
-          awaitingAnswer: _awaitingAnswer,
-          recentConnectorId: recent,
-        );
-        final fixedCandidates = collect(fixed, hideFromNetwork);
-        final fixedDecision = RoutePolicy.pick(
-          <ConnectorMatch>[for (final (_, m) in fixedCandidates) m],
-          recentConnectorId: recent,
-        );
-        if (TypoFix.sameCommand(decision, fixedDecision)) {
-          utterance = fixed;
-          candidates = fixedCandidates;
-          decision = fixedDecision;
-        }
-      }
-    }
-    // «yfgjvyb pfdnhf d 10 gjpdjybnm vfvt»: набрано не в той раскладке
-    // (LayoutFix). Только если фразу как есть не понял никто явно.
-    if (pending == null && depth == 0) {
-      for (final repaired in LayoutFix.candidates(message)) {
-        final fixed =
-            Utterance.analyze(repaired, now: session.clock.now()).withChat(
-          session.chatTaskId,
-          awaitingAnswer: _awaitingAnswer,
-          recentConnectorId: recent,
-        );
-        // Фраза о паролях не повторяется в чате ни в каком виде.
-        if (PasswordPhrases.looksLike(fixed) ||
-            SecretGuard.redact(repaired, known: knownSecret).guarded) {
-          break;
-        }
-        final fixedDecision = RoutePolicy.pick(
-          <ConnectorMatch>[
-            for (final (_, m) in collect(fixed, hideFromNetwork)) m,
-          ],
-          recentConnectorId: recent,
-        );
-        if (!LayoutFix.prefer(decision, fixedDecision)) continue;
-        return _repaired(repaired, fixedDecision.winner!, addressed: addressed);
-      }
-      // «постпвь будильник на 7», «склоько венских стульев»: опечатка в
-      // слове команды (TypoFix) — тем же путём, что раскладка.
-      final typoFixed = TypoFix.repair(message);
-      if (typoFixed != null) {
-        final fixed =
-            Utterance.analyze(typoFixed, now: session.clock.now()).withChat(
-          session.chatTaskId,
-          awaitingAnswer: _awaitingAnswer,
-          recentConnectorId: recent,
-        );
-        if (!PasswordPhrases.looksLike(fixed) &&
-            !SecretGuard.redact(typoFixed, known: knownSecret).guarded) {
-          final fixedDecision = RoutePolicy.pick(
-            <ConnectorMatch>[
-              for (final (_, m) in collect(fixed, hideFromNetwork)) m,
-            ],
+    if (layers) {
+      // Слои распознавания (ADR-037, RecognitionLayers): обёртка, опечатка
+      // в слове срока, а если как есть не понял никто явно, — раскладка и
+      // опечатка. Ответ на вопрос («да, купил хлеб») разобран выше по
+      // исходной фразе.
+      RouteDecision pick(List<(Connector, ConnectorMatch)> found) =>
+          RoutePolicy.pick(
+            <ConnectorMatch>[for (final (_, m) in found) m],
             recentConnectorId: recent,
           );
-          if (TypoFix.prefer(decision, fixedDecision)) {
-            return _repaired(
-              typoFixed,
-              fixedDecision.winner!,
-              addressed: addressed,
-              reply: 'router.typo',
-            );
-          }
+      final layered =
+          RecognitionLayers.route<List<(Connector, ConnectorMatch)>>(
+        message: message,
+        utterance: utterance,
+        hide: hideFromNetwork,
+        first: (found: candidates, decision: decision),
+        router: (Utterance u, bool hide) {
+          final found = collect(u, hide);
+          return (found: found, decision: pick(found));
+        },
+        analyze: (String text) =>
+            _analyze(text, recent, awaiting: utterance.awaitingAnswer),
+        fromVoice: session.fromVoice,
+        knownSecret: knownSecret,
+      );
+      if (layered.repair case final String reply) {
+        return _repaired(
+          layered.text,
+          layered.decision.winner!,
+          addressed: addressed,
+          depth: depth,
+          reply: reply,
+        );
+      }
+      if (layered.text != message) {
+        utterance = layered.utterance;
+        hideFromNetwork = layered.hide;
+        candidates = layered.found;
+        decision = layered.decision;
+        // Фраза о паролях без обёртки при выключенном навыке — тот же
+        // ответ, что и как есть, а не задача с паролем в названии.
+        final framedPasswords = PasswordPhrases.parse(utterance);
+        if (_passwordsOff &&
+            framedPasswords != null &&
+            framedPasswords.confidence >= PasswordPhrases.firm) {
+          session.lastConnectorId = null;
+          return session.reply(
+            'passwords.off',
+            intent: 'passwords.off',
+            status: AssistantStatus.noAction,
+          );
         }
       }
     }
@@ -1346,6 +1297,13 @@ final class AssistantController {
     return _run(bestConnector, best);
   }
 
+  Utterance _analyze(String text, String? recent, {bool? awaiting}) =>
+      Utterance.analyze(text, now: session.clock.now()).withChat(
+        session.chatTaskId,
+        awaitingAnswer: awaiting ?? _awaitingAnswer,
+        recentConnectorId: recent,
+      );
+
   /// Ответ на фразу, набранную не в той раскладке: чтение — сразу, с
   /// пояснением «понял как «…»»; запись (задача, будильник, файлы,
   /// действия склада…) — только после «Да»: исправление могло понять не
@@ -1354,10 +1312,19 @@ final class AssistantController {
     String text,
     ConnectorMatch winner, {
     required bool addressed,
+    required int depth,
     String reply = 'router.repaired',
   }) async {
+    // [winner] — команда, которая выполнится: [text] уже без обёртки и с
+    // исправленным сроком (_decide), и разбирается ещё раз без слоёв —
+    // тем же выбором.
     if (_readOnly(winner)) {
-      final response = await _route(text, addressed: addressed, depth: 1);
+      final response = await _route(
+        text,
+        addressed: addressed,
+        depth: depth,
+        layers: false,
+      );
       if (response.status == AssistantStatus.failed) return response;
       return response.withText(
         '${session.say(reply, <String, String>{'text': text})} '
