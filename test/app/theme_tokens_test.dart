@@ -110,12 +110,14 @@ void main() {
       // обводка знаков внахлёст (ADR-027).
       const allowed = <String>{
         'assistant_theme.dart',
-        'home_page.dart',
+        // Найденный пузырь ленты.
+        'message_row.dart',
         'task_tile.dart',
         'today_panel.dart',
         'my_relay_tabs.dart',
         'pin_pad.dart',
-        'personas_section.dart',
+        // Обводка знаков помощников внахлёст.
+        'persona_mark.dart',
         'bulk_checklist_card.dart',
         // Рамка фокуса поиска по сессиям (видимый фокус с клавиатуры).
         'relay_drawer.dart',
