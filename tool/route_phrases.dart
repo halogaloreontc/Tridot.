@@ -128,7 +128,10 @@ Map<String, Object?> routePhrase(
   final candidates = <ConnectorMatch>[];
   // Фразу о паролях или со словом «пароль» не получает ни один сетевой
   // коннектор — ни в каком виде (раздел 5.9, AssistantController).
-  final passwordsPhrase = PasswordPhrases.looksLike(utterance);
+  final passwordsPhrase = RecognitionLayers.hidesFromNetwork(
+    utterance,
+    (String t) => Utterance.analyze(t, now: now),
+  );
   for (final connector in appConnectors(now)) {
     if (passwordsPhrase && connector.info.requiresNetwork) continue;
     // Как в корпусном тесте: ошибка коннектора — ошибка всей фразы (ответ
@@ -148,7 +151,11 @@ Map<String, Object?> routePhrase(
       hide: passwordsPhrase,
       first: (found: candidates, decision: decision),
       router: (Utterance u, bool hide) {
-        final hidden = hide || PasswordPhrases.looksLike(u);
+        final hidden = hide ||
+            RecognitionLayers.hidesFromNetwork(
+              u,
+              (String t) => Utterance.analyze(t, now: now),
+            );
         final found = <ConnectorMatch>[
           for (final connector in appConnectors(now))
             if (!(hidden && connector.info.requiresNetwork))

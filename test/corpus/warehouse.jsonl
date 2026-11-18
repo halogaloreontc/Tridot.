@@ -156,3 +156,4 @@
 {"id":"wh-157","text":"сколько осталось до конца дня","connector":"warehouse","intent":"unknown","route":"talk","source":"manual"}
 {"id":"wh-158","text":"сколько стоит доллар","connector":"warehouse","intent":"unknown","route":"talk","note":"курс валюты, не цена товара","source":"manual"}
 {"id":"wh-159","text":"наличие задач","connector":"warehouse","intent":"unknown","route":"none","source":"manual"}
+{"id":"wh-160","text":"где лежит парль от почты","connector":"warehouse","intent":"unknown","route":"talk","connected":true,"note":"фраза о паролях и с опечаткой не уходит сетевому складу (раздел 5.9)","source":"review"}

@@ -966,7 +966,10 @@ final class AssistantController {
     // Фраза о паролях или просто со словом «пароль» (раздел 5.9): её не
     // получает ни один сетевой коннектор — ни в match, ни в уточнении
     // ответа, при любой уверенности, включён навык или нет.
-    var hideFromNetwork = PasswordPhrases.looksLike(utterance);
+    var hideFromNetwork = RecognitionLayers.hidesFromNetwork(
+      utterance,
+      (String text) => Utterance.analyze(text, now: session.clock.now()),
+    );
     final pendingAsker = session.pendingSpeaker;
     final pending = session.takePendingConfirmation();
     final asker = pending == null

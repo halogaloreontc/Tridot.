@@ -503,7 +503,10 @@ final class _Case {
     // один сетевой коннектор (раздел 5.9) — то же правило, что в
     // AssistantController.
     List<ConnectorMatch> matchesOf(Utterance utterance) {
-      final passwordsPhrase = PasswordPhrases.looksLike(utterance);
+      final passwordsPhrase = RecognitionLayers.hidesFromNetwork(
+        utterance,
+        (String text) => Utterance.analyze(text, now: now),
+      );
       return <ConnectorMatch>[
         for (final connector in registry.enabledConnectors)
           if (!(passwordsPhrase && connector.info.requiresNetwork))

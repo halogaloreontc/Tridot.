@@ -52,6 +52,17 @@ final class Layered<T> {
 ///    которая выполнится. Фразы о паролях, ПИН, кодах не исправляются:
 ///    исправленный текст повторяется в чате.
 abstract final class RecognitionLayers {
+  /// Фразу о паролях не получает ни один сетевой коннектор (раздел 5.9) —
+  /// и с опечаткой: «где лежит парль от почты» — тоже о паролях.
+  static bool hidesFromNetwork(
+    Utterance utterance,
+    Utterance Function(String text) analyze,
+  ) {
+    if (PasswordPhrases.looksLike(utterance)) return true;
+    final repaired = TypoFix.repair(utterance.original);
+    return repaired != null && PasswordPhrases.looksLike(analyze(repaired));
+  }
+
   static Layered<T> route<T>({
     required String message,
     required Utterance utterance,
