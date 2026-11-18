@@ -85,6 +85,10 @@ final class WidgetStore {
   /// тестов.
   String offReason = '';
 
+  /// Последний отказ склада по правке (`действие: статус код`). Правка
+  /// остаётся в очереди и уйдёт следующей синхронизацией.
+  String lastError = '';
+
   /// Что-то записалось на склад: странице — `changed {what: ["my"]}`.
   void Function()? onPushed;
 
@@ -239,8 +243,13 @@ final class WidgetStore {
         'op': _op(),
       });
       // gone — разговор импорта удалили на складе: копию не возвращаем.
-      if (reply.ok) legacy.clear();
-      return;
+      // Склад сам узнаёт повтор импорта (идемпотентно).
+      if (reply.ok || reply.code == 'gone' || reply.json?['gone'] == true) {
+        legacy.clear();
+        return;
+      }
+      // Хранилище выключилось (старый склад, нет прав) — в разговор кэша.
+      if (!_off) return;
     }
     final at = messages.first.timestamp;
     final thread = ChatThread(
@@ -310,6 +319,7 @@ final class WidgetStore {
       for (final p in chats._projects()) p.id: p,
     };
     final taskMap = <String, Task>{for (final t in tasks._all()) t.id: t};
+    final previousTasks = Map<String, Task>.of(taskMap);
     final index = _readIndex();
     if (full) {
       // Всё заново: остаются только свои неотправленные.
@@ -344,7 +354,12 @@ final class WidgetStore {
         case 'task':
           if (_state.dirtyTasks.contains(id)) continue;
           final task = _taskFrom(obj, projects);
-          if (task == null) continue;
+          if (task == null) {
+            // Не разобрали — прежняя копия лучше, чем ничего.
+            final old = previousTasks[id];
+            if (old != null) taskMap[id] = old;
+            continue;
+          }
           taskMap[id] = task;
           final pid = obj['project_id'];
           if (pid is String) {
@@ -485,6 +500,13 @@ final class WidgetStore {
     if (!remote) return;
     var pushed = false;
     bool stop(MyReply r) => r.transient || _off;
+    // Правка дошла (или объекта на складе больше нет). Иначе метка
+    // «грязное» остаётся: полная синхронизация не сотрёт локальную копию.
+    bool settled(String what, MyReply r) {
+      if (r.ok || r.code == 'gone') return true;
+      lastError = '$what: ${r.status} ${r.code}'.trim();
+      return false;
+    }
 
     for (final key in _state.deletes.toList()) {
       final [type, id] = key.split('|');
@@ -495,6 +517,7 @@ final class WidgetStore {
         'op': _op(),
       });
       if (stop(reply)) return _done(pushed);
+      if (!settled('my_del', reply) && reply.status != 404) continue;
       _state.deletes.remove(key);
       _state.known.remove(id);
       pushed = pushed || reply.ok;
@@ -526,6 +549,7 @@ final class WidgetStore {
         p.updatedAt,
       );
       if (stop(reply)) return _done(pushed);
+      if (!settled('project $id', reply)) continue;
       _state.dirtyProjects.remove(id);
       _state.pushedProjects[id] = _projectHash(p);
       pushed = pushed || reply.ok;
@@ -567,6 +591,7 @@ final class WidgetStore {
         t.updatedAt,
       );
       if (stop(reply)) return _done(pushed);
+      if (!settled('task $id', reply)) continue;
       _state.dirtyTasks.remove(id);
       if (projectId == null) {
         _state.taskProject.remove(id);
@@ -613,17 +638,19 @@ final class WidgetStore {
           'op': _op(),
         });
         if (stop(reply)) return _done(pushed);
-        _state.pushedMeta[id] = hash;
-        pushed = pushed || reply.ok;
+        if (reply.ok) {
+          _state.pushedMeta[id] = hash;
+          pushed = true;
+        } else {
+          settled('chat $id', reply);
+        }
       }
       final last = _state.pushedMessage[id];
+      // Последнее отправленное ушло из кэша — шлём всё: повтор по id
+      // безвреден, а старые неотправленные не теряются.
       var from = last == null
           ? 0
           : messages.indexWhere((ChatMessage m) => m.id == last) + 1;
-      // Последнее отправленное ушло из кэша — повтор по id безвреден.
-      if (from == 0 && last != null && messages.length > 50) {
-        from = messages.length - 50;
-      }
       while (from < messages.length) {
         final chunk = messages.sublist(from, min(from + 50, messages.length));
         final reply = await _send('my_chat_append', <String, Object?>{
@@ -636,13 +663,18 @@ final class WidgetStore {
           'op': _op(),
         });
         if (stop(reply)) return _done(pushed);
-        if (!reply.ok) break;
+        if (!reply.ok) {
+          settled('chat $id', reply);
+          break;
+        }
         if (reply.json?['u'] case final int u) _state.chatU[id] = u;
         from += chunk.length;
         _state.pushedMessage[id] = chunk.last.id;
         pushed = true;
       }
-      _state.dirtyChats.remove(id);
+      if (from >= messages.length && _state.pushedMeta[id] == hash) {
+        _state.dirtyChats.remove(id);
+      }
       _saveState();
     }
     _done(pushed);
