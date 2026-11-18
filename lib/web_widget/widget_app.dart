@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,15 +11,19 @@ import '../app/shell/session_header.dart';
 import '../app/shell/session_hero.dart';
 import '../app/widgets/status_cube.dart';
 import '../app/widgets/action_card_view.dart';
+import '../app/widgets/chat_feed_rhythm.dart';
+import '../app/widgets/command_highlight.dart';
+import '../app/widgets/composer_shell.dart';
+import '../app/widgets/message_row.dart';
 import '../app/widgets/warehouse_card_view.dart';
 import '../core/chats/chat_models.dart';
-import '../core/models/assistant_types.dart';
 import '../core/personas/persona.dart';
 import 'widget_session.dart';
 
-/// Веб-помощник склада: компактный чат по ADR-027 (шкала 16/14/13) —
-/// заголовок «Связной», лента, поле ввода и микрофон (только в оболочке
-/// Android). Без `package:web`: тесты виджетов идут на VM.
+/// Веб-помощник склада — чат из тех же частей, что сессия приложения
+/// (ADR-038): шапка [SessionHeader], пустой чат [SessionHero], лента
+/// [MessageRow] с ритмом [ChatFeedRhythm], поле [ComposerShell]; микрофон —
+/// только в оболочке Android. Без `package:web`: тесты виджетов идут на VM.
 final class WidgetApp extends StatelessWidget {
   const WidgetApp({super.key, required this.session});
 
@@ -67,7 +72,7 @@ final class WidgetChat extends StatefulWidget {
 }
 
 final class _WidgetChatState extends State<WidgetChat> {
-  final TextEditingController _input = TextEditingController();
+  final CommandInputController _input = CommandInputController();
   final ScrollController _scroll = ScrollController();
   final FocusNode _focus = FocusNode();
   int _seen = 0;
@@ -93,10 +98,9 @@ final class _WidgetChatState extends State<WidgetChat> {
   void _changed() {
     if (_session.messages.length != _seen) {
       _seen = _session.messages.length;
+      // Лента перевёрнута, как в приложении: низ — начало прокрутки.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scroll.hasClients) {
-          _scroll.jumpTo(_scroll.position.maxScrollExtent);
-        }
+        if (_scroll.hasClients) _scroll.jumpTo(0);
       });
     }
     if (mounted) setState(() {});
@@ -199,80 +203,131 @@ final class _WidgetChatState extends State<WidgetChat> {
         note: who.isEmpty ? null : who,
       );
     }
-    return ListView.builder(
-      controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(
-        AppSpace.pageH,
-        AppSpace.s,
-        AppSpace.pageH,
-        AppSpace.m,
-      ),
-      itemCount: messages.length + (_session.busy ? 1 : 0),
-      itemBuilder: (BuildContext context, int index) {
-        if (index == messages.length) {
-          return Padding(
-            padding: const EdgeInsets.only(top: AppSpace.toReply),
-            child: Text(
-              'Связной думает…',
-              style: text.bodySmall,
-            ),
-          );
-        }
-        final message = messages[index];
-        final previous = index == 0 ? null : messages[index - 1];
-        final gap = previous == null
-            ? 0.0
-            : message.fromUser
-                ? AppSpace.toUser
-                : AppSpace.toReply;
-        return Padding(
-          padding: EdgeInsets.only(top: gap),
-          child: message.fromUser
-              ? _UserBubble(message: message)
-              : _reply(context, message),
+    return _feed(context, messages);
+  }
+
+  static final PersonaCast _cast = PersonaCast.of(
+    const PersonaSettings(teamMode: TeamMode.solo, emoji: false),
+  );
+
+  /// Лента — те же строки и ритм, что в приложении ([MessageRow],
+  /// [ChatFeedRhythm]): метки времени группы, имя над ответом, промежутки.
+  /// Без задач, вложений и времени у каждого сообщения (в приложении оно
+  /// по умолчанию выключено).
+  Widget _feed(BuildContext context, List<ChatMessage> messages) {
+    final now = _session.now;
+    final lastWithCard = lastIndexById(messages, (ChatMessage m) => m.card?.id);
+    final rhythm = ChatFeedRhythm();
+    final rows = <Widget>[];
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      final author = message.fromUser ? null : _cast.find(message.personaId);
+      final beat = rhythm.next(
+        at: message.timestamp,
+        fromUser: message.fromUser,
+        authorId: author?.id,
+      );
+      if (beat.newGroup) {
+        rows.add(
+          GroupTime(
+            key: ValueKey<String>('group-time-${message.id}'),
+            label: groupTimeLabel(message.timestamp, now),
+            first: rows.isEmpty,
+          ),
         );
-      },
+      }
+      final card = _card(message, i, lastWithCard);
+      rows.add(
+        MessageRow(
+          cast: _cast,
+          message: message,
+          now: now,
+          showTime: false,
+          showAuthor: beat.showAuthor,
+          topGap: beat.topGap,
+          checklist: card,
+          onOpenTask: (_) {},
+          onToggleDone: (_) {},
+        ),
+      );
+      rhythm.placed(hadCard: card != null);
+    }
+    final thinking = _session.thinking;
+    if (thinking != null) {
+      final author = _cast.find(thinking.personaId);
+      final beat = rhythm.working(authorId: author?.id);
+      rows.add(
+        MessageRow(
+          cast: _cast,
+          key: const ValueKey<String>('working-message'),
+          message: thinking,
+          now: now,
+          showTime: false,
+          showAuthor: beat.showAuthor,
+          topGap: beat.topGap,
+          thinking: true,
+          onOpenTask: (_) {},
+          onToggleDone: (_) {},
+        ),
+      );
+    }
+    // Верх ленты гаснет на строку текста, полосы прокрутки нет — как в
+    // приложении.
+    final topFade = math.max(
+      AppSpace.m,
+      MediaQuery.textScalerOf(context).scale(16) * 1.4,
+    );
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (Rect bounds) => LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: const <Color>[Colors.transparent, Colors.black],
+          stops: <double>[
+            0,
+            bounds.height <= topFade ? 0 : topFade / bounds.height,
+          ],
+        ).createShader(bounds),
+        child: ListView(
+          key: const ValueKey<String>('widget-feed'),
+          controller: _scroll,
+          reverse: true,
+          padding: EdgeInsets.fromLTRB(
+            AppSpace.pageH,
+            topFade,
+            AppSpace.pageH,
+            AppSpace.m,
+          ),
+          children: rows.reversed.toList(),
+        ),
+      ),
     );
   }
 
-  Widget _reply(BuildContext context, ChatMessage message) {
-    final text = Theme.of(context).textTheme;
-    final colors = context.colors;
-    final card = message.card;
+  /// Карточка под ответом: склад — всегда, действие — только под последним
+  /// ответом с ней (как в приложении).
+  Widget? _card(ChatMessage message, int index, Map<String, int> lastWithCard) {
     final warehouse = message.warehouse;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        SelectableText(
-          message.text,
-          style: text.bodyLarge?.copyWith(
-            color: message.status == AssistantStatus.failed
-                ? colors.danger
-                : colors.text,
-          ),
-        ),
-        if (warehouse != null) ...<Widget>[
-          const SizedBox(height: AppSpace.textToCard),
-          WarehouseCardView(
-            card: warehouse,
-            showSay: false,
-            onOpen: _session.openWarehouse,
-            onOpenLink: _session.openWarehouseLink,
-          ),
-        ],
-        if (card != null) ...<Widget>[
-          const SizedBox(height: AppSpace.textToCard),
-          ActionCardView(
-            card: card,
-            busy: _session.busy,
-            onConfirm: () => unawaited(_session.answerCard(card, apply: true)),
-            onCancel: () => unawaited(_session.answerCard(card, apply: false)),
-            onSettle: () => unawaited(
-              _session.settleCard(card, personaId: message.personaId),
-            ),
-          ),
-        ],
-      ],
+    if (warehouse != null) {
+      return WarehouseCardView(
+        card: warehouse,
+        showSay: warehouse.say.trim() != message.text.trim(),
+        onOpen: _session.openWarehouse,
+        onOpenLink: _session.openWarehouseLink,
+      );
+    }
+    final card = message.card;
+    if (card == null || lastWithCard[card.id] != index) return null;
+    return ActionCardView(
+      card: card,
+      busy: _session.busy,
+      onConfirm: () => unawaited(_session.answerCard(card, apply: true)),
+      onCancel: () => unawaited(_session.answerCard(card, apply: false)),
+      onSettle: () => unawaited(
+        _session.settleCard(card, personaId: message.personaId),
+      ),
     );
   }
 
@@ -308,82 +363,45 @@ final class _WidgetChatState extends State<WidgetChat> {
     );
   }
 
+  /// Поле ввода приложения ([ComposerShell]) без «+», вложений и
+  /// «Диалог / Документ»: у помощника склада их нет. Глагол команды
+  /// подсвечивается, как в приложении.
   Widget _composer(BuildContext context) {
-    final colors = context.colors;
-    final text = Theme.of(context).textTheme;
+    _input.highlighter ??= _session.controller?.highlight;
     final voice = _session.voice;
-    final hint = _session.listening
-        ? (_session.partial.isEmpty ? 'Слушаю…' : _session.partial)
-        : _session.voiceNote;
-    return Container(
-      color: colors.workspace,
+    final VoiceButtonMode mode;
+    if (!voice.showButton) {
+      mode = VoiceButtonMode.hidden;
+    } else if (_session.listening) {
+      mode = VoiceButtonMode.listening;
+    } else {
+      mode = VoiceButtonMode.idle;
+    }
+    return Padding(
       padding: const EdgeInsets.fromLTRB(
+        AppSpace.pageH,
+        AppSpace.xxs,
+        AppSpace.pageH,
         AppSpace.s,
-        AppSpace.xs,
-        AppSpace.s,
-        AppSpace.xs,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          if (hint.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpace.xxs,
-                0,
-                AppSpace.xxs,
-                AppSpace.xs,
-              ),
-              child: Text(
-                hint,
-                key: const ValueKey<String>('voice-note'),
-                style: text.bodySmall,
-              ),
-            ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: <Widget>[
-              Expanded(
-                child: TextField(
-                  key: const ValueKey<String>('widget-input'),
-                  controller: _input,
-                  focusNode: _focus,
-                  minLines: 1,
-                  maxLines: 4,
-                  maxLength: 500,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => _submit(),
-                  // Enter не снимает фокус: следующий вопрос печатается
-                  // сразу, без щелчка по полю.
-                  onEditingComplete: () {},
-                  style: text.bodyLarge,
-                  decoration: const InputDecoration(
-                    hintText: 'Спросите склад…',
-                    counterText: '',
-                    isDense: true,
-                  ),
-                ),
-              ),
-              if (voice.showButton)
-                IconButton(
-                  key: const ValueKey<String>('widget-mic'),
-                  tooltip: _session.listening ? 'Остановить' : 'Сказать',
-                  onPressed: _session.busy ? null : _session.startVoice,
-                  icon: Icon(
-                    _session.listening ? Icons.stop_rounded : Icons.mic_none,
-                    color: _session.listening ? colors.accent : colors.icon,
-                  ),
-                ),
-              IconButton(
-                key: const ValueKey<String>('widget-send'),
-                tooltip: 'Отправить',
-                onPressed: _session.busy ? null : _submit,
-                icon: Icon(Icons.arrow_upward_rounded, color: colors.icon),
-              ),
-            ],
-          ),
-        ],
+      child: ComposerShell(
+        controller: _input,
+        focusNode: _focus,
+        sending: _session.busy,
+        onSend: _submit,
+        hintText: 'Спросите склад…',
+        maxLength: 500,
+        voiceMode: mode,
+        onVoiceTap: _session.startVoice,
+        onVoiceLongPress: _session.startVoice,
+        onVoiceCancel: _session.cancelVoice,
+        voicePartial: _session.listening
+            ? (_session.partial.isEmpty ? 'Слушаю…' : _session.partial)
+            : null,
+        voiceNotice: _session.voiceNote.isEmpty ? null : _session.voiceNote,
+        inputKey: const ValueKey<String>('widget-input'),
+        sendKey: const ValueKey<String>('widget-send'),
+        voiceKey: const ValueKey<String>('widget-mic'),
       ),
     );
   }
@@ -427,42 +445,6 @@ final class _Header extends StatelessWidget {
             ),
           button('widget-close', 'Закрыть', Icons.close_rounded, session.close),
         ],
-      ),
-    );
-  }
-}
-
-final class _UserBubble extends StatelessWidget {
-  const _UserBubble({required this.message});
-
-  final ChatMessage message;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Align(
-      alignment: Alignment.centerRight,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 340),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colors.bubble,
-            borderRadius: BorderRadius.circular(AppRadius.bubble),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpace.s,
-              vertical: AppSpace.xs,
-            ),
-            child: SelectableText(
-              message.text,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyLarge
-                  ?.copyWith(color: colors.text),
-            ),
-          ),
-        ),
       ),
     );
   }

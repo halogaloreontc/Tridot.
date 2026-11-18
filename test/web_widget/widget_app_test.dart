@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_assistant/app/widgets/message_row.dart';
 import 'package:local_assistant/web_widget/widget_app.dart';
 import 'package:local_assistant/web_widget/widget_session.dart';
 import 'package:local_assistant/web_widget/widget_storage.dart';
@@ -72,6 +73,22 @@ void main() {
     expect(session.messages.first.text, 'где лежит 64115');
     expect(find.text('Что сделать?'), findsNothing);
     expect(example, findsNothing);
+  });
+
+  testWidgets(
+      'лента как в приложении: метка времени группы и имя над '
+      'ответом', (WidgetTester tester) async {
+    await openPanel(tester);
+    await tester.runAsync(() async {
+      await session.send('посчитай 12 * 7');
+      await settle();
+    });
+    await tester.pump();
+    expect(find.byType(GroupTime), findsOneWidget);
+    expect(find.byType(MessageRow), findsNWidgets(2));
+    expect(find.textContaining('84'), findsWidgets);
+    // Имя Связного — в шапке и над ответом.
+    expect(find.text('Связной'), findsNWidgets(2));
   });
 
   testWidgets('вопрос из поля ввода — ответ в ленте',

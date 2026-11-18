@@ -78,7 +78,7 @@ exe` до шага с ключом, — без `dart run` и хуков. Checkou
 |---|---|
 | `lib/web_widget/main.dart` | Точка входа сборки `flutter build web -t lib/web_widget/main.dart` |
 | `lib/web_widget/widget_session.dart` | Вся логика без браузера: вход по ключу, разговор, новый ключ, голос, обновление (тесты на VM) |
-| `lib/web_widget/widget_app.dart` | Компактный чат по ADR-027 (тесты виджетов на VM) |
+| `lib/web_widget/widget_app.dart` | Чат из частей приложения (ADR-038): шапка, пустой чат, лента, поле ввода (тесты виджетов на VM) |
 | `lib/web_widget/widget_protocol.dart` | Сообщения `postMessage`: разбор и сборка |
 | `lib/web_widget/widget_storage.dart` | `localStorage` за интерфейсом: запись подключения, кэш описания, история |
 | `lib/web_widget/widget_texts.dart` | Тексты вместо путей приложения («Обновите страницу склада») |
