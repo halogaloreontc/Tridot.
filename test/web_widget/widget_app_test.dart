@@ -54,6 +54,26 @@ void main() {
     expect(find.byKey(const ValueKey<String>('widget-mic')), findsNothing);
   });
 
+  testWidgets(
+      'пустой чат — как новая сессия: «Что сделать?» и примеры '
+      'кнопками, нажатие спрашивает', (WidgetTester tester) async {
+    await openPanel(tester);
+    expect(find.text('Что сделать?'), findsOneWidget);
+    expect(find.text('Склад'), findsOneWidget);
+    final example = find.byKey(
+      const ValueKey<String>('widget-example-где лежит 64115'),
+    );
+    expect(example, findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(example);
+      await settle();
+    });
+    await tester.pump();
+    expect(session.messages.first.text, 'где лежит 64115');
+    expect(find.text('Что сделать?'), findsNothing);
+    expect(example, findsNothing);
+  });
+
   testWidgets('вопрос из поля ввода — ответ в ленте',
       (WidgetTester tester) async {
     await openPanel(tester);

@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 
 import '../app/assistant_theme.dart';
 import '../app/layout.dart';
+import '../app/shell/quick_actions.dart';
+import '../app/shell/session_header.dart';
+import '../app/shell/session_hero.dart';
+import '../app/widgets/status_cube.dart';
 import '../app/widgets/action_card_view.dart';
 import '../app/widgets/warehouse_card_view.dart';
 import '../core/chats/chat_models.dart';
@@ -119,9 +123,11 @@ final class _WidgetChatState extends State<WidgetChat> {
         child: Column(
           children: <Widget>[
             _Header(session: _session),
-            Divider(height: 1, color: colors.divider),
             Expanded(child: _body(context)),
-            if (_session.phase == WidgetPhase.ready) _composer(context),
+            if (_session.phase == WidgetPhase.ready) ...<Widget>[
+              _examples(),
+              _composer(context),
+            ],
           ],
         ),
       ),
@@ -185,13 +191,12 @@ final class _WidgetChatState extends State<WidgetChat> {
     }
     final messages = _session.messages;
     if (messages.isEmpty) {
-      final examples = _session.examples;
-      return note(
-        examples.isEmpty
-            ? 'Спросите склад: где лежит артикул, сколько осталось, что '
-                'пришло сегодня.'
-            : 'Спросите склад, например: '
-                '${examples.map((String e) => '«$e»').join(', ')}.',
+      // Пустой чат — как новая сессия приложения: знак Связного и «Что
+      // сделать?», под ним — кто вошёл в склад.
+      final who = _session.who;
+      return SessionHero(
+        persona: Personas.sado,
+        note: who.isEmpty ? null : who,
       );
     }
     return ListView.builder(
@@ -268,6 +273,38 @@ final class _WidgetChatState extends State<WidgetChat> {
           ),
         ],
       ],
+    );
+  }
+
+  /// Примеры вопросов из описания склада — кнопками над полем ввода, как
+  /// быстрые действия в новой сессии приложения: нажатие спрашивает.
+  Widget _examples() {
+    final examples = _session.examples;
+    if (_session.messages.isNotEmpty || examples.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xxs),
+      child: QuickActionsRow(
+        label: 'Примеры вопросов',
+        inset: AppSpace.pageH,
+        items: <QuickRowItem>[
+          for (final example in examples)
+            (
+              ValueKey<String>('widget-example-$example'),
+              (
+                example,
+                Icons.search_rounded,
+                _session.busy
+                    ? null
+                    : () {
+                        _input.clear();
+                        unawaited(_session.send(example));
+                      },
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -352,6 +389,9 @@ final class _WidgetChatState extends State<WidgetChat> {
   }
 }
 
+/// Шапка как у сессии в приложении (ADR-027): название посередине, под
+/// ним точка и имя помощника, кубик — пока он думает. Справа «Новый чат» и
+/// «Закрыть» вместо «⋯»: рамки вокруг фрейма склад не рисует.
 final class _Header extends StatelessWidget {
   const _Header({required this.session});
 
@@ -360,59 +400,32 @@ final class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final text = Theme.of(context).textTheme;
-    final (accent, background) = PersonaColors.of(Personas.sado, context);
-    final who = session.who;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpace.m,
-        AppSpace.xs,
-        AppSpace.xxs,
-        AppSpace.xs,
-      ),
-      child: Row(
+    final ready = session.phase == WidgetPhase.ready;
+    Widget button(String key, String tip, IconData icon, VoidCallback? tap) =>
+        IconButton(
+          key: ValueKey<String>(key),
+          tooltip: tip,
+          onPressed: tap,
+          style: IconButton.styleFrom(minimumSize: const Size(44, 44)),
+          icon: Icon(icon, color: colors.icon),
+        );
+    return SessionHeader(
+      sessionTitle: 'Склад',
+      persona: ready ? Personas.sado : null,
+      cube: session.busy
+          ? const StatusCube(state: CubeState.working, size: 14)
+          : null,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          CircleAvatar(
-            radius: 14,
-            backgroundColor: background,
-            child: Text(
-              'С',
-              style: text.labelSmall?.copyWith(color: accent),
+          if (ready)
+            button(
+              'widget-new',
+              'Новый чат',
+              Icons.add_comment_outlined,
+              session.busy ? null : session.newChat,
             ),
-          ),
-          const SizedBox(width: AppSpace.s),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  'Связной',
-                  style: text.titleMedium?.copyWith(color: colors.textStrong),
-                ),
-                if (who.isNotEmpty)
-                  Text(
-                    who,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: text.bodySmall,
-                  ),
-              ],
-            ),
-          ),
-          if (session.phase == WidgetPhase.ready)
-            IconButton(
-              key: const ValueKey<String>('widget-new'),
-              tooltip: 'Новый чат',
-              onPressed: session.busy ? null : session.newChat,
-              icon: Icon(Icons.add_comment_outlined, color: colors.icon),
-            ),
-          IconButton(
-            key: const ValueKey<String>('widget-close'),
-            tooltip: 'Закрыть',
-            onPressed: session.close,
-            icon: Icon(Icons.close_rounded, color: colors.icon),
-          ),
+          button('widget-close', 'Закрыть', Icons.close_rounded, session.close),
         ],
       ),
     );
