@@ -33,6 +33,68 @@ final class FakeWarehouse implements HttpTransport {
     'actions': true,
   };
 
+  /// Склад 1.4.74 с личным хранилищем: `ask_me.store` и ответы `my_*` по
+  /// умолчанию (пустое хранилище, записи принимаются).
+  void withStore({bool signals = false}) {
+    me = <String, Object?>{
+      ...me,
+      'store': <String, Object?>{'v': 1, 'on': true, 'signals': signals},
+    };
+    myOk = true;
+  }
+
+  bool myOk = false;
+  int _rev = 0;
+
+  /// Тела запросов действия [action].
+  List<Map<String, Object?>> bodies(String action) => <Map<String, Object?>>[
+        for (final r in requests)
+          if (r.uri.queryParameters['action'] == action)
+            Map<String, Object?>.from(jsonDecode(r.body ?? '{}') as Map),
+      ];
+
+  Map<String, Object?> _myDefault(String action, String? body) {
+    final json = body == null || body.isEmpty
+        ? <String, Object?>{}
+        : Map<String, Object?>.from(jsonDecode(body) as Map);
+    switch (action) {
+      case 'my_sync':
+        return <String, Object?>{
+          'ok': true,
+          'epoch': 'e1',
+          'rev': _rev,
+          'mark': 'mk',
+          'full': json['since'] == 0,
+          'items': <Object?>[],
+          'gone': <Object?>[],
+          'next': _rev,
+          'more': false,
+        };
+      case 'my_put':
+        final obj = json['obj']! as Map;
+        return <String, Object?>{
+          'ok': true,
+          'obj': <String, Object?>{
+            ...Map<String, Object?>.from(obj),
+            'rev': ++_rev,
+          },
+          'rev': _rev,
+        };
+      case 'my_patch':
+      case 'my_chat_new':
+        return <String, Object?>{
+          'ok': true,
+          'obj': <String, Object?>{'id': json['id'], 'rev': ++_rev},
+          'rev': _rev,
+        };
+      case 'my_chat_append':
+        return <String, Object?>{'ok': true, 'u': ++_rev, 'rev': _rev};
+      case 'my_signals':
+        return <String, Object?>{'ok': true, 'items': <Object?>[]};
+    }
+    return <String, Object?>{'ok': true};
+  }
+
   void on(String action, int status, Object? json) =>
       (script[action] ??= <(int, Object?)>[]).add((status, json));
 
@@ -63,6 +125,12 @@ final class FakeWarehouse implements HttpTransport {
     if (queue == null || queue.isEmpty) {
       if (action == 'ask_me') {
         return HttpResponseData(statusCode: 200, body: jsonEncode(me));
+      }
+      if (myOk && action.startsWith('my_')) {
+        return HttpResponseData(
+          statusCode: 200,
+          body: jsonEncode(_myDefault(action, request.body)),
+        );
       }
       return HttpResponseData(
         statusCode: 400,

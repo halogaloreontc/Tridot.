@@ -867,6 +867,11 @@ final class ConnectionService {
   /// права входа — в запись подключения, для карточки и проверки прав
   /// перед действием. Склад без `ask_me` (400) — прежние сведения
   /// остаются. Без личного ключа — ничего не спрашивает.
+  /// Последний ответ `ask_me` как есть — для полей, которых нет в
+  /// [ConnectionMe] (у склада 1.4.74 — `store`: личное хранилище `my_*`).
+  /// Только в памяти.
+  Map<String, Object?>? lastMe;
+
   Future<ConnectionResult> refreshMe() async {
     final description = this.description;
     final me = description?.me ?? builtIn?.me;
@@ -912,6 +917,7 @@ final class ConnectionService {
       permsField: me.perms,
       at: _clock.now(),
     );
+    lastMe = json;
     final login = _text(json['login']);
     await _save(
       record.copyWith(
