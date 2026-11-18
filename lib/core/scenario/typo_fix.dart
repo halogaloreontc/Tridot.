@@ -97,6 +97,14 @@ abstract final class TypoFix {
   static String? _fix(String word, Map<String, int> lexicon) {
     if (word.length < 5 || commandLexicon.containsKey(word)) return null;
     if (Utterance.isRealWord(word) || _realWords.contains(word)) return null;
+    // Растянутая буква: «завтраа», «напоомни» — одна из двух одинаковых
+    // подряд лишняя, и без неё получается слово словаря.
+    final squeezed = <String>{
+      for (var i = 0; i + 1 < word.length; i++)
+        if (word[i] == word[i + 1])
+          word.substring(0, i) + word.substring(i + 1),
+    }.where(lexicon.containsKey).toList();
+    if (squeezed.length == 1) return squeezed.single;
     // «По утрам», «по вечерам», «по средам» — дательный множественного, а
     // не опечатка в «утром», «вечером».
     if (word.endsWith('ам') || word.endsWith('ям')) return null;

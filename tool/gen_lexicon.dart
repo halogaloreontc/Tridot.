@@ -69,11 +69,23 @@ Map<String, int> lexicon() {
       for (final MapEntry(key: other, value: otherCount) in counts.entries)
         if (otherCount >= 3 * count &&
             other != word &&
-            Utterance.isTypoOf(word, other))
+            (Utterance.isTypoOf(word, other) || _stretched(word, other)))
           word,
   };
   counts.removeWhere((String word, int _) => typos.contains(word));
   return counts;
+}
+
+/// «завтраа» — растянутое «завтра»: одна из двух одинаковых букв лишняя.
+bool _stretched(String word, String other) {
+  if (word.length != other.length + 1) return false;
+  for (var i = 0; i + 1 < word.length; i++) {
+    if (word[i] == word[i + 1] &&
+        word.substring(0, i) + word.substring(i + 1) == other) {
+      return true;
+    }
+  }
+  return false;
 }
 
 String generate() {

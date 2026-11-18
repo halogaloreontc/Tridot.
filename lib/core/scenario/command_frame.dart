@@ -38,6 +38,12 @@ abstract final class CommandFrame {
     }
     value = _modal(value);
     value = _stripTail(value, fromVoice: fromVoice);
+    // «кУПИТЬ молоко» — нажат Caps Lock: слово с маленькой первой и
+    // большими остальными — в обычный регистр.
+    value = value.replaceAllMapped(
+      _capsLocked,
+      (Match m) => m.group(0)!.toLowerCase(),
+    );
     value = _colloquial(value);
     value = _verbLast(value);
     value = value.replaceAllMapped(_kaParticle, (Match m) {
@@ -56,6 +62,9 @@ abstract final class CommandFrame {
     );
     return value[0].toUpperCase() + value.substring(1);
   }
+
+  static final RegExp _capsLocked =
+      RegExp(r'(?<![А-Яа-яЁё])[а-яё][А-ЯЁ]{2,}(?![А-Яа-яЁё])');
 
   static final RegExp _quoted = RegExp('«[^»]*»|"[^"]*"|„[^“”]*[“”]');
   static const String _quoteMark = '\uE000';

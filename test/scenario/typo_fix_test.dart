@@ -32,6 +32,12 @@ void main() {
     }
   });
 
+  test('растянутая буква', () {
+    expect(TypoFix.repairDue('купить молоко завтраа'), 'купить молоко завтра');
+    expect(TypoFix.repair('напоомни купить хлеб'), 'напомни купить хлеб');
+    expect(TypoFix.repair('ванна вечером'), isNull, reason: 'не слово словаря');
+  });
+
   test('только слова срока', () {
     expect(
       TypoFix.repairDue('напоми заввтра в 10 позвонить маме'),
