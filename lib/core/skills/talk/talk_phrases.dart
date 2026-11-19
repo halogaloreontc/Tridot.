@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../../connectors/due_parser.dart';
+import '../../connectors/verb_forms.dart';
 import '../../personas/persona.dart';
 import '../../replies/reply_catalog.dart';
 
@@ -195,6 +196,11 @@ abstract final class TalkPhrases {
     'вот',
     'а',
     'вообще',
+    // Обращение по-свойски: «спс бро», «как дела, дружище».
+    'бро',
+    'братан',
+    'братишка',
+    'дружище',
   };
 
   /// Имена для обращения → id: «привет, Нода», «пусть отвечает Лио»
@@ -311,6 +317,14 @@ abstract final class TalkPhrases {
     // Приветствия.
     'привет': TalkRequest(TalkTopic.greet),
     'приветик': TalkRequest(TalkTopic.greet),
+    // Разговорные: «прив», «дарова», «здарова» («здорово!» без имени —
+    // отклик, а не приветствие).
+    'прив': TalkRequest(TalkTopic.greet),
+    'приветы': TalkRequest(TalkTopic.greet),
+    'дарова': TalkRequest(TalkTopic.greet),
+    'здарова': TalkRequest(TalkTopic.greet),
+    'здаров': TalkRequest(TalkTopic.greet),
+    'хаюшки': TalkRequest(TalkTopic.greet),
     'привет привет': TalkRequest(TalkTopic.greet),
     'всем привет': TalkRequest(TalkTopic.greet),
     'приветствую': TalkRequest(TalkTopic.greet),
@@ -354,6 +368,10 @@ abstract final class TalkPhrases {
     'всего хорошего': TalkRequest(TalkTopic.bye),
     'пора': TalkRequest(TalkTopic.bye),
     'все пока': TalkRequest(TalkTopic.bye),
+    'давай пока': TalkRequest(TalkTopic.bye),
+    'все давай пока': TalkRequest(TalkTopic.bye),
+    'пока давай': TalkRequest(TalkTopic.bye),
+    'ну все давай': TalkRequest(TalkTopic.bye),
     'чао': TalkRequest(TalkTopic.bye),
     'bye': TalkRequest(TalkTopic.bye),
     'спокойной ночи': TalkRequest(TalkTopic.bye, night: true),
@@ -364,6 +382,11 @@ abstract final class TalkPhrases {
     'спс': TalkRequest(TalkTopic.thanks),
     'спасибочки': TalkRequest(TalkTopic.thanks),
     'спасибки': TalkRequest(TalkTopic.thanks),
+    'благодарочка': TalkRequest(TalkTopic.thanks),
+    'благодарствую': TalkRequest(TalkTopic.thanks),
+    'пасиб': TalkRequest(TalkTopic.thanks),
+    'пасиба': TalkRequest(TalkTopic.thanks),
+    'сенкс': TalkRequest(TalkTopic.thanks),
     'благодарю': TalkRequest(TalkTopic.thanks),
     'благодарю тебя': TalkRequest(TalkTopic.thanks),
     'благодарю вас': TalkRequest(TalkTopic.thanks),
@@ -1187,6 +1210,7 @@ abstract final class TalkPhrases {
         _settingRequest(plain) ??
         _jokeRequest(plain) ??
         _capabilitiesRequest(plain) ??
+        _skillAbilityRequest(plain) ??
         (loose ? _thanksRequest(plain) : null);
     return request?.withPersona(persona);
   }
@@ -2282,6 +2306,40 @@ abstract final class TalkPhrases {
     }
     return const TalkRequest(TalkTopic.capabilities);
   }
+
+  /// «Умеешь ставить будильник?», «умеешь считать проценты?», «как
+  /// пользоваться калькулятором» — вопрос о том, что умеет помощник:
+  /// «умеешь» и инфинитив, дальше не больше двух слов без чисел. «Можешь
+  /// поставить будильник?» — вежливая просьба, а не вопрос: её здесь нет.
+  static TalkRequest? _skillAbilityRequest(List<String> words) {
+    var at = 0;
+    while (at < words.length && (words[at] == 'ты' || words[at] == 'вы')) {
+      at++;
+    }
+    final rest = words.sublist(at);
+    if (rest.isEmpty || rest.any((String w) => RegExp(r'\d').hasMatch(w))) {
+      return null;
+    }
+    if ((rest.first == 'умеешь' || rest.first == 'умеете') &&
+        rest.length >= 2 &&
+        rest.length <= 4 &&
+        VerbForms.isInfinitive(rest[1])) {
+      return const TalkRequest(TalkTopic.capabilities);
+    }
+    if (rest.length == 3 &&
+        rest[0] == 'как' &&
+        rest[1] == 'пользоваться' &&
+        (_appTopics.any(rest[2].startsWith) ||
+            _skillTopics.any(rest[2].startsWith))) {
+      return const TalkRequest(TalkTopic.capabilities);
+    }
+    return null;
+  }
+
+  /// Основы названий навыков: «как пользоваться будильником».
+  static const List<String> _skillTopics = <String>[
+    'будильник', 'таймер', 'погод', 'конвертер', 'архиватор', 'склад', //
+  ];
 
   /// Слова благодарности: «спасибо», «спс», «благодарю».
   static const Set<String> _thanksWords = <String>{

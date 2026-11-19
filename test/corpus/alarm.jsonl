@@ -66,3 +66,11 @@
 {"id":"alm-064","text":"поставь будильник на 5 и 6","connector":"alarm","intent":"alarm.clarify","source":"manual","note":"два времени — вопрос, а не 5:00"}
 {"id":"alm-065","text":"таймер на час двадцать","connector":"alarm","intent":"alarm.timer","form":{"seconds":"4800"},"source":"manual"}
 {"id":"alm-066","text":"поставь таймер на два часа десять","connector":"alarm","intent":"alarm.timer","form":{"seconds":"7800"},"source":"manual"}
+{"id":"alm-067","text":"подними меня в 6:15","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"15"},"source":"manual","note":"«подними меня» — «разбуди»; «подними цену» — нет"}
+{"id":"alm-068","text":"подними цену на 7","connector":"alarm","intent":"unknown","route":"none","source":"manual","note":"«подними» без «меня» — не будильник"}
+{"id":"alm-069","text":"по субботам буди меня в 9","connector":"alarm","intent":"alarm.set","form":{"hour":"9","minute":"0","days":"6"},"source":"manual","note":"повтор до якоря"}
+{"id":"alm-070","text":"будильник по рабочим дням в 6:50","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"50","days":"1-5"},"source":"manual"}
+{"id":"alm-071","text":"таймер на 4 минуты, яйца варю","connector":"alarm","intent":"alarm.timer","form":{"seconds":"240"},"source":"manual","note":"пояснение после запятой без чисел и сроков"}
+{"id":"alm-072","text":"таймер на 1,5 часа","connector":"alarm","intent":"alarm.timer","form":{"seconds":"5400"},"source":"manual","note":"дробь перед единицей"}
+{"id":"alm-073","text":"мне завтра рано вставать, разбуди в пять двадцать","connector":"alarm","intent":"alarm.set","form":{"hour":"5","minute":"20"},"source":"manual","note":"день до якоря — в просьбу"}
+{"id":"alm-074","text":"поставь будильник на 7, не надо","connector":"alarm","intent":"unknown","route":"none","source":"manual","note":"отказ после запятой не снимается"}

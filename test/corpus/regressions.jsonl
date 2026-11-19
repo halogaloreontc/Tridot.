@@ -104,7 +104,7 @@
 {"id":"reg-104","text":"перенеси будильник на полчаса позже","intent":"unknown","route":"none","note":"будильник — не задача; сдвиг будильника не умеем","source":"probe"}
 {"id":"reg-105","text":"погоду не надо, спасибо","connector":"weather","intent":"unknown","route":"none","note":"отказ, а не вопрос о погоде","source":"probe"}
 {"id":"reg-106","text":"погода на рынке недвижимости","connector":"weather","intent":"unknown","route":"none","note":"переносный смысл","source":"probe"}
-{"id":"reg-107","text":"переведи 30 градусов цельсия в фаренгейты","connector":"weather","intent":"unknown","route":"none","note":"перевод единиц, не погода","source":"probe"}
+{"id":"reg-107","text":"переведи 30 градусов цельсия в фаренгейты","connector":"weather","intent":"unknown","route":"talk","note":"перевод единиц, не погода; беседа честно отвечает: единиц и курсов нет (talk.question.units)","source":"probe"}
 {"id":"reg-108","text":"прогноз на 10 дней","connector":"weather","intent":"weather.week","form":{"range":"week"},"note":"несколько дней — прогноз на неделю","source":"probe"}
 {"id":"reg-109","text":"чо надеть завтра а то холодно","connector":"weather","intent":"weather.wear","form":{"day":"2026-11-03"},"note":"«чо» — «что»","source":"probe"}
 {"id":"reg-110","text":"убери только что сделанную картинку","connector":"files","intent":"files.delete","after":"converter","note":"файл сессии, а не отметка задачи","source":"probe"}

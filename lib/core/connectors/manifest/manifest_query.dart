@@ -77,6 +77,55 @@ abstract final class ManifestQuery {
     return canonical == text ? null : canonical;
   }
 
+  /// Разговорная речь словами описания: «скока» → «сколько», «чо не
+  /// проведено ещё» → «что не проведено», «приходы без фоток покажь» →
+  /// «приходы без фото», «покажи содержимое ячейки 303-1-1» → «что в
+  /// ячейке 303-1-1», «что лежит в ячейке 215 3 2 1» (голос съел дефисы)
+  /// → «… 215-3-2-1», «какая у меня роль» → «моя роль». `null` — менять
+  /// нечего.
+  static String? colloquial(String text) {
+    var t = ' $text ';
+    for (final (pattern, replacement) in _colloquialWords) {
+      t = t.replaceAll(pattern, replacement);
+    }
+    t = t.replaceAll(_spaces, ' ').trim();
+    for (final (pattern, replace) in _colloquialRewrites) {
+      final match = pattern.firstMatch(t);
+      if (match == null) continue;
+      t = replace.replaceAllMapped(
+        RegExp(r'\$(\d)'),
+        (Match m) => match.group(int.parse(m.group(1)!)) ?? '',
+      );
+    }
+    // Код ячейки без дефисов после слова «ячейка/стеллаж»: «215 3 2 1».
+    t = t.replaceAllMapped(_spokenCell, (Match m) {
+      final parts = m.group(3)!.trim().split(_spaces);
+      return '${m.group(1)} ${m.group(2)}-${parts.join('-')}';
+    });
+    if (t.isEmpty || t == text) return null;
+    return t;
+  }
+
+  static final List<(RegExp, String)> _colloquialWords = <(RegExp, String)>[
+    (RegExp(r'(?<=\s)ско(?:ка|ко|лька)(?=\s)'), 'сколько'),
+    (RegExp(r'^\s(?:чо|чё|че|шо)(?=\s)'), ' что'),
+    (RegExp(r'(?<=\s)(?:фоток|фоточек|фотки|фоткам|фотографий)(?=\s)'), 'фото'),
+    (RegExp(r'(?<=\s)(?:щас|еще|плиз|пж)(?=\s)'), ' '),
+    (RegExp(r'\s(?:покажи|покажь)\s*$'), ' '),
+  ];
+
+  static final List<(RegExp, String)> _colloquialRewrites = <(RegExp, String)>[
+    (
+      RegExp(r'^(?:покажи\s+)?содержимое\s+(?:ячейки\s+)?(.+)$'),
+      r'что в ячейке $1',
+    ),
+    (RegExp(r'^какая\s+у\s+меня\s+роль(.*)$'), r'моя роль$1'),
+  ];
+
+  static final RegExp _spokenCell = RegExp(
+    r'(ячейк[аеуи]|стеллаж[еау]?)\s+(\d{3})((?:\s+\d{1,2}){1,3})$',
+  );
+
   static const Set<String> _arrivalsFiller = <String>{
     'что',
     'чё',
@@ -137,7 +186,8 @@ abstract final class ManifestQuery {
     // осталось бы «складе 64115».
     RegExp(r'^(?:по|на|у|для|про)\s+(?=\S)'),
     RegExp(r'^(?:мне\s+)?найти(?:\s|$)'),
-    RegExp(r'^(?:артикул(?:у|а)?|арт)\s+(?=\d)'),
+    // «артикул 64115», «артикул BX-7712» — код с цифрой.
+    RegExp(r'^(?:артикул(?:у|а)?|арт)\s+(?=[a-zа-я-]*\d)'),
     RegExp(r'^штук(?:\s|$)'),
   ];
 
@@ -232,6 +282,12 @@ abstract final class ManifestQuery {
   static final List<(RegExp, String, bool)> _rewrites =
       <(RegExp, String, bool)>[
     (RegExp(r'^есть\s+ли\s+(?:у\s+нас\s+)?(.+)$'), r'сколько $1', true),
+    // «Есть табуретки?» — без «ли».
+    (
+      RegExp(r'^есть\s+(?!ли\s|в\s+наличии)(?:еще\s+)?(?:у\s+нас\s+)?(.+)$'),
+      r'сколько $1',
+      true,
+    ),
     (
       RegExp(r'^(?:а\s+)?(.+?)\s+(?:есть|имеется|имеются)$'),
       r'сколько $1',

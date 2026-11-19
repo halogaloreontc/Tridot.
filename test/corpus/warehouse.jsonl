@@ -157,3 +157,12 @@
 {"id":"wh-158","text":"сколько стоит доллар","connector":"warehouse","intent":"unknown","route":"talk","note":"курс валюты, не цена товара","source":"manual"}
 {"id":"wh-159","text":"наличие задач","connector":"warehouse","intent":"unknown","route":"none","source":"manual"}
 {"id":"wh-160","text":"где лежит парль от почты","connector":"warehouse","intent":"unknown","route":"talk","connected":true,"note":"фраза о паролях и с опечаткой не уходит сетевому складу (раздел 5.9)","source":"review"}
+{"id":"wh-161","text":"покажи содержимое ячейки 303-1-1","connector":"warehouse","intent":"warehouse.cell","form":{"cell":"303-1-1"},"connected":true,"note":"«содержимое ячейки» — «что в ячейке»","source":"manual"}
+{"id":"wh-162","text":"что ещё не проведено","connector":"warehouse","intent":"warehouse.unposted","connected":true,"source":"manual"}
+{"id":"wh-163","text":"чо не проведено ещё","connector":"warehouse","intent":"warehouse.unposted","connected":true,"note":"«чо» — «что», «ещё» ничего не меняет","source":"manual"}
+{"id":"wh-165","text":"какая у меня роль","connector":"warehouse","intent":"warehouse.me","connected":true,"source":"manual"}
+{"id":"wh-166","text":"щас где лежат венские стулья?","connector":"warehouse","intent":"warehouse.where","form":{"q":"венские стулья"},"connected":true,"source":"manual"}
+{"id":"wh-167","text":"скока у нас 64115 осталось","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"connected":true,"source":"manual"}
+{"id":"wh-168","text":"скока стоят венские стулья???","connector":"warehouse","intent":"warehouse.price","form":{"q":"венские стулья"},"connected":true,"source":"manual"}
+{"id":"wh-169","text":"что лежит в ячейке 215 3 2 1","connector":"warehouse","intent":"warehouse.cell","form":{"cell":"215-3-2-1"},"connected":true,"note":"голос съел дефисы: после «ячейке» — код по группам","source":"manual"}
+{"id":"wh-170","text":"есть ещё табуретки?","connector":"warehouse","intent":"warehouse.count","form":{"q":"табуретки"},"connected":true,"source":"manual"}

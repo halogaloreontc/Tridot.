@@ -22,10 +22,10 @@
 {"id": "ext-021", "text": "перегони видео в mp4", "connector": "converter", "intent": "converter.convert", "source": "manual"}
 {"id": "ext-022", "text": "Лиорио, сконвертируй фото в jpg", "connector": "converter", "intent": "converter.convert", "source": "manual"}
 {"id": "ext-023", "text": "конвертируй звук из видео в mp3", "connector": "converter", "intent": "converter.convert", "source": "manual"}
-{"id": "ext-024", "text": "переведи 100 долларов в рубли", "connector": "converter", "intent": "unknown", "route": "none", "note": "не формат файла", "source": "manual"}
+{"id": "ext-024", "text": "переведи 100 долларов в рубли", "connector": "converter", "intent": "unknown", "route": "talk", "note": "не формат файла: беседа честно отвечает, что курсов нет (talk.question.units)", "source": "manual"}
 {"id": "ext-025", "text": "переведи файл на английский", "connector": "converter", "intent": "unknown", "route": "none", "note": "перевод текста, а не формата", "source": "manual"}
-{"id": "ext-026", "text": "конвертируй доллары в рубли", "connector": "converter", "intent": "unknown", "route": "none", "note": "валюта, а не файл", "source": "manual"}
-{"id": "ext-027", "text": "переведи 10 градусов в фаренгейты", "connector": "converter", "intent": "unknown", "route": "none", "note": "единицы измерения; погода «переведи … градусов» тоже не берёт", "source": "manual"}
+{"id": "ext-026", "text": "конвертируй доллары в рубли", "connector": "converter", "intent": "unknown", "route": "talk", "note": "валюта, а не файл; беседа честно отвечает: единиц и курсов нет (talk.question.units)", "source": "manual"}
+{"id": "ext-027", "text": "переведи 10 градусов в фаренгейты", "connector": "converter", "intent": "unknown", "route": "talk", "note": "единицы измерения; погода «переведи … градусов» тоже не берёт; беседа честно отвечает: единиц и курсов нет (talk.question.units)", "source": "manual"}
 {"id": "ext-028", "text": "запили видео про котиков", "connector": "converter", "intent": "unknown", "route": "none", "note": "не команда конвертеру", "source": "manual"}
 {"id": "ext-029", "text": "добавь задачу сконвертировать отчёт в pdf", "intent": "createTask", "title": "Сконвертировать отчёт в pdf", "source": "manual"}
 {"id": "ext-030", "text": "сконвертировать видео", "intent": "createTask", "title": "Сконвертировать видео", "source": "manual"}
@@ -55,9 +55,13 @@
 {"id": "ext-054", "text": "сконвертируй запись в wav", "connector": "converter", "intent": "converter.convert", "form": {"target": "wav"}, "source": "manual"}
 {"id": "ext-055", "text": "сконвертируй видео в webm", "connector": "converter", "intent": "converter.convert", "form": {"target": "webm"}, "note": "цель понята; на телефоне и Mac ответ честный: WebM там не делается (converter_connector_test)", "source": "manual"}
 {"id": "ext-056", "text": "сконвертируй песню в flac", "connector": "converter", "intent": "converter.convert", "form": {"unoffered": "FLAC"}, "note": "формата нет нигде — честный ответ, а не молчание", "source": "manual"}
-{"id": "ext-057", "text": "переведи 320 рублей в доллары", "connector": "converter", "intent": "unknown", "route": "none", "note": "деньги, а не битрейт", "source": "manual"}
+{"id": "ext-057", "text": "переведи 320 рублей в доллары", "connector": "converter", "intent": "unknown", "route": "talk", "note": "деньги, а не битрейт; беседа честно отвечает: единиц и курсов нет (talk.question.units)", "source": "manual"}
 {"id": "ext-058", "text": "сконвертируй 1080 рублей", "connector": "converter", "intent": "unknown", "route": "none", "note": "деньги, а не разрешение", "source": "manual"}
 {"id": "ext-059", "text": "сожми файлы до 10 мегабайт", "connector": "archiver", "intent": "archiver.zip", "note": "файлы — архиватор, не конвертер", "source": "manual"}
 {"id": "ext-060", "text": "сделай из файлов архив", "connector": "converter", "intent": "unknown", "route": "none", "note": "архив — не формат конвертера", "source": "manual"}
 {"id": "ext-061", "text": "сконвертируй видео в формат mp3 320", "connector": "converter", "intent": "converter.convert", "form": {"target": "mp3", "audio_kbps": "320"}, "note": "«в формат mp3» — формат после слова «формат»", "source": "manual"}
 {"id": "ext-062", "text": "сконвертируй видео в jpg качество 75", "connector": "converter", "intent": "converter.convert", "form": {"target": "frame-jpeg", "jpeg_quality": "75"}, "note": "картинка из видео — кадр", "source": "manual"}
+{"id": "ext-063", "text": "сделай из видео гифку", "connector": "converter", "intent": "converter.convert", "form": {"unoffered": "GIF"}, "note": "«гифку» после «сделай из видео» — формат GIF, которого конвертер не делает: честный ответ", "source": "manual"}
+{"id": "ext-064", "text": "сохрани эту картинку как png", "connector": "converter", "intent": "converter.convert", "form": {"target": "png"}, "note": "«как png» — то же, что «в png»", "source": "manual"}
+{"id": "ext-065", "text": "переконвертируй фотку в webp", "connector": "converter", "intent": "converter.convert", "form": {"unoffered": "WebP"}, "note": "в WebP конвертер не пишет — честный ответ", "source": "manual"}
+{"id": "ext-066", "text": "распакуй rar", "connector": "archiver", "intent": "archiver.extract", "note": "rar — тоже архив: форма распаковки, а распаковывается только zip", "source": "manual"}

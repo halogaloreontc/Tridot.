@@ -179,6 +179,11 @@ abstract final class ArchiverPhrases {
   static bool _isArchive(String w) =>
       w.startsWith('архив') ||
       w == 'zip' ||
+      // «Распакуй rar»: команда та же — форма распаковки попросит выбрать
+      // архив, а распаковывается только zip.
+      w == 'rar' ||
+      w == '7z' ||
+      w == 'рар' ||
       (w.startsWith('зип') && w.length <= 5);
 
   static bool _isFiles(String w) =>

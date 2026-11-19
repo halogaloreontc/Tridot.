@@ -27,6 +27,16 @@ abstract final class PlaceNames {
         .map(_capitalize)
         .toList();
     if (words.isEmpty) return const <String>[];
+    // «Питер», «в Питере», «СПб», «мск» — разговорные имена городов.
+    if (words.length == 1) {
+      for (final variant in <String>[
+        words.single,
+        ..._nominative(words.single),
+      ]) {
+        final alias = _aliases[key(variant)];
+        if (alias != null) return <String>[alias];
+      }
+    }
     // Прилагательные перед последним словом: «Нижнем» → «Нижний».
     final head = <String>[
       for (final word in words.sublist(0, words.length - 1)) _adjective(word),
@@ -67,6 +77,19 @@ abstract final class PlaceNames {
     }
     return _nominative(word);
   }
+
+  /// Разговорные и короткие имена городов — полное название.
+  static const Map<String, String> _aliases = <String, String>{
+    'питер': 'Санкт-Петербург',
+    'спб': 'Санкт-Петербург',
+    'петербург': 'Санкт-Петербург',
+    'мск': 'Москва',
+    'екб': 'Екатеринбург',
+    'ебург': 'Екатеринбург',
+    'нск': 'Новосибирск',
+    'новосиб': 'Новосибирск',
+    'нн': 'Нижний Новгород',
+  };
 
   /// Несклоняемые названия, которые похожи на косвенный падеж.
   static const Set<String> _indeclinable = <String>{
@@ -116,12 +139,16 @@ abstract final class PlaceNames {
     return word;
   }
 
+  /// «казани» → «Казани»; набранное заглавными «ЕКАТЕРИНБУРГЕ» →
+  /// «Екатеринбурге» (короткие «США», «ОАЭ» — как есть).
   static String _capitalize(String word) => word
       .split('-')
       .map(
         (String part) => part.isEmpty || _linkWords.contains(part.toLowerCase())
             ? part.toLowerCase()
-            : part[0].toUpperCase() + part.substring(1),
+            : part.length > 3 && part == part.toUpperCase()
+                ? part[0] + part.substring(1).toLowerCase()
+                : part[0].toUpperCase() + part.substring(1),
       )
       .join('-');
 

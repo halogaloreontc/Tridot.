@@ -464,12 +464,17 @@ final class ManifestConnector
     final plain = text.replaceAll(RegExp(r'\s*,\s*'), ' ');
     final priced = ManifestQuery.priceForm(lead ?? text);
     final arrivals = ManifestQuery.arrivalsForm(lead ?? text);
+    // «Скока стоят …», «чо не проведено ещё», «приходы без фоток покажь».
+    final spoken = ManifestQuery.colloquial(lead ?? text);
+    final spokenPrice = spoken == null ? null : ManifestQuery.priceForm(spoken);
     final candidates = <String>{
       if (priced != null) priced,
       if (arrivals != null) arrivals,
       text,
       if (lead != null) lead,
       plain,
+      if (spokenPrice != null) spokenPrice,
+      if (spoken != null) spoken,
     };
     // «Где лежит» без артикула (кнопка «Где лежит…» и сразу «Отправить»):
     // иначе правило «где {q}» искало бы на складе слово «лежит». Смотрим

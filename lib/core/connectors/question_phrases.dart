@@ -11,6 +11,11 @@ enum QuestionKind {
 
   /// Просьба вспомнить за пользователя: «напомни, что я хотел купить».
   recall,
+
+  /// Перевод единиц и валют: «переведи 5 миль в километры», «сколько
+  /// метров в миле». Конвертер работает с файлами, курсов и справочника
+  /// нет — честный ответ и что можно посчитать.
+  units,
 }
 
 /// Вопрос во фразе: что найдено и где.
@@ -87,6 +92,63 @@ abstract final class QuestionPhrases {
     'раз',
     'ка',
   };
+
+  /// Глаголы перевода: «переведи 5 миль в километры».
+  static const Set<String> _convertVerbs = <String>{
+    'переведи',
+    'переведите',
+    'конвертируй',
+    'сконвертируй',
+    'конвертни',
+    'пересчитай',
+  };
+
+  /// Основы единиц длины, массы, объёма, температуры и валют.
+  static const List<String> _unitStems = <String>[
+    'километр', 'сантиметр', 'миллиметр', 'метр', 'дюйм', 'фут', 'ярд', //
+    'килограмм', 'грамм', 'фунт', 'унци', 'литр', 'галлон', 'градус', //
+    'цельси', 'фаренгейт', 'доллар', 'евро', 'рубл', 'юан', 'тенге', //
+    'гривн', 'бакс', 'узл',
+  ];
+
+  static const Set<String> _unitWords = <String>{
+    'миля',
+    'мили',
+    'миль',
+    'милю',
+    'миле',
+    'милях',
+    'милями',
+    'км',
+    'кг',
+  };
+
+  static bool _isUnit(String word) =>
+      _unitWords.contains(word) || _unitStems.any(word.startsWith);
+
+  /// «Переведи 5 миль в километры», «переведи доллары в рубли», «сколько
+  /// метров в миле»: единица до «в/во» и единица после.
+  static bool _unitsQuestion(List<String> words) {
+    if (words.length < 3 || words.length > 10) return false;
+    var start = 0;
+    while (start < words.length && _skip.contains(words[start])) {
+      start++;
+    }
+    if (start >= words.length) return false;
+    final first = words[start];
+    if (!_convertVerbs.contains(first) && first != 'сколько') return false;
+    final into = words.indexWhere(
+      (String w) => w == 'в' || w == 'во',
+      start + 1,
+    );
+    if (into < 0 || into + 1 >= words.length) return false;
+    final before = words.sublist(start + 1, into);
+    final after = words.sublist(into + 1);
+    if (!before.any(_isUnit) || !after.any(_isUnit)) return false;
+    // «Сколько» — только «сколько метров в миле»: единица сразу после.
+    if (first == 'сколько' && !_isUnit(words[start + 1])) return false;
+    return true;
+  }
 
   /// Вопросительные слова: «какой» и «чей», «который» во всех формах,
   /// «как», «где», «когда», «кто», «сколько», «почему», «зачем».
@@ -250,6 +312,13 @@ abstract final class QuestionPhrases {
   static QuestionMatch? detect(Utterance utterance) {
     final tokens = utterance.tokens;
     if (tokens.isEmpty) return null;
+    if (_unitsQuestion(utterance.words)) {
+      return const QuestionMatch(
+        kind: QuestionKind.units,
+        opener: null,
+        whIndex: 0,
+      );
+    }
     final due = utterance.due.spans;
     var i = SocialPrefix.length(utterance);
     bool skippable(UtteranceToken token) =>

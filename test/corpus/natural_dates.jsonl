@@ -192,3 +192,7 @@
 {"id":"nd-185","text":"напомни в четверг или в пятницу позвонить","intent":"createTask","title":"Позвонить","issue":"conflictingDays","note":"«или» — не поправка","source":"probe"}
 {"id":"nd-186","text":"не на завтра, а на послезавтра перенеси отчёт","intent":"rescheduleTask","targetQuery":"Отчёт","due":"2026-11-04","precision":"date","source":"probe"}
 {"id":"nd-187","text":"перенеси звонок юристу на завтра на то же время","intent":"rescheduleTask","targetQuery":"Звонок юристу","due":"2026-11-03T16:30","precision":"dateTime","note":"в разборе — нынешнее время; коннектор берёт время задачи (ParsedCommand.sameTime)","source":"probe"}
+{"id":"nd-188","text":"напомни в нг поздравить коллег","intent":"createTask","title":"Поздравить коллег","due":"2027-01-01","precision":"date","source":"review","note":"«нг» — Новый год, 1 января"}
+{"id":"nd-189","text":"напомни к новому году купить ёлку","intent":"createTask","title":"Купить ёлку","due":"2027-01-01","precision":"date","source":"review"}
+{"id":"nd-190","text":"напомни в 7 pm забрать химчистку","intent":"createTask","title":"Забрать химчистку","due":"2026-11-02T19:00","precision":"dateTime","source":"review","note":"pm — вечер"}
+{"id":"nd-191","text":"новый год прошёл весело","intent":"unknown","route":"none","source":"review","note":"без предлога — не срок"}

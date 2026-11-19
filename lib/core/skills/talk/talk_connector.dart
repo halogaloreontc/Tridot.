@@ -190,9 +190,11 @@ final class TalkConnector implements Connector, ConnectorHealth {
     if (payload is QuestionMatch) {
       return _say(
         session,
-        payload.kind == QuestionKind.recall
-            ? 'talk.question.recall'
-            : 'talk.question.offline',
+        switch (payload.kind) {
+          QuestionKind.recall => 'talk.question.recall',
+          QuestionKind.units => 'talk.question.units',
+          QuestionKind.info => 'talk.question.offline',
+        },
         command: questionCommand,
         status: AssistantStatus.noAction,
       );

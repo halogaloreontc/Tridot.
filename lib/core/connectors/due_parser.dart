@@ -283,11 +283,20 @@ final class DueParser {
     return <CharSpan>[
       for (final span in spans)
         () {
-          for (final word in words) {
+          for (var i = 0; i < words.length; i++) {
+            final word = words[i];
             if (word.end > span.start) break;
-            if (word.end <= span.start &&
-                _clockHedges.contains(word.group(0)) &&
-                _onlySpaces(text, word.end, span.start)) {
+            if (!_onlySpaces(text, word.end, span.start)) continue;
+            if (_clockHedges.contains(word.group(0))) {
+              return CharSpan(word.start, span.end);
+            }
+            // «Часов в шесть», «часа в два» — примерно в шесть; «8 часов в
+            // пятницу» — длительность, она остаётся в названии.
+            final previous = i > 0 ? words[i - 1].group(0)! : '';
+            if (_hourWords.contains(word.group(0)) &&
+                _hedgedHour.hasMatch(text.substring(span.start, span.end)) &&
+                !_allDigits.hasMatch(previous) &&
+                !_numberWords.containsKey(previous)) {
               return CharSpan(word.start, span.end);
             }
           }
@@ -397,6 +406,7 @@ final class DueParser {
     final monthDates = <_Found>[
       ..._monthMentions(normalized, words, today),
       ..._dayOfMonthMentions(normalized, words, today),
+      ..._newYearMentions(normalized, words, today),
     ];
     // Ошибка в дате или времени: разбор доходит до конца, чтобы все
     // фрагменты срока заняли свои места и не попали в название. Если неверны
@@ -1612,6 +1622,9 @@ final class DueParser {
 
   /// Слова приблизительности или точности перед временем: «ровно в шесть»,
   /// «примерно в 10» — часть срока, а не названия.
+  /// Срок — час после «в/к»: «в шесть», «в 6».
+  static final RegExp _hedgedHour = RegExp(r'^(?:в|во|к|ко)\s+\d');
+
   static const Set<String> _clockHedges = <String>{
     'ровно',
     'примерно',
@@ -1901,6 +1914,55 @@ final class DueParser {
 
   /// Год после даты словами: «2026» или слитно «2026г».
   static final RegExp _yearWord = RegExp(r'^(\d{4})(г)?$');
+
+  /// «В Новый год», «к Новому году», «до нового года», «в нг» — 1 января
+  /// (ближайшее, сегодня — если сегодня 1 января). Только после предлога
+  /// «в/на/к/до»: «новый год прошёл весело» — не срок.
+  static List<_Found> _newYearMentions(
+    String text,
+    List<RegExpMatch> words,
+    DateTime today,
+  ) {
+    String word(int i) => words[i].group(0)!;
+    bool adjacent(int left, int right) =>
+        _onlySpaces(text, words[left].end, words[right].start);
+    final date =
+        today.month == 1 && today.day == 1 ? today : DateTime(today.year + 1);
+    final result = <_Found>[];
+    for (var i = 1; i < words.length; i++) {
+      final preposition = word(i - 1);
+      if (!_newYearPrepositions.contains(preposition) || !adjacent(i - 1, i)) {
+        continue;
+      }
+      var last = -1;
+      if (word(i) == 'нг') {
+        last = i;
+      } else if (i + 1 < words.length &&
+          adjacent(i, i + 1) &&
+          _newYearForms[word(i)] == word(i + 1)) {
+        last = i + 1;
+      }
+      if (last < 0) continue;
+      result.add(_Found(words[i].start, words[last].end, date: date));
+      i = last;
+    }
+    return result;
+  }
+
+  static const Set<String> _newYearPrepositions = <String>{
+    'в',
+    'на',
+    'к',
+    'ко',
+    'до',
+  };
+
+  /// «Новый год» в падежах после предлогов: прилагательное → существительное.
+  static const Map<String, String> _newYearForms = <String, String>{
+    'новый': 'год',
+    'новому': 'году',
+    'нового': 'года',
+  };
 
   /// Год без «года»: только похожий на год — 1900…2199. Другое число
   /// после даты («15 ноября 5000 рублей») годом не считается.

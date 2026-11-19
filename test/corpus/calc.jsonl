@@ -109,3 +109,17 @@
 {"id": "calc-109", "text": "купить доску 4x8", "intent": "createTask", "title": "Купить доску 4x8", "note": "размер в названии задачи — не пример", "source": "manual"}
 {"id": "calc-110", "text": "добавь задачу заказать плитку 30х60", "intent": "createTask", "title": "Заказать плитку 30х60", "note": "размер с русской «х» остаётся в названии", "source": "manual"}
 {"id": "calc-111", "text": "4:8", "connector": "calc", "intent": "calc.evaluate", "answer": "0,5", "note": "двоеточие с одной цифрой после — деление, а не время", "source": "manual"}
+{"id": "calc-114", "text": "сколько будет если 1200 разделить на троих", "connector": "calc", "intent": "calc.evaluate", "answer": "400", "source": "manual", "note": "«если» после маркера, собирательное «троих»"}
+{"id": "calc-115", "text": "НДС 12% от 50000", "connector": "calc", "intent": "calc.evaluate", "answer": "6 000", "source": "manual", "note": "«НДС» рядом с процентом ничего не меняет"}
+{"id": "calc-116", "text": "50000 плюс НДС 20%", "connector": "calc", "intent": "calc.evaluate", "answer": "60 000", "source": "manual"}
+{"id": "calc-117", "text": "скидка 30% на 4500, сколько платить", "connector": "calc", "intent": "calc.evaluate", "answer": "3 150", "source": "manual", "note": "скидка — цена минус процент"}
+{"id": "calc-118", "text": "4500 со скидкой 30%", "connector": "calc", "intent": "calc.evaluate", "answer": "3 150", "source": "manual"}
+{"id": "calc-119", "text": "сколько будет три в четвёртой степени", "connector": "calc", "intent": "calc.evaluate", "answer": "81", "source": "manual", "note": "степень порядковым числом"}
+{"id": "calc-120", "text": "сколько будет 2 в десятой", "connector": "calc", "intent": "calc.evaluate", "answer": "1 024", "source": "manual"}
+{"id": "calc-121", "text": "сколько процентов составляет 30 от 120", "connector": "calc", "intent": "calc.evaluate", "answer": "25", "source": "manual", "note": "доля в процентах"}
+{"id": "calc-122", "text": "два с половиной умножить на четыре", "connector": "calc", "intent": "calc.evaluate", "answer": "10", "source": "manual"}
+{"id": "calc-123", "text": "скока будет двести на три", "connector": "calc", "intent": "calc.evaluate", "answer": "600", "source": "manual", "note": "«скока» — «сколько»; с маркером «на» между числами — умножение"}
+{"id": "calc-124", "text": "сколько будет 15 процентов от тыщи", "connector": "calc", "intent": "calc.evaluate", "answer": "150", "source": "manual"}
+{"id": "calc-125", "text": "посчитай плиз 340*12", "connector": "calc", "intent": "calc.evaluate", "answer": "4 080", "source": "manual"}
+{"id": "calc-126", "text": "скока 1500 минус 20%", "connector": "calc", "intent": "calc.evaluate", "answer": "1 200", "source": "manual"}
+{"id": "calc-127", "text": "купить доску 2 на 3", "intent": "createTask", "title": "Купить доску 2 на 3", "source": "manual", "note": "без маркера «на» — размер, не пример"}

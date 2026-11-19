@@ -195,3 +195,16 @@
 {"id":"talk-q16","text":"который сейчас час?","connector":"talk","intent":"talk.question","source":"manual"}
 {"id":"talk-q17","text":"какой сегодня день недели","connector":"talk","intent":"talk.question","source":"manual"}
 {"id":"talk-q18","text":"а какое сегодня число","connector":"talk","intent":"talk.question","source":"manual"}
+{"id":"talk-s01","text":"дарова 👋!!!","connector":"talk","intent":"talk.greet","source":"manual","note":"разговорное приветствие"}
+{"id":"talk-s02","text":"прив","connector":"talk","intent":"talk.greet","source":"manual"}
+{"id":"talk-s03","text":"спс бро 👍","connector":"talk","intent":"talk.thanks","source":"manual","note":"«бро» — обращение"}
+{"id":"talk-s04","text":"благодарочка","connector":"talk","intent":"talk.thanks","source":"manual"}
+{"id":"talk-s05","text":"ну всё давай пока","connector":"talk","intent":"talk.bye","source":"manual"}
+{"id":"talk-s06","text":"как дела бро","connector":"talk","intent":"talk.howAreYou","source":"manual"}
+{"id":"talk-s07","text":"умеешь ставить будильник?","connector":"talk","intent":"talk.capabilities","source":"manual","note":"«умеешь» и инфинитив — вопрос о возможностях"}
+{"id":"talk-s08","text":"как пользоваться калькулятором","connector":"talk","intent":"talk.capabilities","source":"manual"}
+{"id":"talk-s09","text":"можешь поставить будильник на 7?","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual","note":"«можешь» + глагол — вежливая просьба, а не вопрос о возможностях"}
+{"id":"talk-u01","text":"переведи 5 миль в километры","connector":"talk","intent":"talk.question","source":"manual","note":"единицы: конвертер — для файлов; честный ответ и что можно посчитать"}
+{"id":"talk-u02","text":"переведи 30 градусов цельсия в фаренгейты","connector":"talk","intent":"talk.question","source":"manual"}
+{"id":"talk-u03","text":"сколько метров в миле","connector":"talk","intent":"talk.question","source":"manual"}
+{"id":"talk-u04","text":"напомни перевести 100 долларов в рубли","intent":"createTask","title":"Перевести 100 долларов в рубли","source":"manual","note":"просьба напомнить — дело, а не вопрос о курсе"}

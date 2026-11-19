@@ -120,7 +120,14 @@ final class WeatherConnector implements Connector, ConnectorHealth {
           t.text == 'в' ||
           t.text == 'во',
     );
-    final place = _placeFragment.hasMatch(rest);
+    // «А в Казани завтра?», «а завтра в Казани?» — город и день вместе.
+    final placed = _placeWithin.firstMatch(rest);
+    final withDay = placed != null &&
+        _dateOnly(
+          '${rest.substring(0, placed.start)} ${rest.substring(placed.end)}',
+          now,
+        );
+    final place = _placeFragment.hasMatch(rest) || withDay;
     final weekend = _weekend.hasMatch(rest.toLowerCase());
     if (!dateOnly && !place && !weekend) return null;
     return WeatherPhrases.parse(
@@ -140,6 +147,24 @@ final class WeatherConnector implements Connector, ConnectorHealth {
   );
 
   static final RegExp _weekend = RegExp(r'^на\s+выходных$');
+
+  /// «в Казани» внутри обрывка.
+  static final RegExp _placeWithin = RegExp(
+    r'(?:^|\s)(?:в|во)\s+[А-ЯЁ][а-яё-]+(?:\s+[А-ЯЁ][а-яё-]+)?(?=\s|$)',
+  );
+
+  /// В [text] — только срок: «завтра», «на выходных», «в субботу».
+  static bool _dateOnly(String text, DateTime now) {
+    final fragment = Utterance.analyze(text.trim(), now: now);
+    if (fragment.words.isEmpty) return false;
+    return fragment.tokens.every(
+      (UtteranceToken t) =>
+          Utterance.isCovered(t, fragment.due.spans) ||
+          t.text == 'на' ||
+          t.text == 'в' ||
+          t.text == 'во',
+    );
+  }
 
   @override
   Future<AssistantResponse> run(

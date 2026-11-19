@@ -442,22 +442,29 @@ abstract final class ConverterPhrases {
 
   /// Формат во фразе «сделай из видео mp3» — первое слово-формат после
   /// «из <объект>».
-  static String? _madeTarget(List<String> rest) {
+  static String? _madeTarget(List<String> rest, {bool unoffered = false}) {
     final from = rest.indexOf('из');
     if (from < 0 || from + 1 >= rest.length) return null;
     final what = rest[from + 1];
     if (!_isFile(what) && _kindWord(what) == null) return null;
     for (final w in rest.skip(from + 2)) {
-      final target = ConvertTargets.fromWord(w);
+      final target = unoffered
+          ? ConvertTargets.unofferedWord(_madeWord(w))
+          : ConvertTargets.fromWord(w);
       if (target != null) return target;
     }
     return null;
   }
 
+  /// «Гифку», «гифка» после «сделай из видео» — формат GIF, а не тип
+  /// исходного файла.
+  static String _madeWord(String w) => w.startsWith('гифк') ? 'гиф' : w;
+
   /// Индекс слова после «в»/«во», которое — формат; иначе -1.
   static int _targetAt(List<String> rest, {bool unoffered = false}) {
     for (var i = 0; i + 1 < rest.length; i++) {
-      if (rest[i] != 'в' && rest[i] != 'во') continue;
+      // «Сохрани картинку как png» — то же, что «в png».
+      if (rest[i] != 'в' && rest[i] != 'во' && rest[i] != 'как') continue;
       // «в формат mp3», «в формате mp3»: формат — следующее слово.
       final at =
           _isFormatWord(rest[i + 1]) && i + 2 < rest.length ? i + 2 : i + 1;
@@ -505,7 +512,10 @@ abstract final class ConverterPhrases {
       }
       return true;
     }
-    if (_makeVerbs.contains(verb)) return _madeTarget(rest) != null;
+    if (_makeVerbs.contains(verb)) {
+      return _madeTarget(rest) != null ||
+          _madeTarget(rest, unoffered: true) != null;
+    }
     if (_shrinkVerbs.contains(verb)) {
       final kind = rest.map(_kindWord).nonNulls.firstOrNull;
       if (kind != MediaKind.image && kind != MediaKind.video) return false;
@@ -538,7 +548,10 @@ abstract final class ConverterPhrases {
       target: target,
       kind: kind,
       options: optionsOf(rest, target, kind: kind),
-      unoffered: _unofferedIn(rest),
+      unoffered: _unofferedIn(rest) ??
+          (target == null && _makeVerbs.contains(verb)
+              ? _madeTarget(rest, unoffered: true)
+              : null),
     );
   }
 

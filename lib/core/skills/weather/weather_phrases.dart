@@ -121,6 +121,61 @@ abstract final class WeatherPhrases {
     'грозы',
     'зонт',
     'зонтик',
+    'метель',
+    'метели',
+    'вьюга',
+    'снежок',
+    'ливни',
+  };
+
+  /// Перемена погоды — вопрос о погоде и без других слов: «к выходным
+  /// потеплеет?», «завтра похолодает?».
+  static const Set<String> _change = <String>{
+    'потеплеет',
+    'похолодает',
+    'потепление',
+    'похолодание',
+    'распогодится',
+  };
+
+  /// Небо и ветер — только вопросом: «ветрено сегодня?», «солнечно
+  /// будет?».
+  static const Set<String> _sky = <String>{
+    'ветрено',
+    'ветер',
+    'ветреный',
+    'ветреная',
+    'солнечно',
+    'пасмурно',
+    'облачно',
+  };
+
+  /// «Куртку брать?», «шапку надевать?» — одежда и глагол вопросом.
+  static const Set<String> _clothes = <String>{
+    'куртку',
+    'шапку',
+    'пуховик',
+    'шарф',
+    'перчатки',
+    'варежки',
+    'пальто',
+    'плащ',
+    'шорты',
+    'кофту',
+    'свитер',
+    'сапоги',
+  };
+
+  static const Set<String> _clothesVerbs = <String>{
+    'брать',
+    'взять',
+    'надевать',
+    'надеть',
+    'одевать',
+    'одеть',
+    'нужна',
+    'нужен',
+    'нужны',
   };
 
   /// Мороз — не осадки: «завтра мороз?» — погода на день.
@@ -216,6 +271,7 @@ abstract final class WeatherPhrases {
     'выходные',
     'выходных',
     'выходной',
+    'выходным',
   };
 
   /// После «в» — не город: «на улице», «в доме», «в городе».
@@ -321,12 +377,18 @@ abstract final class WeatherPhrases {
     final rain = words.any(_rain.contains);
     final cold = words.any(_cold.contains);
     final wear =
-        words.any(_wearVerbs.contains) && words.any(_wearQuestion.contains);
+        (words.any(_wearVerbs.contains) && words.any(_wearQuestion.contains)) ||
+            (utterance.isQuestion &&
+                words.length <= 6 &&
+                words.any(_clothes.contains) &&
+                words.any(_clothesVerbs.contains));
     final place = _place(utterance, weather || forecast);
     if (place == _homeMarker) return null;
-    final temperature = words.any(_temperature.contains) &&
-        (words.any(_temperatureContext.contains) || place != null) &&
-        !words.any(_body.contains);
+    final temperature = (words.any(_temperature.contains) &&
+            (words.any(_temperatureContext.contains) || place != null) &&
+            !words.any(_body.contains)) ||
+        (words.any(_change.contains) && words.length <= 6) ||
+        (words.any(_sky.contains) && utterance.isQuestion && words.length <= 6);
     final strong = weather || forecast;
     if (!strong && !rain && !cold && !wear && !temperature) return null;
     // «Купить зонт», «написать статью о погоде», «сдать отчёт о погоде» —

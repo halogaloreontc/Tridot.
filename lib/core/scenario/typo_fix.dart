@@ -16,8 +16,11 @@ import 'route_policy.dart';
 /// и не в последней букве ([Utterance.isTypoOf]); при двух соседях —
 /// только если один встречается в корпусе втрое чаще. «Наполни», «записи»
 /// и другие настоящие слова рядом с командами ([Utterance.isRealWord]) не
-/// трогаются. Исправить опечатку по смыслу нельзя без словаря языка,
-/// поэтому запись после такого исправления — только после «Да».
+/// трогаются. Ещё — слитные слова («в7», «завтрав», «будильникна»,
+/// «напомнизавтра»), правка конца слова там, где другой формы нет
+/// («завтро», «завтар», «напомнь») и am/pm после часа. Исправить опечатку
+/// по смыслу нельзя без словаря языка, поэтому запись после такого
+/// исправления — только после «Да».
 abstract final class TypoFix {
   /// Фраза с исправленными словами или `null`, если исправлять нечего.
   static String? repair(String text) => _repair(text, commandLexicon);
@@ -30,31 +33,167 @@ abstract final class TypoFix {
 
   static String? _repair(String text, Map<String, int> lexicon) {
     if (text.length > 400) return null;
-    var changed = false;
-    // Внутри кавычек — название как сказано.
+    final full = identical(lexicon, commandLexicon);
+    // «В 7 pm» → «в 7 вечера», «в7» → «в 7».
+    var fixed = _outsideQuotes(text, _amPm, (Match m) {
+      final hour = int.parse(m.group(1)!);
+      if (hour < 1 || hour > 12) return null;
+      final pm = m.group(2)!.toLowerCase().startsWith('p');
+      final part = pm
+          ? (hour == 12 || hour <= 4 ? 'дня' : 'вечера')
+          : (hour == 12 || hour <= 4 ? 'ночи' : 'утра');
+      return '$hour $part';
+    });
+    fixed = _outsideQuotes(
+      fixed,
+      _gluedPreposition,
+      (Match m) => '${m.group(1)} ${m.group(2)}',
+    );
+    fixed = _outsideQuotes(fixed, _word, (Match m) {
+      final word = m.group(0)!;
+      final lower = word.toLowerCase().replaceAll('ё', 'е');
+      final replacement = _dialect[lower] ??
+          (full ? _dialectVerbs[lower] : null) ??
+          _unglue(lower, full: full) ??
+          _fix(lower, lexicon) ??
+          _fixEnding(lower, lexicon, full: full);
+      if (replacement == null) return null;
+      return _sameCase(word, replacement);
+    });
+    return fixed == text ? null : fixed;
+  }
+
+  /// [pattern] в [text] вне кавычек (там — название как сказано) заменяется
+  /// тем, что вернёт [replace]; `null` — оставить как есть.
+  static String _outsideQuotes(
+    String text,
+    RegExp pattern,
+    String? Function(Match m) replace,
+  ) {
     final quoted = <(int, int)>[
       for (final m in _quoted.allMatches(text)) (m.start, m.end),
     ];
-    final fixed = text.replaceAllMapped(_word, (Match m) {
-      final word = m.group(0)!;
+    return text.replaceAllMapped(pattern, (Match m) {
       if (quoted.any(((int, int) q) => m.start >= q.$1 && m.end <= q.$2)) {
-        return word;
+        return m.group(0)!;
       }
-      final lower = word.toLowerCase().replaceAll('ё', 'е');
-      final replacement = _fix(lower, lexicon);
-      if (replacement == null) return word;
-      changed = true;
-      return _sameCase(word, replacement);
+      return replace(m) ?? m.group(0)!;
     });
-    return changed ? fixed : null;
   }
+
+  /// «7 pm», «7pm», «10 a.m.» — час по-английски.
+  static final RegExp _amPm = RegExp(
+    r'(?<![\d:.])(\d{1,2})\s*(pm|am|p\.m\.|a\.m\.)(?![a-z])',
+    caseSensitive: false,
+  );
+
+  /// Предлог вплотную к числу: «в7», «к9», «на10:30».
+  static final RegExp _gluedPreposition = RegExp(
+    r'(?<![а-яёa-z0-9])(в|во|к|ко|до|на|через)(\d{1,2}(?::\d{2})?)(?![\d])',
+    caseSensitive: false,
+  );
+
+  /// Слова из соседних языков, которые часто вставляют в русскую речь:
+  /// закрытый список.
+  static const Map<String, String> _dialect = <String, String>{
+    'зранку': 'утром',
+  };
+
+  /// Глаголы команд оттуда же — только при полной правке (с «Да?»).
+  static const Map<String, String> _dialectVerbs = <String, String>{
+    'нагадай': 'напомни',
+    'нагадайте': 'напомните',
+  };
+
+  /// Слова срока и навыков, к которым прилипает предлог: «завтрав 9»,
+  /// «будильникна 7».
+  static const Set<String> _anchorNouns = <String>{'будильник', 'таймер'};
+
+  /// Без «к»: «завтрак» — настоящее слово, а не «завтра к».
+  static const List<String> _tailPrepositions = <String>['во', 'в', 'на'];
+
+  /// Два слова без пробела: срок или навык с предлогом («завтрав» →
+  /// «завтра в»), а при полной правке ещё глагол команды со сроком или
+  /// предметом («напомнизавтра» → «напомни завтра»). Иначе `null`.
+  static String? _unglue(String word, {required bool full}) {
+    if (word.length < 5 || commandLexicon.containsKey(word)) return null;
+    if (Utterance.isRealWord(word) || _realWords.contains(word)) return null;
+    for (final preposition in _tailPrepositions) {
+      if (!word.endsWith(preposition)) continue;
+      final head = word.substring(0, word.length - preposition.length);
+      if (_dueWords.hasMatch(head) || _anchorNouns.contains(head)) {
+        return '$head $preposition';
+      }
+    }
+    if (!full) return null;
+    for (var at = 5; at <= word.length - 4; at++) {
+      final head = word.substring(0, at);
+      final tail = word.substring(at);
+      if (Utterance.isCommandVerb(head) &&
+          (_dueWords.hasMatch(tail) ||
+              _anchorNouns.contains(tail) ||
+              tail == 'задачу')) {
+        return '$head $tail';
+      }
+    }
+    return null;
+  }
+
+  /// Правка в конце слова — только там, где другой формы нет: две
+  /// последние буквы переставлены в слове срока («завтар»; у глагола
+  /// «напомин» — обрывок «напоминания», не правится); «ь» вместо «и» у
+  /// глагола команды («напомнь», «покажь») — только при полной правке, она
+  /// всегда переспрашивает «Да?»; последняя буква в «завтра», «сегодня»,
+  /// «послезавтра» («завтро»).
+  static String? _fixEnding(
+    String word,
+    Map<String, int> lexicon, {
+    required bool full,
+  }) {
+    if (word.length < 6 || commandLexicon.containsKey(word)) return null;
+    if (Utterance.isRealWord(word) || _realWords.contains(word)) return null;
+    bool verb(String candidate) => full && Utterance.isCommandVerb(candidate);
+    final swapped = word.substring(0, word.length - 2) +
+        word[word.length - 1] +
+        word[word.length - 2];
+    if (lexicon.containsKey(swapped) && _dueWords.hasMatch(swapped)) {
+      return swapped;
+    }
+    final stem = word.substring(0, word.length - 1);
+    if (word.endsWith('ь') && verb('$stemи')) return '$stemи';
+    for (final day in _dayEndings) {
+      if (day.length == word.length && day.startsWith(stem)) return day;
+    }
+    return null;
+  }
+
+  static const List<String> _dayEndings = <String>[
+    'завтра',
+    'сегодня',
+    'послезавтра',
+  ];
 
   /// Взять ли исправленный разбор — по тому же правилу, что раскладка:
   /// фразу как есть не понял никто явно, исправленную — навык.
+  ///
+  /// Навык, который как есть только переспросил (догадка `implicit`:
+  /// «сколько будет 125 умножитть на 4» — «Не понял пример»), уступает
+  /// исправленной фразе той же своей команды, понятой явно.
   static bool prefer(RouteDecision original, RouteDecision repaired) {
     final was = original.winner;
-    if (original.isAmbiguous || (was != null && !was.fallback)) return false;
     final winner = repaired.winner;
+    if (was != null &&
+        was.implicit &&
+        !original.isAmbiguous &&
+        winner != null &&
+        !repaired.isAmbiguous &&
+        !winner.implicit &&
+        !winner.fallback &&
+        winner.connectorId == was.connectorId &&
+        winner.commandId == was.commandId) {
+      return true;
+    }
+    if (original.isAmbiguous || (was != null && !was.fallback)) return false;
     if (winner == null || repaired.isAmbiguous) return false;
     if (!winner.fallback) return true;
     return was == null && !winner.commandId.endsWith('.question');
@@ -147,7 +286,10 @@ abstract final class TypoFix {
     r'днем|ночью|минут[аы]?|минуту|секунд[аы]?|часов|часа|недел[июе]|'
     r'месяц[аеу]?|понедельник|вторник|среду|четверг|пятницу|субботу|'
     r'воскресенье|выходных|январ[яь]|феврал[яь]|марта|апреля|мая|июня|'
-    r'июля|августа|сентября|октября|ноября|декабря|через)$',
+    r'июля|августа|сентября|октября|ноября|декабря|через|'
+    // Длинные числа словами: у коротких («шесть», «семь») рядом настоящие
+    // слова («шерсть», «семья»).
+    r'одиннадцать|двенадцать|пятнадцать|двадцать|тридцать|пятьдесят)$',
   );
 
   /// [replacement] в регистре [word]: «Пакажи» → «Покажи».
