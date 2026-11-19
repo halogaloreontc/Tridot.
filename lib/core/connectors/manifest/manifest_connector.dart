@@ -470,10 +470,21 @@ final class ManifestConnector
     final words = text.split(_wordSplit);
     if (words.any((String w) => _foreignStems.any(w.startsWith))) return false;
     return utterance.codes.isNotEmpty ||
-        words.any((String w) => w.startsWith('склад')) ||
+        words.any((String w) => _aliasWords.any(w.startsWith)) ||
         utterance.recentConnectorId == slot.id ||
         _hint('bareWords');
   }
+
+  /// Слова обращений слота без предлогов: у склада — «складе» и «склад»
+  /// (по началу слова — «склада», «складу»), у автосервиса —
+  /// «автосервисе», «автосервис».
+  late final List<String> _aliasWords = <String>{
+    for (final alias in slot.aliases)
+      for (final word in askText(alias).split(_wordSplit))
+        if (word.isNotEmpty && !_prepositions.contains(word)) word,
+  }.toList();
+
+  static const Set<String> _prepositions = <String>{'в', 'во', 'на', 'у'};
 
   /// Слова других навыков и обычной речи в вопросе о наличии.
   static const List<String> _foreignStems = <String>[
@@ -963,6 +974,7 @@ final class ManifestConnector
           confidence: aliased
               ? (confidence + 0.05).clamp(0.0, 0.95).toDouble()
               : confidence,
+          aliased: aliased,
           payload: ManifestPayload(
             command: command,
             slots: slots,
@@ -1105,7 +1117,7 @@ final class ManifestConnector
     }
     if (payload.how == 'total') {
       return say('total', AssistantStatus.noAction, <String, String>{
-        'example': command.examples.firstOrNull ?? 'сколько 64115',
+        'example': command.examples.firstOrNull ?? slot.totalExample,
       });
     }
     if (command.reply case final String text) {
@@ -1127,7 +1139,7 @@ final class ManifestConnector
       final field = command.slots.values.firstOrNull;
       return say('ask', AssistantStatus.needsClarification, <String, String>{
         'label': field == null || field.label.isEmpty
-            ? 'артикул или название'
+            ? slot.queryLabel
             : field.label,
         'example': command.examples.firstOrNull ?? '',
       });

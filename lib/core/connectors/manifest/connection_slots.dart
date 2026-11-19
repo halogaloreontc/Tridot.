@@ -1,4 +1,5 @@
 import 'connection.dart';
+import '../../replies/reply_library.dart';
 import 'manifest_format.dart';
 
 /// Подключения, которые знает «Tridot». Новое приложение — новый слот
@@ -46,6 +47,8 @@ abstract final class ConnectionSlots {
     ),
     builtInAsset: 'assets/connectors/depotdesk.assistant.json',
     commandReplies: <String, String>{'price': 'price'},
+    queryLabel: 'артикул или название',
+    totalExample: 'сколько 64115',
     // Описание даёт нейтральный факт ({text}), каталог — голос помощника.
     replies: <String, String>{
       'warehouse.answer': '{text}',
@@ -100,4 +103,70 @@ abstract final class ConnectionSlots {
   );
 
   static const List<ConnectionSlot> all = <ConnectionSlot>[warehouse];
+
+  /// Id подключения приложения без слота в коде (ADR-039): строчная
+  /// латиница и цифры, до 32 знаков. Только такие id годятся в ключи
+  /// каталога ответов (`<id>.help`) и в имена файлов.
+  static final RegExp idPattern = RegExp(r'^[a-z][a-z0-9]{0,31}$');
+
+  /// Id, которые подключению не достаются: склад, навыки «Tridot», роли,
+  /// служебные имена файлов подключений.
+  static const Set<String> reservedIds = <String>{
+    'warehouse',
+    'index',
+    'directory',
+    'tasks',
+    'talk',
+    'calc',
+    'passwords',
+    'data',
+    'weather',
+    'files',
+    'alarm',
+    'archiver',
+    'converter',
+    'ytdl',
+    'zip',
+    'extract',
+    'list',
+    'personal',
+    'storekeeper',
+    'main',
+    'halowarekeep',
+    'depotdesk',
+  };
+
+  /// [id] годится для подключения: по форме, не занят и не совпадает с
+  /// разделом встроенного каталога ответов (иначе `<id>.help` спорил бы
+  /// со встроенной записью).
+  static bool validId(String id) =>
+      idPattern.hasMatch(id) &&
+      !reservedIds.contains(id) &&
+      !_catalogSections.contains(id);
+
+  static final Set<String> _catalogSections = <String>{
+    for (final key in ReplyLibrary.builtIn.neutral.entries.keys)
+      key.split('.').first,
+  };
+
+  /// Id подключения для приложения [appId]: `severauto`, а если занят
+  /// ([taken] — id уже подключённых и когда-либо выданных) —
+  /// `severauto2`, `severauto3`… Знаки, которых нет в [idPattern],
+  /// отбрасываются; пустое — `app`.
+  static String idFor(String appId, Set<String> taken) {
+    var base = appId.toLowerCase().replaceAll(RegExp('[^a-z0-9]'), '');
+    base = base.replaceFirst(RegExp('^[0-9]+'), '');
+    if (base.isEmpty) base = 'app';
+    if (base.length > 32) base = base.substring(0, 32);
+    bool free(String id) => validId(id) && !taken.contains(id);
+    if (free(base)) return base;
+    for (var n = 2;; n++) {
+      final suffix = '$n';
+      final head = base.length + suffix.length > 32
+          ? base.substring(0, 32 - suffix.length)
+          : base;
+      final id = '$head$suffix';
+      if (free(id)) return id;
+    }
+  }
 }

@@ -62,6 +62,12 @@ abstract final class PersonaNames {
     'но', 'или', 'если', 'бы',
   };
 
+  /// Обычное начало фразы ([_phraseWords]): обращение к приложению
+  /// (ADR-039) таким словом тоже не бывает. Слово — в нижнем регистре, с
+  /// «е» вместо «ё».
+  static bool isPhraseWord(String word) =>
+      _phraseWords.contains(Persona.fold(word));
+
   static final RegExp _letters = RegExp(r'^\p{L}+(?:-\p{L}+)*$', unicode: true);
 
   /// Обращения к подключениям в нижнем регистре, с «е» вместо «ё».

@@ -1291,6 +1291,7 @@ final class AssistantController {
           confidence: best.confidence,
           implicit: best.implicit,
           fallback: best.fallback,
+          aliased: best.aliased,
           payload: reroute.orElse,
         ),
       );

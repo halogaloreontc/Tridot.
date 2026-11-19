@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'app_profile.dart';
 import 'manifest_text.dart';
 
 /// Описание не принято: что именно не так.
@@ -240,6 +241,8 @@ final class ManifestDescription {
     required this.appId,
     required this.appTitle,
     required this.about,
+    required this.profile,
+    required this.profileWarnings,
     required this.apiUrl,
     required this.method,
     required this.actionIn,
@@ -283,6 +286,15 @@ final class ManifestDescription {
   final String appId;
   final String appTitle;
   final String about;
+
+  /// Профиль приложения из необязательных полей `app` (`name`, `forms`,
+  /// `in`, `gender`, `addressing`; ADR-039); `null` — в описании их нет
+  /// или имя не годится. Склад его не читает: у него свой слот.
+  final AppProfile? profile;
+
+  /// Что из профиля отброшено и почему: описание из-за этого не
+  /// отклоняется.
+  final List<String> profileWarnings;
   final String apiUrl;
   final String method;
   final String actionIn;
@@ -1010,6 +1022,7 @@ final class ManifestDescription {
     }
     final qr = _map(auth['qr']);
     final logout = _map(auth['logout']);
+    final profile = AppProfile.parse(d['app']);
     return ManifestDescription._(
       json: d,
       source: source,
@@ -1019,6 +1032,8 @@ final class ManifestDescription {
       appId: _string(app['id']),
       appTitle: _string(app['title']),
       about: _string(app['about']),
+      profile: profile.profile,
+      profileWarnings: List<String>.unmodifiable(profile.warnings),
       apiUrl: api['url'] as String,
       method: _string(api['method'], 'POST').toUpperCase(),
       actionIn: _string(action['in'], 'query'),
