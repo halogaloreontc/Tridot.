@@ -1,6 +1,6 @@
 // «Барабан» хроники на телефоне: окошко вырастает из кнопки полос, команды
 // листаются свайпом в стороны, по центру — главная; нажатие мимо, «Назад»,
-// Esc и свайп вниз закрывают; «Весь список» — прежняя шторка.
+// Esc и свайп вниз или вверх закрывают; «Весь список» — прежняя шторка.
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -225,6 +225,55 @@ void main() {
     await tester.pumpAndSettle();
     expect(_popup, findsNothing);
     expect(picked, isEmpty);
+  });
+
+  testWidgets('свайп вверх тоже закрывает, короткий — пружинит',
+      (tester) async {
+    final picked = await _pump(tester);
+    await _openDrum(tester);
+    final header = tester.getRect(_popup).topCenter + const Offset(0, 24);
+    await tester.dragFrom(header, const Offset(0, -30));
+    await tester.pumpAndSettle();
+    expect(_popup, findsOneWidget, reason: 'короткий свайп — пружинит назад');
+    expect(tester.getRect(_popup).topCenter + const Offset(0, 24), header);
+    await tester.dragFrom(header, const Offset(0, -120));
+    await tester.pumpAndSettle();
+    expect(_popup, findsNothing);
+
+    // Быстрый бросок вверх — тоже закрывает; по карточкам — тоже.
+    await _openDrum(tester);
+    await tester.flingFrom(
+      tester.getCenter(find.byKey(const Key('history-drum'))),
+      const Offset(0, -50),
+      1500,
+    );
+    await tester.pumpAndSettle();
+    expect(_popup, findsNothing);
+    expect(picked, isEmpty);
+  });
+
+  testWidgets('«Меньше движения»: свайп вверх закрывает сразу', (tester) async {
+    final picked = await _pump(tester, reduceMotion: true);
+    await tester.tap(_open);
+    await tester.pump();
+    expect(_popup, findsOneWidget);
+    final header = tester.getRect(_popup).topCenter + const Offset(0, 24);
+    await tester.dragFrom(header, const Offset(0, -120));
+    await tester.pump();
+    await tester.pump();
+    expect(_popup, findsNothing);
+    expect(picked, isEmpty);
+  });
+
+  testWidgets('свайп в сторону не закрывает', (tester) async {
+    await _pump(tester);
+    await _openDrum(tester);
+    await tester.drag(
+      find.byKey(const Key('history-drum')),
+      const Offset(-200, -20),
+    );
+    await tester.pumpAndSettle();
+    expect(_popup, findsOneWidget);
   });
 
   testWidgets('клавиатура: ← и Enter', (tester) async {

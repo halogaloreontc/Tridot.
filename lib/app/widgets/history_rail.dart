@@ -25,95 +25,254 @@ final class HistoryEntry {
 /// к старым, одной сгруппированной панелью. Открывается из хроники над
 /// лентой ([HistoryRailPill]) и из «⋯» в шапке.
 ///
+/// Закрывается нажатием мимо, «Назад», свайпом вниз (как любая шторка) и
+/// свайпом вверх — за шапку с ручкой, а когда списку некуда листаться, то и
+/// за сам список. Свайп вверх по длинному списку листает его, а не
+/// закрывает шторку.
+///
 /// Возвращает номер выбранной команды (по порядку в сессии) или `null`.
 Future<int?> showCommandHistory(
   BuildContext context, {
   required List<HistoryEntry> entries,
+  bool reduceMotion = false,
 }) {
+  final still = reduceMotion || MediaQuery.of(context).disableAnimations;
   return showModalBottomSheet<int>(
     context: context,
     isScrollControlled: true,
-    showDragHandle: true,
+    // Ручка — своя, в шапке: за неё шторку можно смахнуть и вверх.
+    showDragHandle: false,
+    sheetAnimationStyle: still ? AnimationStyle.noAnimation : null,
     constraints: const BoxConstraints(maxWidth: AppSize.maxSettings),
     builder: (BuildContext context) => _HistorySheet(entries: entries),
   );
 }
 
-final class _HistorySheet extends StatelessWidget {
+final class _HistorySheet extends StatefulWidget {
   const _HistorySheet({required this.entries});
 
   final List<HistoryEntry> entries;
 
   @override
+  State<_HistorySheet> createState() => _HistorySheetState();
+}
+
+final class _HistorySheetState extends State<_HistorySheet> {
+  final ScrollController _scroll = ScrollController();
+  final GlobalKey _header = GlobalKey();
+
+  /// Свайп вверх: сколько пройти пальцем или с какой скоростью бросить,
+  /// чтобы шторка закрылась (те же пороги, что у свайпа вниз в «барабане»).
+  static const double _closeDistance = 64;
+  static const double _closeVelocity = 700;
+
+  int? _pointer;
+  Offset _start = Offset.zero;
+  double _startOffset = 0;
+  bool _eligible = false;
+  VelocityTracker? _tracker;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  bool get _canScroll =>
+      _scroll.hasClients && _scroll.position.maxScrollExtent > 0;
+
+  double get _offset => _scroll.hasClients ? _scroll.offset : 0;
+
+  bool _inHeader(Offset global) {
+    final box = _header.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return false;
+    return (box.localToGlobal(Offset.zero) & box.size).contains(global);
+  }
+
+  // Сырые касания, а не распознаватель жестов: свайп вниз остаётся у
+  // шторки, а листание — у списка; здесь только подсчёт пути вверх.
+  void _down(PointerDownEvent event) {
+    if (_pointer != null) return;
+    _pointer = event.pointer;
+    _start = event.position;
+    _startOffset = _offset;
+    _eligible = _inHeader(event.position) || !_canScroll;
+    _tracker = VelocityTracker.withKind(event.kind)
+      ..addPosition(event.timeStamp, event.position);
+  }
+
+  void _move(PointerMoveEvent event) {
+    if (event.pointer != _pointer) return;
+    _tracker?.addPosition(event.timeStamp, event.position);
+  }
+
+  void _up(PointerUpEvent event) {
+    if (event.pointer != _pointer) return;
+    final tracker = _tracker;
+    final eligible = _eligible;
+    _pointer = null;
+    _tracker = null;
+    if (!eligible || tracker == null) return;
+    // Список сдвинулся — это было листание, а не жест закрытия.
+    if ((_offset - _startOffset).abs() > .5) return;
+    final delta = event.position - _start;
+    if (delta.dy >= 0 || delta.dy.abs() < delta.dx.abs()) return;
+    final velocity = tracker.getVelocity().pixelsPerSecond.dy;
+    final far = -delta.dy > _closeDistance;
+    final fast = -delta.dy > kTouchSlop && velocity < -_closeVelocity;
+    if (far || fast) Navigator.of(context).maybePop();
+  }
+
+  void _cancel(PointerCancelEvent event) {
+    if (event.pointer != _pointer) return;
+    _pointer = null;
+    _tracker = null;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final text = Theme.of(context).textTheme;
+    final entries = widget.entries;
     return SafeArea(
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * .8,
         ),
-        child: ListView(
-          key: const Key('history-sheet'),
-          shrinkWrap: true,
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.insetH,
-            0,
-            AppSpace.insetH,
-            AppSpace.xl,
-          ),
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, AppSpace.s),
-              child: Semantics(
-                header: true,
-                child: WholeWordText(
-                  'История команд',
-                  style: text.titleMedium!.copyWith(color: colors.textStrong),
-                ),
-              ),
-            ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.group),
-              child: Material(
-                color: colors.workspace,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    for (var i = entries.length - 1; i >= 0; i--) ...<Widget>[
-                      if (i != entries.length - 1)
-                        Padding(
-                          padding: const EdgeInsets.only(left: AppSpace.m),
-                          child: Divider(
-                            height: .5,
-                            thickness: .5,
-                            color: colors.divider,
-                          ),
+        child: Listener(
+          key: const Key('history-sheet-swipe'),
+          onPointerDown: _down,
+          onPointerMove: _move,
+          onPointerUp: _up,
+          onPointerCancel: _cancel,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              // Шапка не листается: за неё (и за ручку) шторку смахивают вниз
+              // и вверх.
+              Column(
+                key: _header,
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  const _SheetHandle(),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpace.insetH + 4,
+                      0,
+                      AppSpace.insetH + 4,
+                      AppSpace.s,
+                    ),
+                    child: Semantics(
+                      header: true,
+                      child: WholeWordText(
+                        'История команд',
+                        style: text.titleMedium!.copyWith(
+                          color: colors.textStrong,
                         ),
-                      _HistoryRow(
-                        key: Key('history-item-$i'),
-                        entry: entries[i],
-                        onTap: () => Navigator.of(context).pop(i),
                       ),
-                    ],
+                    ),
+                  ),
+                ],
+              ),
+              Flexible(
+                child: ListView(
+                  key: const Key('history-sheet'),
+                  controller: _scroll,
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpace.insetH,
+                    0,
+                    AppSpace.insetH,
+                    AppSpace.xl,
+                  ),
+                  children: <Widget>[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.group),
+                      child: Material(
+                        color: colors.workspace,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            for (var i = entries.length - 1;
+                                i >= 0;
+                                i--) ...<Widget>[
+                              if (i != entries.length - 1)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(left: AppSpace.m),
+                                  child: Divider(
+                                    height: .5,
+                                    thickness: .5,
+                                    color: colors.divider,
+                                  ),
+                                ),
+                              _HistoryRow(
+                                key: Key('history-item-$i'),
+                                entry: entries[i],
+                                onTap: () => Navigator.of(context).pop(i),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpace.m,
+                        8,
+                        AppSpace.m,
+                        0,
+                      ),
+                      child: WholeWordText(
+                        'Нажмите на команду, чтобы перейти к ней в ленте',
+                        style: text.bodySmall,
+                      ),
+                    ),
                   ],
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Ручка шторки — как у стандартной (размер и цвет из темы, «Закрыть» для
+/// диктора), но внутри шапки, чтобы свайп вверх за неё тоже закрывал.
+final class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context).bottomSheetTheme;
+    final size = theme.dragHandleSize ?? const Size(32, 4);
+    final color = WidgetStateProperty.resolveAs<Color?>(
+          theme.dragHandleColor,
+          const <WidgetState>{},
+        ) ??
+        Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: .4);
+    return Semantics(
+      key: const Key('history-sheet-handle'),
+      label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      container: true,
+      button: true,
+      onTap: () => Navigator.of(context).maybePop(),
+      child: SizedBox(
+        height: kMinInteractiveDimension,
+        child: Center(
+          child: Container(
+            width: size.width,
+            height: size.height,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(size.height / 2),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpace.m,
-                8,
-                AppSpace.m,
-                0,
-              ),
-              child: WholeWordText(
-                'Нажмите на команду, чтобы перейти к ней в ленте',
-                style: text.bodySmall,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -398,7 +557,11 @@ final class HistoryRail extends StatelessWidget {
   }
 
   Future<void> _openList(BuildContext context) async {
-    final index = await showCommandHistory(context, entries: entries);
+    final index = await showCommandHistory(
+      context,
+      entries: entries,
+      reduceMotion: reduceMotion,
+    );
     if (index != null) onSelect(index);
   }
 

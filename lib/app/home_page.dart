@@ -4947,7 +4947,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           return;
         }
         if (value != 'history') return;
-        final index = await showCommandHistory(context, entries: history);
+        final index = await showCommandHistory(
+          context,
+          entries: history,
+          reduceMotion: _settings.reduceMotion,
+        );
         if (index != null && mounted) _selectCommand(index);
       },
       itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
