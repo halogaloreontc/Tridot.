@@ -48,7 +48,7 @@
 {"id": "calc-048", "text": "A-03-2", "connector": "calc", "intent": "unknown", "route": "none", "note": "ячейка склада", "source": "manual"}
 {"id": "calc-049", "text": "2026-11-05", "connector": "calc", "intent": "unknown", "route": "none", "note": "дата в формате ISO", "source": "manual"}
 {"id": "calc-050", "text": "реши задачу с отчётом", "connector": "calc", "intent": "unknown", "route": "none", "note": "«реши» без примера", "source": "manual"}
-{"id": "calc-051", "text": "сколько задач на завтра", "connector": "calc", "intent": "unknown", "route": "none", "note": "«сколько» без примера", "source": "manual"}
+{"id": "calc-051", "text": "сколько задач на завтра", "intent": "listTasks", "note": "expect fixed: счёт задач — список задач (не калькулятор)", "source": "manual"}
 {"id": "calc-052", "text": "посчитай что-нибудь", "connector": "calc", "intent": "unknown", "route": "none", "note": "дефис в слове — не минус", "source": "manual"}
 {"id": "calc-053", "text": "пять", "connector": "calc", "intent": "unknown", "route": "none", "note": "одно число без действия", "source": "manual"}
 {"id": "calc-054", "text": "100%", "connector": "calc", "intent": "unknown", "route": "none", "note": "проценты без действия", "source": "manual"}

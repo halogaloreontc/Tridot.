@@ -166,7 +166,11 @@ final class TasksConnector
     }
     // Правка текущей или названной задачи (ADR-033): срок, заметка,
     // пункты, новое название.
-    final edit = TaskEditPhrases.parse(utterance, tasksId: id);
+    // «Не завтра, а в среду», «ой, не в 10, а в 11»: срок — последний.
+    final edit = TaskEditPhrases.parse(
+      _parser.correctedDue(utterance) ?? utterance,
+      tasksId: id,
+    );
     // «Запиши, что код от сейфа CANARY» — секрет не становится заметкой.
     if (edit != null &&
         ScenarioParser.secretObject(edit.rawText ?? edit.text)) {

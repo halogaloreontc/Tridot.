@@ -343,7 +343,10 @@ final class ScenarioParser {
   /// ними — только слова поправки: «в четверг, нет, в пятницу», «не на
   /// завтра, а на послезавтра», «в 10, точнее в 11». Срок — второй, а
   /// первый вместе со словами поправки занимает место срока, чтобы не
-  /// попасть в название. `null` — поправки нет.
+  /// попасть в название. `null` — поправки нет. Тот же разбор — у правки
+  /// одним сроком («не завтра, а в среду», TaskEditPhrases).
+  Utterance? correctedDue(Utterance utterance) => _correctedDue(utterance);
+
   Utterance? _correctedDue(Utterance utterance) {
     final due = utterance.due;
     if (due.issue != DueIssue.conflictingDays &&
@@ -1994,6 +1997,8 @@ final class ScenarioParser {
     if (promised != null) return promised;
     final firstPerson = _firstPersonCreate(utterance, i, remove);
     if (firstPerson != null) return firstPerson;
+    final event = _eventCreate(utterance, i, remove);
+    if (event != null) return event;
     final verb = tokens[i].text;
     if (!DueParser.isInfinitive(verb) || _notImplicitVerbs.contains(verb)) {
       return null;
@@ -2083,6 +2088,119 @@ final class ScenarioParser {
       implicit: true,
     );
   }
+
+  /// Дело без глагола со сроком: «у меня в пятницу в 14:00
+  /// собеседование» (событие из закрытого списка [_eventNouns]), «завтра
+  /// мне надо к врачу к 9» («надо/нужно» + «к/в …»). Это может быть и
+  /// рассказ, поэтому, как у дела от первого лица, — только со сроком и
+  /// с вопросом «Понял так: … Создать?» (сомнение 0,5). Без срока, с
+  /// «не», с вопросом, в чате задачи — не задача.
+  ParsedCommand? _eventCreate(
+    Utterance utterance,
+    int index,
+    List<CharSpan> remove,
+  ) {
+    final tokens = utterance.tokens;
+    final due = utterance.due;
+    if (due.spans.isEmpty ||
+        due.dueAt == null ||
+        utterance.chatTaskId != null ||
+        utterance.isQuestion ||
+        utterance.words.contains('не')) {
+      return null;
+    }
+    final head = <CharSpan>[...remove];
+    var from = index;
+    final first = tokens[index].text;
+    if (first == 'у' &&
+        index + 1 < tokens.length &&
+        (tokens[index + 1].text == 'меня' || tokens[index + 1].text == 'нас')) {
+      head
+        ..add(tokens[index].span)
+        ..add(tokens[index + 1].span);
+      from = index + 2;
+    } else if (_eventPrepositions.contains(first)) {
+      final before = tokens.take(index).map((UtteranceToken t) => t.text);
+      if (!before.any(_eventModals.contains)) return null;
+    } else {
+      return null;
+    }
+    final rest = <UtteranceToken>[
+      for (final token in tokens.skip(from))
+        if (!Utterance.isCovered(token, due.spans)) token,
+    ];
+    if (rest.isEmpty || rest.length > 4) return null;
+    if (rest.any(
+      (UtteranceToken t) =>
+          DueParser.isInfinitive(t.text) ||
+          _firstPersonNotTask.contains(t.text) ||
+          _isAssistantNoun(t.text) ||
+          _privateStems.any(t.text.startsWith),
+    )) {
+      return null;
+    }
+    if (from > index && !_eventNouns.contains(rest.first.text)) return null;
+    if (from == index && rest.length < 2) return null;
+    final text = _titleText(utterance, head);
+    if (text.isEmpty) return null;
+    // «К врачу» с предлогом в начале названия [_finish] и так считает
+    // недоразобранным (минус 0,4): вместе — тот же вопрос, не отказ.
+    _doubt += from == index ? 0.2 : 0.5;
+    return ParsedCommand(
+      intent: CommandIntent.createTask,
+      title: Utterance.capitalize(text),
+      dueAt: due.dueAt,
+      duePrecision: due.precision,
+      dueIssue: due.issue,
+      projects: <String>[for (final tag in utterance.hashtags) tag.name],
+      implicit: true,
+    );
+  }
+
+  /// «Мне надо к врачу», «нужно в банк» — куда идти.
+  static const Set<String> _eventPrepositions = <String>{'к', 'ко', 'в', 'во'};
+
+  static const Set<String> _eventModals = <String>{
+    'надо',
+    'нужно',
+    'необходимо',
+  };
+
+  /// События, о которых говорят без глагола: «у меня завтра собеседование».
+  static const Set<String> _eventNouns = <String>{
+    'собеседование',
+    'встреча',
+    'созвон',
+    'совещание',
+    'планерка',
+    'прием',
+    'экзамен',
+    'зачет',
+    'тренировка',
+    'ужин',
+    'обед',
+    'презентация',
+    'свидание',
+    'концерт',
+    'спектакль',
+    'стрижка',
+    'маникюр',
+    'рейс',
+    'поезд',
+    'самолет',
+    'занятие',
+    'урок',
+    'лекция',
+    'семинар',
+    'вебинар',
+    'конференция',
+    'запись',
+    'операция',
+    'анализы',
+    'репетиция',
+    'игра',
+    'матч',
+  };
 
   /// «Я обещал Лене перезвонить вечером», «мы договорились завтра
   /// созвониться»: обещание — дело впереди, а не сделанное. Название — с
@@ -3789,14 +3907,19 @@ bool _isListQuery(Utterance utterance) {
   // «что мне нужно сделать?», «покажи всё, что нужно сделать», «что я
   // должен сделать», «что там у меня осталось?», «что у меня на завтра?»,
   // «что я записал на пятницу», «что я там планировал».
-  if (!subject && words.contains('что')) {
+  // «Шо у меня на завтра», «чё там по задачам», «чем я занят завтра».
+  if (!subject && words.any(_listWhat.contains)) {
     final mine = words.contains('у') && words.contains('меня');
+    // «А что на завтра?» — вопрос о своих делах на день (после ответа о
+    // погоде его раньше берёт «Погода», RoutePolicy).
+    final aboutTasks = utterance.isQuestion;
     subject =
         (words.any(_listDuties.contains) && words.any(_listDoings.contains)) ||
             words.contains('осталось') ||
             words.contains('остались') ||
             words.any(_listPlanned.contains) ||
-            (mine && utterance.due.spans.isNotEmpty);
+            words.any(_listBusy.contains) ||
+            ((mine || aboutTasks) && utterance.due.spans.isNotEmpty);
   }
   return subject && ask;
 }
@@ -3817,6 +3940,19 @@ bool _isQuotedDue(String text, Utterance utterance) {
     ),
   );
 }
+
+/// Вопросительное «что» и разговорные формы: «шо», «чё», «чо», «чем».
+const Set<String> _listWhat = <String>{'что', 'шо', 'че', 'чо', 'чем'};
+
+/// «Чем я занят завтра», «что я забыл?» — о своих делах.
+const Set<String> _listBusy = <String>{
+  'занят',
+  'занята',
+  'заняты',
+  'забыл',
+  'забыла',
+  'забыли',
+};
 
 /// Кто должен: «что мне нужно сделать», «что я должен сделать».
 const Set<String> _listDuties = <String>{
@@ -3893,7 +4029,8 @@ bool _listSubjectStem(String word) =>
     word.startsWith('задач') ||
     word.startsWith('незаверш') ||
     word.startsWith('невыполн') ||
-    word.startsWith('несделан');
+    word.startsWith('несделан') ||
+    word.startsWith('просроч');
 
 /// Просьба показать или вопрос: «покажи», «выведи», «глянь», «что», «какие».
 const Set<String> _listAsks = <String>{
@@ -3914,6 +4051,12 @@ const Set<String> _listAsks = <String>{
   'скажи',
   'подскажи',
   'что',
+  'шо',
+  'че',
+  'чо',
+  'чем',
+  // «Сколько задач на неделе», «сколько у меня просроченных».
+  'сколько',
   'какие',
   'какой',
   'какая',
@@ -3998,6 +4141,16 @@ const Set<String> _listVocabulary = <String>{
   'месяц',
   'месяце',
   'покупок',
+  ..._listBusy,
+  // «на послезавтра у меня что-нибудь стоит?», «что ближайшее по
+  // плану», «на этой неделе много дел?».
+  'стоит',
+  'ближайшее',
+  'ближайшие',
+  'ближайшая',
+  'ближайший',
+  'много',
+  'мало',
   'пожалуйста',
   'плиз',
   'пж',

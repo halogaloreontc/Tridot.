@@ -297,12 +297,23 @@ abstract final class AlarmPhrases {
     final from = prefix == 0 || prefix >= utterance.tokens.length
         ? 0
         : utterance.tokens[prefix - 1].span.end;
-    final tokens = <String>[
+    var tokens = <String>[
       for (final match in _token.allMatches(text))
         if (match.start >= from) match.group(0)!,
     ];
-    if (tokens.isEmpty || tokens.contains('не') || tokens.contains('нет')) {
-      return null;
+    if (tokens.isEmpty) return null;
+    // «Мне бы не проспать завтра в 6:15» — просьба разбудить.
+    final oversleep = _oversleep(tokens);
+    if (oversleep != null) tokens = oversleep;
+    if (tokens.contains('не')) return null;
+    // «Поставь будильник на 7, хотя нет, на 7:30» — время — последнее.
+    final corrected = _corrected(tokens);
+    if (corrected != null) tokens = corrected;
+    if (tokens.contains('нет')) {
+      // «Нет, на 6:45» сразу после ответа о будильнике — новое время.
+      return utterance.recentConnectorId == recentId
+          ? _continuation(tokens, utterance, now)
+          : null;
     }
     // Где слово-якорь: «будильник», «таймер», «разбуди», «засеки».
     var anchor = -1;
@@ -326,7 +337,11 @@ abstract final class AlarmPhrases {
       anchor = i;
       break;
     }
-    if (kind == null) return null;
+    if (kind == null) {
+      return utterance.recentConnectorId == recentId
+          ? _continuation(tokens, utterance, now)
+          : null;
+    }
     if (kind == AlarmKind.alarm) {
       final first = _wakeFirst(tokens, anchor, utterance, now);
       if (first != null) return first;
@@ -380,6 +395,130 @@ abstract final class AlarmPhrases {
     }
     return _alarm(reader, now, label);
   }
+
+  /// Id навыка «Часы» в контексте сессии ([Utterance.recentConnectorId]).
+  static const String recentId = 'alarm';
+
+  /// Обрывок сразу после ответа о будильнике или таймере: «7:30», «а на 9
+  /// можно?», «нет, на 6:45» — будильник на новое время; «ещё на 5
+  /// минут», «а ещё таймер на 15 минут» — таймер. Кроме времени или
+  /// длительности — только слова из [_continuationWords]; «не» — никогда
+  /// («не на 7» — не просьба). Ставится, как всегда, только после
+  /// «Поставить».
+  static AlarmRequest? _continuation(
+    List<String> tokens,
+    Utterance utterance,
+    DateTime now,
+  ) {
+    final rest = <String>[
+      for (final word in tokens)
+        if (!_continuationWords.contains(word)) word,
+    ];
+    if (rest.isEmpty || rest.length > 4) return null;
+    // Голое число («15») — не время: только «7:30», «на 9», «в 7 утра».
+    final marked = rest.any(
+      (String w) =>
+          _Reader._clock.hasMatch(w) ||
+          _Reader._timePrepositions.contains(w) ||
+          _Reader._dayparts.contains(w),
+    );
+    final clock = _Reader(rest, timer: false)..read();
+    if (marked &&
+        clock.hasTime &&
+        !clock.leftover &&
+        !clock.strayNumber &&
+        clock.days.isEmpty) {
+      return _alarm(clock, now, null);
+    }
+    final timer = _Reader(rest, timer: true)..read();
+    final seconds = timer.duration?.inSeconds;
+    if (timer.hasDuration &&
+        !timer.leftover &&
+        !timer.strayNumber &&
+        seconds != null &&
+        seconds > 0 &&
+        seconds <= maxTimerSeconds &&
+        rest.any(_Reader._unitSeconds.containsKey)) {
+      return AlarmRequest(kind: AlarmKind.timer, seconds: seconds);
+    }
+    return null;
+  }
+
+  /// Слова продолжения вокруг времени: «а», «нет», «можно», «лучше».
+  static const Set<String> _continuationWords = <String>{
+    'а',
+    'и',
+    'нет',
+    'неа',
+    'ой',
+    'ну',
+    'давай',
+    'лучше',
+    'тогда',
+    'хотя',
+    'еще',
+    'можно',
+    'пожалуйста',
+    'плиз',
+  };
+
+  /// «Мне бы не проспать завтра в 6:15», «чтобы не проспать в 7»: «не
+  /// проспать» — якорь «разбуди». `null` — такого нет.
+  static List<String>? _oversleep(List<String> tokens) {
+    final at = tokens.indexOf('проспать');
+    if (at < 1 || tokens[at - 1] != 'не') return null;
+    final head = tokens.take(at - 1);
+    if (!head.every(_oversleepLead.contains)) return null;
+    return <String>['разбуди', ...tokens.skip(at + 1)];
+  }
+
+  static const Set<String> _oversleepLead = <String>{
+    'мне',
+    'нам',
+    'бы',
+    'чтобы',
+    'чтоб',
+    'главное',
+    'помоги',
+    'хочу',
+    'как',
+    'только',
+  };
+
+  /// «Поставь будильник на 7, хотя нет, на 7:30», «на 7, нет, на 8»:
+  /// слова до поправки ([_correctionMarks]) после якоря отбрасываются, если
+  /// после неё — одно время. `null` — поправки нет.
+  static List<String>? _corrected(List<String> tokens) {
+    final at = tokens.indexWhere(_correctionMarks.contains);
+    if (at < 2) return null;
+    var tail = at + 1;
+    while (tail < tokens.length && _correctionMarks.contains(tokens[tail])) {
+      tail++;
+    }
+    final after = tokens.sublist(tail);
+    if (after.isEmpty) return null;
+    final reader = _Reader(after, timer: false)..read();
+    if (!reader.hasTime || reader.leftover || reader.strayNumber) return null;
+    // Якорь — до поправки: «будильник», «разбуди».
+    var anchor = -1;
+    for (var i = 0; i < at; i++) {
+      final word = tokens[i];
+      if (_alarmNouns.contains(word) || _wakeVerbs.contains(word)) {
+        anchor = i;
+        break;
+      }
+    }
+    if (anchor < 0) return null;
+    return <String>[...tokens.take(anchor + 1), ...after];
+  }
+
+  static const Set<String> _correctionMarks = <String>{
+    'хотя',
+    'нет',
+    'точнее',
+    'вернее',
+    'ой',
+  };
 
   /// «Мне вставать в 5:40, поставь будильник», «завтра подъём в 6,
   /// заведи будильник»: время — в начале, о подъёме, а просьба —

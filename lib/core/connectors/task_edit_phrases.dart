@@ -229,6 +229,66 @@ abstract final class TaskEditPhrases {
     'и',
   };
 
+  /// Поправка в начале одного срока: «нет, в 11», «не, давай к обеду»,
+  /// «ой, лучше в 10», «неее давай лучше на послезавтра», «её тоже на
+  /// пятницу» — о той же задаче.
+  static const Set<String> _bareLeads = <String>{
+    'нет',
+    'неа',
+    'нее',
+    'неее',
+    'нееет',
+    'ой',
+    'хотя',
+    'вернее',
+    'точнее',
+    'ее',
+    'тоже',
+    'тогда',
+    'теперь',
+  };
+
+  static const Set<String> _noWords = <String>{'нет', 'неа', 'нее', 'неее'};
+
+  /// Слова вне срока у правки одним сроком ([parse]): из [_bareExtras] и
+  /// поправок [_bareLeads] в начале. «Не» — только поправкой «не …, а …»
+  /// («не завтра, а в среду», «ой, не в 10, а в 11»: срок — последний) или
+  /// «не,» отдельным словом в начале («не, давай к обеду»); «не в 10»,
+  /// «только не в субботу» — запрет, а не новый срок.
+  static bool _bareRest(Utterance utterance, List<UtteranceToken> rest) {
+    final text = utterance.analysisText;
+    var leading = true;
+    for (var i = 0; i < rest.length; i++) {
+      final word = rest[i].text;
+      if (_bareExtras.contains(word)) {
+        if (word != 'а' && word != 'и') leading = false;
+        continue;
+      }
+      // Ответ «нет, …» на вопрос помощника — ответ, а не правка.
+      if (leading &&
+          _bareLeads.contains(word) &&
+          !(utterance.awaitingAnswer && _noWords.contains(word))) {
+        continue;
+      }
+      if (word == 'не') {
+        final after = text.substring(rest[i].span.end);
+        // «Не, давай к обеду» — «нет» разговорно.
+        if (i == 0 && after.trimLeft().startsWith(',')) continue;
+        // «Не завтра, а в среду»: дальше — запятая и «а».
+        final but = rest.indexWhere((UtteranceToken t) => t.text == 'а', i + 1);
+        if (but > i &&
+            text.substring(rest[i].span.end, rest[but].span.start).contains(
+                  ',',
+                )) {
+          continue;
+        }
+        return false;
+      }
+      return false;
+    }
+    return true;
+  }
+
   /// Правка в [utterance] или `null`, если фраза не о правке задачи.
   ///
   /// Одна дата без глагола ([TaskEdit.bare]) — только когда о задаче
@@ -277,10 +337,8 @@ abstract final class TaskEditPhrases {
     }
     final due = utterance.due;
     if (due.spans.isEmpty || words.first == 'до') return null;
-    final rest = utterance.tokensOutside(due.spans);
-    if (!rest.every((UtteranceToken t) => _bareExtras.contains(t.text))) {
-      return null;
-    }
+    final rest = utterance.tokensOutside(due.spans).toList(growable: false);
+    if (!_bareRest(utterance, rest)) return null;
     return TaskEdit(
       kind: TaskEditKind.due,
       dueAt: due.dueAt,

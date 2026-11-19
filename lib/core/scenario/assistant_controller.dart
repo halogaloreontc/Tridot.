@@ -1197,6 +1197,9 @@ final class AssistantController {
       <ConnectorMatch>[for (final (_, m) in candidates) m],
       recentConnectorId: recent,
     );
+    // Вторая команда того же сообщения (CommandSplit): не выполняется,
+    // а предлагается кнопкой под ответом на первую.
+    String? rest;
     if (layers) {
       // Слои распознавания (ADR-037, RecognitionLayers): обёртка, опечатка
       // в слове срока, а если как есть не понял никто явно, — раскладка и
@@ -1252,6 +1255,7 @@ final class AssistantController {
           );
         }
       }
+      rest = layered.rest;
       if (layered.text != message) {
         utterance = layered.utterance;
         hideFromNetwork = layered.hide;
@@ -1322,31 +1326,73 @@ final class AssistantController {
         );
         final note = reroute.noteReplyId;
         if (note == null || response.status == AssistantStatus.failed) {
-          return response;
+          return _offerRest(response, rest);
         }
-        return response.withText(
-          '${session.say(note)} ${response.message}',
-          response.values,
+        return _offerRest(
+          response.withText(
+            '${session.say(note)} ${response.message}',
+            response.values,
+          ),
+          rest,
         );
       }
       _leadByDuty(bestConnector);
-      return _run(
-        bestConnector,
-        ConnectorMatch(
-          connectorId: best.connectorId,
-          commandId: best.commandId,
-          confidence: best.confidence,
-          implicit: best.implicit,
-          fallback: best.fallback,
-          aliased: best.aliased,
-          payload: reroute.orElse,
+      return _offerRest(
+        await _run(
+          bestConnector,
+          ConnectorMatch(
+            connectorId: best.connectorId,
+            commandId: best.commandId,
+            confidence: best.confidence,
+            implicit: best.implicit,
+            fallback: best.fallback,
+            aliased: best.aliased,
+            payload: reroute.orElse,
+          ),
         ),
+        rest,
       );
     }
 
     _leadByDuty(bestConnector);
-    return _run(bestConnector, best);
+    return _offerRest(await _run(bestConnector, best), rest);
   }
+
+  /// Вторая команда сообщения ([Layered.rest]) — кнопкой под ответом на
+  /// первую: нажатие кладёт её в поле ввода, отправляет пользователь сам.
+  /// Если первая ждёт выбора из вариантов (кнопки вопроса закрывают
+  /// подсказки), вторая сразу лежит в поле ввода. Запись по второй
+  /// половине без нового сообщения не выполняется никогда.
+  AssistantResponse _offerRest(AssistantResponse response, String? rest) {
+    if (rest == null || response.status == AssistantStatus.failed) {
+      return response;
+    }
+    final note = session.say(compoundRestReply, <String, String>{
+      'text': rest,
+    });
+    final withNote = response.withText(
+      '${response.message} $note',
+      response.values,
+    );
+    if (response.clarification != null || response.draft != null) {
+      return response.draft != null ? withNote : withNote.withDraft(rest);
+    }
+    return withNote.withSuggestions(
+      CommandSuggestions(<CommandSuggestion>[
+        CommandSuggestion(
+          entryId: compoundRestEntry,
+          label: rest,
+          template: rest,
+        ),
+      ]),
+    );
+  }
+
+  /// Пояснение под ответом на первую из двух команд.
+  static const String compoundRestReply = 'router.compound.rest';
+
+  /// Id кнопки второй команды в подсказках.
+  static const String compoundRestEntry = 'compound.rest';
 
   Utterance _analyze(String text, String? recent, {bool? awaiting}) =>
       Utterance.analyze(text, now: session.clock.now()).withChat(

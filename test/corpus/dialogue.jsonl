@@ -1,0 +1,53 @@
+{"id":"dlg-001","text":"напомни купить молоко и поставь будильник на 7","intent":"createTask","title":"Купить молоко","source":"probe","note":"две команды: выполняется первая, вторая — кнопкой (CommandSplit, ADR-037)"}
+{"id":"dlg-002","text":"поставь будильник на 6 и напомни в 8 выгулять собаку","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"0"},"source":"probe","note":"раньше — спор двух навыков"}
+{"id":"dlg-003","text":"закрой задачу про хлеб и добавь купить сыр","intent":"completeTask","title":"Хлеб","source":"probe"}
+{"id":"dlg-004","text":"перенеси созвон на четверг, а отчёт на пятницу","intent":"rescheduleTask","title":"Созвон","due":"2026-11-05","precision":"date","source":"probe","note":"вторая половина без глагола — «перенеси отчёт на пятницу» кнопкой"}
+{"id":"dlg-005","text":"засеки 20 минут и напомни снять пирог","connector":"alarm","intent":"alarm.timer","form":{"seconds":"1200"},"source":"probe"}
+{"id":"dlg-006","text":"сколько будет 300 умножить на 12, а потом напомни заплатить за свет","connector":"calc","intent":"calc.evaluate","source":"probe","note":"не задача «Сколько будет …, а потом заплатить за свет»"}
+{"id":"dlg-007","text":"добавь задачу купить хлеб и напомни позвонить маме завтра","intent":"createTask","title":"Купить хлеб","source":"manual"}
+{"id":"dlg-008","text":"напомни позвонить маме и закрой окно","intent":"createTask","title":"Позвонить маме и закрой окно","source":"manual","note":"после создания задачи «закрой …» — часть дела, а не вторая команда"}
+{"id":"dlg-009","text":"напомни купить хлеб и молоко","intent":"createTask","title":"Купить хлеб и молоко","source":"manual","note":"«и» без глагола команды — одно дело"}
+{"id":"dlg-010","text":"перенеси созвон на четверг, а то забуду","intent":"rescheduleTask","title":"Созвон","due":"2026-11-05","precision":"date","source":"manual","note":"«а то …» — не вторая команда"}
+{"id":"dlg-011","text":"добавь задачу «закрой и добавь»","intent":"createTask","title":"закрой и добавь","source":"manual","note":"в кавычках не режется"}
+{"id":"dlg-020","text":"нет, в 11","intent":"task.edit","after":"tasks","form":{"kind":"due","due":"2026-11-03T11:00","precision":"dateTime","bare":"true"},"source":"probe","note":"поправка срока текущей задачи"}
+{"id":"dlg-021","text":"её тоже на пятницу","intent":"task.edit","after":"tasks","form":{"kind":"due","due":"2026-11-06T00:00","precision":"date","bare":"true"},"source":"probe"}
+{"id":"dlg-022","text":"не завтра, а в среду","intent":"task.edit","after":"tasks","form":{"kind":"due","due":"2026-11-04T00:00","precision":"date","bare":"true"},"source":"probe","note":"срок — последний"}
+{"id":"dlg-023","text":"ой, не в 10, а в 11","intent":"task.edit","after":"tasks","form":{"kind":"due","due":"2026-11-03T11:00","precision":"dateTime","bare":"true"},"source":"probe"}
+{"id":"dlg-024","text":"неее давай лучше на послезавтра","intent":"task.edit","after":"tasks","form":{"kind":"due","due":"2026-11-04T00:00","precision":"date","bare":"true"},"source":"probe"}
+{"id":"dlg-025","text":"не, давай завтра","intent":"task.edit","after":"tasks","form":{"kind":"due","due":"2026-11-03T00:00","precision":"date","bare":"true"},"source":"manual","note":"«не,» отдельным словом — «нет»"}
+{"id":"dlg-026","text":"не в 10","intent":"unknown","route":"none","after":"tasks","source":"manual","note":"запрет без нового срока — не правка"}
+{"id":"dlg-027","text":"только не в субботу","intent":"unknown","route":"none","after":"tasks","source":"manual"}
+{"id":"dlg-028","text":"нет, в 11","intent":"unknown","route":"none","source":"manual","note":"без разговора о задаче — не правка"}
+{"id":"dlg-029","text":"а в среду?","intent":"unknown","route":"none","after":"tasks","source":"probe","note":"вопрос после задач — и перенос, и «что в среду?»: по догадке не пишем"}
+{"id":"dlg-030","text":"и ещё одну — купить хлеб","intent":"createTask","title":"Купить хлеб","after":"tasks","source":"probe"}
+{"id":"dlg-040","text":"а на 9 можно?","connector":"alarm","intent":"alarm.set","after":"alarm","form":{"hour":"9","minute":"0"},"source":"probe","note":"продолжение после будильника; ставится только после «Поставить»"}
+{"id":"dlg-041","text":"нет, на 6:45","connector":"alarm","intent":"alarm.set","after":"alarm","form":{"hour":"6","minute":"45"},"source":"probe"}
+{"id":"dlg-042","text":"7:30","connector":"alarm","intent":"alarm.set","after":"alarm","form":{"hour":"7","minute":"30"},"source":"probe"}
+{"id":"dlg-043","text":"ещё на 5 минут","connector":"alarm","intent":"alarm.timer","after":"alarm","form":{"seconds":"300"},"source":"probe"}
+{"id":"dlg-044","text":"15","intent":"unknown","route":"none","after":"alarm","source":"manual","note":"голое число — не время"}
+{"id":"dlg-045","text":"не на 7","intent":"unknown","route":"none","after":"alarm","source":"manual"}
+{"id":"dlg-046","text":"7:30","intent":"unknown","route":"none","source":"manual","note":"без разговора о будильнике — не будильник"}
+{"id":"dlg-047","text":"поставь будильник на 7, хотя нет, на 7:30","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"30"},"source":"probe","note":"поправка на ходу: время — последнее"}
+{"id":"dlg-048","text":"мне бы не проспать завтра в 6:15","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"15"},"source":"probe","note":"«не проспать» — разбуди"}
+{"id":"dlg-049","text":"напомни не проспать на планёрку","intent":"createTask","title":"Не проспать на планёрку","source":"manual","note":"с командой задачи — дело"}
+{"id":"dlg-060","text":"сколько задач на неделе","intent":"listTasks","source":"probe"}
+{"id":"dlg-061","text":"что я забыл?","intent":"listTasks","source":"probe"}
+{"id":"dlg-062","text":"сколько у меня просроченных","intent":"listTasks","source":"probe"}
+{"id":"dlg-063","text":"на послезавтра у меня что-нибудь стоит?","intent":"listTasks","source":"probe"}
+{"id":"dlg-064","text":"чем я занят завтра утром","intent":"listTasks","source":"probe"}
+{"id":"dlg-065","text":"что ближайшее по плану","intent":"listTasks","source":"probe"}
+{"id":"dlg-066","text":"на этой неделе много дел?","intent":"listTasks","source":"probe"}
+{"id":"dlg-067","text":"шо у меня на завтра","intent":"listTasks","source":"probe"}
+{"id":"dlg-068","text":"чё там по задачам","intent":"listTasks","source":"probe"}
+{"id":"dlg-069","text":"а что на завтра?","intent":"listTasks","after":"tasks","source":"probe"}
+{"id":"dlg-070","text":"что я забыл купить?","intent":"unknown","route":"none","source":"manual"}
+{"id":"dlg-071","text":"чем заняться на выходных?","intent":"unknown","route":"none","source":"manual"}
+{"id":"dlg-072","text":"а что на завтра?","connector":"weather","intent":"weather.day","after":"weather","source":"manual","note":"после погоды — погода"}
+{"id":"dlg-073","text":"закрой всё, что на вчера","intent":"completeMany","scope":"date:2026-11-01","source":"probe"}
+{"id":"dlg-074","text":"перенеси все просроченные на пн плз","intent":"rescheduleMany","due":"2026-11-09","precision":"date","scope":"overdue","source":"probe"}
+{"id":"dlg-075","text":"поменяй срок у задачи про отчёт на 20 ноября","intent":"rescheduleTask","title":"Про отчёт","due":"2026-11-20","precision":"date","source":"probe"}
+{"id":"dlg-080","text":"завтра мне надо к врачу к 9","intent":"createTask","title":"К врачу","due":"2026-11-03T09:00","precision":"dateTime","source":"probe","note":"без глагола — только со сроком и с вопросом «Понял так: … Создать?»"}
+{"id":"dlg-081","text":"у меня в пятницу в 14:00 собеседование","intent":"createTask","title":"Собеседование","due":"2026-11-06T14:00","precision":"dateTime","source":"probe","note":"событие из закрытого списка, с вопросом"}
+{"id":"dlg-082","text":"у меня завтра болит голова","intent":"unknown","route":"none","source":"manual"}
+{"id":"dlg-083","text":"мне надо в банк","intent":"unknown","route":"none","source":"manual","note":"без срока — не задача"}
+{"id":"dlg-084","text":"у меня завтра выходной","intent":"unknown","route":"none","source":"manual","note":"не событие из списка"}

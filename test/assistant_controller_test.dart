@@ -117,6 +117,41 @@ void main() {
     });
   });
 
+  group('две команды в одном сообщении (CommandSplit)', () {
+    test('выполняется первая, вторая — кнопкой, без записи', () async {
+      final first = await assistant
+          .handle('добавь задачу купить хлеб и напомни позвонить маме завтра');
+      expect(first.status, AssistantStatus.completed);
+      expect(first.task?.title, 'Купить хлеб');
+      expect(first.message, contains('«Напомни позвонить маме завтра»'));
+      final button = first.suggestions!.commands.single;
+      expect(button.template, 'Напомни позвонить маме завтра');
+      expect(
+        (await service.listActive()).map((Task t) => t.title),
+        <String>['Купить хлеб'],
+        reason: 'вторая задача сама не создаётся',
+      );
+    });
+
+    test('первая ждёт ответа — вторая уже в поле ввода', () async {
+      final first =
+          await assistant.handle('напомни купить молоко и покажи задачи');
+      expect(first.status, AssistantStatus.needsClarification);
+      expect(first.draft, 'Покажи задачи');
+    });
+  });
+
+  group('поправка срока текущей задачи', () {
+    test('«не завтра, а в среду», «нет, в 11»', () async {
+      await assistant.handle('Добавь задачу «Отчёт» на завтра в 10:00');
+      final moved = await assistant.handle('не завтра, а в среду');
+      expect(moved.status, AssistantStatus.completed);
+      expect(moved.task?.dueAt?.day, 4);
+      final again = await assistant.handle('нет, в 11');
+      expect(again.task?.dueAt?.hour, 11);
+    });
+  });
+
   group('не та раскладка (LayoutFix)', () {
     test('чтение — сразу, с пояснением', () async {
       await assistant.handle('Добавь задачу «Отчёт»');

@@ -218,7 +218,9 @@ final class BulkParser {
   static const Set<String> _polite = <String>{
     'пожалуйста',
     'плиз',
+    'плз',
     'пж',
+    'пжлст',
     'ка',
     'мне',
     'давай',
@@ -461,6 +463,10 @@ final class BulkParser {
         continue;
       } else if (_quantifiers.contains(word)) {
         quantifier = true;
+      } else if (word == 'что' &&
+          i > 0 &&
+          _quantifiers.contains(tokens[i - 1].text)) {
+        // «Закрой всё, что на вчера» — «что» после «всё» уточняет выбор.
       } else if (_nouns.contains(word)) {
         noun = true;
         if (_pluralNouns.contains(word)) pluralNoun = true;

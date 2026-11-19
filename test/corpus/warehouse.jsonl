@@ -43,7 +43,7 @@
 {"id":"wh-043","text":"привет","connector":"talk","intent":"talk.greet","note":"«привет» в help описания не перехватывает приветствие беседы","source":"manual"}
 {"id":"wh-044","text":"что ты умеешь","connector":"talk","intent":"talk.capabilities","note":"справка склада — только своими фразами","source":"manual"}
 {"id":"wh-045","text":"сколько будет 2+2","connector":"calc","intent":"calc.evaluate","note":"пример — калькулятору","source":"manual"}
-{"id":"wh-046","text":"сколько у меня задач","connector":"warehouse","intent":"unknown","route":"none","note":"слова задач — не товар","source":"manual"}
+{"id": "wh-046", "text": "сколько у меня задач", "intent": "listTasks", "note": "expect fixed: счёт задач — список задач (не склад)", "source": "manual"}
 {"id":"wh-047","text":"найди задачу отчёт","connector":"warehouse","intent":"unknown","route":"none","source":"manual"}
 {"id":"wh-048","text":"Добавь задачу проверить, где лежит 64115","intent":"createTask","note":"образцы склада привязаны к началу и концу фразы","source":"manual"}
 {"id":"wh-049","text":"через 2 часа позвонить","intent":"createTask","note":"срок — не товар","source":"manual"}
