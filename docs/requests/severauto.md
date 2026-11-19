@@ -40,17 +40,28 @@ https://github.com/halogaloreontc/Tridot./blob/claude/nice-davinci-swz8vx/docs/C
 
 ### Что сделать
 
-**1. Дверь для помощника: ключ сотрудника.**
+**1. Дверь для помощника: личный ключ сотрудника по общему договору.**
+Связной подключается к любому приложению одинаково (ADR-039 в Tridot):
+вход и выход — общие действия Tridot, своих имён у приложения нет.
 - Миграция: таблица `assist_keys(id, staff_id, digest, scope 'assist',
-  label, created_at, last_used_at, revoked_at)`. Хранить только хеш, как у
-  сессий (`accounts.ts`).
-- Методы `createAssistKey` (ключ показывается один раз), `listAssistKeys`,
-  `revokeAssistKey` — только над своими ключами; в интерфейсе — «Настройки
-  → Профиль → Помощник «Связной»». Ключи гаснут при деактивации
-  сотрудника и смене пароля.
-- Отдельный путь `POST /assist/api?action=<метод>` (тело — JSON, как у
-  `/api`), ключ — только в заголовке `Authorization: Bearer <ключ>`, без
-  cookie. Существующий `/api` и его cookie не трогаем.
+  device, created_at, last_used_at, revoked_at)`. Хранить только хеш, как у
+  сессий (`accounts.ts`). Ключи гаснут при деактивации сотрудника и смене
+  пароля; список ключей и «Отключить» — «Настройки → Профиль → Помощник
+  «Связной»».
+- Отдельный путь `POST /assist/api?action=<действие>` (тело — JSON),
+  без cookie. Существующий `/api` и его cookie не трогаем.
+- Вход (действия с этими именами — договор Tridot):
+  - `auth_check {login, pass, scope: "assist"}` → `{ok, sid, login, name,
+    scope: "assist"}` — `sid` и есть личный ключ помощника; лимит попыток
+    как у обычного входа;
+  - `qr_take {code, scope: "assist", device}` → то же: одноразовый код
+    (живёт 10 минут) из «Профиль → Помощник «Связной» → Показать QR»; QR и
+    ссылка — `https://<адрес>/assist/#qr=<код>` (Связной понимает и
+    `tridot://connect?u=<адрес>&qr=<код>`);
+  - `auth_out` → гасит ключ из заголовка.
+- Ключ — в заголовке `X-Assist-Key: <ключ>` (в описании —
+  `auth.headers: {"X-Assist-Key": "{$sid}"}`). Пароль сотрудника Связной
+  не хранит.
 - `assistUser()` рядом с `sessionUser()` и тот же шлюз `createGateway`:
   `refusal()` → метод → `redactResult()`. Права и скрытие телефонов —
   ровно как у сессии.
@@ -88,10 +99,31 @@ https://github.com/halogaloreontc/Tridot./blob/claude/nice-davinci-swz8vx/docs/C
   каждом этапе; `getPartOrder` отдаёт последние 20 строк.
 
 **4. Описание команд `assistant.json`.**
-- `GET /assist/assistant.json`, формат `assistant/1`, `app.id`
-  `"severauto"`, `app.name` «Автосервис», `version` = версия из
-  `package.json`. `api.url` — `/assist/api` того же адреса, действие —
-  в `?action=`. Вход — `Authorization: Bearer {$key}` (ключ из профиля).
+- `GET /assist/assistant.json`: Связной берёт описание по адресу
+  подключения + `assistant.json`, поэтому адрес для Связного —
+  `https://<сервер>/assist/`. Формат `assistant/1`, `app.id`
+  `"severauto"`, `version` = версия из `package.json`, `api.url` —
+  `api` (тот же источник), `api.action: {"in": "query", "name":
+  "action"}`, `auth.credentials.sid.get` → `auth_check`, `auth.qr` →
+  `qr_take`, `auth.logout` → `auth_out` (образец — `assistant.json` склада).
+- Профиль приложения — по нему Связной сам строит подключение, тексты и
+  обращения, без кода под «Автосервис»:
+  ```json
+  "app": {
+    "id": "severauto",
+    "title": "Автосервис",
+    "about": "Запись на сервис, клиенты, запчасти, кампании, шаблоны ТО.",
+    "name": "автосервис",
+    "forms": {"nom": "автосервис", "gen": "автосервиса", "dat": "автосервису",
+              "acc": "автосервис", "ins": "автосервисом", "prep": "автосервисе"},
+    "in": "в автосервисе",
+    "gender": "m",
+    "addressing": ["автосервис", "сервис"]
+  }
+  ```
+  Значения — только буквы, цифры, пробел, дефис и «»; обращения не должны
+  совпадать со словами Tridot («склад», «задача», «пароль», имена
+  помощников) — иначе Связной их отбросит.
 - Команды (фразы — как говорят в сервисе):
   - «мои задачи» → `listTasks`;
   - «записи на сегодня», «записи на {date}», «кто записан завтра» →
@@ -141,8 +173,9 @@ https://github.com/halogaloreontc/Tridot./blob/claude/nice-davinci-swz8vx/docs/C
 - `docs/operations.md`: сервер стоит в локальной сети. Помощник на
   телефоне вне сети сервиса его не увидит — нужен туннель или обратный
   прокси (nginx уже упомянут); внутри сети — по адресу компьютера.
-- `docs/user-guide.md`: как выпустить ключ помощника в профиле и
-  подключить «Связного».
+- `docs/user-guide.md`: как подключить «Связного»: в Tridot «Мой Связной
+  → Помощники → Подключения → Подключить приложение», адрес
+  `https://<сервер>/assist/` или QR из «Профиль → Помощник «Связной»».
 
 ### Как проверить
 - `npm test` (vitest) и e2e, если затронут интерфейс профиля.
@@ -159,6 +192,7 @@ https://github.com/halogaloreontc/Tridot./blob/claude/nice-davinci-swz8vx/docs/C
   отдельной задачей, с подтверждением).
 - Не менять поведение `/api`, cookie и входа.
 
-В конце: что сделано, версия, адреса `/assist/assistant.json` и
+В конце: что сделано, версия, адрес для подключения Связного
+(`https://<сервер>/assist/`), адреса `/assist/assistant.json` и
 `/assist/help.json`, список методов в `ASSIST_METHODS`, пример ответа
 `assistMe` (с вымышленным сотрудником).
