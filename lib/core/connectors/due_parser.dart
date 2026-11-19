@@ -308,14 +308,18 @@ final class DueParser {
   /// «в 18 30 забрать заказ» — так распознаватель и спешащий человек пишут
   /// «18:30». Пробел меняется на двоеточие (длина та же), только после
   /// «в/к/до/на», с минутами 00–59 и если дальше не слово счёта: «в 2 50
-  /// рублей», «на 10 15 человек» — числа, а не время.
+  /// рублей», «на 10 15 человек» — числа, а не время. Минуты с нулём
+  /// впереди («в 21 00 таблетки») — время при любом слове дальше.
   static String _spacedClock(String text) => text.replaceAllMapped(
         _spacedTime,
         (Match m) {
           final hour = int.parse(m.group(2)!);
           final minute = int.parse(m.group(3)!);
           final after = m.group(4);
+          // «В 21 00 таблетки»: минуты с нулём впереди — так числа не
+          // считают («в 2 50 рублей»), это время.
           final free = after == null ||
+              m.group(3)!.startsWith('0') ||
               _bareHourSuffixes.contains(after) ||
               _hourSuffixes.contains(after) ||
               _dayWords.containsKey(after) ||
@@ -328,6 +332,20 @@ final class DueParser {
           return m.group(0)!.replaceRange(colon, colon + 1, ':');
         },
       );
+
+  /// «Минут через двадцать», «часа через два» — единица впереди, как
+  /// «через минут двадцать»: слова меняются местами (длина та же), если
+  /// после «через» — число.
+  static String _unitFirst(String text) => text.replaceAllMapped(
+        _unitBeforeThrough,
+        (Match m) => '${m.group(3)}${m.group(2)}${m.group(1)}',
+      );
+
+  static final RegExp _unitBeforeThrough = RegExp(
+    r'(?<![а-я])(минут|минуты|часа|часов|дня|дней|недели|недель)(\s+)(через)'
+    r'(?=\s+(?:\d|пар|полтор|один|одну|две|два|три|четыре|пять|шесть|семь|'
+    r'восемь|девять|десять|пятнадцать|двадцать|тридцать|сорок|пятьдесят))',
+  );
 
   static final RegExp _spacedTime = RegExp(
     r'((?:^|(?<=\s))(?:в|во|к|ко|до|на)\s)(\d{1,2}) (\d{2})(?![\d:.,])'
@@ -373,7 +391,9 @@ final class DueParser {
     // же длины: фрагменты срока по-прежнему указывают в исходную строку,
     // а в конце расширяются на всё слово ([_spoken]).
     final spoken = SpokenTime.find(normalizeChars(text));
-    final normalized = _spacedClock(_spellDigits(normalizeChars(text), spoken));
+    final normalized = _unitFirst(
+      _spacedClock(_spellDigits(normalizeChars(text), spoken)),
+    );
     final today = DateTime(now.year, now.month, now.day);
     final words = _word.allMatches(normalized).toList(growable: false);
 
@@ -1999,16 +2019,26 @@ final class DueParser {
       final value = word(i);
       // «5го», «15ое» — окончание вплотную, как пишут в спешке.
       final glued = _gluedOrdinal.firstMatch(value);
-      if (glued == null && (value.length > 2 || !_allDigits.hasMatch(value))) {
+      // «К первому числу», «до пятого числа» — порядковое словом, только
+      // со словом «число».
+      final spelled = glued == null ? _spelledOrdinal(value) : null;
+      if (spelled != null) {
+        if (i + 1 >= words.length ||
+            !adjacent(i, i + 1) ||
+            !_monthDayNouns.contains(word(i + 1))) {
+          continue;
+        }
+      } else if (glued == null &&
+          (value.length > 2 || !_allDigits.hasMatch(value))) {
         continue;
       }
-      final day = int.parse(glued?.group(1) ?? value);
+      final day = spelled?.$1 ?? int.parse(glued?.group(1) ?? value);
       if (day < 1 || day > 31) continue;
       if (_touchesNumberPunctuation(text, words[i].start, words[i].end)) {
         continue;
       }
       var last = i;
-      String? ending = glued?.group(2);
+      String? ending = glued?.group(2) ?? spelled?.$2;
       final end = words[i].end;
       if (glued == null &&
           i + 1 < words.length &&
@@ -2022,7 +2052,7 @@ final class DueParser {
       var noun = false;
       if (last + 1 < words.length &&
           adjacent(last, last + 1) &&
-          (word(last + 1) == 'число' || word(last + 1) == 'числа')) {
+          _monthDayNouns.contains(word(last + 1))) {
         noun = true;
         last++;
       }
@@ -2032,7 +2062,9 @@ final class DueParser {
       final accusative = ending == 'е' ||
           ending == 'ое' ||
           (ending == null && word(last) == 'число');
-      final dative = ending == 'му' || ending == 'ому';
+      final dative = ending == 'му' ||
+          ending == 'ому' ||
+          (ending == null && word(last) == 'числу');
       final date = resolve(day);
       final source = _sourcePrepositions.contains(preposition);
       if ((preposition == 'на' && accusative) ||
@@ -2073,6 +2105,59 @@ final class DueParser {
     }
     return result;
   }
+
+  static const Set<String> _monthDayNouns = <String>{
+    'число',
+    'числа',
+    'числу',
+  };
+
+  /// Порядковое число дня словом и его окончание: «первому» → (1, «ому»),
+  /// «пятого» → (5, «ого»), «двадцатое» → (20, «ое»). `null` — не оно.
+  static (int, String)? _spelledOrdinal(String word) {
+    for (final (ending, same) in _spelledEndings) {
+      if (!word.endsWith(ending)) continue;
+      final day = _ordinalStems[word.substring(0, word.length - ending.length)];
+      if (day == null) continue;
+      return (day, same);
+    }
+    return null;
+  }
+
+  /// Окончания порядкового словом и такие же окончания после цифр:
+  /// «третьему» — как «3-му».
+  static const List<(String, String)> _spelledEndings = <(String, String)>[
+    ('ому', 'ому'),
+    ('ого', 'ого'),
+    ('ое', 'ое'),
+    ('ьему', 'ому'),
+    ('ьего', 'ого'),
+    ('ье', 'ое'),
+  ];
+
+  static const Map<String, int> _ordinalStems = <String, int>{
+    'перв': 1,
+    'втор': 2,
+    'трет': 3,
+    'четверт': 4,
+    'пят': 5,
+    'шест': 6,
+    'седьм': 7,
+    'восьм': 8,
+    'девят': 9,
+    'десят': 10,
+    'одиннадцат': 11,
+    'двенадцат': 12,
+    'тринадцат': 13,
+    'четырнадцат': 14,
+    'пятнадцат': 15,
+    'шестнадцат': 16,
+    'семнадцат': 17,
+    'восемнадцат': 18,
+    'девятнадцат': 19,
+    'двадцат': 20,
+    'тридцат': 30,
+  };
 
   /// «на 5 дней назад», «на неделю назад» — прошедший день: перенос туда —
   /// «уже прошло».

@@ -166,3 +166,16 @@
 {"id":"wh-168","text":"скока стоят венские стулья???","connector":"warehouse","intent":"warehouse.price","form":{"q":"венские стулья"},"connected":true,"source":"manual"}
 {"id":"wh-169","text":"что лежит в ячейке 215 3 2 1","connector":"warehouse","intent":"warehouse.cell","form":{"cell":"215-3-2-1"},"connected":true,"note":"голос съел дефисы: после «ячейке» — код по группам","source":"manual"}
 {"id":"wh-170","text":"есть ещё табуретки?","connector":"warehouse","intent":"warehouse.count","form":{"q":"табуретки"},"connected":true,"source":"manual"}
+{"id":"wh-171","text":"сколько можно ждать","intent":"talk.question","connected":true,"note":"«сколько можно» + глагол — риторика, не остаток","source":"probe","connector":"talk"}
+{"id":"wh-172","text":"скока можно звонить","intent":"unknown","route":"none","connected":true,"source":"probe"}
+{"id":"wh-173","text":"сколько ещё терпеть","intent":"talk.question","connected":true,"note":"инфинитив в поле — не товар","source":"probe","connector":"talk"}
+{"id":"wh-174","text":"остался ещё 64115?","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"connected":true,"note":"«остался» с артикулом — остаток, не «где лежит»","source":"probe"}
+{"id":"wh-175","text":"а 64115 ещё осталось?","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"connected":true,"source":"probe"}
+{"id":"wh-176","text":"стульев много ещё осталось?","connector":"warehouse","intent":"warehouse.count","connected":true,"note":"«X много осталось» — только в разговоре о складе","source":"probe"}
+{"id":"wh-177","text":"денег много осталось?","intent":"unknown","route":"none","note":"без склада — не товар","source":"probe"}
+{"id":"wh-178","text":"покажи что в 215-1-1-1 лежит","connector":"warehouse","intent":"warehouse.cell","form":{"cell":"215-1-1-1"},"connected":true,"note":"глагол после кода ячейки","source":"probe"}
+{"id":"wh-179","text":"покажи поступления за 7 дней","connector":"warehouse","intent":"warehouse.week","connected":true,"source":"probe"}
+{"id":"wh-180","text":"какие висят непроведённые","connector":"warehouse","intent":"warehouse.unposted","connected":true,"source":"probe"}
+{"id":"wh-181","text":"у которых приходов нет фото","connector":"warehouse","intent":"warehouse.nophoto","connected":true,"source":"probe"}
+{"id":"wh-182","text":"кем я записан на складе","connector":"warehouse","intent":"warehouse.me","connected":true,"source":"probe"}
+{"id":"wh-183","text":"чем мне склад может помочь","connector":"warehouse","intent":"warehouse.help","connected":true,"source":"probe"}

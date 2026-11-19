@@ -123,3 +123,6 @@
 {"id": "calc-125", "text": "посчитай плиз 340*12", "connector": "calc", "intent": "calc.evaluate", "answer": "4 080", "source": "manual"}
 {"id": "calc-126", "text": "скока 1500 минус 20%", "connector": "calc", "intent": "calc.evaluate", "answer": "1 200", "source": "manual"}
 {"id": "calc-127", "text": "купить доску 2 на 3", "intent": "createTask", "title": "Купить доску 2 на 3", "source": "manual", "note": "без маркера «на» — размер, не пример"}
+{"id":"calc-128","text":"36 на 15 скока","connector":"calc","intent":"calc.evaluate","answer":"540","note":"«сколько» в конце — «на» между числами умножение","source":"probe"}
+{"id":"calc-129","text":"12 на 12 сколько","connector":"calc","intent":"calc.evaluate","answer":"144","source":"probe"}
+{"id":"calc-130","text":"сколько процентов 30 от 120","connector":"calc","intent":"calc.evaluate","answer":"25","note":"доля без «составляет»","source":"probe"}

@@ -18,3 +18,10 @@
 {"id":"create-018","text":"Добавь задачу «Сверить счета» #работа завтра","intent":"createTask","title":"Сверить счета","due":"2026-11-03","precision":"date","projects":["работа"]}
 {"id":"create-019","text":"Добавь задачу «Купить краску» #Дача #ремонт","intent":"createTask","title":"Купить краску","due":null,"projects":["дача","ремонт"]}
 {"id":"create-020","text":"Добавь задачу «Встреча #42» #завтра","intent":"createTask","title":"Встреча #42","due":null,"projects":["завтра"],"note":"метки внутри кавычек и метка-слово не становятся сроком"}
+{"id":"cr-b5-01","text":"напомни завтра купить хлеб, доча","intent":"createTask","title":"Купить хлеб","due":"2026-11-03T00:00","precision":"date","note":"обращение в конце — не название","source":"probe"}
+{"id":"cr-b5-02","text":"сынок, напомни в пятницу оплатить свет","intent":"createTask","title":"Оплатить свет","due":"2026-11-06T00:00","precision":"date","source":"probe"}
+{"id":"cr-b5-03","text":"слышь, напомни завтра вынести мусор","intent":"createTask","title":"Вынести мусор","due":"2026-11-03T00:00","precision":"date","source":"probe"}
+{"id":"cr-b5-04","text":"напомни завтра позвонить жене","intent":"createTask","title":"Позвонить жене","due":"2026-11-03T00:00","precision":"date","note":"«жене» — жена, не Женя","source":"probe"}
+{"id":"cr-b5-05","text":"напомни в 19 00 лекарство","intent":"createTask","title":"Лекарство","due":"2026-11-02T19:00","precision":"dateTime","note":"минуты с нулём — время при любом слове дальше","source":"probe"}
+{"id":"cr-b5-06","text":"ну это завтра в 10 забежать в аптеку","intent":"createTask","title":"Забежать в аптеку","due":"2026-11-03T10:00","precision":"dateTime","source":"probe"}
+{"id":"cr-b5-07","text":"сестре позвонить в субботу напомни","intent":"createTask","title":"Сестре позвонить","due":"2026-11-07T00:00","precision":"date","note":"порядок слов пользователя","source":"probe"}

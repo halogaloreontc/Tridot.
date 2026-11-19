@@ -311,6 +311,11 @@ abstract final class TalkPhrases {
     'мне',
     'же',
     'честно',
+    // «Ты дурак что ли», «ты тупой, что ль».
+    'что',
+    'ли',
+    'ль',
+    'чтоли',
   };
 
   static const Map<String, TalkRequest> _phrases = <String, TalkRequest>{
@@ -344,6 +349,13 @@ abstract final class TalkPhrases {
     'доброго дня': TalkRequest(TalkTopic.greet, saidPart: DayPart.day),
     'добрый вечер': TalkRequest(TalkTopic.greet, saidPart: DayPart.evening),
     'доброго вечера': TalkRequest(TalkTopic.greet, saidPart: DayPart.evening),
+    // Ласкательные: «доброго утречка», «доброго вечерочка».
+    'доброе утречко': TalkRequest(TalkTopic.greet, saidPart: DayPart.morning),
+    'доброго утречка': TalkRequest(TalkTopic.greet, saidPart: DayPart.morning),
+    'доброго денечка': TalkRequest(TalkTopic.greet, saidPart: DayPart.day),
+    'добрый вечерочек': TalkRequest(TalkTopic.greet, saidPart: DayPart.evening),
+    'доброго вечерочка':
+        TalkRequest(TalkTopic.greet, saidPart: DayPart.evening),
 
     // Прощания.
     'пока': TalkRequest(TalkTopic.bye),
@@ -418,6 +430,9 @@ abstract final class TalkPhrases {
     'как вы': TalkRequest(TalkTopic.howAreYou),
     'как жизнь': TalkRequest(TalkTopic.howAreYou),
     'как поживаешь': TalkRequest(TalkTopic.howAreYou),
+    'как ты поживаешь': TalkRequest(TalkTopic.howAreYou),
+    'как ты там поживаешь': TalkRequest(TalkTopic.howAreYou),
+    'как вы поживаете': TalkRequest(TalkTopic.howAreYou),
     'как поживаете': TalkRequest(TalkTopic.howAreYou),
     'как сам': TalkRequest(TalkTopic.howAreYou),
     'как сама': TalkRequest(TalkTopic.howAreYou),
@@ -480,6 +495,11 @@ abstract final class TalkPhrases {
     'чем ты можешь помочь': TalkRequest(TalkTopic.capabilities),
     'чем можешь помочь': TalkRequest(TalkTopic.capabilities),
     'чем можете помочь': TalkRequest(TalkTopic.capabilities),
+    'чем ты можешь быть полезен': TalkRequest(TalkTopic.capabilities),
+    'чем ты можешь быть полезна': TalkRequest(TalkTopic.capabilities),
+    'чем ты полезен': TalkRequest(TalkTopic.capabilities),
+    'чем ты полезна': TalkRequest(TalkTopic.capabilities),
+    'чем вы можете быть полезны': TalkRequest(TalkTopic.capabilities),
     'помощь': TalkRequest(TalkTopic.capabilities),
     'помоги': TalkRequest(TalkTopic.capabilities),
     'справка': TalkRequest(TalkTopic.capabilities),
@@ -1121,6 +1141,15 @@ abstract final class TalkPhrases {
           ? TalkRequest(TalkTopic.joke, pun: thanksFor.contains('каламбур'))
           : _recognizeWords(restWords);
       if (rest == null) continue;
+      // «Спс, понятно», «спасибо, ясно»: отклик после благодарности —
+      // всё ещё благодарность.
+      if (rest.topic == TalkTopic.reaction &&
+          _thanksWords.contains(prefixWords.last)) {
+        final thanks = named.isEmpty
+            ? const TalkRequest(TalkTopic.thanks)
+            : const TalkRequest(TalkTopic.thanks).withPersona(named.first);
+        return named.length > 1 ? null : thanks;
+      }
       if (named.length > 1 ||
           (named.isNotEmpty &&
               rest.persona != null &&
@@ -2374,6 +2403,8 @@ abstract final class TalkPhrases {
     'ясно',
     'понятно',
     'все',
+    'верно',
+    'правильно',
     'и',
     'так',
     'ты',

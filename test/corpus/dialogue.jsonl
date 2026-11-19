@@ -51,3 +51,19 @@
 {"id":"dlg-082","text":"у меня завтра болит голова","intent":"unknown","route":"none","source":"manual"}
 {"id":"dlg-083","text":"мне надо в банк","intent":"unknown","route":"none","source":"manual","note":"без срока — не задача"}
 {"id":"dlg-084","text":"у меня завтра выходной","intent":"unknown","route":"none","source":"manual","note":"не событие из списка"}
+{"id":"dlg-085","text":"начальник перенёс совещание на понедельник, прикинь","intent":"unknown","route":"none","note":"рассказ о чужом переносе, не просьба","source":"probe"}
+{"id":"dlg-086","text":"жена перенесла ужин на восемь","intent":"unknown","route":"none","source":"probe"}
+{"id":"dlg-087","text":"брат опять отложил поездку на месяц","intent":"unknown","route":"none","source":"probe"}
+{"id":"dlg-088","text":"напомни, что у меня на выходных","intent":"listTasks","note":"«напомни, что у меня …» без дела — вопрос о планах","source":"probe"}
+{"id":"dlg-089","text":"напомни какие дела запланированы на пятницу","intent":"listTasks","source":"probe"}
+{"id":"dlg-090","text":"в пятницу в 6 вечера корпоратив","intent":"createTask","title":"Корпоратив","due":"2026-11-06T18:00","precision":"dateTime","note":"событие из списка с днём и часом — с вопросом «Понял так»","source":"probe"}
+{"id":"dlg-091","text":"в воскресенье в 10 утра бассейн с сыном","intent":"createTask","title":"Бассейн с сыном","due":"2026-11-08T10:00","precision":"dateTime","source":"probe"}
+{"id":"dlg-092","text":"в понедельник в 8 вечера общее собрание","intent":"createTask","title":"Общее собрание","due":"2026-11-02T20:00","precision":"dateTime","source":"probe"}
+{"id":"dlg-093","text":"в четверг в 9 планёрка, не забыть бы","intent":"createTask","title":"Планёрка","due":"2026-11-05T09:00","precision":"dateTime","source":"probe"}
+{"id":"dlg-094","text":"короч завтра в 8 вечера тренировка","intent":"createTask","title":"Тренировка","due":"2026-11-03T20:00","precision":"dateTime","source":"probe"}
+{"id":"dlg-095","text":"в пятницу в 6 вечера корпоратив был отличный","intent":"unknown","route":"none","note":"рассказ: после события — ещё слова","source":"probe"}
+{"id":"dlg-096","text":"завтра собрание было скучное","intent":"unknown","route":"none","source":"probe"}
+{"id":"dlg-097","text":"в пятницу корпоратив","intent":"unknown","route":"none","note":"без часа и без «у меня» — не дело","source":"probe"}
+{"id":"dlg-098","text":"не завтра а в пятницу вечером","intent":"task.edit","form":{"kind":"due","due":"2026-11-06T19:00","precision":"partOfDay","bare":"true"},"after":"tasks","note":"«не X а Y» без запятой; второй срок из двух кусков","source":"probe"}
+{"id":"dlg-099","text":"допиши к ней: взять паспорт","intent":"task.edit","form":{"kind":"note","text":"взять паспорт"},"after":"tasks","source":"probe"}
+{"id":"dlg-100","text":"добавь: взять паспорт","intent":"createTask","title":"Взять паспорт","after":"tasks","note":"без «к ней» — новое дело","source":"probe"}

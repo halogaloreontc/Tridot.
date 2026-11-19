@@ -270,6 +270,42 @@ final class ManifestConnector
     'хватит',
   };
 
+  /// «Сколько можно …», «сколько нельзя …» — риторика, а не остаток.
+  static const Set<String> _modalWords = <String>{'можно', 'нельзя'};
+
+  /// Меры погоды и тела: «сколько градусов за окном», «сколько калорий в
+  /// яблоке» — не позиции склада.
+  static const List<String> _measureStems = <String>[
+    'градус',
+    'калори',
+    'килокалори',
+  ];
+
+  /// Слова между числами примера: «48 на 25», «12 и 7», «3 с половиной на 2».
+  static const Set<String> _arithmeticWords = <String>{
+    'на',
+    'и',
+    'с',
+    'половиной',
+    'х',
+    'x',
+    'по',
+  };
+
+  /// В поле только числа (не меньше двух, ни одного кода артикула) и слова
+  /// действия между ними: «48 на 25» — пример, а не товар.
+  static bool _arithmetic(List<String> words) {
+    var numbers = 0;
+    for (final word in words) {
+      if (RegExp(r'^\d{1,4}(?:[.,]\d+)?$').hasMatch(word)) {
+        numbers++;
+      } else if (!_arithmeticWords.contains(word)) {
+        return false;
+      }
+    }
+    return numbers >= 2;
+  }
+
   /// Единица после «в»: «сколько сантиметров в дюйме», «сколько секунд
   /// в сутках» — перевод единиц, а не товар.
   static const Set<String> _unitsIn = <String>{
@@ -467,7 +503,9 @@ final class ManifestConnector
     // «Скока стоят …», «чо не проведено ещё», «приходы без фоток покажь».
     final spoken = ManifestQuery.colloquial(lead ?? text);
     final spokenPrice = spoken == null ? null : ManifestQuery.priceForm(spoken);
+    final remain = ManifestQuery.remainForm(lead ?? text);
     final candidates = <String>{
+      if (remain != null) remain,
       if (priced != null) priced,
       if (arrivals != null) arrivals,
       text,
@@ -1114,6 +1152,18 @@ final class ManifestConnector
     // «Сколько стульев нужно для гостей» — расчёт, а не остаток; «сколько
     // сантиметров в дюйме» — перевод единиц.
     if (words.any(_needWords.contains)) return false;
+    // «48 на 25 скока» — пример: одни числа и слова действия между ними.
+    if (_arithmetic(words)) return false;
+    // «Сколько можно повторять», «сколько ещё терпеть» — глагол, а не
+    // товар; «скока там градусов за окном» — мера, а не позиция склада.
+    if (words.any(
+      (String w) =>
+          _modalWords.contains(w) ||
+          VerbForms.isInfinitive(w) ||
+          _measureStems.any(w.startsWith),
+    )) {
+      return false;
+    }
     for (var i = 0; i + 1 < words.length; i++) {
       if ((words[i] == 'в' || words[i] == 'во') &&
           _unitsIn.contains(words[i + 1])) {

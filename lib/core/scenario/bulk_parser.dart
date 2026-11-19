@@ -70,6 +70,9 @@ final class BulkParser {
     'перекинь',
     'перекиньте',
     'перекинуть',
+    'подвинь',
+    'подвиньте',
+    'подвинуть',
   };
 
   /// Глаголы, после которых «на N часов» — сдвиг и без «позже».
@@ -83,6 +86,9 @@ final class BulkParser {
     'передвинь',
     'передвиньте',
     'передвинуть',
+    'подвинь',
+    'подвиньте',
+    'подвинуть',
   };
 
   static const Set<String> _completeVerbs = <String>{
@@ -123,6 +129,9 @@ final class BulkParser {
 
   static const Set<String> _quantifiers = <String>{'все', 'всех', 'весь'};
 
+  /// «Что» после «всё» и разговорные «чё/чо/шо».
+  static const Set<String> _thatWords = <String>{'что', 'че', 'чо', 'шо'};
+
   /// Знаки после «всё», с которыми оно — не «все задачи», а «так, хватит»:
   /// «всё, закрой», «всё — перенеси на пятницу».
   static final RegExp _discourseMark = RegExp(r'^\s*[,—–!.:-]');
@@ -161,6 +170,10 @@ final class BulkParser {
     'текущие',
     'невыполненные',
     'незакрытые',
+    // «Закрой всё, что на вчера висит».
+    'висит',
+    'висят',
+    'висящие',
   };
 
   static const Set<String> _overdueWords = <String>{
@@ -169,6 +182,8 @@ final class BulkParser {
     'просроченных',
     'просроченными',
     'просрочку',
+    'просрочено',
+    'просрочены',
   };
 
   static const Map<String, int> _dayAdjectives = <String, int>{
@@ -463,7 +478,7 @@ final class BulkParser {
         continue;
       } else if (_quantifiers.contains(word)) {
         quantifier = true;
-      } else if (word == 'что' &&
+      } else if (_thatWords.contains(word) &&
           i > 0 &&
           _quantifiers.contains(tokens[i - 1].text)) {
         // «Закрой всё, что на вчера» — «что» после «всё» уточняет выбор.

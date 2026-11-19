@@ -44,3 +44,5 @@
 {"id":"typo-044","text":"напомни завтра зранку забрать документы","intent":"createTask","title":"Забрать документы","due":"2026-11-03T09:00","precision":"partOfDay","source":"review","note":"«зранку» — «утром» (закрытый список)"}
 {"id":"typo-045","text":"купить завтрак на завтра","intent":"createTask","title":"Купить завтрак","due":"2026-11-03","precision":"date","source":"review","note":"«завтрак» — слово, а не «завтра к»"}
 {"id":"typo-046","text":"напомин завтар оплатить квартплату","intent":"unknown","route":"none","source":"review","note":"«напомин» — обрывок (rev-091), а не опечатка: перестановка в конце глагола не правится"}
+{"id":"typo-b5-01","text":"напомни чрез 2 часа выпить таблетку","intent":"createTask","title":"Выпить таблетку","due":"2026-11-02T18:30","precision":"dateTime","note":"«чрез» — «через»","source":"probe"}
+{"id":"typo-b5-02","text":"напомни завтра с утреца позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T09:00","precision":"partOfDay","source":"probe"}

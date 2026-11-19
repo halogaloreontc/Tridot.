@@ -212,6 +212,9 @@ abstract final class WeatherPhrases {
   static const Set<String> _temperatureContext = <String>{
     'сейчас',
     'улице',
+    'окном',
+    'скока',
+    'скоко',
     'завтра',
     'сегодня',
     'будет',
@@ -363,7 +366,8 @@ abstract final class WeatherPhrases {
     // переносный смысл.
     if (_declined(words) ||
         words.any(_convertVerbs.contains) ||
-        _figurative(words)) {
+        _figurative(words) ||
+        _remark(utterance)) {
       return null;
     }
     final weather = words.any(_weather.contains);
@@ -376,12 +380,16 @@ abstract final class WeatherPhrases {
     }
     final rain = words.any(_rain.contains);
     final cold = words.any(_cold.contains);
-    final wear =
-        (words.any(_wearVerbs.contains) && words.any(_wearQuestion.contains)) ||
-            (utterance.isQuestion &&
-                words.length <= 6 &&
-                words.any(_clothes.contains) &&
-                words.any(_clothesVerbs.contains));
+    // «Одеваться тепло сегодня?», «одеться потеплее завтра» — как одеться
+    // по погоде.
+    final wear = (words.any(_wearVerbs.contains) &&
+            (words.any(_wearQuestion.contains) ||
+                words.any(_wearManner.contains) ||
+                (utterance.isQuestion && words.length <= 6))) ||
+        (utterance.isQuestion &&
+            words.length <= 6 &&
+            words.any(_clothes.contains) &&
+            words.any(_clothesVerbs.contains));
     final place = _place(utterance, weather || forecast);
     if (place == _homeMarker) return null;
     final temperature = (words.any(_temperature.contains) &&
@@ -434,7 +442,11 @@ abstract final class WeatherPhrases {
         words.any(_weekdays.contains)) {
       offset = 0;
     }
-    final past = words.any(_past.contains) || (offset != null && offset < 0);
+    // «Какая погода была в воскресенье» — прошедший день, даже если срок
+    // разобран вперёд.
+    final past = words.any(_past.contains) ||
+        (offset != null && offset < 0) ||
+        (words.any(_pastCopula.contains) && !words.any(_futureCopula.contains));
     WeatherRange? range;
     if (weekend) {
       range = WeatherRange.weekend;
@@ -479,6 +491,65 @@ abstract final class WeatherPhrases {
           : DateTime(today.year, today.month, today.day + offset),
     );
   }
+
+  static const Set<String> _pastCopula = <String>{
+    'был',
+    'была',
+    'было',
+    'были',
+  };
+
+  static const Set<String> _futureCopula = <String>{'будет', 'будут', 'бы'};
+
+  /// Как одеться: «тепло», «потеплее», «легко».
+  static const Set<String> _wearManner = <String>{
+    'тепло',
+    'теплее',
+    'потеплее',
+    'легко',
+    'легче',
+    'полегче',
+  };
+
+  /// Погода в рассказе, а не вопрос: «у нас дома такая погода сейчас, хоть
+  /// плачь», «в такую погоду только дома сидеть», «погода такая, что
+  /// выходить не хочется». Указательное «такая/такую» при погоде без
+  /// вопроса — оценка, о прогнозе не спрашивают. «А погода такая же
+  /// завтра будет?» — вопрос.
+  static bool _remark(Utterance utterance) {
+    final words = utterance.words;
+    if (utterance.isQuestion || words.any(_askWords.contains)) return false;
+    for (var i = 0; i < words.length; i++) {
+      if (!_weather.contains(words[i])) continue;
+      if (i > 0 && _suchWords.contains(words[i - 1])) return true;
+      if (i + 1 < words.length && _suchWords.contains(words[i + 1])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static const Set<String> _suchWords = <String>{
+    'такая',
+    'такую',
+    'такой',
+    'такие',
+    'такою',
+  };
+
+  /// Слова вопроса: с ними «такая погода» — всё ещё вопрос.
+  static const Set<String> _askWords = <String>{
+    'какая',
+    'какой',
+    'какую',
+    'как',
+    'будет',
+    'будут',
+    'ли',
+    'скажи',
+    'подскажи',
+    'узнай',
+  };
 
   /// «Не надо», «не нужно», «не интересует» сразу после «не».
   static bool _declined(List<String> words) {

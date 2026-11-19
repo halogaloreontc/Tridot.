@@ -282,6 +282,15 @@ abstract final class TaskEditPhrases {
                 )) {
           continue;
         }
+        // «Не сегодня а завтра вечером» без запятой: между «не» и «а» —
+        // только срок.
+        if (but == i + 1 &&
+            utterance.due.spans.any(
+              (CharSpan s) =>
+                  s.start >= rest[i].span.end && s.end <= rest[but].span.start,
+            )) {
+          continue;
+        }
         return false;
       }
       return false;
@@ -309,7 +318,7 @@ abstract final class TaskEditPhrases {
     for (var v = 0; v < tokens.length; v++) {
       final word = tokens[v].text;
       if (_noteVerbs.contains(word)) {
-        final note = _note(utterance, v);
+        final note = _note(utterance, v, tasksId);
         if (note != null) return note;
         final items = _items(utterance, v);
         if (items != null) return items;
@@ -450,7 +459,7 @@ abstract final class TaskEditPhrases {
   }
 
   /// Заметка после глагола [v]: «… запиши, что …», «добавь заметку: …».
-  static TaskEdit? _note(Utterance utterance, int v) {
+  static TaskEdit? _note(Utterance utterance, int v, String tasksId) {
     final tokens = utterance.tokens;
     var marker = -1;
     for (var k = v + 1; k < tokens.length; k++) {
@@ -460,7 +469,7 @@ abstract final class TaskEditPhrases {
         break;
       }
     }
-    if (marker < 0) return null;
+    if (marker < 0) return _noteAfterColon(utterance, v, tasksId);
     final before = _target(utterance, 0, v, allowBareName: true);
     final between = _target(utterance, v + 1, marker);
     if (before == null || between == null) return null;
@@ -480,6 +489,48 @@ abstract final class TaskEditPhrases {
       rawText: rawClean,
     );
   }
+
+  /// «Допиши к ней: позвонить заранее», «добавь: взять паспорт» — заметка
+  /// к текущей задаче после двоеточия, только в разговоре о задаче; между
+  /// глаголом и двоеточием — только «к ней», «туда» ([_toCurrent]).
+  static TaskEdit? _noteAfterColon(
+    Utterance utterance,
+    int v,
+    String tasksId,
+  ) {
+    final tokens = utterance.tokens;
+    final text = utterance.original;
+    if (utterance.chatTaskId == null &&
+        utterance.recentConnectorId != tasksId) {
+      return null;
+    }
+    final colon = text.indexOf(':', tokens[v].span.end);
+    if (colon < 0) return null;
+    var pointed = false;
+    for (final token in tokens.skip(v + 1)) {
+      if (token.span.start > colon) break;
+      if (!_toCurrent.contains(token.text)) return null;
+      if (_pointers.contains(token.text)) pointed = true;
+    }
+    // «Добавь: купить хлеб» без «к ней» — скорее новое дело.
+    if (!pointed) return null;
+    final rawClean = text.substring(colon + 1).trim();
+    if (rawClean.isEmpty) return null;
+    final note = TaskRephrase.note(rawClean);
+    if (note.isEmpty) return null;
+    return TaskEdit(kind: TaskEditKind.note, text: note, rawText: rawClean);
+  }
+
+  static const Set<String> _toCurrent = <String>{
+    'к',
+    'ней',
+    'нему',
+    'туда',
+    'еще',
+    'мне',
+  };
+
+  static const Set<String> _pointers = <String>{'ней', 'нему', 'туда'};
 
   /// «Добавь пункт молоко», «добавь в «Покупки» пункты хлеб, сыр и чай».
   static TaskEdit? _items(Utterance utterance, int v) {

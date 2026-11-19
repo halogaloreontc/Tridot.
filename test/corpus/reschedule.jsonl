@@ -29,3 +29,6 @@
 {"id":"move-029","text":"сдвинь созвон на завтра на 11","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-03T11:00","precision":"dateTime","note":"«на 11» сразу после дня — час и после глагола отсрочки","source":"probe"}
 {"id":"move-030","text":"сдвинь созвон на завтра на одиннадцать","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-03T11:00","precision":"dateTime","source":"probe"}
 {"id":"move-031","text":"перенеси отчёт с завтра на 2 дня позже","intent":"rescheduleTask","targetQuery":"Отчёт","due":null,"shift":"+2d","note":"исходный день только называет нынешний срок — сдвиг; раньше задача молча уезжала на завтра","source":"manual"}
+{"id":"move-032","text":"отложи доставку штор до пятницы","intent":"rescheduleTask","targetQuery":"Доставка штор","due":"2026-11-06T00:00","precision":"date","note":"родительный множественного без окончания после женского рода","source":"probe"}
+{"id":"move-033","text":"перекинь встречу на четверг","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-05T00:00","precision":"date","source":"probe"}
+{"id":"move-034","text":"подвинь стул к окну","intent":"unknown","route":"none","note":"без срока «подвинь» — о вещах","source":"probe"}

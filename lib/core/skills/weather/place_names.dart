@@ -89,6 +89,10 @@ abstract final class PlaceNames {
     'нск': 'Новосибирск',
     'новосиб': 'Новосибирск',
     'нн': 'Нижний Новгород',
+    // «В Нижнем» — так зовут Нижний Новгород.
+    'нижний': 'Нижний Новгород',
+    'нижнем': 'Нижний Новгород',
+    'нижнего': 'Нижний Новгород',
   };
 
   /// Несклоняемые названия, которые похожи на косвенный падеж.
@@ -102,12 +106,17 @@ abstract final class PlaceNames {
   };
 
   /// «Москве» → «Москва», «Москв»; «Новгороде» → «Новгорода», «Новгород»;
-  /// «Казани» → «Казань»; иное — без изменений.
+  /// «Казани» → «Казань»; «Ярославле» → «Ярославль», «Ярославла»; иное —
+  /// без изменений.
   static List<String> _nominative(String word) {
     final lower = word.toLowerCase();
     if (word.length < 3 || _indeclinable.contains(lower)) return <String>[word];
     final stem = word.substring(0, word.length - 1);
     if (lower.endsWith('ии')) return <String>['$stemя'];
+    if (lower.endsWith('ле')) {
+      // «Ярославле» → «Ярославль», «Туле» → «Тула».
+      return <String>['$stemь', '$stemа'];
+    }
     if (lower.endsWith('е')) {
       // «Петербурге», «Новгороде», «Ростове» — мужской род чаще: без «-е».
       if (lower.endsWith('ге') ||

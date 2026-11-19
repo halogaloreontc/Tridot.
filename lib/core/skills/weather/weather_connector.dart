@@ -108,18 +108,23 @@ final class WeatherConnector implements Connector, ConnectorHealth {
     if (utterance.recentConnectorId != id) return null;
     final match = _fragment.firstMatch(utterance.original.trim());
     if (match == null) return null;
-    final rest = match.group(1)!.trim();
+    // «А к вечеру как?» — часть суток: «вечером».
+    final rest = match.group(1)!.trim().replaceAllMapped(
+          _towardDaypart,
+          (Match m) => _dayparts[m.group(1)!.toLowerCase()]!,
+        );
     final now = clock.now();
     final fragment = Utterance.analyze(rest, now: now);
     final words = fragment.words;
     if (words.isEmpty || words.length > 4) return null;
-    final dateOnly = fragment.tokens.every(
-      (UtteranceToken t) =>
-          Utterance.isCovered(t, fragment.due.spans) ||
-          t.text == 'на' ||
-          t.text == 'в' ||
-          t.text == 'во',
-    );
+    final dateOnly = (fragment.due.spans.isNotEmpty ||
+            words.contains('сейчас') ||
+            words.contains('неделю')) &&
+        fragment.tokens.every(
+          (UtteranceToken t) =>
+              Utterance.isCovered(t, fragment.due.spans) ||
+              _fragmentWords.contains(t.text),
+        );
     // «А в Казани завтра?», «а завтра в Казани?» — город и день вместе.
     final placed = _placeWithin.firstMatch(rest);
     final withDay = placed != null &&
@@ -135,6 +140,30 @@ final class WeatherConnector implements Connector, ConnectorHealth {
       now,
     );
   }
+
+  /// Слова обрывка, кроме срока: «а на неделю вперёд», «а в Мурманске
+  /// сейчас?», «а вечером как?».
+  static const Set<String> _fragmentWords = <String>{
+    'на',
+    'в',
+    'во',
+    'сейчас',
+    'там',
+    'как',
+    'неделю',
+    'вперед',
+  };
+
+  static final RegExp _towardDaypart = RegExp(
+    r'(?<![а-яё])к\s+(вечеру|утру|ночи)(?![а-яё])',
+    caseSensitive: false,
+  );
+
+  static const Map<String, String> _dayparts = <String, String>{
+    'вечеру': 'вечером',
+    'утру': 'утром',
+    'ночи': 'ночью',
+  };
 
   static final RegExp _fragment = RegExp(
     r'^(?:а|и)\s+(?:как\s+|что\s+)?(?:насчет\s+|насчёт\s+)?'
@@ -160,9 +189,7 @@ final class WeatherConnector implements Connector, ConnectorHealth {
     return fragment.tokens.every(
       (UtteranceToken t) =>
           Utterance.isCovered(t, fragment.due.spans) ||
-          t.text == 'на' ||
-          t.text == 'в' ||
-          t.text == 'во',
+          _fragmentWords.contains(t.text),
     );
   }
 

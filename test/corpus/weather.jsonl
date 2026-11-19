@@ -62,3 +62,19 @@
 {"id":"wth-075","text":"напомни взять куртку","intent":"createTask","title":"Взять куртку","source":"manual","note":"просьба напомнить — задача, не погода"}
 {"id":"wth-076","text":"ветрено сегодня?","connector":"weather","intent":"weather.now","source":"manual"}
 {"id":"wth-077","text":"метель будет ночью?","connector":"weather","intent":"weather.rain","source":"manual"}
+{"id":"wth-078","text":"скока там на улице градусов","connector":"weather","intent":"weather.now","note":"градусы — погода, не склад","source":"probe"}
+{"id":"wth-079","text":"в такую погоду только дома сидеть","intent":"unknown","route":"none","note":"«такая погода» без вопроса — оценка, не вопрос","source":"probe"}
+{"id":"wth-080","text":"погода такая, что выходить не хочется","intent":"unknown","route":"none","source":"probe"}
+{"id":"wth-081","text":"у нас на даче такая погода была, просто сказка","intent":"unknown","route":"none","source":"probe"}
+{"id":"wth-082","text":"из-за такой погоды весь день голова болит","intent":"unknown","route":"none","source":"probe"}
+{"id":"wth-083","text":"а погода такая же завтра будет?","connector":"weather","intent":"weather.day","form":{"day":"2026-11-03"},"note":"вопрос — погода","source":"probe"}
+{"id":"wth-084","text":"одеться потеплее завтра?","connector":"weather","intent":"weather.wear","source":"probe"}
+{"id":"wth-085","text":"тепло одеваться сегодня?","connector":"weather","intent":"weather.wear","source":"probe"}
+{"id":"wth-086","text":"какая была погода в субботу","connector":"weather","intent":"weather.past","note":"«была» — прошедший день","source":"probe"}
+{"id":"wth-087","text":"дождь был в воскресенье?","connector":"weather","intent":"weather.past","source":"probe"}
+{"id":"wth-088","text":"а в Сочи сейчас?","connector":"weather","intent":"weather.now","after":"weather","source":"probe"}
+{"id":"wth-089","text":"а к утру как?","connector":"weather","intent":"weather.day","after":"weather","note":"«к утру» в продолжении — «утром»","source":"probe"}
+{"id":"wth-090","text":"а на неделю вперёд?","connector":"weather","intent":"weather.week","after":"weather","source":"probe"}
+{"id":"wth-091","text":"а как?","intent":"talk.question","after":"weather","note":"нет ни срока, ни города","source":"probe","connector":"talk"}
+{"id":"wth-092","text":"какая погода в Ярославле завтра","connector":"weather","intent":"weather.day","form":{"place":"Ярославль","day":"2026-11-03"},"source":"probe"}
+{"id":"wth-093","text":"в Нижнем завтра дождь будет?","connector":"weather","intent":"weather.rain","form":{"place":"Нижний Новгород","day":"2026-11-03"},"source":"probe"}

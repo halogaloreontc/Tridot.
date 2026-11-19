@@ -208,3 +208,10 @@
 {"id":"talk-u02","text":"переведи 30 градусов цельсия в фаренгейты","connector":"talk","intent":"talk.question","source":"manual"}
 {"id":"talk-u03","text":"сколько метров в миле","connector":"talk","intent":"talk.question","source":"manual"}
 {"id":"talk-u04","text":"напомни перевести 100 долларов в рубли","intent":"createTask","title":"Перевести 100 долларов в рубли","source":"manual","note":"просьба напомнить — дело, а не вопрос о курсе"}
+{"id":"talk-v01","text":"спс, ясно","connector":"talk","intent":"talk.thanks","note":"отклик после благодарности — благодарность","source":"probe"}
+{"id":"talk-v02","text":"спасибо понятно","connector":"talk","intent":"talk.thanks","source":"probe"}
+{"id":"talk-v03","text":"спасибо, всё правильно","connector":"talk","intent":"talk.thanks","source":"probe"}
+{"id":"talk-v04","text":"доброго утречка","connector":"talk","intent":"talk.greet","source":"probe"}
+{"id":"talk-v05","text":"как ты поживаешь","connector":"talk","intent":"talk.howAreYou","source":"probe"}
+{"id":"talk-v06","text":"чем ты полезен","connector":"talk","intent":"talk.capabilities","source":"probe"}
+{"id":"talk-v07","text":"ты тупой что ли","connector":"talk","intent":"talk.rude","source":"probe"}

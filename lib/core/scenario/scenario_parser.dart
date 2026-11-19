@@ -357,7 +357,9 @@ final class ScenarioParser {
       for (final span in due.spans)
         if (span.length > 0) span,
     ];
-    if (spans.length != 2) return null;
+    // «Не сегодня а завтра вечером»: второй срок — из нескольких кусков
+    // («завтра» и «вечером»); поправка — между первым и вторым.
+    if (spans.length < 2) return null;
     final tokens = utterance.tokens;
     final between = <UtteranceToken>[
       for (final token in tokens)
@@ -654,12 +656,45 @@ final class ScenarioParser {
       // «сказать маме спасибо», «передать спасибо» — само дело.
       final thanks = _thanks.contains(word) &&
           !head.split(_spaces).any(_sayVerbs.contains);
-      if (!(thanks || (comma && SocialPrefix.isAssistantName(word)))) {
-        return text;
+      if (!(thanks ||
+          _vocatives.contains(word) ||
+          (comma && SocialPrefix.isAssistantName(word)))) {
+        return _withoutLeadVocative(text);
       }
       text = text.substring(0, match.start).trimRight();
     }
   }
+
+  /// Обращение в начале названия: «доча, пенсию получить» → «пенсию
+  /// получить».
+  static String _withoutLeadVocative(String title) {
+    final match = _firstWord.firstMatch(title);
+    if (match == null) return title;
+    if (!_vocatives.contains(DueParser.normalizeChars(match.group(1)!))) {
+      return title;
+    }
+    return title.substring(match.end).trimLeft();
+  }
+
+  static final RegExp _firstWord = RegExp(r'^\s*([A-Za-zА-Яа-яЁё]+)[\s,]+');
+
+  /// Ласковые и свойские обращения — закрытый список слов, которые не
+  /// бывают частью дела: «позвонить внучке, милок», «доча, напомни …»,
+  /// «слышь, напомни …».
+  static const Set<String> _vocatives = <String>{
+    'милок',
+    'милочка',
+    'доча',
+    'дочуля',
+    'сынок',
+    'сына',
+    'слышь',
+    'братан',
+    'бро',
+    'дружище',
+    'голубчик',
+    'голубушка',
+  };
 
   static final RegExp _lastWord =
       RegExp(r'(\s*,?\s+|\s*,\s*)([A-Za-zА-Яа-яЁё]+)[\s.!)]*$');
@@ -990,7 +1025,13 @@ final class ScenarioParser {
   static bool _quantifiedBefore(Utterance utterance, int markerIndex) {
     final words = utterance.words;
     for (var i = 0; i + 1 < markerIndex && i + 1 < words.length; i++) {
-      if (_allWords.contains(words[i]) && _manyTasks.contains(words[i + 1])) {
+      // «Все задачи …», «все субботние дела …», «всё, что просрочено …».
+      final next = words[i + 1];
+      if (_allWords.contains(words[i]) &&
+          (_manyTasks.contains(next) ||
+              next.endsWith('ие') ||
+              next.endsWith('ые') ||
+              next == 'что')) {
         return true;
       }
     }
@@ -1850,6 +1891,12 @@ final class ScenarioParser {
     'потом',
     'тоже',
     'кстати',
+    // «Короч в среду в 7 тренировка», «слышь, завтра забежать на почту».
+    'короче',
+    'короч',
+    'слышь',
+    'слушай',
+    'значит',
   };
 
   /// Вторые слова после «не» во вступлении: «не забыть», «не забудь».
@@ -1962,8 +2009,10 @@ final class ScenarioParser {
         continue;
       }
       // «хм, купить хлеб»: шум перед делом, как и в надиктованном.
+      // «Ну это завтра забежать на почту»: «это» после «ну» — вставка.
       if (_implicitLeadIns.contains(token.text) ||
-          SpeechNoise.isLeadNoise(token.text)) {
+          SpeechNoise.isLeadNoise(token.text) ||
+          (token.text == 'это' && i > 0 && tokens[i - 1].text == 'ну')) {
         remove.add(token.span);
         i++;
         continue;
@@ -2100,16 +2149,23 @@ final class ScenarioParser {
     int index,
     List<CharSpan> remove,
   ) {
-    final tokens = utterance.tokens;
     final due = utterance.due;
+    // «… оперативка, не забыть бы» — «не забыть» в конце, как вступление.
+    final reminder = _trailingDontForget(utterance);
+    final tokens = reminder == 0
+        ? utterance.tokens
+        : utterance.tokens.sublist(0, utterance.tokens.length - reminder);
     if (due.spans.isEmpty ||
         due.dueAt == null ||
         utterance.chatTaskId != null ||
         utterance.isQuestion ||
-        utterance.words.contains('не')) {
+        tokens.any((UtteranceToken t) => t.text == 'не')) {
       return null;
     }
-    final head = <CharSpan>[...remove];
+    final head = <CharSpan>[
+      ...remove,
+      for (final token in utterance.tokens.skip(tokens.length)) token.span,
+    ];
     var from = index;
     final first = tokens[index].text;
     if (first == 'у' &&
@@ -2122,7 +2178,7 @@ final class ScenarioParser {
     } else if (_eventPrepositions.contains(first)) {
       final before = tokens.take(index).map((UtteranceToken t) => t.text);
       if (!before.any(_eventModals.contains)) return null;
-    } else {
+    } else if (!_bareEvent(utterance, tokens, index)) {
       return null;
     }
     final rest = <UtteranceToken>[
@@ -2140,7 +2196,11 @@ final class ScenarioParser {
       return null;
     }
     if (from > index && !_eventNouns.contains(rest.first.text)) return null;
-    if (from == index && rest.length < 2) return null;
+    if (from == index &&
+        rest.length < 2 &&
+        !_eventNouns.contains(rest.first.text)) {
+      return null;
+    }
     final text = _titleText(utterance, head);
     if (text.isEmpty) return null;
     // «К врачу» с предлогом в начале названия [_finish] и так считает
@@ -2155,6 +2215,62 @@ final class ScenarioParser {
       projects: <String>[for (final tag in utterance.hashtags) tag.name],
       implicit: true,
     );
+  }
+
+  /// «В следующую среду в 7 вечера родительское собрание», «в субботу в
+  /// 12 шашлыки у Серёги»: событие без глагола и без «у меня» — только со
+  /// временем (день и час), событие из [_eventNouns] первым словом или
+  /// после одного прилагательного, дальше — разве что «у/с/в …».
+  bool _bareEvent(
+    Utterance utterance,
+    List<UtteranceToken> tokens,
+    int index,
+  ) {
+    // «По пятницам тренировка в 19:00» — расписание, а не одно дело.
+    if (utterance.due.precision != DuePrecision.dateTime ||
+        utterance.due.recurring) {
+      return false;
+    }
+    final rest = <String>[
+      for (final token in tokens.skip(index))
+        if (!Utterance.isCovered(token, utterance.due.spans)) token.text,
+    ];
+    if (rest.isEmpty) return false;
+    var at = 0;
+    if (!_eventNouns.contains(rest.first)) {
+      if (rest.length < 2 ||
+          !_adjectiveEnding.hasMatch(rest.first) ||
+          !_eventNouns.contains(rest[1])) {
+        return false;
+      }
+      at = 1;
+    }
+    final tail = rest.skip(at + 1).toList(growable: false);
+    if (tail.isEmpty) return true;
+    return tail.length <= 2 && _eventTailPrepositions.contains(tail.first);
+  }
+
+  static final RegExp _adjectiveEnding =
+      RegExp(r'(?:ое|ее|ая|яя|ый|ий|ой|ые|ие)$');
+
+  static const Set<String> _eventTailPrepositions = <String>{
+    'у',
+    'с',
+    'в',
+    'во',
+  };
+
+  /// Сколько слов в конце — «не забыть (бы)», «не забудь»: 0 — нет.
+  static int _trailingDontForget(Utterance utterance) {
+    final words = utterance.words;
+    var end = words.length;
+    if (end > 0 && words[end - 1] == 'бы') end--;
+    if (end < 2 ||
+        words[end - 2] != 'не' ||
+        !_dontForget.contains(words[end - 1])) {
+      return 0;
+    }
+    return words.length - end + 2;
   }
 
   /// «Мне надо к врачу», «нужно в банк» — куда идти.
@@ -2200,6 +2316,24 @@ final class ScenarioParser {
     'репетиция',
     'игра',
     'матч',
+    'собрание',
+    'оперативка',
+    'летучка',
+    'пятиминутка',
+    'корпоратив',
+    'вечеринка',
+    'праздник',
+    'утренник',
+    'шашлыки',
+    'экскурсия',
+    'соревнования',
+    'турнир',
+    'выступление',
+    'защита',
+    'бассейн',
+    'массаж',
+    'кружок',
+    'секция',
   };
 
   /// «Я обещал Лене перезвонить вечером», «мы договорились завтра
@@ -3225,6 +3359,9 @@ final class ScenarioParser {
       if (_isReschedule(word) ||
           (_rescheduleImperfective.contains(word) &&
               utterance.due.spans.isNotEmpty)) {
+        // «Коллега перенёс встречу на пятницу», «жена перенесла ужин» —
+        // рассказ о чужом деле, а не просьба.
+        if (_othersMoved(words, i)) return const _Marker.unknown();
         return negated
             ? const _Marker.unknown()
             : _Marker(CommandIntent.rescheduleTask, i, 1);
@@ -3568,6 +3705,38 @@ final class ScenarioParser {
         !Utterance.isCovered(tokens[index + 2], utterance.due.spans);
   }
 
+  /// Прошедшее время переноса с подлежащим перед ним (не «я/мы»):
+  /// «коллега перенёс», «Маша отложила», «начальник сдвинул».
+  static bool _othersMoved(List<String> words, int index) {
+    final word = words[index];
+    final past =
+        word == 'перенес' || word.startsWith('перенесл') || isPastVerb(word);
+    if (!past) return false;
+    for (final before in words.take(index)) {
+      if (_selfOrFiller.contains(before) || SpeechNoise.isLeadFiller(before)) {
+        continue;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /// Перед «перенёс» — я сам или вводное слово: «я перенёс встречу».
+  static const Set<String> _selfOrFiller = <String>{
+    'я',
+    'мы',
+    'ну',
+    'а',
+    'вот',
+    'короче',
+    'кстати',
+    'уже',
+    'тут',
+    'опять',
+    'снова',
+    'вроде',
+  };
+
   bool _isReschedule(String word) =>
       word.startsWith('перенес') ||
       word.startsWith('передвин') ||
@@ -3579,6 +3748,12 @@ final class ScenarioParser {
   /// инфинитив, «перенос» — существительное) и только со сроком: «переноси
   /// коробки аккуратно» — о вещах, а не о задаче.
   static const Set<String> _rescheduleImperfective = <String>{
+    // Разговорные «перекинь/подвинь встречу на пятницу» — тоже только со
+    // сроком: «подвинь стул» — о вещах.
+    'перекинь',
+    'перекиньте',
+    'подвинь',
+    'подвиньте',
     'переноси',
     'переносите',
     'сдвигай',
@@ -3991,7 +4166,12 @@ const Set<String> _listPlanned = <String>{
   'наметила',
   'наметили',
   'намечено',
+  'намечены',
   'назначено',
+  'назначены',
+  'запланировано',
+  'запланированы',
+  'записаны',
 };
 
 /// То, что показывает список: «задачи», «дела», «планы», «расписание».

@@ -1,5 +1,6 @@
 import '../../connectors/social_prefix.dart';
 import '../../connectors/utterance.dart';
+import '../../connectors/verb_forms.dart';
 
 /// Будильник или таймер.
 enum AlarmKind { alarm, timer }
@@ -139,6 +140,8 @@ abstract final class AlarmPhrases {
 
   static const Set<String> _timerNouns = <String>{
     'таймер',
+    'таймерок',
+    'таймерочек',
     'таймера',
     'таймеру',
     'таймером',
@@ -193,6 +196,10 @@ abstract final class AlarmPhrases {
   static const Set<String> _leadFillers = <String>{
     'пожалуйста',
     'плиз',
+    'пж',
+    'плз',
+    // «И ещё таймер на 10 минут».
+    'и',
     'мне',
     'нам',
     'ну',
@@ -217,6 +224,8 @@ abstract final class AlarmPhrases {
   static const Set<String> _tailFillers = <String>{
     'пожалуйста',
     'плиз',
+    'пж',
+    'плз',
     'мне',
     'меня',
     'нас',
@@ -263,6 +272,18 @@ abstract final class AlarmPhrases {
     'сорок': 40,
     'сорока': 40,
     'пятьдесят': 50,
+    // «К девяти вечера», «к семи»: час после «к».
+    'двух': 2,
+    'трех': 3,
+    'четырех': 4,
+    'пяти': 5,
+    'шести': 6,
+    'семи': 7,
+    'восьми': 8,
+    'девяти': 9,
+    'десяти': 10,
+    'одиннадцати': 11,
+    'двенадцати': 12,
   };
 
   /// «Полседьмого»: час, к которому идёт половина.
@@ -385,11 +406,17 @@ abstract final class AlarmPhrases {
       }
     }
     if (utterance.isQuestion && !setVerb) return null;
-    final reader = _Reader(
+    var reader = _Reader(
       tokens.sublist(anchor + 1),
       timer: kind == AlarmKind.timer,
     );
     reader.read();
+    // «Таймер на 7 минут чай заварить»: зачем таймер — в конце, без
+    // запятой.
+    if (kind == AlarmKind.timer && reader.leftover) {
+      final purpose = _withoutPurpose(tokens.sublist(anchor + 1));
+      if (purpose != null) reader = purpose;
+    }
     // Число, которое не вошло ни во время, ни в длительность («на 5 и 6»,
     // «в 7 через 2 дня»): лучше спросить, чем молча поставить не то.
     if (reader.strayNumber && setVerb) {
@@ -422,6 +449,46 @@ abstract final class AlarmPhrases {
     }
     return _alarm(reader, now, label);
   }
+
+  /// Длительность таймера без хвоста-цели: в хвосте не меньше двух слов и
+  /// есть инфинитив («чай заварить», «чтобы яйца сварить»), нет чисел и
+  /// слов отмены. `null` — хвоста нет или без него длительность не
+  /// читается.
+  static _Reader? _withoutPurpose(List<String> words) {
+    for (var cut = 1; cut < words.length; cut++) {
+      final tail = words.sublist(cut);
+      // Одно слово хвоста («…, отменить») — скорее другая просьба: цель —
+      // дело с предметом («чай заварить») или «чтобы …».
+      if (tail.length < 2 ||
+          !tail.any(VerbForms.isInfinitive) ||
+          tail.any(
+            (String w) =>
+                number(w) != null ||
+                RegExp(r'\d').hasMatch(w) ||
+                _remarkStops.contains(w) ||
+                _cancelInfinitives.contains(w),
+          )) {
+        continue;
+      }
+      final reader = _Reader(words.sublist(0, cut), timer: true)..read();
+      if (reader.hasDuration && !reader.leftover && !reader.strayNumber) {
+        return reader;
+      }
+    }
+    return null;
+  }
+
+  /// Хвост «отменить», «выключить» — не цель таймера, а другая просьба.
+  static const Set<String> _cancelInfinitives = <String>{
+    'отменить',
+    'выключить',
+    'удалить',
+    'убрать',
+    'остановить',
+    'сбросить',
+    'поменять',
+    'изменить',
+  };
 
   /// Слова, с которыми пояснение после запятой — часть просьбы: отказ,
   /// поправка («…, не надо», «…, хотя нет, на 8»).
@@ -1183,6 +1250,11 @@ final class _Reader {
     'минуты': 60,
     'минут': 60,
     'мин': 60,
+    // «На 3 минутки», «на минутку».
+    'минутка': 60,
+    'минутку': 60,
+    'минутки': 60,
+    'минуток': 60,
     'час': 3600,
     'часа': 3600,
     'часов': 3600,
@@ -1199,6 +1271,13 @@ final class _Reader {
       if (word == 'полчаса') {
         total += 1800;
         _i++;
+        any = true;
+        continue;
+      }
+      // «Четверть часа».
+      if (word == 'четверть' && _peek(1) == 'часа') {
+        total += 900;
+        _i += 2;
         any = true;
         continue;
       }
@@ -1253,6 +1332,15 @@ final class _Reader {
         value += second;
         used = 2;
       }
+      // «Две с половиной минуты», «3 с половиной часа» — плюс половина
+      // единицы.
+      var half = 0;
+      if (_peek(used) == 'с' &&
+          _peek(used + 1) == 'половиной' &&
+          _unitSeconds[_peek(used + 2) ?? ''] != null) {
+        half = _unitSeconds[_peek(used + 2)!]! ~/ 2;
+        used += 2;
+      }
       final unit = _unitSeconds[_peek(used) ?? ''];
       if (unit == null) {
         // «на час двадцать», «два часа десять»: минуты без слова после
@@ -1266,7 +1354,7 @@ final class _Reader {
         }
         break;
       }
-      total += value * unit;
+      total += value * unit + half;
       _i += used + 1;
       any = true;
       _afterHours = unit == 3600;

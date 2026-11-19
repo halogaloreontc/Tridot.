@@ -196,3 +196,9 @@
 {"id":"nd-189","text":"напомни к новому году купить ёлку","intent":"createTask","title":"Купить ёлку","due":"2027-01-01","precision":"date","source":"review"}
 {"id":"nd-190","text":"напомни в 7 pm забрать химчистку","intent":"createTask","title":"Забрать химчистку","due":"2026-11-02T19:00","precision":"dateTime","source":"review","note":"pm — вечер"}
 {"id":"nd-191","text":"новый год прошёл весело","intent":"unknown","route":"none","source":"review","note":"без предлога — не срок"}
+{"id":"nd-b5-01","text":"часа через два позвонить в банк","intent":"createTask","title":"Позвонить в банк","due":"2026-11-02T18:30","precision":"dateTime","note":"единица перед «через»","source":"probe"}
+{"id":"nd-b5-02","text":"напомни минут через десять снять пирог","intent":"createTask","title":"Снять пирог","due":"2026-11-02T16:40","precision":"dateTime","source":"probe"}
+{"id":"nd-b5-03","text":"к десятому числу оплатить интернет","intent":"createTask","title":"Оплатить интернет","due":"2026-11-10T00:00","precision":"date","note":"порядковое словом со словом «число»","source":"probe"}
+{"id":"nd-b5-04","text":"напомни до двадцатого числа сдать отчёт","intent":"createTask","title":"Сдать отчёт","due":"2026-11-20T00:00","precision":"date","source":"probe"}
+{"id":"nd-b5-05","text":"напомни к 25 числу заплатить за квартиру","intent":"createTask","title":"Заплатить за квартиру","due":"2026-11-25T00:00","precision":"date","source":"probe"}
+{"id":"nd-b5-06","text":"напомни к первому сходить в банк","intent":"createTask","title":"К первому сходить в банк","note":"без слова «число» порядковое — не срок","source":"probe"}

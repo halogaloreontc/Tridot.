@@ -297,6 +297,9 @@ abstract final class Calculator {
     if (text.isEmpty) return null;
     var explicit = false;
     var weakMarker = false;
+    // «48 на 25 скока»: «сколько» в конце — вопрос о примере, «на» между
+    // числами — умножение, как с маркером впереди.
+    var askedTail = false;
 
     // Частица впереди: «а 4.5 умножить на 3.2?», «ну 2+2». Не маркер:
     // «а 5» по-прежнему не пример.
@@ -334,6 +337,7 @@ abstract final class Calculator {
       final weakTail = _weakTail.firstMatch(text);
       if (weakTail != null) {
         weakMarker = true;
+        askedTail = true;
         text = text.substring(0, weakTail.start).trimRight();
         continue;
       }
@@ -393,7 +397,7 @@ abstract final class Calculator {
     } else if (suffix != null) {
       final sign = suffix.group(3)!.contains('множ') ? '*' : '/';
       text = '(${suffix.group(1)}) $sign (${suffix.group(2)})';
-    } else if (explicit) {
+    } else if (explicit || askedTail) {
       // «Сколько будет двести на три» — с маркером «на» между числами —
       // умножение, как в «2 на 3». Без маркера «доска 2 на 3» — размер.
       final by = _byTimes.firstMatch(text);
@@ -528,10 +532,11 @@ abstract final class Calculator {
   static final RegExp _skoka = RegExp(r'(?<![а-я])ско(?:ка|ко|лька)(?![а-я])');
 
   /// «Сколько процентов составляет 30 от 120», «какой процент составляет
-  /// 30 от 120».
+  /// 30 от 120», «сколько процентов 45 от 180» (без глагола — число сразу).
   static final RegExp _share = RegExp(
     r'^(?:а\s+)?(?:сколько\s+процентов|какой\s+процент|какую\s+долю)\s+'
-    r'(?:составляет|составят|будет|это|занимает)\s+(.+?)\s+от\s+(.+)$',
+    r'(?:(?:составляет|составят|будет|это|занимает)\s+|(?=\d))'
+    r'(.+?)\s+от\s+(.+)$',
   );
 
   /// «Если» сразу после маркера: «сколько будет, если …».
