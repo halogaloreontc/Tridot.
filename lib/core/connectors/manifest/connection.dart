@@ -27,6 +27,7 @@ final class ConnectionSlot {
     this.alsoAccepts = const <String>{},
     this.queryLabel = GenericSlotTexts.queryLabel,
     this.totalExample = '',
+    this.runtime = false,
   });
 
   /// Слот приложения, которого нет в коде (ADR-039): название, обращения,
@@ -47,6 +48,7 @@ final class ConnectionSlot {
       helpPhrases: GenericSlotTexts.helpPhrases(profile),
       replies: GenericSlotTexts.replies(profile, id),
       protectedReplies: GenericSlotTexts.protectedReplies(id),
+      runtime: true,
     );
   }
 
@@ -108,6 +110,16 @@ final class ConnectionSlot {
   /// Пример для ответа «сколько всего» (`how: total`),
   /// если у команды нет своих примеров.
   final String totalExample;
+
+  /// Слот приложения из каталога подключений ([ConnectionSlot.generic],
+  /// ADR-039), а не из кода.
+  final bool runtime;
+
+  /// Имя файлов подключения (`connections/<ключ>.json`,
+  /// `<ключ>.assistant.json`): у слотов из кода — [appId], как раньше; у
+  /// приложений из каталога — id подключения: два подключения одного
+  /// `app.id` не делят файлы.
+  String get fileKey => runtime ? id : appId;
 
   String get tokenKey => '$id.token';
   String get sidKey => '$id.sid';

@@ -1,3 +1,5 @@
+import '../../commands/command_suggest.dart';
+import 'app_profile.dart';
 import 'manifest_format.dart';
 
 /// Какое описание приложения сейчас в работе.
@@ -7,6 +9,10 @@ enum DescriptionOrigin {
 
   /// Описание с сервера: новее встроенного и не шире его по правам.
   server,
+
+  /// Закреплённое описание приложения без встроенной копии: то, что
+  /// показали на экране согласия при подключении (ADR-039).
+  pinned,
 
   /// Описания нет: фразы не понимаются, экран подключения работает.
   none,
@@ -58,12 +64,25 @@ abstract final class DescriptionAuthority {
   /// Выбор между встроенным [builtIn] и описанием сервера [server];
   /// [serverError] — почему описание сервера не принято (тогда [server] —
   /// `null`).
+  ///
+  /// [pinned] — закреплённое описание приложения без встроенной копии
+  /// (ADR-039): опора вместо [builtIn] — `builtIn ?? pinned`, с теми же
+  /// правилами ([widening]) и ещё строже ([pinnedWidening]): новое
+  /// описание сервера, которое расширяет права или вход, не принимается,
+  /// в работе остаётся закреплённое. [ownWords] — слова самого приложения
+  /// (имя, обращения): ими фразы команд начинаться могут.
   static DescriptionPick choose({
     ManifestDescription? builtIn,
+    ManifestDescription? pinned,
     ManifestDescription? server,
     String? serverError,
+    Set<String> ownWords = const <String>{},
   }) {
-    if (builtIn == null) {
+    final anchor = builtIn ?? pinned;
+    final byPin = builtIn == null && pinned != null;
+    final kind = byPin ? 'закреплённое' : 'встроенное';
+    final origin = byPin ? DescriptionOrigin.pinned : DescriptionOrigin.builtIn;
+    if (anchor == null) {
       if (server == null) {
         return DescriptionPick(
           null,
@@ -77,38 +96,41 @@ abstract final class DescriptionAuthority {
         'описание сервера: встроенного нет.',
       );
     }
-    final ours = builtIn.version ?? 'без версии';
+    final ours = anchor.version ?? 'без версии';
     if (server == null) {
       return DescriptionPick(
-        builtIn,
-        DescriptionOrigin.builtIn,
+        anchor,
+        origin,
         serverError == null
-            ? 'встроенное описание $ours.'
-            : 'встроенное описание $ours: описание сервера не принято '
+            ? '$kind описание $ours.'
+            : '$kind описание $ours: описание сервера не принято '
                 '($serverError).',
       );
     }
     final theirs = server.version;
     if (theirs == null) {
       return DescriptionPick(
-        builtIn,
-        DescriptionOrigin.builtIn,
-        'встроенное описание $ours: в описании сервера нет версии.',
+        anchor,
+        origin,
+        '$kind описание $ours: в описании сервера нет версии.',
       );
     }
-    if (compareVersions(theirs, builtIn.version) <= 0) {
+    if (compareVersions(theirs, anchor.version) <= 0) {
       return DescriptionPick(
-        builtIn,
-        DescriptionOrigin.builtIn,
-        'встроенное описание $ours: описание сервера $theirs не новее.',
+        anchor,
+        origin,
+        '$kind описание $ours: описание сервера $theirs не новее.',
       );
     }
-    final extra = widening(builtIn, server);
+    final extra = <String>[
+      ...widening(anchor, server),
+      if (byPin) ...pinnedWidening(anchor, server, ownWords: ownWords),
+    ];
     if (extra.isNotEmpty) {
       return DescriptionPick(
-        builtIn,
-        DescriptionOrigin.builtIn,
-        'встроенное описание $ours: описание сервера $theirs расширяет '
+        anchor,
+        origin,
+        '$kind описание $ours: описание сервера $theirs расширяет '
         'права (${extra.join('; ')}).',
         refused: 'расширяет права (${extra.join('; ')})',
       );
@@ -116,9 +138,87 @@ abstract final class DescriptionAuthority {
     return DescriptionPick(
       server,
       DescriptionOrigin.server,
-      'описание сервера $theirs: новее встроенного $ours.',
+      byPin
+          ? 'описание сервера $theirs: новее закреплённого $ours.'
+          : 'описание сервера $theirs: новее встроенного $ours.',
     );
   }
+
+  /// Сверх [widening] для закреплённого описания [pinned] (ADR-039): чем
+  /// ещё описание [server] меняет вход или слова приложения. Встроенной
+  /// копии нет — значит, нет и проверки кода сервера, поэтому любое
+  /// изменение входа (`auth.qr`, `auth.credentials`, `auth.logout`)
+  /// требует подключить заново, а фразы, примеры и названия команд
+  /// принимаются, только если в них нет приватных слов (пароль, PIN, код,
+  /// логин) и чужих обращений ([textProblems]).
+  static List<String> pinnedWidening(
+    ManifestDescription pinned,
+    ManifestDescription server, {
+    Set<String> ownWords = const <String>{},
+  }) {
+    final found = <String>[];
+    if (pinned.qr == null && server.qr != null) {
+      found.add('другой вход по ссылке auth.qr');
+    }
+    if (pinned.logout == null && server.logout != null) {
+      found.add('другой выход auth.logout');
+    }
+    final ourNames = pinned.credentials.keys.toSet();
+    final theirNames = server.credentials.keys.toSet();
+    final sameDrop = server.credentials['sid']?.drop?.action ==
+        pinned.credentials['sid']?.drop?.action;
+    if (ourNames.length != theirNames.length ||
+        !ourNames.containsAll(theirNames) ||
+        !sameDrop) {
+      found.add('другие данные для входа auth.credentials');
+    }
+    found.addAll(textProblems(server, ownWords: ownWords));
+    return found;
+  }
+
+  /// Фразы, примеры и названия команд описания [description], которых
+  /// помощник не берёт у приложения без встроенной копии: с приватным
+  /// словом (пароль, PIN, код, логин — [CommandSuggester.isPrivate]) или
+  /// начинающиеся с обращения к навыку, другому подключению или помощнику
+  /// ([AppProfile.isClaimed]). Слова профиля (`app.name`, `forms`,
+  /// `addressing`) — тоже без приватных. Пусто — всё годится.
+  static List<String> textProblems(
+    ManifestDescription description, {
+    Set<String> ownWords = const <String>{},
+  }) {
+    final private = <String>{};
+    final claimed = <String>{};
+    for (final command in description.commands) {
+      for (final text in <String>[
+        command.title,
+        ...command.say,
+        ...command.examples,
+      ]) {
+        if (text.isEmpty) continue;
+        if (CommandSuggester.isPrivate(text.replaceAll(_slot, ' '))) {
+          private.add(command.id);
+        }
+        final first = text.trim().split(RegExp(r'[\s,]+')).first;
+        if (!first.startsWith('{') &&
+            AppProfile.isClaimed(first, own: ownWords)) {
+          claimed.add(command.id);
+        }
+      }
+    }
+    final profile = description.profile;
+    final found = <String>[
+      if (private.isNotEmpty)
+        'приватные слова в фразах команд: ${(private.toList()..sort()).join(', ')}',
+      if (claimed.isNotEmpty)
+        'фразы начинаются с чужого обращения: '
+            '${(claimed.toList()..sort()).join(', ')}',
+      if (profile != null && profile.words.any(AppProfile.isPrivate))
+        'приватные слова в профиле app',
+    ];
+    return found;
+  }
+
+  static final RegExp _slot = RegExp(r'\{[^}]*\}');
 
   /// Чем описание [server] шире встроенного [builtIn] — по пунктам, для
   /// экрана; пусто — прав не больше:

@@ -7,6 +7,7 @@ import '../secret_store.dart';
 import 'connection.dart';
 import 'description_authority.dart';
 import 'manifest_connector.dart';
+import 'manifest_fetch.dart';
 import 'manifest_format.dart';
 import 'manifest_text.dart';
 
@@ -68,6 +69,8 @@ final class ConnectionService {
     required ConnectionStore store,
     Clock clock = const SystemClock(),
     this.builtIn,
+    this.pinned,
+    this.fixedBase,
     DescriptionPick? pick,
     this.device = defaultDevice,
   })  : _transport = transport,
@@ -77,12 +80,16 @@ final class ConnectionService {
     final initial = pick ??
         DescriptionAuthority.choose(
           builtIn: builtIn,
-          server: identical(connector.description, builtIn)
+          pinned: pinned,
+          server: identical(connector.description, builtIn) ||
+                  identical(connector.description, pinned)
               ? null
               : connector.description,
+          ownWords: _ownWords,
         );
     descriptionOrigin = initial.origin;
     descriptionReason = initial.reason;
+    if (_pinnedAnchor) offered = initial.refused;
     connector
       // Действия с записью — только из встроенной копии (ADR-013), какое
       // бы описание ни было в работе для чтения.
@@ -107,20 +114,28 @@ final class ConnectionService {
   /// сервера в работе, только если он новее и не шире по правам
   /// ([DescriptionAuthority]). Без описания коннектор не понимает фраз, но
   /// экран подключения работает.
+  ///
+  /// [pinned] — закреплённое описание приложения без встроенной копии
+  /// (каталог подключений, ADR-039), взятое с [base]: опора вместо
+  /// встроенного. Разбирается как описание сервера — действий с записью
+  /// из него нет никогда. [base] — адрес приложения из каталога: вход с
+  /// другого адреса это подключение не перенацеливает.
   static Future<ConnectionService> restore({
     required ConnectionSlot slot,
     required HttpTransport transport,
     required SecretStore secrets,
     required ConnectionStore store,
     String? builtIn,
+    String? pinned,
+    Uri? base,
     Clock clock = const SystemClock(),
     String device = defaultDevice,
   }) async {
     ConnectionRecord? record;
     String? cached;
     try {
-      record = await store.load(slot.appId);
-      cached = await store.loadManifest(slot.appId);
+      record = await store.load(slot.fileKey);
+      cached = await store.loadManifest(slot.fileKey);
     } on Object {
       record = null;
       cached = null;
@@ -144,6 +159,9 @@ final class ConnectionService {
     }
 
     final ours = parse(builtIn, null, builtIn: true);
+    // Закреплённое — никогда не как встроенное: `builtIn: true` включил бы
+    // раздел `actions[]` (ADR-013).
+    final pin = parse(pinned, base?.resolve('assistant.json'));
     // Кэш годится только серверу, с которого взят (`cached_from`): после
     // входа на другой склад чужое описание в работу не идёт.
     final from = record?.manifestUri;
@@ -152,10 +170,12 @@ final class ConnectionService {
     final server = bound ? parse(cached, from) : null;
     final pick = DescriptionAuthority.choose(
       builtIn: ours,
+      pinned: pin,
       server: server,
       serverError: bound && server == null
           ? 'сохранённая копия не прошла проверку'
           : null,
+      ownWords: ownWordsOf(slot),
     );
     if (record != null && (server == null || pick.refused != null)) {
       // Кэша этого сервера нет или он больше не годится: запись — о
@@ -165,8 +185,10 @@ final class ConnectionService {
       if (meta.etag != null ||
           meta.lastModified != null ||
           meta.cachedFrom != null) {
+        final anchor = ours ?? pin;
         record = record.copyWith(
-          manifest: ours == null ? const ManifestMeta() : ManifestMeta.of(ours),
+          manifest:
+              anchor == null ? const ManifestMeta() : ManifestMeta.of(anchor),
         );
       }
     }
@@ -184,10 +206,24 @@ final class ConnectionService {
       store: store,
       clock: clock,
       builtIn: ours,
+      pinned: pin,
+      fixedBase: base,
       pick: pick,
       device: device,
     );
   }
+
+  /// Слова самого приложения: название и обращения слота. Фразы его команд
+  /// с них начинаться могут ([DescriptionAuthority.textProblems]).
+  static Set<String> ownWordsOf(ConnectionSlot slot) => <String>{
+        slot.title,
+        for (final alias in slot.aliases) ...<String>[
+          alias,
+          ...alias.split(' '),
+        ],
+      };
+
+  Set<String> get _ownWords => ownWordsOf(connector.slot);
 
   /// Как устройство называется на складе в списке подключённых Связных.
   static const String defaultDevice = 'Связной';
@@ -230,6 +266,27 @@ final class ConnectionService {
   /// Встроенная копия описания (`assets/connectors/`) — главная (ADR-012).
   final ManifestDescription? builtIn;
 
+  /// Закреплённое описание приложения без встроенной копии (ADR-039): то,
+  /// что показали при подключении. Опора вместо [builtIn]; действий с
+  /// записью в нём нет.
+  final ManifestDescription? pinned;
+
+  /// Адрес приложения из каталога подключений: вход по ссылке или вручную
+  /// с другого адреса не перенацеливает подключение (ADR-039). `null` —
+  /// слот из кода (склад): адрес задаёт вход.
+  final Uri? fixedBase;
+
+  /// Опора выбора описания: встроенное, иначе закреплённое.
+  ManifestDescription? get anchor => builtIn ?? pinned;
+
+  bool get _pinnedAnchor => builtIn == null && pinned != null;
+
+  /// Новое описание сервера расширяет права или вход приложения с
+  /// закреплённым описанием — чем именно; в работе закреплённое
+  /// (ADR-039). Экран подключения предложит посмотреть и подключить
+  /// заново. `null` — предложений нет.
+  String? offered;
+
   /// Какое описание в работе: встроенное или с сервера.
   late DescriptionOrigin descriptionOrigin;
 
@@ -249,11 +306,15 @@ final class ConnectionService {
   /// остаётся как было (описание в работе, кэш, запись с её `etag`), иначе
   /// в работе встроенное. Так состояние сейчас и после перезапуска
   /// одинаково.
-  _Decision _decide(Uri manifestUri, _Fetched fetched) {
+  _Decision _decide(Uri manifestUri, ManifestFetched fetched) {
     final server = fetched.description;
     if (server != null) {
-      final pick =
-          DescriptionAuthority.choose(builtIn: builtIn, server: server);
+      final pick = DescriptionAuthority.choose(
+        builtIn: builtIn,
+        pinned: pinned,
+        server: server,
+        ownWords: _ownWords,
+      );
       final refused = pick.refused;
       if (refused == null) {
         return _Decision(
@@ -268,13 +329,13 @@ final class ConnectionService {
           cache: server.source,
         );
       }
-      return _keep(manifestUri, refused);
+      return _keep(manifestUri, refused, offer: refused);
     }
     return _keep(manifestUri, fetched.rejected ?? 'описание не получено');
   }
 
   /// Описание сервера не принято ([why]): прежнее остаётся.
-  _Decision _keep(Uri manifestUri, String why) {
+  _Decision _keep(Uri manifestUri, String why, {String? offer}) {
     final now = _clock.now();
     final current = connector.description;
     if (current != null && record.manifest.isCachedFrom(manifestUri)) {
@@ -288,10 +349,12 @@ final class ConnectionService {
         record.manifest.checkedAt(now),
         error: why,
         kept: true,
+        offer: offer,
       );
     }
     final pick = DescriptionAuthority.choose(
       builtIn: builtIn,
+      pinned: pinned,
       serverError: why,
     );
     final description = pick.description;
@@ -301,6 +364,7 @@ final class ConnectionService {
           ? ManifestMeta(fetchedAt: now)
           : ManifestMeta.of(description, fetchedAt: now),
       error: why,
+      offer: offer,
     );
   }
 
@@ -308,8 +372,9 @@ final class ConnectionService {
   /// Запись подключения ([_Decision.meta]) сохраняет вызывающий.
   Future<void> _commit(_Decision decision) async {
     if (decision.cache case final String source) {
-      await _store.saveManifest(slot.appId, source);
+      await _store.saveManifest(slot.fileKey, source);
     }
+    if (_pinnedAnchor) offered = decision.offer;
     final pick = decision.pick;
     descriptionOrigin = pick.origin;
     descriptionReason = pick.reason;
@@ -554,61 +619,17 @@ final class ConnectionService {
 
   // -------------------------------------------------------- описание
 
-  Future<_Fetched> _fetchManifest(Uri base, {ManifestMeta? known}) async {
-    final uri = base.resolve('assistant.json');
-    final headers = <String, String>{'Accept': 'application/json'};
-    if (known?.etag case final String etag) headers['If-None-Match'] = etag;
-    if (known?.lastModified case final String date) {
-      headers['If-Modified-Since'] = date;
-    }
-    final HttpResponseData response;
-    try {
-      response = await _transport.send(
-        HttpRequestData(
-          method: 'GET',
-          uri: uri,
-          headers: headers,
-          timeout: timeout,
-        ),
-      );
-    } on TimeoutException {
-      return const _Fetched.failed('Сервер не ответил вовремя.');
-    } on Object {
-      return const _Fetched.failed(
-        'Нет связи с сервером. Проверьте адрес и интернет.',
-      );
-    }
-    if (response.statusCode == 304) return const _Fetched.unchanged();
-    if (response.statusCode == 404) {
-      return const _Fetched.failed(
-        'По этому адресу нет описания помощника (assistant.json).',
-      );
-    }
-    if (!response.isSuccess) {
-      return _Fetched.failed(
-        'Сервер ответил ошибкой ${response.statusCode}.',
-      );
-    }
-    try {
-      final description = ManifestDescription.parse(
-        response.body,
+  Future<ManifestFetched> _fetchManifest(Uri base, {ManifestMeta? known}) =>
+      ManifestFetch.fetch(
+        _transport,
+        base,
         appIds: slot.appIds,
-        manifestUri: uri,
+        known: known,
+        // Описание того же приложения, не прошедшее проверку: есть
+        // встроенное или закреплённое — работаем по нему (ADR-012).
+        sameApp: anchor == null ? null : _sameApp,
+        wait: timeout,
       );
-      return _Fetched(
-        description,
-        etag: response.headers['etag'],
-        lastModified: response.headers['last-modified'],
-      );
-    } on ManifestException catch (error) {
-      // Это то приложение, но описание сервера не прошло проверку: если
-      // есть встроенное, работаем по нему (ADR-012).
-      if (builtIn != null && _sameApp(response.body)) {
-        return _Fetched.rejected(error.message);
-      }
-      return _Fetched.failed('Описание не принято: ${error.message}.');
-    }
-  }
 
   /// Ответ — описание этого приложения (`format` и `app.id` совпадают),
   /// пусть и не прошедшее проверку.
@@ -682,6 +703,9 @@ final class ConnectionService {
     } on ConnectionAddressException catch (error) {
       return ConnectionResult.failed(error.message);
     }
+    if (_otherAddress(parsed.base) case final String why) {
+      return ConnectionResult.failed(why);
+    }
     final fetched = await _fetchManifest(parsed.base);
     if (fetched.error != null) return ConnectionResult.failed(fetched.error!);
     final manifestUri = parsed.base.resolve('assistant.json');
@@ -690,7 +714,7 @@ final class ConnectionService {
     if (description == null) {
       return const ConnectionResult.failed('Описание не получено.');
     }
-    final qr = description.qr ?? builtIn?.qr ?? slot.builtInQr;
+    final qr = description.qr ?? anchor?.qr ?? slot.builtInQr;
     if (qr == null) {
       return const ConnectionResult.failed(
         'Это приложение не умеет вход по ссылке. Подключите его вручную.',
@@ -792,6 +816,9 @@ final class ConnectionService {
     } on ConnectionAddressException catch (error) {
       return ConnectionResult.failed(error.message);
     }
+    if (_otherAddress(base) case final String why) {
+      return ConnectionResult.failed(why);
+    }
     final key = sid.trim();
     if (!_assistKey.hasMatch(key)) {
       return const ConnectionResult.failed(
@@ -869,7 +896,7 @@ final class ConnectionService {
   /// остаются. Без личного ключа — ничего не спрашивает.
   Future<ConnectionResult> refreshMe() async {
     final description = this.description;
-    final me = description?.me ?? builtIn?.me;
+    final me = description?.me ?? anchor?.me;
     final base = record.manifestUri;
     if (description == null || me == null || base == null) {
       return const ConnectionResult.failed('Склад не говорит, кто вошёл.');
@@ -939,6 +966,9 @@ final class ConnectionService {
       base = baseOf(address);
     } on ConnectionAddressException catch (error) {
       return ConnectionResult.failed(error.message);
+    }
+    if (_otherAddress(base) case final String why) {
+      return ConnectionResult.failed(why);
     }
     if (password.isEmpty) {
       return const ConnectionResult.failed('Введите пароль склада.');
@@ -1072,6 +1102,16 @@ final class ConnectionService {
 
   // ---------------------------------------------------------- служебное
 
+  /// Вход с адреса [base] для подключения из каталога с другим адресом
+  /// ([fixedBase]): текст отказа; `null` — адрес тот же или слот из кода.
+  String? _otherAddress(Uri base) {
+    final fixed = fixedBase;
+    if (fixed == null || fixed == base) return null;
+    return 'Это подключение — к ${fixed.host}. Ссылка ведёт на другой адрес '
+        '(${base.host}): другое приложение подключают заново, через '
+        '«Подключить приложение».';
+  }
+
   /// Ещё раз, перед самим запросом: действие входа — из
   /// [ManifestDescription.authActions] и не команда из `api.only`.
   static bool _authAllowed(ManifestDescription d, String role, String action) =>
@@ -1153,7 +1193,7 @@ final class ConnectionService {
   /// `null` — входа нет или описание выхода не умеет.
   Future<_DropKey?> _previousKey() async {
     final description = this.description;
-    final logout = description?.signOut ?? builtIn?.signOut;
+    final logout = description?.signOut ?? anchor?.signOut;
     final base = record.manifestUri;
     if (!record.connected ||
         description == null ||
@@ -1325,7 +1365,7 @@ final class ConnectionService {
     await _commit(decision);
     await _save(
       ConnectionRecord(
-        appId: slot.appId,
+        appId: slot.fileKey,
         baseUri: base,
         login: login.isEmpty ? null : login,
         level: sid.isEmpty ? ConnectionLevel.shared : ConnectionLevel.staff,
@@ -1361,52 +1401,6 @@ final class ConnectionService {
   static String _text(Object? value) => value is String ? value.trim() : '';
 }
 
-/// Ответ сервера на запрос описания.
-final class _Fetched {
-  const _Fetched(this.description, {this.etag, this.lastModified})
-      : error = null,
-        rejected = null,
-        unchanged = false;
-
-  const _Fetched.failed(this.error)
-      : description = null,
-        etag = null,
-        lastModified = null,
-        rejected = null,
-        unchanged = false;
-
-  /// Описание того же приложения пришло, но проверку не прошло: вход не
-  /// останавливается, работаем по прежнему или встроенному.
-  const _Fetched.rejected(this.rejected)
-      : description = null,
-        etag = null,
-        lastModified = null,
-        error = null,
-        unchanged = false;
-
-  const _Fetched.unchanged()
-      : description = null,
-        etag = null,
-        lastModified = null,
-        error = null,
-        rejected = null,
-        unchanged = true;
-
-  /// Описание сервера, прошедшее проверку формата (выбор —
-  /// [DescriptionAuthority]).
-  final ManifestDescription? description;
-  final String? etag;
-  final String? lastModified;
-
-  /// Сервер недоступен или ответил не описанием этого приложения: войти
-  /// нельзя.
-  final String? error;
-
-  /// Почему описание сервера не прошло проверку.
-  final String? rejected;
-  final bool unchanged;
-}
-
 /// Что делать с ответом сервера: какое описание в работе, что записать о
 /// нём в подключение и что положить в кэш.
 final class _Decision {
@@ -1416,9 +1410,13 @@ final class _Decision {
     this.cache,
     this.error,
     this.kept = false,
+    this.offer,
   });
 
   final DescriptionPick pick;
+
+  /// Описание сервера расширяет закреплённое: чем (ADR-039).
+  final String? offer;
 
   /// Запись об описании для [ConnectionRecord.manifest].
   final ManifestMeta meta;

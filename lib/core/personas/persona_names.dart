@@ -74,7 +74,7 @@ abstract final class PersonaNames {
   static Set<String> get connectorWords => <String>{
         for (final word in <String>{
           ..._reserved,
-          for (final slot in ConnectionSlots.all) ...<String>[
+          for (final slot in ConnectionSlots.live) ...<String>[
             slot.title,
             for (final alias in slot.aliases) alias,
           ],

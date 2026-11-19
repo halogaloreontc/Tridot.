@@ -71,7 +71,7 @@ final class ManifestConnector
   })  : _transport = transport,
         _secrets = secrets,
         _random = random ?? Random.secure(),
-        record = record ?? ConnectionRecord(appId: slot.appId) {
+        record = record ?? ConnectionRecord(appId: slot.fileKey) {
     if (description != null) load(description);
     this.builtIn = builtIn;
   }

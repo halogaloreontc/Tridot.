@@ -32,6 +32,8 @@ import 'core/chats/chat_store.dart';
 import 'core/connectors/connector.dart';
 import 'core/connectors/manifest/warehouse_signals.dart';
 import 'core/connectors/io_http_transport.dart';
+import 'core/connectors/manifest/app_connections.dart';
+import 'core/connectors/manifest/connection_directory_io.dart';
 import 'core/connectors/manifest/connection_store_io.dart';
 import 'core/connectors/manifest/connection_service.dart';
 import 'core/connectors/manifest/connection_slots.dart';
@@ -44,6 +46,7 @@ import 'core/passwords/vault.dart';
 import 'core/passwords/vault_crypto.dart';
 import 'core/passwords/vault_store.dart';
 import 'core/scenario/assistant_controller.dart';
+import 'core/scenario/connector_assembly.dart';
 import 'core/scenario/scenario_parser.dart';
 import 'core/services/clock.dart';
 import 'core/services/task_service.dart';
@@ -158,7 +161,13 @@ Future<void> main() async {
   final secrets = secretsChoice.store;
   final transport = IoHttpTransport();
   final connectionStore = JsonConnectionStore(p.join(folder, 'connections'));
-  final connections = <ConnectionService>[
+  final device = switch (currentJobPlatform()) {
+    JobPlatform.android => 'Связной · Android',
+    JobPlatform.macos => 'Связной · Mac',
+    JobPlatform.windows => 'Связной · Windows',
+    _ => 'Связной · Linux',
+  };
+  final knownConnections = <ConnectionService>[
     for (final slot in ConnectionSlots.all)
       await ConnectionService.restore(
         slot: slot,
@@ -167,18 +176,33 @@ Future<void> main() async {
         store: connectionStore,
         builtIn: await _builtInManifest(slot.builtInAsset),
         clock: clock,
-        device: switch (currentJobPlatform()) {
-          JobPlatform.android => 'Связной · Android',
-          JobPlatform.macos => 'Связной · Mac',
-          JobPlatform.windows => 'Связной · Windows',
-          _ => 'Связной · Linux',
-        },
+        device: device,
       ),
   ];
+  // Приложения из каталога подключений (ADR-039): connections/_directory.json,
+  // закреплённые описания рядом. Склад в каталоге не хранится.
+  ExtensionRegistry? registry;
+  final appConnections = AppConnections(
+    transport: transport,
+    secrets: secrets,
+    store: connectionStore,
+    directory: JsonConnectionDirectory(p.join(folder, 'connections')),
+    known: knownConnections,
+    clock: clock,
+    device: device,
+    reservedIds: () => <String>{
+      for (final connector in registry?.connectors ?? const <Connector>[])
+        connector.info.id,
+      for (final installed in registry?.packs.packs ?? const <InstalledPack>[])
+        installed.pack.id,
+    },
+  );
+  await appConnections.load();
+  final connections = appConnections.services;
   // Сигналы склада (ADR-031): только пока приложение открыто — паузу и
   // продолжение даёт HomePage по жизненному циклу.
   final signals = <WarehouseSignals>[
-    for (final connection in connections)
+    for (final connection in knownConnections)
       if (connection.slot.id == ConnectionSlots.warehouse.id)
         WarehouseSignals(
           service: connection,
@@ -289,10 +313,14 @@ Future<void> main() async {
     links: LinkOpener(platform: currentJobPlatform()),
   );
   await weather.load();
-  final extensions = ExtensionRegistry(
-    connectors: <Connector>[
+  // Один путь сборки коннекторов — при запуске и после «Подключить» /
+  // «Удалить» приложение (ADR-039): реестр пересобирается между ходами.
+  final assembly = ConnectorAssembly(
+    connections: appConnections,
+    before: <Connector>[
       TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
-      for (final connection in connections) connection.connector,
+    ],
+    after: <Connector>[
       const CalculatorConnector(),
       TalkConnector(taskService: tasks),
       // Включаемый навык вне ролей, по умолчанию выключен (D1).
@@ -330,8 +358,12 @@ Future<void> main() async {
           YtdlUnavailableReason.of(currentJobPlatform(), play: kPlayBuild),
         ),
     ],
+  );
+  final extensions = ExtensionRegistry(
+    connectors: assembly.build(),
     packs: packs,
   );
+  registry = extensions;
   await packs.load();
   // Голосовой ввод (ADR-023): пока только Android — libvosk приходит из
   // AAR только для arm64-v8a. Модель скачивается по требованию в
@@ -367,6 +399,7 @@ Future<void> main() async {
     clock: clock,
     knownSecret: passwords?.facade.knownSecret,
   );
+  assembly.attach(extensions, assistant);
   // Вход в приложение по отпечатку / Face ID (ADR-025): включён — экран
   // закрыт с первого кадра, до загрузки остального интерфейса.
   final settingsStore = JsonSettingsStore(p.join(folder, 'settings.json'));

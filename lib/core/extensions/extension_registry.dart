@@ -30,13 +30,35 @@ final class ExtensionRegistry {
     ExtensionChoice choice = const ExtensionChoice(),
     List<RoleInfo> roles = Roles.all,
     Map<String, String> replyOverrides = const <String, String>{},
-  })  : _connectors = List<Connector>.unmodifiable(connectors),
-        packs = packs ?? PackStore.memory(),
-        _choice = choice {
+  })  : packs = packs ?? PackStore.memory(),
+        _choice = choice,
+        _roleTemplates = roles,
+        _replyOverrides = replyOverrides {
+    _install(connectors);
+    _pushHints();
+  }
+
+  /// Пересобирает реестр с другим набором коннекторов [connectors] тем же
+  /// путём, что конструктор: записи каталога ответов, роли, подсказки
+  /// (ADR-039: подключили или удалили приложение). Выбор пользователя и
+  /// паки остаются. Звать между ходами диалога
+  /// (`AssistantController.betweenTurns`). Повтор id или записи ответа —
+  /// [ArgumentError], реестр не меняется.
+  void rebuild(List<Connector> connectors) {
+    _install(connectors);
+    _pushHints();
+    _notify();
+  }
+
+  final List<RoleInfo> _roleTemplates;
+  final Map<String, String> _replyOverrides;
+
+  void _install(List<Connector> connectors) {
+    final list = List<Connector>.unmodifiable(connectors);
     final ids = <String>{};
     final replies = <String, String>{};
     final protectedReplies = <String>{};
-    for (final connector in _connectors) {
+    for (final connector in list) {
       if (!ids.add(connector.info.id)) {
         throw ArgumentError.value(
           connector.info.id,
@@ -56,33 +78,34 @@ final class ExtensionRegistry {
       }
       protectedReplies.addAll(connector.info.protectedReplies);
     }
-    this.packs.reservedIds = ids;
-    // [replyOverrides] — тексты другой оболочки (веб-помощник, ADR-032).
-    this.replies = ReplyLibrary.builtIn
+    // [_replyOverrides] — тексты другой оболочки (веб-помощник, ADR-032).
+    final library = ReplyLibrary.builtIn
         .withEntries(replies, protectedIds: protectedReplies)
-        .withOverrides(replyOverrides);
+        .withOverrides(_replyOverrides);
+    _connectors = list;
+    packs.reservedIds = ids;
+    this.replies = library;
     // Паки ответов проверяются и против записей коннекторов.
-    this.packs.replySchema = this.replies.schema;
+    packs.replySchema = library.schema;
     // Роль без своих расширений в этой сборке не показывается; роль с
     // подключением — только если подключение зарегистрировано.
-    this.roles = List<RoleInfo>.unmodifiable(<RoleInfo>[
-      for (final role in roles)
+    roles = List<RoleInfo>.unmodifiable(<RoleInfo>[
+      for (final role in _roleTemplates)
         if (role.extensions.any(ids.contains) &&
             (role.connection == null ||
                 ids.contains(role.connection!.extensionId)))
           role,
     ]);
-    _pushHints();
   }
 
   /// Роли этой сборки в порядке показа.
-  late final List<RoleInfo> roles;
+  late List<RoleInfo> roles;
 
   /// Встроенные каталоги ответов вместе с записями коннекторов — без
   /// стилей из паков.
-  late final ReplyLibrary replies;
+  late ReplyLibrary replies;
 
-  final List<Connector> _connectors;
+  late List<Connector> _connectors;
 
   final PackStore packs;
 

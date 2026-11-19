@@ -217,6 +217,30 @@ final class AssistantController {
     if (!enabled) session.takePendingConfirmation()?.onDropped?.call();
   }
 
+  final List<void Function()> _betweenTurns = <void Function()>[];
+
+  /// Сообщение сейчас обрабатывается ([handle] ещё не вернул ответ).
+  bool get midTurn => _inFlight > 0;
+
+  /// Выполняет [change] между ходами диалога: сразу, если сообщение не
+  /// обрабатывается, иначе — как только последнее обработается. Так
+  /// пересобирается реестр расширений после «Подключить» и «Удалить»
+  /// приложение (ADR-039): ход, который уже идёт, договаривает с прежним
+  /// набором коннекторов.
+  void betweenTurns(void Function() change) {
+    if (_inFlight == 0) {
+      change();
+      return;
+    }
+    _betweenTurns.add(change);
+  }
+
+  void _runBetweenTurns() {
+    while (_betweenTurns.isNotEmpty && _inFlight == 0) {
+      _betweenTurns.removeAt(0)();
+    }
+  }
+
   /// Ожидание, на которое ответили в текущем сообщении: его не нужно
   /// объявлять снятым ([PendingConfirmation.onDropped]).
   PendingConfirmation? _answered;
@@ -520,6 +544,7 @@ final class AssistantController {
         ..recentFiles = const <SessionFileRef>[]
         ..fromVoice = false;
       _inFlight--;
+      if (_inFlight == 0) _runBetweenTurns();
       if (_inFlight == 0 && !_chatChangePending) {
         session.projectTag = _viewProjectTag;
       }

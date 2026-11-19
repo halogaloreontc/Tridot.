@@ -105,6 +105,33 @@ final class AppProfile {
   /// Падежи для текстов: свои или несклоняемое имя.
   NameForms get cases => forms ?? NameForms.same(name);
 
+  /// Все слова профиля: имя, падежи, «в автосервисе», обращения.
+  List<String> get words => <String>[
+        name,
+        ...?forms?.all,
+        if (inPhrase case final String phrase) phrase,
+        ...addressing,
+      ];
+
+  /// Профиль в том же виде, что поля `app` описания: так он хранится в
+  /// каталоге подключений и при загрузке проверяется заново ([parse]).
+  Map<String, Object?> toJson() => <String, Object?>{
+        'id': appId,
+        'name': name,
+        if (forms case final NameForms f)
+          'forms': <String, String>{
+            'nom': f.nom,
+            'gen': f.gen,
+            'dat': f.dat,
+            'acc': f.acc,
+            'ins': f.ins,
+            'prep': f.prep,
+          },
+        if (inPhrase case final String phrase) 'in': phrase,
+        if (gender case final AppGender g) 'gender': g.name,
+        if (addressing.isNotEmpty) 'addressing': addressing,
+      };
+
   /// Пределы «Tridot».
   static const int maxLength = 40;
   static const int maxAddressing = 8;
@@ -120,7 +147,7 @@ final class AppProfile {
   static const List<String> _prepositions = <String>['в', 'во', 'на'];
 
   /// Названия навыков «Tridot»: обращение к приложению ими не бывает.
-  static const Set<String> _skillWords = <String>{
+  static const Set<String> skillWords = <String>{
     'задачи',
     'задача',
     'беседа',
@@ -153,7 +180,7 @@ final class AppProfile {
   static bool isReserved(String value, {Set<String> taken = const {}}) {
     final folded = Persona.fold(value.trim());
     if (folded.isEmpty) return true;
-    if (_skillWords.contains(folded)) return true;
+    if (skillWords.contains(folded)) return true;
     if (PersonaNames.connectorWords.contains(folded)) return true;
     if (PersonaNames.isPhraseWord(folded)) return true;
     if (taken.map(Persona.fold).contains(folded)) return true;
@@ -167,6 +194,22 @@ final class AppProfile {
       return isReserved(words.last, taken: taken);
     }
     return false;
+  }
+
+  /// Слово — обращение к навыку, подключению или помощнику «Tridot»
+  /// (как [isReserved], но обычное начало фразы — «найди», «покажи» —
+  /// годится): с такого слова фраза команды приложения не начинается.
+  /// [own] — слова самого приложения: они не чужие.
+  static bool isClaimed(String word, {Set<String> own = const <String>{}}) {
+    final folded = Persona.fold(word.trim());
+    if (folded.isEmpty) return false;
+    if (own.map(Persona.fold).contains(folded)) return false;
+    if (skillWords.contains(folded)) return true;
+    if (PersonaNames.connectorWords.contains(folded)) return true;
+    for (final persona in Personas.all) {
+      if (persona.nameForms.contains(folded)) return true;
+    }
+    return Personas.byNameForm(folded) != null;
   }
 
   /// Пароль, PIN, код, логин и похожее: такие слова не попадают ни в
