@@ -757,15 +757,59 @@ final class TasksConnector
     if (dueQuestion != null) {
       return _ask(session, 'task.reschedule', dueQuestion);
     }
-    final dueAt = command.dueAt;
+    var dueAt = command.dueAt;
+    var precision = command.duePrecision ?? DuePrecision.dateTime;
+    final shift = command.shift;
+    if (shift != null) {
+      // «Перенеси звонок на час позже»: сдвиг от срока самой задачи. Без
+      // срока (или часы у задачи на день) сдвигать не от чего — спросим,
+      // на когда, а не угадаем от «сейчас».
+      final current = await _tasks.find(target.id!);
+      final currentDue = current?.dueAt;
+      if (current != null &&
+          currentDue != null &&
+          shift.fits(current.duePrecision)) {
+        final moved = shift.apply(currentDue);
+        // «На 5 дней раньше» в прошлое — не молча: как срок в прошлом.
+        final now = session.clock.now();
+        final cutoff = current.duePrecision == DuePrecision.dateTime
+            ? now
+            : DateTime(now.year, now.month, now.day);
+        if (moved.isBefore(cutoff)) {
+          return _ask(
+            session,
+            'task.reschedule',
+            _dueClarification(DueIssue.inPast)!,
+          );
+        }
+        dueAt = moved;
+        precision = current.duePrecision;
+      }
+    }
+    if (dueAt != null && command.sameTime) {
+      // «На завтра на то же время»: день новый, время — задачи. Задача без
+      // точного времени — только день.
+      final current = await _tasks.find(target.id!);
+      final currentDue = current?.dueAt;
+      if (current != null &&
+          currentDue != null &&
+          current.duePrecision == DuePrecision.dateTime) {
+        dueAt = DateTime(
+          dueAt.year,
+          dueAt.month,
+          dueAt.day,
+          currentDue.hour,
+          currentDue.minute,
+        );
+      } else {
+        dueAt = DateTime(dueAt.year, dueAt.month, dueAt.day);
+        precision = DuePrecision.date;
+      }
+    }
     if (dueAt == null) {
       return _ask(session, 'task.reschedule', 'task.ask.rescheduleWhen');
     }
-    final task = await _tasks.reschedule(
-      target.id!,
-      dueAt,
-      command.duePrecision ?? DuePrecision.dateTime,
-    );
+    final task = await _tasks.reschedule(target.id!, dueAt, precision);
     session.select(id, task.id);
     return session.reply(
       'task.rescheduled',

@@ -310,6 +310,49 @@ final class BulkParser {
     'назад',
   };
 
+  /// Сдвиг «на N единиц позже/раньше» после глагола переноса
+  /// [verbIndex]: «сдвинь всё на час позже», «перенеси звонок на полчаса
+  /// раньше». После «отложи», «сдвинь» длительность и без «позже» —
+  /// сдвиг вперёд. Без направления после «перенеси» («перенеси на 2
+  /// часа») — длительность без сдвига: [ShiftFound.shift] пуст, и
+  /// спрашивается, на когда. `null` — сдвига во фразе нет.
+  static ShiftFound? shiftAfter(List<UtteranceToken> tokens, int verbIndex) {
+    final verb = tokens[verbIndex].text;
+    for (var i = verbIndex + 1; i < tokens.length; i++) {
+      if (tokens[i].text != 'на') continue;
+      var j = i + 1;
+      int? amount;
+      if (j < tokens.length) {
+        final word = tokens[j].text;
+        amount = tokens[j].isNumber ? int.tryParse(word) : _numberWords[word];
+        if (amount != null) j++;
+      }
+      if (j >= tokens.length) continue;
+      final unit = _units[tokens[j].text];
+      if (unit == null) continue;
+      final (shiftUnit, factor) = unit;
+      final value = (amount ?? 1) * factor;
+      var end = j;
+      var sign = 0;
+      if (j + 1 < tokens.length) {
+        final direction = tokens[j + 1].text;
+        if (_later.contains(direction)) sign = 1;
+        if (_earlier.contains(direction)) sign = -1;
+        if (sign != 0) end = j + 1;
+      }
+      if (sign == 0 && _shiftVerbs.contains(verb)) sign = 1;
+      if (value <= 0 || value > 9999) continue;
+      return ShiftFound(
+        from: i,
+        to: end,
+        span: CharSpan(tokens[i].span.start, tokens[end].span.end),
+        shift: sign == 0 ? null : DueShift(sign * value, shiftUnit),
+        directed: end > j,
+      );
+    }
+    return null;
+  }
+
   /// Массовая команда или `null`, если фраза о другом.
   BulkParse? parse(Utterance utterance, DateTime now) {
     if (utterance.unbalancedQuotes) return null;
@@ -341,41 +384,14 @@ final class BulkParser {
     var durationOnly = false;
     CharSpan? shiftSpan;
     if (action == BulkAction.reschedule) {
-      for (var i = verbIndex + 1; i < tokens.length && shiftSpan == null; i++) {
-        if (tokens[i].text != 'на') continue;
-        var j = i + 1;
-        int? amount;
-        if (j < tokens.length) {
-          final word = tokens[j].text;
-          amount = tokens[j].isNumber ? int.tryParse(word) : _numberWords[word];
-          if (amount != null) j++;
-        }
-        if (j >= tokens.length) continue;
-        final unit = _units[tokens[j].text];
-        if (unit == null) continue;
-        final (shiftUnit, factor) = unit;
-        final value = (amount ?? 1) * factor;
-        var end = j;
-        var sign = 0;
-        if (j + 1 < tokens.length) {
-          final direction = tokens[j + 1].text;
-          if (_later.contains(direction)) sign = 1;
-          if (_earlier.contains(direction)) sign = -1;
-          if (sign != 0) end = j + 1;
-        }
-        if (sign == 0 && _shiftVerbs.contains(verb)) sign = 1;
-        if (value <= 0 || value > 9999) continue;
-        for (var k = i; k <= end; k++) {
+      final found = shiftAfter(tokens, verbIndex);
+      if (found != null) {
+        for (var k = found.from; k <= found.to; k++) {
           used[k] = true;
         }
-        shiftSpan = CharSpan(tokens[i].span.start, tokens[end].span.end);
-        if (sign == 0) {
-          // «перенеси всё на 2 часа»: не сдвиг и не срок — спросим, на
-          // когда.
-          durationOnly = true;
-        } else {
-          shift = DueShift(sign * value, shiftUnit);
-        }
+        shiftSpan = found.span;
+        shift = found.shift;
+        durationOnly = found.shift == null;
       }
     }
 
@@ -549,6 +565,24 @@ final class BulkParser {
       text.write(masked ? ' ' : analysis[i]);
     }
     final target = const DueParser().parse(text.toString(), now);
+    final targetDue = target.dueAt;
+    if (target.sameTime && target.issue == DueIssue.none && targetDue != null) {
+      // «Перенеси всё сегодняшнее на завтра на то же время»: у каждой
+      // задачи своё время — это сдвиг на столько же дней. Без исходного
+      // дня сдвиг не посчитать — переспросим, на когда.
+      final from = selection.day;
+      final days = from == null
+          ? 0
+          : DateTime.utc(targetDue.year, targetDue.month, targetDue.day)
+              .difference(DateTime.utc(from.year, from.month, from.day))
+              .inDays;
+      return BulkParse(
+        action: action,
+        exclude: exclude,
+        selection: selection,
+        shift: days == 0 ? null : DueShift(days, ShiftUnit.days),
+      );
+    }
     return BulkParse(
       action: action,
       exclude: exclude,
@@ -678,4 +712,26 @@ final class BulkParser {
     if (due == null) return null;
     return DateTime(due.year, due.month, due.day);
   }
+}
+
+/// Найденный сдвиг ([BulkParser.shiftAfter]): слова с [from] по [to]
+/// включительно и их место в тексте.
+final class ShiftFound {
+  const ShiftFound({
+    required this.from,
+    required this.to,
+    required this.span,
+    required this.shift,
+    required this.directed,
+  });
+
+  final int from;
+  final int to;
+  final CharSpan span;
+
+  /// `null` — длительность без направления: «перенеси на 2 часа».
+  final DueShift? shift;
+
+  /// Направление названо словом: «позже», «раньше», «пораньше».
+  final bool directed;
 }

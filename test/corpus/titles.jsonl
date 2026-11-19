@@ -62,3 +62,25 @@
 {"id": "ttl-062", "text": "«купить хлеб»", "intent": "unknown", "route": "none", "note": "одни кавычки без вступления — не команда", "source": "manual"}
 {"id": "ttl-063", "text": "хочу «отпуск»", "intent": "unknown", "route": "none", "source": "manual"}
 {"id": "ttl-064", "text": "надо «купить хлеб» и «молоко»", "intent": "unknown", "route": "none", "note": "два названия и других слов — не создание без маркера", "source": "manual"}
+{"id":"ttl-065","text":"добавь задачу купить билеты на 8 марта","intent":"createTask","title":"Купить билеты на 8 марта","due":null,"note":"дата после «билеты на» — на что билеты","source":"probe"}
+{"id":"ttl-066","text":"напомни купить билеты на 8 марта завтра","intent":"createTask","title":"Купить билеты на 8 марта","due":"2026-11-03","precision":"date","source":"probe"}
+{"id":"ttl-067","text":"забронировать столик на пятницу","intent":"createTask","title":"Забронировать столик на пятницу","due":null,"source":"probe"}
+{"id":"ttl-068","text":"напомни завтра заказать торт к пятнице","intent":"createTask","title":"Заказать торт к пятнице","due":"2026-11-03","precision":"date","note":"«к пятнице» после дела при другом дне — в названии","source":"probe"}
+{"id":"ttl-069","text":"напомни к пятнице сдать отчёт","intent":"createTask","title":"Сдать отчёт","due":"2026-11-06","precision":"date","note":"единственный день — срок","source":"probe"}
+{"id":"ttl-070","text":"добавь прочитать книгу «Сто лет одиночества»","intent":"createTask","title":"Прочитать книгу «Сто лет одиночества»","note":"кавычки после дела — его предмет","source":"probe"}
+{"id":"ttl-071","text":"добавь задачу посмотреть фильм «1+1»","intent":"createTask","title":"Посмотреть фильм «1+1»","source":"probe"}
+{"id":"ttl-072","text":"добавь задачу согласовать с Мариной Викторовной акт сверки по ООО «Ромашка» за октябрь","intent":"createTask","title":"Согласовать с Мариной Викторовной акт сверки по ООО «Ромашка» за октябрь","source":"probe"}
+{"id":"ttl-073","text":"напомни завтра позвонить в «Ромашку»","intent":"createTask","title":"Позвонить в «Ромашку»","due":"2026-11-03","precision":"date","note":"предлог перед кавычками не висит","source":"probe"}
+{"id":"ttl-074","text":"напомни купить корм коту, Нода","intent":"createTask","title":"Купить корм коту","note":"обращение к помощнику в конце","source":"probe"}
+{"id":"ttl-075","text":"напомни позвонить маме, спасибо","intent":"createTask","title":"Позвонить маме","source":"probe"}
+{"id":"ttl-076","text":"добавь задачу сказать спасибо","intent":"createTask","title":"Сказать спасибо","note":"«спасибо» здесь — само дело","source":"probe"}
+{"id":"ttl-077","text":"эээ напомни мне ну это завтра утром эээ купить корм коту","intent":"createTask","title":"Купить корм коту","due":"2026-11-03T09:00","precision":"partOfDay","source":"probe"}
+{"id":"ttl-078","text":"напомни мне в общем через два часа перезвонить клиенту","intent":"createTask","title":"Перезвонить клиенту","due":"2026-11-02T18:30","precision":"dateTime","source":"probe"}
+{"id":"ttl-079","text":"СРОЧНО!!! напомни через час отправить счёт","intent":"createTask","title":"Отправить счёт","due":"2026-11-02T17:30","precision":"dateTime","source":"probe"}
+{"id":"ttl-080","text":"очень прошу, напомни через полчаса проверить духовку","intent":"createTask","title":"Проверить духовку","due":"2026-11-02T17:00","precision":"dateTime","source":"probe"}
+{"id":"ttl-081","text":"добавь задачу позвонить Олегу, точнее написать Олегу","intent":"createTask","title":"Написать Олегу","note":"поправка дела на ходу","source":"probe"}
+{"id":"ttl-082","text":"напомни купить молоко, ой, кефир","intent":"createTask","title":"Купить кефир","source":"probe"}
+{"id":"ttl-083","text":"напомни шоб я завтра позвонил брату","intent":"createTask","title":"Позвонить брату","due":"2026-11-03","precision":"date","source":"probe"}
+{"id":"ttl-084","text":"Связной, а Связной, перенеси тренировку на среду","intent":"rescheduleTask","targetQuery":"Тренировка","due":"2026-11-04","precision":"date","note":"обращение по имени с запятой — вступление","source":"probe"}
+{"id":"ttl-085","text":"можно созвон с поставщиком сдвинуть на 18:00?","intent":"rescheduleTask","targetQuery":"Созвон с поставщиком","due":"2026-11-02T18:00","precision":"dateTime","source":"probe"}
+{"id":"ttl-086","text":"отложи ремонт велосипеда на после праздников","intent":"rescheduleTask","targetQuery":"Ремонт велосипеда","due":null,"note":"неясный срок не цель — помощник спросит, на когда","source":"probe"}

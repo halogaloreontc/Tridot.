@@ -20,3 +20,12 @@
 {"id":"move-020","text":"перенеси отчёт на пятницу к","intent":"rescheduleTask","targetQuery":"Отчёт","issue":"missingTime"}
 {"id":"move-021","text":"Добавь задачу «Смета» на завтра в","intent":"createTask","title":"Смета","issue":"missingTime","note":"создание с днём и висящим «в» — тоже «Во сколько?»"}
 {"id":"move-022","text":"Добавь задачу «Смета» #","intent":"createTask","title":"Смета","projects":[],"note":"шаблон «Задача в проект» без метки: голая решётка не метка"}
+{"id":"move-023","text":"перенеси звонок маме на час попозже","intent":"rescheduleTask","targetQuery":"Звонок маме","due":null,"shift":"+1h","note":"«на час позже» у одной задачи — сдвиг от её срока; без срока помощник спросит, на когда","source":"probe"}
+{"id":"move-024","text":"перенеси на час позже","intent":"rescheduleTask","targetQuery":null,"due":null,"shift":"+1h","note":"выбранная задача, сдвиг от её срока","source":"probe"}
+{"id":"move-025","text":"сдвинь визит к стоматологу на полчаса раньше","intent":"rescheduleTask","targetQuery":"Визит к стоматологу","due":null,"shift":"-30m","source":"probe"}
+{"id":"move-026","text":"отодвинь звонок маме на час","intent":"rescheduleTask","targetQuery":"Звонок маме","due":"2026-11-02T17:30","precision":"dateTime","note":"«отодвинь» — как «отложи»: без «позже» длительность — «через час» (как move-013)","source":"probe"}
+{"id":"move-027","text":"отлои звонок маме на час","intent":"rescheduleTask","targetQuery":"Звонок маме","due":"2026-11-02T17:30","precision":"dateTime","note":"опечатка в «отложи»: то же «через час»","source":"probe"}
+{"id":"move-028","text":"перенеси встречу на 2 часа","intent":"rescheduleTask","targetQuery":"Встреча","due":null,"note":"длительность без «позже» после «перенеси» — не цель, не срок: спросим, на когда","source":"probe"}
+{"id":"move-029","text":"сдвинь созвон на завтра на 11","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-03T11:00","precision":"dateTime","note":"«на 11» сразу после дня — час и после глагола отсрочки","source":"probe"}
+{"id":"move-030","text":"сдвинь созвон на завтра на одиннадцать","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-03T11:00","precision":"dateTime","source":"probe"}
+{"id":"move-031","text":"перенеси отчёт с завтра на 2 дня позже","intent":"rescheduleTask","targetQuery":"Отчёт","due":null,"shift":"+2d","note":"исходный день только называет нынешний срок — сдвиг; раньше задача молча уезжала на завтра","source":"manual"}

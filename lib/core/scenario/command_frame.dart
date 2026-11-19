@@ -138,6 +138,13 @@ abstract final class CommandFrame {
       r'кстати|слушай-ка|давай|ну)(?:\s*[,—–:]|\s+-)\s*',
       caseSensitive: false,
     ),
+    // «Кстати не дай мне забыть …», «короче напомни …» — без запятой
+    // только перед словом команды.
+    RegExp(
+      r'^(?:кстати|короче|в\s+общем)\s+(?=(?:напомни|не\s+дай|добавь|'
+      r'запиши|поставь|перенеси|отметь)(?![а-яё]))',
+      caseSensitive: false,
+    ),
     RegExp(
       r'^(?:будь\s+(?:добр|добра|другом|любезен|любезна)|'
       r'будьте\s+(?:добры|любезны)|'
@@ -163,7 +170,8 @@ abstract final class CommandFrame {
   static String _modal(String text) {
     final match = _modalFrame.firstMatch(text);
     if (match == null) return text;
-    final verb = match.group(1)!;
+    final verb = match.group(2)!;
+    final when = match.group(1)!;
     final imperative = _toImperative[verb.toLowerCase().replaceAll('ё', 'е')];
     if (imperative == null) return text;
     final rest = text.substring(match.end);
@@ -186,7 +194,9 @@ abstract final class CommandFrame {
       return text;
     }
     final tail = rest.replaceFirst(RegExp(r'\s*\?+\s*$'), '');
-    return '$imperative$tail';
+    return when.isEmpty
+        ? '$imperative$tail'
+        : '$imperative ${when.trim()}$tail';
   }
 
   static const Set<String> _completionVerbs = <String>{
@@ -201,7 +211,10 @@ abstract final class CommandFrame {
     r'(?:можешь|можете|сможешь|сможете|'
     r'не\s+(?:мог|могла|могли)\s+бы(?:\s+(?:ты|вы))?|'
     r'(?:мог|могла|могли)\s+бы(?:\s+(?:ты|вы))?)'
-    r'\s+(?:мне\s+|нам\s+|пожалуйста\s+)*([а-яё]+)',
+    r'\s+(?:мне\s+|нам\s+|пожалуйста\s+)*'
+    // «не мог бы ты завтра утром напомнить …» — срок до глагола.
+    r'((?:(?:завтра|послезавтра|сегодня|утром|вечером|днем|днём)\s+)*)'
+    r'(?:мне\s+|нам\s+)?([а-яё]+)',
     caseSensitive: false,
   );
 
@@ -243,8 +256,10 @@ abstract final class CommandFrame {
         final match = pattern.firstMatch(value);
         if (match == null) continue;
         final rest = value.substring(match.end);
-        final due = pattern.pattern.contains(_due) &&
-            RegExp('^$_due', caseSensitive: false).hasMatch(rest);
+        final due = (pattern.pattern.contains(_due) &&
+                RegExp('^$_due', caseSensitive: false).hasMatch(rest)) ||
+            (pattern.pattern.contains(_dayWord) &&
+                RegExp('^$_dayWord', caseSensitive: false).hasMatch(rest));
         final deed = rest
             .toLowerCase()
             .replaceAll('ё', 'е')
@@ -272,6 +287,12 @@ abstract final class CommandFrame {
   /// Дальше по фразе — дело глаголом: «… позвонить маме».
   static const String _deed =
       r'(?=.*\s[а-яё]{2,}(?:ть|ти|чь)(?:ся|сь)?(?:[\s,.!?]|$))';
+
+  /// Дальше по фразе — день или время: «в четверг», «завтра», «в 9».
+  static const String _dayWord =
+      r'(?=.*(?<![а-яё])(?:завтра|послезавтра|сегодня|понедельник|вторник|'
+      r'среду|четверг|пятницу|субботу|воскресенье|выходных|выходные|утром|'
+      r'вечером|днем|днём|\d+)(?![а-яё]))';
 
   /// Дальше — срок или дело глаголом.
   static const String _dueOrDeed = '(?:$_due|$_deed)';
@@ -320,7 +341,7 @@ abstract final class CommandFrame {
     (
       RegExp(
         r'^(?:кинь|закинь|брось|черкни|черкани|занеси|внеси)\s+в\s+'
-        r'(?:задачи|список\s+дел|дела|туду)(?![а-яё])\s*:?',
+        r'(?:задачи|список(?:\s+дел)?|дела|туду)(?![а-яё])\s*:?',
         caseSensitive: false,
       ),
       'добавь задачу ',
@@ -335,6 +356,70 @@ abstract final class CommandFrame {
     (
       RegExp(r'^не\s+дай\s+(?:мне\s+)?забыть(?![а-яё])', caseSensitive: false),
       'напомни',
+    ),
+    // «Хочется не забыть поздравить Сергея», «было бы здорово не забыть
+    // про врача в четверг» — просьба напомнить, сказанная пожеланием.
+    (
+      RegExp(
+        r'^(?:мне\s+)?(?:хочется|хочу|хотелось\s+бы|важно|надо\s+бы|'
+        r'было\s+бы\s+(?:здорово|хорошо|неплохо|круто)|'
+        r'(?:хорошо|неплохо)\s+бы)\s+не\s+забыть(?![а-яё])'
+        '(?:$_dayWord|$_deed)',
+        caseSensitive: false,
+      ),
+      'напомни',
+    ),
+    // «Хорошо бы в выходные помыть машину», «неплохо бы созвониться
+    // с бухгалтером до среды» — дело глаголом: как «надо …».
+    (
+      RegExp(
+        '^(?:хорошо|неплохо|было\\s+бы\\s+(?:здорово|хорошо|неплохо))'
+        '(?:\\s+бы)?(?![а-яё])$_deed',
+        caseSensitive: false,
+      ),
+      'надо',
+    ),
+    // «Буду признателен, если напомнишь оплатить кредит» — вежливое
+    // «напомни».
+    (
+      RegExp(
+        r'^(?:буду\s+)?(?:признателен|признательна|благодарен|благодарна)'
+        r'\s*,?\s*если\s+(?:ты\s+)?(?:мне\s+)?напомнишь(?![а-яё])',
+        caseSensitive: false,
+      ),
+      'напомни',
+    ),
+    // «Ты напомнишь мне в 6 полить цветы?» — просьба вопросом, а дальше
+    // дело глаголом.
+    (
+      RegExp(
+        '^(?:а\\s+)?(?:ты\\s+)?напомнишь(?![а-яё])$_deed',
+        caseSensitive: false,
+      ),
+      'напомни',
+    ),
+    // «Я хочу в субботу разобрать балкон» — желание со сроком и делом
+    // глаголом — дело на этот день. Без срока («хочу спать») — как есть.
+    (
+      RegExp(
+        '^(?:я\\s+)?хочу(?![а-яё])(?!\\s+не\\s)$_dayWord$_deed',
+        caseSensitive: false,
+      ),
+      'надо',
+    ),
+    // «Не забудь, что у Маши день рождения в субботу» — в начале фразы,
+    // со сроком или делом: как «напомни».
+    (
+      RegExp(
+        '^не\\s+забудь(?:те)?(?![а-яё])(?:$_dayWord|$_deed)',
+        caseSensitive: false,
+      ),
+      'напомни',
+    ),
+    // «Так, записывай: послезавтра в 14:00 встреча» — как «запиши».
+    (
+      RegExp(r'^записывай(?:те)?(?![а-яё])', caseSensitive: false),
+      'запиши',
     ),
     // «Запомни: завтра в 10 позвонить маме» — дело со сроком или глаголом;
     // «запомни: хлеб» — как есть.
@@ -365,8 +450,14 @@ abstract final class CommandFrame {
       'заверши',
     ),
     (
-      RegExp('^(?:перекинь|отодвинь)(?![а-яё])$_due', caseSensitive: false),
+      RegExp('^перекинь(?![а-яё])$_due', caseSensitive: false),
       'перенеси',
+    ),
+    // «Отодвинь звонок на час» — как «отложи»: длительность без «позже» —
+    // сдвиг вперёд.
+    (
+      RegExp('^отодвинь(?![а-яё])$_due', caseSensitive: false),
+      'отложи',
     ),
     (
       RegExp(

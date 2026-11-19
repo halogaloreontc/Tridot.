@@ -1,6 +1,6 @@
 /// Время на часах словами: «в девять», «к восьми утра», «в восемь
 /// тридцать», «полдевятого», «в половине девятого», «без пятнадцати
-/// девять». Так его пишет распознаватель голоса, а разбор срока понимает
+/// девять», «в полдень». Так его пишет распознаватель голоса, а разбор срока понимает
 /// цифры.
 ///
 /// Только находит такие места: что с ними делать, решает вызывающий.
@@ -135,6 +135,25 @@ abstract final class SpokenTime {
     'двенадцатого': 12,
   };
 
+  /// Полдень и полночь: «в полдень» — 12:00, «к полуночи» — 0:00.
+  static const Map<String, int> _noon = <String, int>{
+    'полдень': 12,
+    'полудню': 12,
+    'полудня': 12,
+    'полночь': 0,
+    'полуночи': 0,
+  };
+
+  /// Предлоги перед «полднем»: «после полудня» — не ровно 12:00.
+  static const Set<String> _noonPrepositions = <String>{
+    'в',
+    'к',
+    'ко',
+    'до',
+    'около',
+    'на',
+  };
+
   /// Минуты до часа: «без пятнадцати девять», «без четверти восемь».
   static const Map<String, int> _minutesBefore = <String, int>{
     'пяти': 5,
@@ -182,7 +201,26 @@ abstract final class SpokenTime {
           continue;
         }
       }
-      if ((word == 'пол' || word == 'половине' || word == 'половина') &&
+      // «в полдень», «к полуночи», «до полудня» — после предлога.
+      // «до обеда» — к полудню; «с утра до обеда» — промежуток, не срок.
+      final beforeLunch = word == 'обеда' &&
+          i > 0 &&
+          at(i - 1) == 'до' &&
+          !(i > 1 && (at(i - 2) == 'утра' || at(i - 2) == 'утречка'));
+      final noon = beforeLunch ? 12 : _noon[word];
+      if (noon != null &&
+          i > 0 &&
+          adjacent(i - 1, i) &&
+          _noonPrepositions.contains(at(i - 1))) {
+        result.add(
+          SpokenTimeMatch(words[i].start, words[i].end, noon, 0, named: true),
+        );
+        continue;
+      }
+      if ((word == 'пол' ||
+              word == 'половине' ||
+              word == 'половина' ||
+              word == 'половину') &&
           next(i)) {
         final ordinal = _ordinals[at(i + 1)];
         if (ordinal != null) {
@@ -210,6 +248,7 @@ abstract final class SpokenTime {
                 words[k + 1].end,
                 previous,
                 60 - before,
+                twelveHour: true,
               ),
             );
             i = k + 1;
@@ -364,19 +403,33 @@ abstract final class SpokenTime {
   }
 
   static SpokenTimeMatch _half(int start, int end, int ordinal) =>
-      SpokenTimeMatch(start, end, ordinal == 1 ? 12 : ordinal - 1, 30);
+      SpokenTimeMatch(
+        start,
+        end,
+        ordinal == 1 ? 12 : ordinal - 1,
+        30,
+        twelveHour: true,
+      );
 }
 
 /// Время словами в тексте: [start]–[end] — слова времени без предлога.
 /// Число месяца словами — тоже здесь ([SpokenTimeMatch.date]).
 final class SpokenTimeMatch {
-  const SpokenTimeMatch(this.start, this.end, this.hour, this.minute)
-      : day = null;
+  const SpokenTimeMatch(
+    this.start,
+    this.end,
+    this.hour,
+    this.minute, {
+    this.named = false,
+    this.twelveHour = false,
+  }) : day = null;
 
   /// Число месяца словами: «пятнадцатого ноября» → «15» перед «ноября».
   const SpokenTimeMatch.date(this.start, this.end, int this.day)
       : hour = 0,
-        minute = null;
+        minute = null,
+        named = false,
+        twelveHour = false;
 
   final int start;
   final int end;
@@ -387,6 +440,14 @@ final class SpokenTimeMatch {
 
   /// Число месяца, если это дата, а не время.
   final int? day;
+
+  /// Время названо словом, а не числом: «полдень», «полночь». Голосовой
+  /// текст его не переписывает цифрами — «в полдень» и так понятно.
+  final bool named;
+
+  /// Разговорная форма на двенадцатичасовом циферблате: «полшестого»,
+  /// «без четверти пять» — утро это или вечер, из неё не видно.
+  final bool twelveHour;
 
   /// «9», «8:30», «15» (число месяца).
   String get digits => day != null

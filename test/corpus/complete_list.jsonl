@@ -49,3 +49,6 @@
 {"id":"done-032","text":"отправь список задач маме","intent":"unknown","route":"none"}
 {"id":"done-033","text":"распечатай список задач на завтра","intent":"unknown","route":"none"}
 {"id":"done-034","text":"покажи список задач на завтра","intent":"listTasks","note":"просьба показать — список, как и раньше"}
+{"id":"done-035","text":"готово с отчётом","intent":"completeTask","targetQuery":"Отчётом","note":"«с» после слова о готовности — не цель; творительный не приводится (как «С врачом всё, сделано»)","source":"probe"}
+{"id":"done-036","text":"отметь звонок маме как сделанный","intent":"completeTask","targetQuery":"Звонок маме","source":"probe"}
+{"id":"done-037","text":"оплатила коммуналку, вычеркни","intent":"completeTask","targetQuery":"Оплатила коммуналку","note":"просьба отметить в конце — не цель","source":"probe"}

@@ -151,6 +151,22 @@ final class Utterance {
               recentConnectorId: recentConnectorId,
             );
 
+  /// То же сообщение с другим разбором срока: часть дат во фразе — не срок,
+  /// а часть названия («билеты на 8 марта»).
+  Utterance withDue(DueParseResult due) => Utterance._(
+        original: original,
+        normalized: normalized,
+        analysisText: analysisText,
+        tokens: tokens,
+        quotedTitles: quotedTitles,
+        unbalancedQuotes: unbalancedQuotes,
+        hashtags: hashtags,
+        due: due,
+        chatTaskId: chatTaskId,
+        awaitingAnswer: awaitingAnswer,
+        recentConnectorId: recentConnectorId,
+      );
+
   /// Коннектор, который отвечал в этом чате одно-два сообщения назад и не
   /// дольше нескольких минут назад (контекст сессии,
   /// `AssistantController`); `null` — контекста нет. Так «сделай бэкап»
@@ -292,10 +308,17 @@ final class Utterance {
   /// и меток. Регистр пользователя сохраняется, пробелы схлопываются, знаки
   /// препинания по краям и «осиротевшие» запятые убираются. Пустая строка,
   /// если не осталось ни одного слова.
-  String remainder(Iterable<CharSpan> remove) {
+  ///
+  /// [keepQuoted] — оставить названия в кавычках вместе с кавычками:
+  /// «посмотреть фильм «1+1»» — кавычки здесь часть дела, а не название.
+  String remainder(Iterable<CharSpan> remove, {bool keepQuoted = false}) {
     final source = allCaps ? _lowerSameLength(original) : original;
     final chars = source.split('');
     for (var i = 0; i < chars.length; i++) {
+      if (keepQuoted &&
+          quotedTitles.any((QuotedTitle q) => q.span.contains(i))) {
+        continue;
+      }
       // Кавычки и метки уже заменены пробелами в analysisText.
       if (analysisText[i] == ' ' && original[i].trim().isNotEmpty) {
         chars[i] = ' ';
