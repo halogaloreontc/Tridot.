@@ -29,6 +29,13 @@ lib/web_widget  веб-помощник склада (flutter build web -t lib/w
 - `lib/app/home_page.dart` большой: новое — отдельным виджетом в
   `lib/app/widgets/` или `lib/app/shell/`, а не в него.
 
+## Интерфейс
+
+- Поле в фокусе всегда видно над клавиатурой (ADR-040) — проверяют
+  `test/app/keyboard_safe_test.dart` и
+  `test/passwords/passwords_keyboard_test.dart`: новое поле ввода — новая
+  строка в их списках.
+
 ## Распознавание
 
 - Все слои разбора — один модуль `RecognitionLayers`

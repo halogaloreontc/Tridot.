@@ -26,6 +26,7 @@ import 'app/security/device_auth.dart';
 import 'app/voice/device_voice_recognizer.dart';
 import 'app/voice/voice_kit.dart';
 import 'app/voice/vosk_voice_recognizer.dart';
+import 'app/widgets/keyboard_safe.dart';
 import 'core/app_info.dart';
 import 'core/build_flags.dart';
 import 'core/chats/chat_store.dart';
@@ -673,11 +674,14 @@ final class _AssistantAppState extends State<AssistantApp> {
       builder: (BuildContext context, Widget? _) => MaterialApp(
         builder: (BuildContext context, Widget? child) {
           final content = child ?? const SizedBox.shrink();
-          return _overlay(
-            context,
-            lock == null
-                ? content
-                : AppLockGate(controller: lock, child: content),
+          // Поле в фокусе — целиком над клавиатурой (ADR-040).
+          return KeyboardSafeScope(
+            child: _overlay(
+              context,
+              lock == null
+                  ? content
+                  : AppLockGate(controller: lock, child: content),
+            ),
           );
         },
         title: AppInfo.name,

@@ -14,6 +14,7 @@ import '../app/widgets/action_card_view.dart';
 import '../app/widgets/chat_feed_rhythm.dart';
 import '../app/widgets/command_highlight.dart';
 import '../app/widgets/composer_shell.dart';
+import '../app/widgets/keyboard_safe.dart';
 import '../app/widgets/message_row.dart';
 import '../app/widgets/warehouse_card_view.dart';
 import '../core/chats/chat_models.dart';
@@ -35,6 +36,9 @@ final class WidgetApp extends StatelessWidget {
         builder: (BuildContext context, Widget? _) => MaterialApp(
           title: 'Связной',
           debugShowCheckedModeBanner: false,
+          // Поле в фокусе — целиком над клавиатурой (ADR-040).
+          builder: (BuildContext context, Widget? child) =>
+              KeyboardSafeScope(child: child ?? const SizedBox.shrink()),
           theme: AssistantTheme.light(),
           darkTheme: AssistantTheme.dark(),
           themeMode: switch (session.theme) {
