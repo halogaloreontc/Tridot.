@@ -95,3 +95,17 @@
 {"id": "calc-095", "text": "найди квадратный корень из 144", "connector": "calc", "intent": "calc.evaluate", "answer": "12", "source": "manual"}
 {"id": "calc-096", "text": "сколько будет полтора плюс два", "connector": "calc", "intent": "calc.evaluate", "answer": "3,5", "source": "manual"}
 {"id": "calc-097", "text": "полторы тысячи разделить на три", "connector": "calc", "intent": "calc.evaluate", "answer": "500", "source": "manual", "note": "«полторы тысячи» — не 1,5 и не пример без числа"}
+{"id": "calc-098", "text": "4x8", "connector": "calc", "intent": "calc.evaluate", "answer": "32", "source": "manual", "note": "латинская x вплотную между числами — умножение (сообщение владельца)"}
+{"id": "calc-099", "text": "4х8", "connector": "calc", "intent": "calc.evaluate", "answer": "32", "source": "manual", "note": "русская «х» вплотную"}
+{"id": "calc-100", "text": "12X3", "connector": "calc", "intent": "calc.evaluate", "answer": "36", "source": "manual", "note": "заглавная X"}
+{"id": "calc-101", "text": "2,5x4", "connector": "calc", "intent": "calc.evaluate", "answer": "10", "source": "manual"}
+{"id": "calc-102", "text": "4x8x2", "connector": "calc", "intent": "calc.evaluate", "answer": "64", "source": "manual"}
+{"id": "calc-103", "text": "сколько будет 4x8?", "connector": "calc", "intent": "calc.evaluate", "answer": "32", "source": "manual"}
+{"id": "calc-104", "text": "посчитай 4х8", "connector": "calc", "intent": "calc.evaluate", "answer": "32", "source": "manual"}
+{"id": "calc-105", "text": "4x8=", "connector": "calc", "intent": "calc.evaluate", "answer": "32", "source": "manual"}
+{"id": "calc-106", "text": "4*8", "connector": "calc", "intent": "calc.evaluate", "answer": "32", "source": "manual"}
+{"id": "calc-107", "text": "4×8", "connector": "calc", "intent": "calc.evaluate", "answer": "32", "source": "manual"}
+{"id": "calc-108", "text": "4÷8", "connector": "calc", "intent": "calc.evaluate", "answer": "0,5", "source": "manual"}
+{"id": "calc-109", "text": "купить доску 4x8", "intent": "createTask", "title": "Купить доску 4x8", "note": "размер в названии задачи — не пример", "source": "manual"}
+{"id": "calc-110", "text": "добавь задачу заказать плитку 30х60", "intent": "createTask", "title": "Заказать плитку 30х60", "note": "размер с русской «х» остаётся в названии", "source": "manual"}
+{"id": "calc-111", "text": "4:8", "connector": "calc", "intent": "calc.evaluate", "answer": "0,5", "note": "двоеточие с одной цифрой после — деление, а не время", "source": "manual"}

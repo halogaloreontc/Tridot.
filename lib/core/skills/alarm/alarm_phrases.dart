@@ -326,7 +326,12 @@ abstract final class AlarmPhrases {
       anchor = i;
       break;
     }
-    if (kind == null || anchor > 5) return null;
+    if (kind == null) return null;
+    if (kind == AlarmKind.alarm) {
+      final first = _wakeFirst(tokens, anchor, utterance, now);
+      if (first != null) return first;
+    }
+    if (anchor > 5) return null;
     var setVerb = wake;
     for (final word in tokens.take(anchor)) {
       if (_setVerbs.contains(word)) {
@@ -375,6 +380,50 @@ abstract final class AlarmPhrases {
     }
     return _alarm(reader, now, label);
   }
+
+  /// «Мне вставать в 5:40, поставь будильник», «завтра подъём в 6,
+  /// заведи будильник»: время — в начале, о подъёме, а просьба —
+  /// в конце. Кроме времени, в начале — только слова о подъёме
+  /// ([_wakeClause]).
+  static AlarmRequest? _wakeFirst(
+    List<String> tokens,
+    int anchor,
+    Utterance utterance,
+    DateTime now,
+  ) {
+    if (anchor < 2 || !_setVerbs.contains(tokens[anchor - 1])) return null;
+    if (!tokens.skip(anchor + 1).every(_tailFillers.contains)) return null;
+    final head = tokens.take(anchor - 1).toList(growable: false);
+    if (!head.any(_wakeClause.contains)) return null;
+    final reader = _Reader(
+      <String>[
+        for (final word in head)
+          if (!_wakeClause.contains(word) && !_leadFillers.contains(word)) word,
+      ],
+      timer: false,
+    );
+    reader.read();
+    if (reader.leftover || reader.strayNumber || !reader.hasTime) return null;
+    final label = utterance.quotedTitles.isEmpty
+        ? null
+        : _label(utterance.quotedTitles.first.text);
+    return _alarm(reader, now, label);
+  }
+
+  static const Set<String> _wakeClause = <String>{
+    'вставать',
+    'встать',
+    'встаю',
+    'проснуться',
+    'просыпаться',
+    'просыпаюсь',
+    'подъем',
+    'подниматься',
+    'надо',
+    'нужно',
+    'мне',
+    'нам',
+  };
 
   static AlarmRequest _alarm(_Reader reader, DateTime now, String? label) {
     final days = reader.days.toList()..sort();

@@ -1308,8 +1308,13 @@ final class _Lexer {
         '∛' => _Kind.cbrt,
         '²' => _Kind.square,
         '³' => _Kind.cube,
-        // «3 х 4»: буква «х» — умножение, только с пробелами вокруг.
-        'x' || 'х' when _spaceAround(_pos) => _Kind.times,
+        // «3 х 4», «4x8», «2,5х4»: буква «х» (латинская или русская) —
+        // умножение с пробелами вокруг или вплотную между цифрами.
+        'x' ||
+        'х'
+            when _spaceAround(_pos) ||
+                (_digitBefore(_pos) && _digitAfter(_pos)) =>
+          _Kind.times,
         _ => null,
       };
       if (symbol != null) {
@@ -1318,7 +1323,8 @@ final class _Lexer {
           _pos += 2;
           continue;
         }
-        final tight = _digitBefore(_pos) && _digitAfter(_pos);
+        // «÷» датой или кодом не бывает: «4÷8» — пример и вплотную.
+        final tight = char != '÷' && _digitBefore(_pos) && _digitAfter(_pos);
         _tokens.add(_Token(symbol, tight: tight));
         _pos++;
         continue;

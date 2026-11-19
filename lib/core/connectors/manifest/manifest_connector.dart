@@ -249,6 +249,54 @@ final class ManifestConnector
     'годиков',
   };
 
+  /// Часы телефона: «сколько осталось на таймере» — не склад.
+  static const List<String> _deviceStems = <String>[
+    'таймер',
+    'будильник',
+    'секундомер',
+  ];
+
+  /// Надобность: «сколько стульев нужно для гостей», «сколько надо краски».
+  static const Set<String> _needWords = <String>{
+    'нужно',
+    'надо',
+    'нужен',
+    'нужна',
+    'нужны',
+    'понадобится',
+    'понадобятся',
+    'потребуется',
+    'потребуются',
+    'хватит',
+  };
+
+  /// Единица после «в»: «сколько сантиметров в дюйме», «сколько секунд
+  /// в сутках» — перевод единиц, а не товар.
+  static const Set<String> _unitsIn = <String>{
+    'дюйме',
+    'футе',
+    'миле',
+    'ярде',
+    'метре',
+    'сантиметре',
+    'километре',
+    'литре',
+    'галлоне',
+    'килограмме',
+    'кило',
+    'грамме',
+    'фунте',
+    'унции',
+    'тонне',
+    'часе',
+    'минуте',
+    'сутках',
+    'неделе',
+    'месяце',
+    'году',
+    'веке',
+  };
+
   static const List<String> _currencyStems = <String>[
     'доллар',
     'евро',
@@ -414,7 +462,15 @@ final class ManifestConnector
     final lead = _withoutLead(text);
     // «покажи мне, где лежит …»: запятая после связок мешает их снять.
     final plain = text.replaceAll(RegExp(r'\s*,\s*'), ' ');
-    final candidates = <String>{text, if (lead != null) lead, plain};
+    final priced = ManifestQuery.priceForm(lead ?? text);
+    final arrivals = ManifestQuery.arrivalsForm(lead ?? text);
+    final candidates = <String>{
+      if (priced != null) priced,
+      if (arrivals != null) arrivals,
+      text,
+      if (lead != null) lead,
+      plain,
+    };
     // «Где лежит» без артикула (кнопка «Где лежит…» и сразу «Отправить»):
     // иначе правило «где {q}» искало бы на складе слово «лежит». Смотрим
     // во всех вариантах текста раньше обычных правил: «подскажи, где
@@ -1044,9 +1100,20 @@ final class ManifestConnector
     if (words.first == 'до' ||
         words.any(
           (String w) =>
-              _notGoods.contains(w) || _currencyStems.any(w.startsWith),
+              _notGoods.contains(w) ||
+              _currencyStems.any(w.startsWith) ||
+              _deviceStems.any(w.startsWith),
         )) {
       return false;
+    }
+    // «Сколько стульев нужно для гостей» — расчёт, а не остаток; «сколько
+    // сантиметров в дюйме» — перевод единиц.
+    if (words.any(_needWords.contains)) return false;
+    for (var i = 0; i + 1 < words.length; i++) {
+      if ((words[i] == 'в' || words[i] == 'во') &&
+          _unitsIn.contains(words[i + 1])) {
+        return false;
+      }
     }
     for (final word in words) {
       if (_taskWord(word) ||

@@ -1251,7 +1251,29 @@ abstract final class PasswordPhrases {
   /// её не получает ни один сетевой коннектор (раздел 5.9). Это и
   /// разобранная команда, и любое упоминание слова «пароль» ([mentions]).
   static bool looksLike(Utterance utterance) =>
-      mentions(utterance) || parse(utterance) != null;
+      mentions(utterance) ||
+      mentionsCode(utterance.normalized) ||
+      parse(utterance) != null;
+
+  /// ПИН-код, CVV, кодовое слово, «код от/доступа/сейфа …» — тоже секрет:
+  /// «где записан пин от домофона?», «сколько на складе пин-кодов» не
+  /// уходят на склад (раздел 5.9). Слово целиком: «Пинск», «пинцет»,
+  /// «кодовый замок», «код ячейки» — не секрет.
+  static bool mentionsCode(String text) => _codeMention.hasMatch(text);
+
+  /// Первое упоминание кода в [text] ([mentionsCode]) или `null`.
+  static RegExpMatch? codeMention(String text) => _codeMention.firstMatch(text);
+
+  static final RegExp _codeMention = RegExp(
+    r'(?<![a-zа-яё])(?:'
+    r'пин(?:а|у|ом)?|пин-?код[а-яё]*|pin(?:-?code)?|cvv|cvc|'
+    r'кодов(?:ое|ого|ым|ом)\s+слов[а-яё]*|'
+    r'код(?:а|у|ом|ы|ов)?\s+(?:от|для|к|ко|доступа|сейфа|домофона|'
+    r'подъезда|двери|калитки|замка|карты|карточки|восстановления|'
+    r'подтверждения|безопасности|из\s+смс|смс|входа)'
+    r')(?![a-zа-яё])',
+    caseSensitive: false,
+  );
 
   /// Слово «пароль» в любой форме («пароли», «паролем», «мастер-пароль»),
   /// «password», «пасс».

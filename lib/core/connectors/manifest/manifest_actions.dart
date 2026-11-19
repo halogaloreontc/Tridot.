@@ -373,8 +373,15 @@ extension _Actions on ManifestConnector {
   /// действия»: запрет объясняет `run`, а фраза не уходит в задачи.
   ConnectorMatch? matchAction(String text, Utterance utterance) {
     if (_actRules.isEmpty) return null;
-    final plain = text.replaceAll(RegExp(r'\s*,\s*'), ' ');
-    for (final candidate in <String>{text, plain}) {
+    // «… в 215-3-2-1 плиз»: вежливость в конце — не часть ячейки.
+    final polite = text.replaceFirst(_politeTail, '');
+    // «Перенеси 64115 из 215-1-1-1 в 215-3-2-1»: «перенеси» — слово задач
+    // (ADR-013), но из ячейки в ячейку переносят только товар.
+    final moved = _cellToCell.hasMatch(polite)
+        ? polite.replaceFirst(_carryVerb, 'перемести ')
+        : polite;
+    final plain = moved.replaceAll(RegExp(r'\s*,\s*'), ' ');
+    for (final candidate in <String>{text, moved, plain}) {
       final found = _actHit(candidate, utterance, aliased: false);
       if (found != null) return found;
       final rest = _withoutAlias(candidate);
@@ -385,6 +392,17 @@ extension _Actions on ManifestConnector {
     }
     return null;
   }
+
+  static final RegExp _politeTail =
+      RegExp(r'[\s,]+(?:пожалуйста|плиз|пж|пжлст|спасибо)$');
+
+  static final RegExp _carryVerb = RegExp(r'^(?:перенеси|перенесите)\s+');
+
+  /// «перенеси … из 215-1-1-1 в 215-3-2-1»: обе ячейки — кодом склада.
+  static final RegExp _cellToCell = RegExp(
+    r'^(?:перенеси|перенесите)\s+\S.*\s(?:из|с)\s+\d{3}[a-zа-яё]*\s*-\s*'
+    r'[0-9a-zа-яё].*\s(?:в|на)\s+\d{3}[a-zа-яё]*\s*-\s*[0-9a-zа-яё]',
+  );
 
   ConnectorMatch? _actHit(
     String text,

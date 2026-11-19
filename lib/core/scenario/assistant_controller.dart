@@ -15,6 +15,7 @@ import '../personas/persona_address.dart';
 import '../replies/reply_library.dart';
 import '../services/clock.dart';
 import '../skills/passwords/passwords_phrases.dart';
+import 'command_frame.dart';
 import 'command_spans.dart';
 import 'layout_fix.dart';
 import 'recognition_layers.dart';
@@ -1229,6 +1230,27 @@ final class AssistantController {
           depth: depth,
           reply: reply,
         );
+      }
+      // «Не дай мне забыть пароль от почты», «напомни-ка пароль от почты»
+      // при выключенном навыке: без обёртки это явная фраза о паролях —
+      // ответ «Пароли выключены», а не «не понял» и не задача.
+      if (_passwordsOff && layered.text == message) {
+        final framed =
+            CommandFrame.strip(message, fromVoice: session.fromVoice);
+        final framedPasswords = framed == null
+            ? null
+            : PasswordPhrases.parse(
+                _analyze(framed, recent, awaiting: utterance.awaitingAnswer),
+              );
+        if (framedPasswords != null &&
+            framedPasswords.confidence >= PasswordPhrases.firm) {
+          session.lastConnectorId = null;
+          return session.reply(
+            'passwords.off',
+            intent: 'passwords.off',
+            status: AssistantStatus.noAction,
+          );
+        }
       }
       if (layered.text != message) {
         utterance = layered.utterance;

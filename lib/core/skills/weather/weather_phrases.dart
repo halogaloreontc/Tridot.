@@ -134,7 +134,15 @@ abstract final class WeatherPhrases {
     'одеть',
   };
 
-  static const Set<String> _wearQuestion = <String>{'что', 'во', 'как'};
+  static const Set<String> _wearQuestion = <String>{
+    'что',
+    'чо',
+    'чё',
+    'че',
+    'шо',
+    'во',
+    'как',
+  };
 
   static const Set<String> _temperature = <String>{
     'температура',
@@ -294,6 +302,14 @@ abstract final class WeatherPhrases {
     if (words.any(_taskVerbs.contains) && !_remindQuestion(utterance)) {
       return null;
     }
+    // «Погоду не надо, спасибо» — отказ; «переведи 30 градусов цельсия в
+    // фаренгейты» — перевод единиц; «погода на рынке недвижимости» —
+    // переносный смысл.
+    if (_declined(words) ||
+        words.any(_convertVerbs.contains) ||
+        _figurative(words)) {
+      return null;
+    }
     final weather = words.any(_weather.contains);
     var forecast = false;
     for (var i = 0; i < words.length; i++) {
@@ -368,7 +384,7 @@ abstract final class WeatherPhrases {
             ? 0
             : DateTime.saturday - now.weekday;
       }
-    } else if (week && !wear) {
+    } else if ((week || _manyDays(words)) && !wear) {
       range = WeatherRange.week;
     }
 
@@ -400,6 +416,77 @@ abstract final class WeatherPhrases {
           ? null
           : DateTime(today.year, today.month, today.day + offset),
     );
+  }
+
+  /// «Не надо», «не нужно», «не интересует» сразу после «не».
+  static bool _declined(List<String> words) {
+    for (var i = 0; i + 1 < words.length; i++) {
+      if (words[i] == 'не' && _declineWords.contains(words[i + 1])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static const Set<String> _declineWords = <String>{
+    'надо',
+    'нужно',
+    'нужна',
+    'нужен',
+    'интересует',
+    'интересно',
+    'хочу',
+    'спрашивал',
+    'спрашивала',
+  };
+
+  static const Set<String> _convertVerbs = <String>{
+    'переведи',
+    'перевести',
+    'переводи',
+    'конвертируй',
+    'сконвертируй',
+    'пересчитай',
+    'пересчитать',
+  };
+
+  /// «Погода на рынке», «погода в семье», «погода в коллективе».
+  static bool _figurative(List<String> words) {
+    for (var i = 0; i + 1 < words.length; i++) {
+      if (!_weather.contains(words[i])) continue;
+      final at = words[i + 1];
+      if ((at == 'на' || at == 'в' || at == 'во') &&
+          i + 2 < words.length &&
+          _figurativeStems.any(words[i + 2].startsWith)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static const List<String> _figurativeStems = <String>[
+    'рынк',
+    'бирж',
+    'семь',
+    'коллектив',
+    'отношени',
+    'душе',
+    'стране',
+    'политик',
+    'экономик',
+  ];
+
+  /// «Прогноз на 10 дней», «погода на 5 дней» — несколько дней вперёд.
+  static bool _manyDays(List<String> words) {
+    for (var i = 0; i + 1 < words.length; i++) {
+      final days = int.tryParse(words[i]);
+      if (days != null &&
+          days >= 2 &&
+          (words[i + 1] == 'дней' || words[i + 1] == 'дня')) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// «о погоде», «про погоду» — погода как тема фразы.

@@ -1,3 +1,5 @@
+import '../utterance.dart';
+
 /// Запрос к складу словами пользователя: что искать и как спросили.
 ///
 /// Описание склада (`assistant/1`) знает свои фразы — «сколько {q}», «где
@@ -31,6 +33,80 @@ abstract final class ManifestQuery {
     }
     return q;
   }
+
+  /// «Сколько стоят пуфы», «сколько сттоит 64115», «скоолько стит 64115»
+  /// → «сколько стоит …»: глагол цены в другой форме или с одной опечаткой
+  /// (не в первой и не в последней букве). `null` — не вопрос о цене.
+  static String? priceForm(String text) {
+    final match = _priceAsk.firstMatch(text);
+    if (match == null) return null;
+    final verb = match.group(1)!;
+    final price = _priceForms.contains(verb) ||
+        (verb.length >= 4 &&
+            (Utterance.isTypoOf(verb, 'стоит') ||
+                Utterance.isTypoOf(verb, 'стоят')));
+    if (!price) return null;
+    final normalized = 'сколько стоит ${text.substring(match.end).trim()}';
+    return normalized == text ? null : normalized;
+  }
+
+  /// «Склад вчера чё было по приходам», «что там по приходам сегодня» →
+  /// «приходы вчера», «приходы сегодня»: кроме дня и слова о приходах —
+  /// только связки. `null` — не то.
+  static String? arrivalsForm(String text) {
+    final words = text
+        .split(RegExp(r'[\s,.!?]+'))
+        .where((String w) => w.isNotEmpty)
+        .toList(growable: false);
+    String? day;
+    var arrivals = false;
+    for (final word in words) {
+      if (word == 'сегодня' || word == 'вчера') {
+        if (day != null && day != word) return null;
+        day = word;
+      } else if (word.startsWith('приход') ||
+          word == 'пришло' ||
+          word.startsWith('поступ')) {
+        arrivals = true;
+      } else if (!_arrivalsFiller.contains(word)) {
+        return null;
+      }
+    }
+    if (!arrivals || day == null) return null;
+    final canonical = 'приходы $day';
+    return canonical == text ? null : canonical;
+  }
+
+  static const Set<String> _arrivalsFiller = <String>{
+    'что',
+    'чё',
+    'че',
+    'чо',
+    'было',
+    'по',
+    'там',
+    'какие',
+    'у',
+    'нас',
+    'на',
+    'складе',
+    'склад',
+    'за',
+    'есть',
+  };
+
+  static final RegExp _priceAsk =
+      RegExp(r'^с+к+о+л+ь+к+о+\s+(с[а-я]+)\s+(?=\S)');
+
+  static const Set<String> _priceForms = <String>{
+    'стоит',
+    'стоят',
+    'стоил',
+    'стоила',
+    'стоило',
+    'стоили',
+    'стоить',
+  };
 
   static final RegExp _spaces = RegExp(r'\s+');
   static final RegExp _edgePunctuation =
@@ -139,6 +215,8 @@ abstract final class ManifestQuery {
     // «за неделю», «что сегодня пришло на склад» — без «на склад».
     final arrivals = text
         .replaceAll(RegExp(r'поступлени[яйе]'), 'приходы')
+        // «Что поступило сегодня» — «что пришло сегодня».
+        .replaceAll(RegExp(r'(?<![а-я])поступил[оаи]?(?![а-я])'), 'пришло')
         .replaceAll(
           RegExp(
             r'за\s+последн(?:юю\s+неделю|ие\s+(?:7|семь)\s+дней)',

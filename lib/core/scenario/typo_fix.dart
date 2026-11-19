@@ -1,4 +1,5 @@
 import '../connectors/utterance.dart';
+import '../connectors/verb_forms.dart';
 import 'command_lexicon.g.dart';
 import 'route_policy.dart';
 
@@ -108,6 +109,9 @@ abstract final class TypoFix {
     // «По утрам», «по вечерам», «по средам» — дательный множественного, а
     // не опечатка в «утром», «вечером».
     if (word.endsWith('ам') || word.endsWith('ям')) return null;
+    // Инфинитив — настоящее слово, а не опечатка в повелительном: «а как
+    // перенести задачу?» — вопрос, «перенеси» сделало бы его командой.
+    final infinitive = VerbForms.isInfinitive(word);
     String? best;
     var bestCount = 0;
     var second = 0;
@@ -117,6 +121,7 @@ abstract final class TypoFix {
           !Utterance.isTypoOf(word, candidate)) {
         continue;
       }
+      if (infinitive && !VerbForms.isInfinitive(candidate)) continue;
       if (count > bestCount) {
         second = bestCount;
         bestCount = count;

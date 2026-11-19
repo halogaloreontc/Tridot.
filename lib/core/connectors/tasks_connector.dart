@@ -6,6 +6,7 @@ import '../scenario/command_spans.dart';
 import '../scenario/scenario_parser.dart';
 import '../services/task_service.dart';
 import '../skills/data/data_phrases.dart';
+import '../skills/files/files_connector.dart';
 import '../skills/talk/talk_phrases.dart';
 import 'connector.dart';
 import 'reminder_choices.dart';
@@ -166,7 +167,20 @@ final class TasksConnector
     // Правка текущей или названной задачи (ADR-033): срок, заметка,
     // пункты, новое название.
     final edit = TaskEditPhrases.parse(utterance, tasksId: id);
-    if (edit != null && _claims(edit, command)) {
+    // «Запиши, что код от сейфа CANARY» — секрет не становится заметкой.
+    if (edit != null &&
+        ScenarioParser.secretObject(edit.rawText ?? edit.text)) {
+      return null;
+    }
+    final inTaskTalk =
+        utterance.chatTaskId != null || utterance.recentConnectorId == id;
+    if (edit != null &&
+        _claims(
+          edit,
+          command,
+          inTaskTalk: inTaskTalk,
+          utterance: utterance,
+        )) {
       return ConnectorMatch(
         connectorId: id,
         commandId: editCommand,
@@ -195,6 +209,11 @@ final class TasksConnector
     };
     if (command.intent == CommandIntent.unknown) return null;
     if (_isTalk(utterance, command)) return null;
+    // «Убери только что сделанную картинку» — файл сессии, не задача.
+    if (command.intent == CommandIntent.completeTask &&
+        FilesPhrases.parse(utterance) != null) {
+      return null;
+    }
     // Угадано слишком много: лучше «не до конца понял» с подсказками
     // команд, чем задача наугад.
     if (command.intent == CommandIntent.createTask &&
@@ -223,11 +242,38 @@ final class TasksConnector
   static const String editCommand = 'task.edit';
 
   /// Берёт ли коннектор правку [edit] вместо обычного разбора [command].
-  static bool _claims(TaskEdit edit, ParsedCommand command) {
+  /// Срок — внутри текста заметки: «запиши, что в четверг стрижка в 11»
+  /// (а не «в среду запиши, что придёт машина»).
+  static bool _dueInNote(TaskEdit edit, Utterance utterance) {
+    final raw = edit.rawText;
+    if (raw == null) return false;
+    final start = utterance.original.lastIndexOf(raw);
+    if (start < 0) return false;
+    return utterance.due.spans.any(
+      (CharSpan span) => span.length > 0 && span.start >= start,
+    );
+  }
+
+  static bool _claims(
+    TaskEdit edit,
+    ParsedCommand command, {
+    required bool inTaskTalk,
+    required Utterance utterance,
+  }) {
     switch (edit.kind) {
       case TaskEditKind.note:
       case TaskEditKind.items:
       case TaskEditKind.rename:
+        // «Запиши, что в четверг стрижка в 11» вне разговора о задаче —
+        // новое дело со сроком, а не заметка к давней задаче.
+        if (edit.kind == TaskEditKind.note &&
+            edit.target == null &&
+            !inTaskTalk &&
+            command.intent == CommandIntent.createTask &&
+            command.title != null &&
+            _dueInNote(edit, utterance)) {
+          return false;
+        }
         // «Отметь, что сдал отчёт» — сообщение о сделанном, его понимает
         // обычный разбор.
         return command.intent == CommandIntent.unknown ||

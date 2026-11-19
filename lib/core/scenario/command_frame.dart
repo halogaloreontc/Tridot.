@@ -36,6 +36,12 @@ abstract final class CommandFrame {
       if (next == value) break;
       value = next;
     }
+    // «Отметь отметь, что …», «напомни напомни …» — слово повторено
+    // в надиктованном.
+    value = value.replaceAllMapped(
+      _stutter,
+      (Match m) => m.group(1) ?? m.group(2)!,
+    );
     value = _modal(value);
     value = _stripTail(value, fromVoice: fromVoice);
     // «кУПИТЬ молоко» — нажат Caps Lock: слово с маленькой первой и
@@ -62,6 +68,14 @@ abstract final class CommandFrame {
     );
     return value[0].toUpperCase() + value.substring(1);
   }
+
+  /// Первое слово (от четырёх букв) или «задачу», сказанные дважды
+  /// подряд. Внутри фразы повтор бывает нужен: «в пятнадцать ноль ноль».
+  static final RegExp _stutter = RegExp(
+    r'(?:^([а-яё]{4,})(?:\s*,?\s+)\1|(?<![а-яё])(задачу|напоминание)\s+\2)'
+    r'(?![а-яё])',
+    caseSensitive: false,
+  );
 
   static final RegExp _capsLocked =
       RegExp(r'(?<![А-Яа-яЁё])[а-яё][А-ЯЁ]{2,}(?![А-Яа-яЁё])');
@@ -131,6 +145,13 @@ abstract final class CommandFrame {
       r'алло|эй|слушай(?:те)?|слышь|слышишь|давай-ка|'
       r'пожалуйста|пожалуйсто|плиз|пж)'
       r'(?![а-яё-])(?:\s*[,—–:]|\s+-)?\s*(?:а(?![а-яё])\s*,?\s*)?',
+      caseSensitive: false,
+    ),
+    // Поправка: «я имел в виду в 19:00», «в смысле, на завтра» — дальше
+    // то, что сказано вместо прежнего.
+    RegExp(
+      r'^(?:(?:нет|не)\s*,?\s*)?(?:я\s+)?(?:имел[аи]?\s+в\s+виду|'
+      r'хотел[аи]?\s+сказать|в\s+смысле)(?![а-яё-])[\s,:—–-]*',
       caseSensitive: false,
     ),
   ];

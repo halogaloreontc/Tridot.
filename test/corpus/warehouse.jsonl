@@ -89,7 +89,7 @@
 {"id":"wh-090","text":"закрой задачу отчёт","intent":"completeTask","note":"«закрой» — задачи","source":"manual"}
 {"id":"wh-091","text":"перемести задачу из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"unknown","route":"none","note":"слово задач в {what} — не товар","source":"manual"}
 {"id":"wh-092","text":"закрой приход 318","connector":"warehouse","intent":"warehouse.act.post","status":"known_gap","note":"«закрой» — слово задач; правка маршрутизатора отложена (ADR-013)","source":"manual"}
-{"id":"wh-093","text":"перенеси 3 стула из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","status":"known_gap","note":"«перенеси» — слово задач; правка маршрутизатора отложена (ADR-013)","source":"manual"}
+{"id":"wh-093","text":"перенеси 3 стула из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","note":"«перенеси» — слово задач, но из ячейки в ячейку переносят только товар (ADR-013, ADR-037)","source":"manual"}
 {"id":"wh-094","text":"отметь проведение прихода утром","intent":"createTask","title":"Отметь проведение прихода","due":"2026-11-03T09:00","precision":"partOfDay","note":"слово срока — не номер прихода: в {no} нужна цифра (ревью 1.4.57)","source":"manual"}
 {"id":"wh-095","text":"проведи приход завтра","intent":"unknown","route":"none","note":"«завтра» — не номер прихода, действие склада не берёт (ревью 1.4.57)","source":"manual"}
 {"id":"wh-096","text":"проведи приход ВЗ12","connector":"warehouse","intent":"warehouse.act.post","note":"номер с буквами и цифрой","source":"manual"}

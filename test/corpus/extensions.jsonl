@@ -25,7 +25,7 @@
 {"id": "ext-024", "text": "переведи 100 долларов в рубли", "connector": "converter", "intent": "unknown", "route": "none", "note": "не формат файла", "source": "manual"}
 {"id": "ext-025", "text": "переведи файл на английский", "connector": "converter", "intent": "unknown", "route": "none", "note": "перевод текста, а не формата", "source": "manual"}
 {"id": "ext-026", "text": "конвертируй доллары в рубли", "connector": "converter", "intent": "unknown", "route": "none", "note": "валюта, а не файл", "source": "manual"}
-{"id": "ext-027", "text": "переведи 10 градусов в фаренгейты", "connector": "converter", "intent": "unknown", "route": "weather", "note": "единицы измерения", "source": "manual"}
+{"id": "ext-027", "text": "переведи 10 градусов в фаренгейты", "connector": "converter", "intent": "unknown", "route": "none", "note": "единицы измерения; погода «переведи … градусов» тоже не берёт", "source": "manual"}
 {"id": "ext-028", "text": "запили видео про котиков", "connector": "converter", "intent": "unknown", "route": "none", "note": "не команда конвертеру", "source": "manual"}
 {"id": "ext-029", "text": "добавь задачу сконвертировать отчёт в pdf", "intent": "createTask", "title": "Сконвертировать отчёт в pdf", "source": "manual"}
 {"id": "ext-030", "text": "сконвертировать видео", "intent": "createTask", "title": "Сконвертировать видео", "source": "manual"}
