@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/connectors/manifest/app_profile.dart';
 import '../../core/connectors/manifest/connection.dart';
 import '../../core/connectors/manifest/connection_service.dart';
 import '../../core/connectors/manifest/connection_texts.dart';
@@ -20,12 +21,23 @@ String connectionStatus(ConnectionService service) {
     return label.isEmpty ? fallback : label;
   }
 
+  // Род — по профилю приложения (ADR-039): «Касса подключена». Склад и
+  // несклоняемые имена — «подключён», как раньше.
+  final profile = service.slot.profile;
+  final on =
+      switch (profile != null && profile.declinable ? profile.gender : null) {
+    AppGender.f => 'Подключена',
+    AppGender.n => 'Подключено',
+    AppGender.pl => 'Подключены',
+    _ => 'Подключён',
+  };
+  final off = 'Не ${on.toLowerCase()}';
   return switch (record.level) {
-    ConnectionLevel.none => 'Не подключён',
-    ConnectionLevel.shared => 'Подключён ${level('по паролю')}',
+    ConnectionLevel.none => off,
+    ConnectionLevel.shared => '$on ${level('по паролю')}',
     ConnectionLevel.staff => record.login == null
-        ? 'Подключён ${level('под своим логином')}'
-        : 'Подключён: ${record.login} · ${level('под своим логином')}',
+        ? '$on ${level('под своим логином')}'
+        : '$on: ${record.login} · ${level('под своим логином')}',
   };
 }
 

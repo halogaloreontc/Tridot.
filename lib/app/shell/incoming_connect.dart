@@ -69,6 +69,12 @@ Future<String?> handleIncomingConnect(
   if (probeIsWarehouse(probe) && warehouse != null) {
     return toWarehouse(warehouse);
   }
+  // Описание не получено (нет сети, сервер молчит): как до ADR-039 —
+  // ссылка идёт складу, его подтверждение и его «Нет связи». Новое
+  // приложение без описания всё равно не подключить.
+  if (probe.description == null && warehouse != null) {
+    return toWarehouse(warehouse);
+  }
   if (probe.existingId case final String id) {
     final service = host.apps.byId(id);
     // Проба сверила app.id и хост: ссылка ведёт туда же, куда подключено.

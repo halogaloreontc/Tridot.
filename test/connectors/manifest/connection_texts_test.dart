@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_assistant/app/widgets/connection_screen.dart';
 import 'package:local_assistant/core/connectors/http_transport.dart';
 import 'package:local_assistant/core/connectors/manifest/app_connections.dart';
 import 'package:local_assistant/core/connectors/manifest/app_profile.dart';
@@ -190,6 +191,24 @@ void main() {
       const t = ConnectionTexts.app;
       expect(t.address(AddressProblem.empty), 'Укажите адрес приложения.');
       expect(t.cardOpen, 'Открыть приложение');
+    });
+
+    test('строка статуса — в роде приложения', () async {
+      Future<String> statusOf(AppProfile profile, String id) async {
+        final s = await ConnectionService.restore(
+          slot: ConnectionSlot.generic(profile, id),
+          transport: _Offline(),
+          secrets: InMemorySecretStore(),
+          store: InMemoryConnectionStore(),
+          base: Uri.parse('https://crm.example/'),
+          clock: FixedClock(DateTime(2026, 11, 19, 10)),
+        );
+        return connectionStatus(s);
+      }
+
+      expect(await statusOf(cash, 'kassa'), 'Не подключена');
+      expect(await statusOf(service, 'testcrm'), 'Не подключён');
+      expect(await statusOf(crm, 'crm'), 'Не подключён');
     });
 
     test('экран входа CRM говорит её именем', () async {

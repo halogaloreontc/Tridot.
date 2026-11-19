@@ -495,6 +495,22 @@ void main() {
       expect(find.byKey(const ValueKey<String>('app-consent')), findsNothing);
     });
 
+    testWidgets('описание не получено — прежнее подтверждение склада',
+        (tester) async {
+      final ui = Ui();
+      await tester.runAsync(ui.apps.load);
+      final notes = <String?>[];
+      // На этом хосте описания нет (сервер молчит, нет сети): как до
+      // ADR-039 — ссылка идёт складу, а не на «Подключить приложение».
+      await incoming(tester, ui, link('https://silent.example/'), notes);
+      expect(
+        find.byKey(const ValueKey<String>('warehouse-link-confirm')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey<String>('app-consent')), findsNothing);
+      expect(ui.apps.runtime, isEmpty);
+    });
+
     testWidgets('без каталога — как раньше: только склад', (tester) async {
       final ui = Ui();
       final notes = <String?>[];
