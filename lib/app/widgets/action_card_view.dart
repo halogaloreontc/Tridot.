@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/connectors/manifest/connection_texts.dart';
 import '../../core/models/action_card.dart';
 import '../assistant_theme.dart';
 import 'whole_word_text.dart';
@@ -27,7 +28,11 @@ final class ActionCardView extends StatefulWidget {
     required this.onSettle,
     this.busy = false,
     this.now = DateTime.now,
+    this.texts = ConnectionTexts.warehouse,
   });
+
+  /// Тексты подключения карточки: у склада — прежние (ADR-039).
+  final ConnectionTexts texts;
 
   final ActionCard card;
   final VoidCallback onConfirm;
@@ -125,7 +130,10 @@ class _ActionCardViewState extends State<ActionCardView> {
     String plus(String text) => result.isEmpty ? text : '$text: $result';
     return switch (card.state) {
       ActionCardState.pending => null,
-      ActionCardState.sending => ('Отправляю на склад…', context.colors.muted),
+      ActionCardState.sending => (
+          widget.texts.actionSending,
+          context.colors.muted
+        ),
       ActionCardState.applied => (plus('Выполнено'), context.colors.success),
       ActionCardState.cancelled => (
           'Отменено — ничего не изменено',
@@ -141,7 +149,7 @@ class _ActionCardViewState extends State<ActionCardView> {
         ),
       ActionCardState.failed => (plus('Не выполнено'), context.colors.danger),
       ActionCardState.unknown => (
-          'Итог неизвестен — «Проверить» спросит склад',
+          widget.texts.actionUnknown,
           context.colors.warning,
         ),
     };

@@ -419,6 +419,7 @@ Future<void> main() async {
       appLock: appLock,
       chatStore: JsonChatStore(chatsPath),
       connections: connections,
+      appConnections: appConnections,
       passwords: passwords,
       voice: voice,
       fileOpener: opener,
@@ -539,6 +540,7 @@ final class AssistantApp extends StatefulWidget {
     this.settingsStore,
     this.chatStore,
     this.connections = const <ConnectionService>[],
+    this.appConnections,
     this.passwords,
     this.voice,
     this.fileOpener,
@@ -571,6 +573,9 @@ final class AssistantApp extends StatefulWidget {
 
   /// Подключения к приложениям: экран «Настройки → Подключения».
   final List<ConnectionService> connections;
+
+  /// Каталог подключений (ADR-039): «Подключить приложение».
+  final AppConnections? appConnections;
 
   /// Навык «Пароли»; `null` — libsodium не загрузилась.
   final PasswordsKit? passwords;
@@ -646,6 +651,7 @@ final class _AssistantAppState extends State<AssistantApp> {
       settingsStore: widget.settingsStore,
       chatStore: widget.chatStore,
       connections: widget.connections,
+      appConnections: widget.appConnections,
       passwords: widget.passwords,
       voice: widget.voice,
       fileOpener: widget.fileOpener,

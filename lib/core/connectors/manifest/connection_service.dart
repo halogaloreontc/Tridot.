@@ -5,6 +5,7 @@ import '../../services/clock.dart';
 import '../http_transport.dart';
 import '../secret_store.dart';
 import 'connection.dart';
+import 'connection_texts.dart';
 import 'description_authority.dart';
 import 'manifest_connector.dart';
 import 'manifest_fetch.dart';
@@ -37,11 +38,18 @@ final class QrLink {
   String toString() => 'QrLink($base)';
 }
 
-/// Ссылка или адрес не годятся: текст для экрана.
+/// Ссылка или адрес не годятся: код ([problem]), а текст — у того, кто
+/// показывает ([textFor]): разбор статический и не знает, куда входят.
 final class ConnectionAddressException implements Exception {
-  const ConnectionAddressException(this.message);
+  const ConnectionAddressException(this.problem);
 
-  final String message;
+  final AddressProblem problem;
+
+  /// Текст склада — прежний.
+  String get message => ConnectionTexts.warehouse.address(problem);
+
+  /// Текст для подключения с текстами [texts].
+  String textFor(ConnectionTexts texts) => texts.address(problem);
 
   @override
   String toString() => message;
@@ -389,6 +397,9 @@ final class ConnectionService {
   }
 
   ConnectionSlot get slot => connector.slot;
+
+  /// Тексты для экрана: у склада — прежние, у приложения — с его именем.
+  ConnectionTexts get texts => ConnectionTexts.of(slot);
   ConnectionRecord get record => connector.record;
   bool get connected => record.connected;
   ManifestDescription? get description => connector.description;
@@ -441,31 +452,24 @@ final class ConnectionService {
   static Uri baseOf(String input) {
     var text = input.trim();
     if (text.isEmpty) {
-      throw const ConnectionAddressException('Укажите адрес склада.');
+      throw const ConnectionAddressException(AddressProblem.empty);
     }
     if (!RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://').hasMatch(text)) {
       text = 'https://$text';
     }
     final uri = Uri.tryParse(text);
     if (uri == null || uri.host.isEmpty) {
-      throw const ConnectionAddressException('Адрес не похож на ссылку.');
+      throw const ConnectionAddressException(AddressProblem.notUrl);
     }
     final scheme = uri.scheme.toLowerCase();
     if (scheme != 'https' && scheme != 'http') {
-      throw const ConnectionAddressException(
-        'Нужен адрес https://… склада.',
-      );
+      throw const ConnectionAddressException(AddressProblem.scheme);
     }
     if (uri.userInfo.isNotEmpty) {
-      throw const ConnectionAddressException(
-        'Логин и пароль в адресе не указывают — для них есть поля ниже.',
-      );
+      throw const ConnectionAddressException(AddressProblem.userInfo);
     }
     if (scheme == 'http' && !isLocalHost(uri.host)) {
-      throw const ConnectionAddressException(
-        'Без шифрования (http) можно только в своей сети. Для склада в '
-        'интернете нужен адрес https://…',
-      );
+      throw const ConnectionAddressException(AddressProblem.httpRemote);
     }
     var path = uri.path;
     final last = path.split('/').last;
@@ -500,18 +504,12 @@ final class ConnectionService {
   static QrLink parseQrLink(String input, {String param = 'qr'}) {
     final text = input.trim();
     if (text.isEmpty) {
-      throw const ConnectionAddressException(
-        'Вставьте ссылку со склада: «Подключить Связного» → «Скопировать '
-        'ссылку».',
-      );
+      throw const ConnectionAddressException(AddressProblem.linkEmpty);
     }
     if (isConnectLink(text)) return parseConnectLink(text);
     final uri = Uri.tryParse(text);
     if (uri == null || !uri.hasScheme) {
-      throw const ConnectionAddressException(
-        'Это не ссылка. Скопируйте её на складе: «Подключить Связного» → '
-        '«Показать QR» → «Скопировать ссылку».',
-      );
+      throw const ConnectionAddressException(AddressProblem.notLink);
     }
     String? code;
     for (final part in <String>[uri.fragment, uri.query]) {
@@ -525,16 +523,11 @@ final class ConnectionService {
       code ??= values[param];
     }
     if (code == null) {
-      throw const ConnectionAddressException(
-        'В ссылке нет кода входа. Скопируйте её заново на складе: '
-        '«Подключить Связного» → «Показать QR» → «Скопировать ссылку».',
-      );
+      throw const ConnectionAddressException(AddressProblem.noCode);
     }
     final normalized = code.trim().toLowerCase();
     if (!_qrCode.hasMatch(normalized)) {
-      throw const ConnectionAddressException(
-        'Код в ссылке обрезан или испорчен — скопируйте ссылку заново.',
-      );
+      throw const ConnectionAddressException(AddressProblem.badCode);
     }
     final base = baseOf(
       uri.replace(fragment: '', query: '').toString().replaceAll(
@@ -564,10 +557,7 @@ final class ConnectionService {
   /// параметров и «#»; код — ровно 32 знака hex строчными. Иначе —
   /// [ConnectionAddressException] с текстом для экрана, без кода.
   static QrLink parseConnectLink(String input) {
-    const broken = ConnectionAddressException(
-      'Ссылка «Открыть в Tridot» испорчена — сделайте новый код на складе: '
-      '«Подключить Связного».',
-    );
+    const broken = ConnectionAddressException(AddressProblem.connectBroken);
     final text = input.trim();
     if (text.length > _maxLinkLength || text.contains(RegExp(r'\s'))) {
       throw broken;
@@ -602,9 +592,7 @@ final class ConnectionService {
     if (purpose != null && purpose != 'assist') throw broken;
     final code = fields['qr']?.single ?? '';
     if (!_qrCode.hasMatch(code)) {
-      throw const ConnectionAddressException(
-        'Код в ссылке обрезан или испорчен — сделайте новый на складе.',
-      );
+      throw const ConnectionAddressException(AddressProblem.connectCode);
     }
     final address = fields['u']?.single ?? '';
     final target = Uri.tryParse(address);
@@ -649,7 +637,7 @@ final class ConnectionService {
   Future<ConnectionResult> refreshManifest() async {
     final base = record.baseUri;
     if (base == null) {
-      return const ConnectionResult.failed('Склад ещё не подключён.');
+      return ConnectionResult.failed(texts.notConnectedYet);
     }
     final manifestUri = base.resolve('assistant.json');
     _refreshing = true;
@@ -701,7 +689,7 @@ final class ConnectionService {
     try {
       parsed = parseQrLink(link);
     } on ConnectionAddressException catch (error) {
-      return ConnectionResult.failed(error.message);
+      return ConnectionResult.failed(error.textFor(texts));
     }
     if (_otherAddress(parsed.base) case final String why) {
       return ConnectionResult.failed(why);
@@ -744,9 +732,7 @@ final class ConnectionService {
       },
     );
     if (response == null) {
-      return const ConnectionResult.failed(
-        'Нет связи со складом. Проверьте интернет и попробуйте снова.',
-      );
+      return ConnectionResult.failed(texts.offlineRetry);
     }
     final json = _object(response.body);
     if (!response.isSuccess || json == null || json['ok'] != true) {
@@ -756,8 +742,8 @@ final class ConnectionService {
       return ConnectionResult.failed(
         known ??
             (said.isNotEmpty
-                ? 'Склад ответил: $said'
-                : 'Склад ответил ошибкой $status.'),
+                ? texts.serverSaid(said)
+                : texts.serverError(status)),
       );
     }
     final token = _text(json[qr.take['token'] ?? 'token']);
@@ -769,9 +755,7 @@ final class ConnectionService {
     // хватает личного ключа. Старый склад пароль присылает — храним, как
     // прежде.
     if (token.isEmpty && (scope != 'assist' || sid.isEmpty)) {
-      return const ConnectionResult.failed(
-        'Склад не прислал пароль — сделайте новую ссылку.',
-      );
+      return ConnectionResult.failed(texts.noPasswordSent);
     }
     final previous = await _previousKey();
     try {
@@ -814,16 +798,14 @@ final class ConnectionService {
     try {
       base = baseOf(address);
     } on ConnectionAddressException catch (error) {
-      return ConnectionResult.failed(error.message);
+      return ConnectionResult.failed(error.textFor(texts));
     }
     if (_otherAddress(base) case final String why) {
       return ConnectionResult.failed(why);
     }
     final key = sid.trim();
     if (!_assistKey.hasMatch(key)) {
-      return const ConnectionResult.failed(
-        'Склад передал ключ не того вида — обновите страницу склада.',
-      );
+      return ConnectionResult.failed(texts.keyWrongShape);
     }
     final manifestUri = base.resolve('assistant.json');
     final fetched = await _fetchManifest(base);
@@ -870,10 +852,7 @@ final class ConnectionService {
       if (me.name.isNotEmpty) me.name,
       if (me.role.isNotEmpty) me.role,
     ].join(', ');
-    if (login.isEmpty) return 'Склад подключён.';
-    return who.isEmpty
-        ? 'Склад подключён: $login.'
-        : 'Склад подключён: $login ($who).';
+    return texts.connected(login, who);
   }
 
   static final RegExp _deviceControls = RegExp(
@@ -899,7 +878,7 @@ final class ConnectionService {
     final me = description?.me ?? anchor?.me;
     final base = record.manifestUri;
     if (description == null || me == null || base == null) {
-      return const ConnectionResult.failed('Склад не говорит, кто вошёл.');
+      return ConnectionResult.failed(texts.noWho);
     }
     final keys = await readConnectionKeys(_secrets, slot, record);
     if (keys == null || keys['sid'] == null) {
@@ -910,7 +889,7 @@ final class ConnectionService {
     if (!description.only.contains(me.action) ||
         ManifestDescription.writeNames.contains(me.action) ||
         ManifestDescription.checkNames.contains(me.action)) {
-      return const ConnectionResult.failed('Склад не говорит, кто вошёл.');
+      return ConnectionResult.failed(texts.noWho);
     }
     final response = await _post(
       description,
@@ -919,7 +898,7 @@ final class ConnectionService {
       const <String, Object?>{},
     );
     if (response == null) {
-      return const ConnectionResult.failed('Нет связи со складом.');
+      return ConnectionResult.failed(texts.offline);
     }
     final json = _object(response.body);
     if ((response.statusCode == 403 &&
@@ -931,7 +910,7 @@ final class ConnectionService {
       );
     }
     if (!response.isSuccess || json == null || json['ok'] != true) {
-      return const ConnectionResult.failed('Склад не говорит, кто вошёл.');
+      return ConnectionResult.failed(texts.noWho);
     }
     final got = ConnectionMe.fromServer(
       json,
@@ -965,13 +944,13 @@ final class ConnectionService {
     try {
       base = baseOf(address);
     } on ConnectionAddressException catch (error) {
-      return ConnectionResult.failed(error.message);
+      return ConnectionResult.failed(error.textFor(texts));
     }
     if (_otherAddress(base) case final String why) {
       return ConnectionResult.failed(why);
     }
     if (password.isEmpty) {
-      return const ConnectionResult.failed('Введите пароль склада.');
+      return ConnectionResult.failed(texts.enterPassword);
     }
     final fetched = await _fetchManifest(base);
     if (fetched.error != null) return ConnectionResult.failed(fetched.error!);
@@ -1013,8 +992,8 @@ final class ConnectionService {
     if (sid.isNotEmpty) await refreshMe();
     return ConnectionResult.ok(
       sid.isEmpty
-          ? 'Склад подключён по паролю склада.'
-          : 'Склад подключён: ${user.toLowerCase()}.',
+          ? texts.connectedByPassword
+          : texts.connected(user.toLowerCase(), ''),
     );
   }
 
@@ -1027,7 +1006,7 @@ final class ConnectionService {
     final base = record.baseUri;
     final token = await _secrets.read(slot.tokenKey);
     if (description == null || base == null || token == null) {
-      return const ConnectionResult.failed('Сначала подключите склад.');
+      return ConnectionResult.failed(texts.connectFirst);
     }
     final user = login.trim();
     if (user.isEmpty) return const ConnectionResult.failed('Введите логин.');
@@ -1142,7 +1121,7 @@ final class ConnectionService {
           needs.every((String n) => n == 'token');
     }).firstOrNull;
     if (probe == null) {
-      return 'Пароль не проверить: в описании нет команды по паролю склада.';
+      return texts.cannotCheck;
     }
     final response = await _post(
       d,
@@ -1159,25 +1138,18 @@ final class ConnectionService {
       ),
     );
     if (response == null) {
-      return 'Нет связи со складом. Проверьте адрес и интернет.';
+      return texts.offlineAddress;
     }
     final status = response.statusCode;
-    if (status == 401) return 'Склад не принял пароль.';
-    if (status == 429) {
-      return 'Склад просит подождать: слишком много попыток. Попробуйте '
-          'через несколько минут.';
-    }
+    if (status == 401) return texts.passwordRejected;
+    if (status == 429) return texts.busyAttempts;
     if ((status >= 300 && status < 400) || status == 404) {
-      return 'По этому адресу не склад или он переехал (ответ $status). '
-          'Проверьте адрес.';
+      return texts.notThisApp(status);
     }
-    if (!response.isSuccess) return 'Склад ответил ошибкой $status.';
+    if (!response.isSuccess) return texts.serverError(status);
     final json = _object(response.body);
-    if (json == null) {
-      return 'По этому адресу отвечает не склад (ответ не JSON). Проверьте '
-          'адрес.';
-    }
-    if (json['ok'] == false) return 'Склад не принял пароль.';
+    if (json == null) return texts.notJson;
+    if (json['ok'] == false) return texts.passwordRejected;
     return null;
   }
 
@@ -1271,18 +1243,14 @@ final class ConnectionService {
       ),
     );
     if (response == null) {
-      return const ConnectionResult.failed(
-        'Нет связи со складом. Проверьте интернет.',
-      );
+      return ConnectionResult.failed(texts.offlineInternet);
     }
     if (response.statusCode == 401) {
-      return const ConnectionResult.failed('Склад не принял пароль.');
+      return ConnectionResult.failed(texts.passwordRejected);
     }
     final json = _object(response.body);
     if (!response.isSuccess || json == null) {
-      return ConnectionResult.failed(
-        'Склад ответил ошибкой ${response.statusCode}.',
-      );
+      return ConnectionResult.failed(texts.serverError(response.statusCode));
     }
     final locked = json['locked'];
     if (locked is num && locked > 0) {

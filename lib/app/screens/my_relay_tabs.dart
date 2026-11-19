@@ -12,6 +12,8 @@ import '../assistant_theme.dart';
 import '../layout.dart';
 import '../shell/today_panel.dart';
 import '../widgets/activity_grid.dart';
+import '../widgets/connections_host.dart';
+import '../widgets/connections_section.dart';
 import '../widgets/grouped.dart';
 import '../widgets/personas_section.dart';
 import '../widgets/roles_section.dart';
@@ -447,7 +449,12 @@ final class RelayAssistants extends StatefulWidget {
     required this.registry,
     this.connections = const <ConnectionService>[],
     this.onOpenRoles,
+    this.connectionsHost,
   });
+
+  /// Каталог подключений (ADR-039): раздел «Подключения» под «Ролями»;
+  /// `null` — раздела нет.
+  final ConnectionsHost? connectionsHost;
 
   final AppSettings settings;
   final ValueChanged<AppSettings> onChanged;
@@ -606,6 +613,10 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
               ),
             ),
           ),
+        // Подключения к приложениям (ADR-039) — рядом с ролями: склад
+        // подключается и в роли «Кладовщик», остальные — только здесь.
+        if (widget.connectionsHost case final ConnectionsHost host)
+          InsetGroupScope(side: 0, child: ConnectionsSection(host: host)),
         // В самом конце, а не между карточками и их настройками: строка о
         // будущем не разрывает вкладку.
         // Отступ — как у подписей групп над ней (AppSpace.rowH): одна

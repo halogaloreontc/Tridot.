@@ -26,6 +26,8 @@ import '../core/connectors/connector.dart';
 import '../core/connectors/login_link.dart';
 import '../core/connectors/manifest/connection_service.dart';
 import '../core/connectors/manifest/connection.dart';
+import '../core/connectors/manifest/connection_slots.dart';
+import '../core/connectors/manifest/connection_texts.dart';
 import '../core/connectors/manifest/manifest_text.dart';
 import '../core/formatting/due_format.dart';
 import '../core/homescreen/home_screen_actions.dart';
@@ -117,7 +119,9 @@ import 'widgets/grouped.dart';
 import 'widgets/task_tile.dart';
 import 'widgets/weather_card_view.dart';
 import 'widgets/warehouse_card_view.dart';
-import 'widgets/warehouse_connection_card.dart';
+import 'widgets/connections_host.dart';
+import 'shell/incoming_connect.dart';
+import '../core/connectors/manifest/app_connections.dart';
 import 'widgets/qr_scan_sheet.dart';
 import 'links/incoming_links.dart';
 import 'links/link_opener.dart';
@@ -197,6 +201,7 @@ final class HomePage extends StatefulWidget {
     this.appLock,
     this.incoming,
     this.signals = const <WarehouseSignals>[],
+    this.appConnections,
     this.onAppearanceChanged,
     this.onReduceMotionChanged,
   });
@@ -217,6 +222,11 @@ final class HomePage extends StatefulWidget {
 
   /// Подключения к приложениям (склад): «Настройки → Подключения».
   final List<ConnectionService> connections;
+
+  /// Каталог подключений (ADR-039): «Подключения», «Подключить
+  /// приложение», входящие ссылки чужих приложений. `null` — только
+  /// подключения из [connections] (тесты, прежнее поведение).
+  final AppConnections? appConnections;
 
   /// Выбор файлов для «+» → «Прикрепить файл» (ADR-019); в тестах —
   /// подделка.
@@ -596,9 +606,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // Первая пустая сессия — свой выбор («её») с самого начала: при
     // возврате в неё из чата задачи он восстановится.
     widget.assistant.enterChat(sessionId: _book.currentId);
-    for (final connection in widget.connections) {
-      connection.addSessionListener(_onSessionChanged);
-    }
+    _followSessions();
+    widget.appConnections?.addListener(_onAppsChanged);
     _jobHub.addListener(_onJobsChanged);
     _book.onThreadLoaded = _sweepInterruptedJobs;
     widget.ffmpeg?.addListener(_onJobsChanged);
@@ -745,6 +754,51 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       .where((ConnectionService c) => c.slot.id == id)
       .firstOrNull;
 
+  /// Подключения, чей вход слушаем ([_onSessionChanged]): и те, что
+  /// подключили, пока приложение открыто (ADR-039).
+  final Set<ConnectionService> _sessionFollowed = <ConnectionService>{};
+
+  void _followSessions() {
+    final live = widget.connections.toSet();
+    for (final gone in _sessionFollowed.difference(live).toList()) {
+      gone.removeSessionListener(_onSessionChanged);
+      _sessionFollowed.remove(gone);
+    }
+    for (final added in live.difference(_sessionFollowed)) {
+      added.addSessionListener(_onSessionChanged);
+      _sessionFollowed.add(added);
+    }
+  }
+
+  /// Подключили или удалили приложение: слушать его вход, меню и списки —
+  /// заново.
+  void _onAppsChanged() {
+    _followSessions();
+    if (mounted) setState(() {});
+  }
+
+  /// Экраны подключений (ADR-039); `null` — каталога нет.
+  late final ConnectionsHost? _connectionsHost =
+      switch (widget.appConnections) {
+    final AppConnections apps => ConnectionsHost(
+        apps: apps,
+        registry: widget.assistant.extensions,
+        settings: () => _settings,
+        onChanged: (AppSettings value) {
+          if (mounted) _changeSettings(value);
+        },
+      ),
+    null => null,
+  };
+
+  /// Тексты карточки подключения [id]: склад — прежние, приложение — со
+  /// своим именем; подключение удалено — о «приложении» (ADR-039).
+  ConnectionTexts _textsOf(String id) =>
+      _connectionOf(id)?.texts ??
+      (id == ConnectionSlots.warehouse.id
+          ? ConnectionTexts.warehouse
+          : ConnectionTexts.app);
+
   void _quietNote(String text) {
     if (!mounted) return;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -769,22 +823,18 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     if (!mounted) return;
     final service = _connectionOf('warehouse');
-    if (service == null || text == null || !looksLikeLoginLink(text)) {
-      _quietNote(
-        item.kind == IncomingKind.image
-            ? 'На картинке нет QR склада.'
-            : 'Через «Поделиться» Tridot принимает только ссылку склада.',
-      );
-      return;
-    }
     await _settingsReady;
     if (!mounted) return;
-    final result = await connectWarehouseLink(
+    // Склад — как раньше; чужое приложение — только через согласие
+    // (ADR-039, lib/app/shell/incoming_connect.dart).
+    final note = await handleIncomingConnect(
       context,
-      service,
-      text,
-      onEnabledChanged: (bool value) {
-        if (!mounted) return;
+      text: text,
+      image: item.kind == IncomingKind.image,
+      warehouse: service,
+      host: _connectionsHost,
+      onWarehouseEnabled: (bool value) {
+        if (!mounted || service == null) return;
         _changeSettings(
           connectionChanged(
             widget.assistant.extensions,
@@ -795,7 +845,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         );
       },
     );
-    if (result != null) _quietNote(result.message);
+    if (note != null) _quietNote(note);
   }
 
   /// Новые приходы, пока приложение открыто: тихая строка, без
@@ -1205,9 +1255,11 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (widget.passwords?.onSettings == _onPasswordsSettings) {
       widget.passwords?.onSettings = null;
     }
-    for (final connection in widget.connections) {
+    widget.appConnections?.removeListener(_onAppsChanged);
+    for (final connection in _sessionFollowed) {
       connection.removeSessionListener(_onSessionChanged);
     }
+    _sessionFollowed.clear();
     _cubeTimer?.cancel();
     _docTimer?.cancel();
     _docToastTimer?.cancel();
@@ -1419,6 +1471,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return WarehouseCardView(
       key: ValueKey<String>('warehouse-${message.id}'),
       card: card,
+      texts: _textsOf(card.connector),
       // Итог уже в пузыре над карточкой — второй раз его не пишем.
       showSay: card.say.trim() != message.text.trim(),
       onOpen: base == null || base.scheme != 'https'
@@ -3999,7 +4052,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ExtensionEntry(
             id: service.slot.id,
             title: service.slot.title,
-            icon: Icons.inventory_2_outlined,
+            icon: service.slot.runtime
+                ? Icons.hub_outlined
+                : Icons.inventory_2_outlined,
             status: service.connected ? 'на связи' : 'нет связи',
             statusColor: service.connected
                 ? context.colors.success
@@ -4036,6 +4091,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _openConnection(ConnectionService service) =>
+      _connectionsHost?.open(context, service) ??
       Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           builder: (BuildContext context) => ConnectionScreen(
@@ -4536,6 +4592,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         onChanged: _changeSettings,
         registry: widget.assistant.extensions,
         connections: widget.connections,
+        connectionsHost: _connectionsHost,
       ),
       settings: SettingsScreen(
         settings: _settings,
@@ -5355,6 +5412,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (card == null || lastWithCard[card.id] != index) return null;
     return ActionCardView(
       card: card,
+      texts: _textsOf(card.connectorId),
       busy: _bulkBusy || _sending,
       now: () => _now,
       onConfirm: () {

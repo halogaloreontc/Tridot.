@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/connectors/manifest/connection.dart';
 import '../../core/connectors/manifest/connection_service.dart';
+import '../../core/connectors/manifest/connection_texts.dart';
 import '../../core/connectors/manifest/manifest_format.dart';
 import '../assistant_theme.dart';
 import 'task_tile.dart';
@@ -28,6 +29,33 @@ String connectionStatus(ConnectionService service) {
   };
 }
 
+/// Подтверждение «Удалить подключение» к [title] (ADR-039). `true` —
+/// удалить.
+Future<bool> confirmRemoveConnection(BuildContext context, String title) async {
+  final yes = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext context) => AppDialog(
+      key: const ValueKey<String>('connection-remove-dialog'),
+      icon: Icons.delete_outline,
+      title: WholeWordText('Удалить «$title»?'),
+      content: const WholeWordText(
+        'Связной выйдет из приложения и удалит с устройства пароль, ключи, '
+        'адрес и описание. Отменить нельзя — подключить снова можно с '
+        'новым согласием.',
+      ),
+      actions: <Widget>[
+        DialogCancel(onPressed: () => Navigator.of(context).pop(false)),
+        DialogDanger(
+          key: const ValueKey<String>('connection-remove-yes'),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const ActionLabel('Удалить'),
+        ),
+      ],
+    ),
+  );
+  return yes ?? false;
+}
+
 /// «05.11.2026 14:05».
 String _moment(DateTime? time) {
   if (time == null) return '—';
@@ -42,17 +70,38 @@ String _moment(DateTime? time) {
 ///
 /// Пароли и ссылка с кодом не хранятся в полях дольше одной попытки:
 /// после отправки поля очищаются.
+///
+/// Тот же экран — у приложения из каталога подключений (ADR-039): тексты
+/// с его именем ([ConnectionService.texts]), вход — каким умеет описание
+/// (ссылка, пароль, логин), адрес закреплён; «Удалить» и «Подключить
+/// заново», если приложение предлагает изменения. У склада всё прежнее.
 class ConnectionScreen extends StatefulWidget {
   const ConnectionScreen({
     super.key,
     required this.service,
     required this.onEnabledChanged,
+    this.onRemove,
+    this.onReconnect,
+    this.initialResult,
   });
 
   final ConnectionService service;
 
   /// Включить подключение после входа и выключить после выхода.
   final ValueChanged<bool> onEnabledChanged;
+
+  /// «Удалить подключение» (после подтверждения): `true` — с устройства
+  /// стёрлось всё. `null` — кнопки нет (склад).
+  final Future<bool> Function()? onRemove;
+
+  /// «Подключить заново» у приложения, которое предлагает изменения:
+  /// удалить и подключить по тому же адресу с новым согласием. `null` —
+  /// кнопки нет.
+  final VoidCallback? onReconnect;
+
+  /// Итог, с которым экран открылся (вход по ссылке сразу после
+  /// подключения).
+  final ConnectionResult? initialResult;
 
   @override
   State<ConnectionScreen> createState() => _ConnectionScreenState();
@@ -77,12 +126,32 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
 
   ConnectionService get _service => widget.service;
 
+  ConnectionTexts get _texts => _service.texts;
+
+  /// Приложение из каталога (не слот из кода).
+  bool get _runtime => _service.slot.runtime;
+
+  /// Вход по ссылке: склад — всегда (встроенный вход), приложение — если
+  /// его описание умеет.
+  bool get _canLink =>
+      !_runtime ||
+      _service.description?.qr != null ||
+      _service.anchor?.qr != null;
+
+  /// Вход под логином сотрудника: склад — всегда, приложение — если
+  /// описание умеет выдать личный ключ.
+  bool get _canStaff =>
+      !_runtime ||
+      _service.description?.credentials['sid']?.get != null ||
+      _service.anchor?.credentials['sid']?.get != null;
+
   @override
   void initState() {
     super.initState();
     _service.addListener(_changed);
-    final base = _service.record.baseUri;
+    final base = _service.record.baseUri ?? _service.fixedBase;
     if (base != null) _address.text = base.toString();
+    _result = widget.initialResult;
   }
 
   @override
@@ -166,10 +235,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       builder: (dialogContext) => AppDialog(
         scrollable: true,
         title: WholeWordText('Выйти из «${_service.slot.title}»?'),
-        content: const Text(
-          'Пароль склада и личный ключ будут удалены с устройства. Адрес '
-          'и описание останутся.',
-        ),
+        content: Text(_texts.logoutBody),
         actions: <Widget>[
           TextButton(
             key: const ValueKey<String>('connection-logout-cancel'),
@@ -249,11 +315,16 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                       padding: EdgeInsets.only(top: 8),
                       child: LinearProgressIndicator(),
                     ),
-                  const SectionLabel('Подключить по ссылке'),
-                  _linkSection(),
+                  if (_service.offered case final String offered)
+                    if (_runtime) _offer(offered),
+                  if (_canLink) ...<Widget>[
+                    const SectionLabel('Подключить по ссылке'),
+                    _linkSection(),
+                  ],
                   const SectionLabel('Ввести вручную'),
                   _manualSection(),
-                  if (record.level == ConnectionLevel.shared) ...<Widget>[
+                  if (record.level == ConnectionLevel.shared &&
+                      _canStaff) ...<Widget>[
                     const SectionLabel('Войти под логином'),
                     _staffSection(),
                   ],
@@ -277,6 +348,10 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                   ],
                   // Выйти не вышло: кнопка осталась, итог — под ней.
                   _message('logout'),
+                  if (widget.onRemove != null) ...<Widget>[
+                    const SectionLabel('Удалить подключение'),
+                    _removeSection(),
+                  ],
                 ],
               ),
             ),
@@ -347,6 +422,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     bool secret = false,
     String? hint,
     TextInputType? keyboard,
+    bool readOnly = false,
   }) =>
       Padding(
         padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
@@ -368,6 +444,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               key: ValueKey<String>(key),
               controller: controller,
               obscureText: secret,
+              readOnly: readOnly,
               enableSuggestions: !secret,
               autocorrect: false,
               keyboardType: keyboard,
@@ -400,13 +477,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 8),
             child: Text(
-              'На складе: «Складской помощник» → «Показать QR» → «Скопировать '
-              'ссылку» (склад 1.4.62) или «Профиль» → «Войти на телефоне» '
-              '→ «Скопировать ссылку». Вставьте её сюда. Код одноразовый и '
-              'сработает только один раз: не открывайте ссылку «#qr=» в '
-              'браузере.\n'
-              'Если таких кнопок нет — склад старше 1.4.56: подключите его '
-              'вручную (ниже).',
+              _texts.linkHint,
               style: TextStyle(color: context.colors.muted),
             ),
           ),
@@ -436,27 +507,38 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 8),
             child: Text(
-              'Адрес склада и пароль склада. Логин и пароль сотрудника — '
-              'по желанию: без них видны только остатки и ячейки. Пароль '
-              'сотрудника не сохраняется — только личный ключ.',
+              _texts.manualHint(staff: _canStaff),
               style: TextStyle(color: context.colors.muted),
             ),
           ),
           _field(
             'connection-address',
             _address,
-            'Адрес склада',
+            _texts.addressLabel,
             hint: 'https://…',
             keyboard: TextInputType.url,
+            // Адрес приложения из каталога закреплён (ADR-039).
+            readOnly: _service.fixedBase != null,
           ),
           _field(
             'connection-password',
             _password,
-            'Пароль склада',
+            _texts.passwordLabel(
+              (_service.description ?? _service.anchor)
+                  ?.credentials['token']
+                  ?.label,
+            ),
             secret: true,
           ),
-          _field('connection-login', _login, 'Логин сотрудника'),
-          _field('connection-pass', _pass, 'Пароль сотрудника', secret: true),
+          if (_canStaff) ...<Widget>[
+            _field('connection-login', _login, 'Логин сотрудника'),
+            _field(
+              'connection-pass',
+              _pass,
+              'Пароль сотрудника',
+              secret: true,
+            ),
+          ],
           _button(
             'connection-manual-connect',
             'Подключить',
@@ -481,8 +563,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           Padding(
             padding: EdgeInsets.symmetric(horizontal: 8),
             child: Text(
-              'Приходы видны только под своим логином. Можно и по ссылке '
-              'выше.',
+              _texts.staffHint,
               style: TextStyle(color: context.colors.muted),
             ),
           ),
@@ -507,6 +588,106 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           _message('staff'),
         ],
       );
+
+  /// Приложение предлагает изменения, которые без нового согласия не
+  /// приняты (ADR-039): что именно и «Подключить заново».
+  Widget _offer(String offered) => Padding(
+        key: const ValueKey<String>('connection-offer'),
+        padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            WholeWordText(
+              'Приложение предлагает изменения — подключить заново',
+              style: TextStyle(
+                color: context.colors.warning,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: WholeWordText(
+                'В новом описании: $offered. Пока в работе прежнее — то, на '
+                'что вы согласились. Чтобы принять новое, подключите '
+                'приложение заново: снова покажем, что оно умеет.',
+                style: metaStyle(context),
+              ),
+            ),
+            if (widget.onReconnect case final VoidCallback reconnect)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton(
+                    key: const ValueKey<String>('connection-reconnect'),
+                    style: _outlined(context),
+                    onPressed: _busy ? null : reconnect,
+                    child: const Text('Подключить заново'),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+
+  Widget _removeSection() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: WholeWordText(
+              'Выход на сервере, затем с устройства удаляются пароль, ключи, '
+              'адрес и описание. Подключить снова можно через «Подключить '
+              'приложение».',
+              style: TextStyle(color: context.colors.muted),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                key: const ValueKey<String>('connection-remove'),
+                style: _outlined(context, context.colors.danger),
+                onPressed: _busy ? null : _remove,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Удалить'),
+              ),
+            ),
+          ),
+          _message('remove'),
+        ],
+      );
+
+  Future<void> _remove() async {
+    final remove = widget.onRemove;
+    if (remove == null) return;
+    if (!await confirmRemoveConnection(context, _service.slot.title) ||
+        !mounted) {
+      return;
+    }
+    setState(() => _busy = true);
+    bool clean;
+    try {
+      clean = await remove();
+    } on Object {
+      clean = false;
+    }
+    if (!mounted) return;
+    widget.onEnabledChanged(false);
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      // Итог (не всё стёрлось) показывает тот, кто удалял.
+      navigator.pop();
+    } else {
+      _show(
+        ConnectionResult.ok(
+          clean ? 'Подключение удалено.' : 'Подключение снято.',
+        ),
+        'remove',
+      );
+    }
+  }
 
   Widget _descriptionSection(
     ConnectionRecord record,
@@ -546,7 +727,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               Text(
                 record.connected
                     ? 'Проверено: ${_moment(meta.fetchedAt)}'
-                    : 'Встроенная копия — до подключения',
+                    : _texts.beforeConnect,
                 style: metaStyle(context),
               ),
               // «Наше описание главное» (ADR-012): какое в работе и почему.

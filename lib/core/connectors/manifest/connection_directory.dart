@@ -16,6 +16,7 @@ final class DirectoryEntry {
     required this.profile,
     this.secretNames = const <String>[],
     this.problem,
+    this.offered,
   });
 
   /// Id подключения: `[a-z][a-z0-9]{0,31}` ([ConnectionSlots.validId]).
@@ -44,6 +45,38 @@ final class DirectoryEntry {
   /// Почему запись не годится в работу; `null` — годится.
   final String? problem;
 
+  /// Новое описание сервера расширяет закреплённое — чем именно
+  /// (`ConnectionService.offered`). Хранится, чтобы предложение «подключить
+  /// заново» пережило перезапуск: не принятое описание в кэш не идёт.
+  /// `null` — предложений нет.
+  final String? offered;
+
+  /// Та же запись с другим [offered].
+  DirectoryEntry withOffered(String? value) => DirectoryEntry(
+        id: id,
+        appId: appId,
+        base: base,
+        addedAt: addedAt,
+        profile: profile,
+        secretNames: secretNames,
+        problem: problem,
+        offered: value,
+      );
+
+  /// Предел текста [offered] в файле.
+  static const int maxOffered = 400;
+
+  static final RegExp _controls = RegExp(r'[\u0000-\u001f\u007f]');
+
+  /// [offered] из файла: строка без управляющих знаков, не длиннее
+  /// [maxOffered]; иначе `null`.
+  static String? _offered(Object? raw) {
+    if (raw is! String) return null;
+    final text = raw.replaceAll(_controls, ' ').trim();
+    if (text.isEmpty) return null;
+    return text.length > maxOffered ? text.substring(0, maxOffered) : text;
+  }
+
   /// Ключи секретов подключения: `<id>.token`, `<id>.sid` и по одному на
   /// каждое имя из [secretNames].
   Set<String> get secretKeys => <String>{
@@ -59,6 +92,7 @@ final class DirectoryEntry {
         'addedAt': addedAt.toUtc().toIso8601String(),
         if (profile case final AppProfile p) 'profile': p.toJson(),
         if (secretNames.isNotEmpty) 'secretNames': secretNames,
+        if (_offered(offered) case final String text) 'offered': text,
       };
 
   static final RegExp _secretName = RegExp(r'^[a-z][a-z0-9_]{0,31}$');
@@ -108,6 +142,7 @@ final class DirectoryEntry {
             if (name is String && _secretName.hasMatch(name)) name,
       ],
       problem: problem,
+      offered: _offered(json['offered']),
     );
   }
 }

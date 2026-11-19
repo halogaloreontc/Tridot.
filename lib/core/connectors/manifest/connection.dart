@@ -28,6 +28,7 @@ final class ConnectionSlot {
     this.queryLabel = GenericSlotTexts.queryLabel,
     this.totalExample = '',
     this.runtime = false,
+    this.profile,
   });
 
   /// Слот приложения, которого нет в коде (ADR-039): название, обращения,
@@ -49,6 +50,7 @@ final class ConnectionSlot {
       replies: GenericSlotTexts.replies(profile, id),
       protectedReplies: GenericSlotTexts.protectedReplies(id),
       runtime: true,
+      profile: profile,
     );
   }
 
@@ -114,6 +116,11 @@ final class ConnectionSlot {
   /// Слот приложения из каталога подключений ([ConnectionSlot.generic],
   /// ADR-039), а не из кода.
   final bool runtime;
+
+  /// Профиль приложения из каталога ([ConnectionSlot.generic]): имя,
+  /// падежи и род для текстов экрана и карточки (`ConnectionTexts`).
+  /// `null` — слот из кода (склад), тексты прежние.
+  final AppProfile? profile;
 
   /// Имя файлов подключения (`connections/<ключ>.json`,
   /// `<ключ>.assistant.json`): у слотов из кода — [appId], как раньше; у

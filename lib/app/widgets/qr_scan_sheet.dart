@@ -52,18 +52,66 @@ Future<String?> decodeQrImage(String path) async {
   }
 }
 
+/// Годится ли текст из QR для «Подключить приложение» (ADR-039): ссылка
+/// входа ([looksLikeLoginLink]) или адрес приложения `https://…`.
+bool looksLikeAppAddress(String? text) {
+  if (text == null || text.length > 2048) return false;
+  if (looksLikeLoginLink(text)) return true;
+  final trimmed = text.trim();
+  if (!RegExp(r'^https?://', caseSensitive: false).hasMatch(trimmed)) {
+    return false;
+  }
+  try {
+    ConnectionService.baseOf(trimmed);
+    return true;
+  } on ConnectionAddressException {
+    return false;
+  }
+}
+
 /// Шторка «Сканировать QR» (ADR-031): камера, «Из картинки» (снимок
 /// экрана с кодом) и честное «нет доступа к камере». Возвращает текст
-/// ссылки из кода — только годный ([looksLikeLoginLink]); `null` —
-/// закрыли. Сама ничего не подключает: подтверждение и вход — у
-/// вызывающего.
-Future<String?> showQrScanSheet(BuildContext context) => showAppSheet<String>(
+/// ссылки из кода — только годный ([accept], по умолчанию
+/// [looksLikeLoginLink]); `null` — закрыли. Сама ничего не подключает:
+/// подтверждение и вход — у вызывающего. [title], [hint] и [notOurs] —
+/// тексты шторки; по умолчанию — склада.
+Future<String?> showQrScanSheet(
+  BuildContext context, {
+  String? title,
+  String? hint,
+  String? notOurs,
+  bool Function(String? text)? accept,
+}) =>
+    showAppSheet<String>(
       context: context,
-      builder: (BuildContext context) => const QrScanSheet(),
+      builder: (BuildContext context) => QrScanSheet(
+        title: title,
+        hint: hint,
+        notOurs: notOurs,
+        accept: accept,
+      ),
     );
 
 final class QrScanSheet extends StatefulWidget {
-  const QrScanSheet({super.key});
+  const QrScanSheet({
+    super.key,
+    this.title,
+    this.hint,
+    this.notOurs,
+    this.accept,
+  });
+
+  /// Заголовок; `null` — «Сканировать QR склада».
+  final String? title;
+
+  /// Пояснение над камерой; `null` — где взять QR на складе.
+  final String? hint;
+
+  /// Код не тот; `null` — «Это не код склада…».
+  final String? notOurs;
+
+  /// Годится ли текст кода; `null` — [looksLikeLoginLink].
+  final bool Function(String? text)? accept;
 
   @override
   State<QrScanSheet> createState() => _QrScanSheetState();
@@ -95,7 +143,7 @@ final class _QrScanSheetState extends State<QrScanSheet> {
     if (_done) return;
     for (final code in codes) {
       final raw = code.rawValue?.trim();
-      if (looksLikeLoginLink(raw)) {
+      if ((widget.accept ?? looksLikeLoginLink)(raw)) {
         _done = true;
         Navigator.of(context).pop(raw);
         return;
@@ -103,8 +151,9 @@ final class _QrScanSheetState extends State<QrScanSheet> {
     }
     if (codes.isNotEmpty && mounted) {
       setState(
-        () => _problem = 'Это не код склада. Нужен QR со склада: '
-            '«Складской помощник» → «Показать QR».',
+        () => _problem = widget.notOurs ??
+            'Это не код склада. Нужен QR со склада: '
+                '«Складской помощник» → «Показать QR».',
       );
     }
   }
@@ -174,14 +223,15 @@ final class _QrScanSheetState extends State<QrScanSheet> {
     return AppSheet(
       key: const ValueKey<String>('qr-scan-sheet'),
       icon: Icons.qr_code_scanner,
-      title: const WholeWordText('Сканировать QR склада'),
+      title: WholeWordText(widget.title ?? 'Сканировать QR склада'),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const WholeWordText(
-            'На складе: «Складской помощник» → «Показать QR». Наведите камеру на код — '
-            'распознаётся на устройстве, без сети.',
+          WholeWordText(
+            widget.hint ??
+                'На складе: «Складской помощник» → «Показать QR». Наведите '
+                    'камеру на код — распознаётся на устройстве, без сети.',
           ),
           const SizedBox(height: 12),
           if (controller != null)

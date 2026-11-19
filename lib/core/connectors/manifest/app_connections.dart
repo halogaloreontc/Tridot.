@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import '../../services/clock.dart';
@@ -8,6 +9,7 @@ import 'connection.dart';
 import 'connection_directory.dart';
 import 'connection_service.dart';
 import 'connection_slots.dart';
+import 'connection_texts.dart';
 import 'description_authority.dart';
 import 'manifest_fetch.dart';
 import 'manifest_format.dart';
@@ -166,6 +168,9 @@ final class AppConnections {
       if (service != null) _runtime.add(service);
     }
     _all.addAll(_runtime);
+    for (final service in _runtime) {
+      unawaited(_keepOffer(service));
+    }
     _changed();
   }
 
@@ -179,7 +184,7 @@ final class AppConnections {
       return null;
     }
     final pinned = await _directory.loadPinned(entry.id);
-    return ConnectionService.restore(
+    final service = await ConnectionService.restore(
       slot: slot,
       transport: _transport,
       secrets: _secrets,
@@ -189,6 +194,37 @@ final class AppConnections {
       clock: _clock,
       device: _device,
     );
+    // Не принятое описание в кэш не идёт: предложение — из каталога.
+    service.offered ??= entry.offered;
+    _follow(service);
+    return service;
+  }
+
+  /// Предложение приложения ([ConnectionService.offered]) — в каталог:
+  /// после перезапуска «Приложение предлагает изменения» не пропадает.
+  void _follow(ConnectionService service) {
+    void listener() => unawaited(_keepOffer(service));
+    service.addListener(listener);
+  }
+
+  Future<void> _keepOffer(ConnectionService service) async {
+    final id = service.slot.id;
+    final entry = _snapshot.entry(id);
+    if (entry == null || !_runtime.contains(service)) return;
+    final offered = service.offered;
+    if (entry.offered == offered) return;
+    _snapshot = DirectorySnapshot(
+      entries: <DirectoryEntry>[
+        for (final e in _snapshot.entries)
+          if (e.id == id) e.withOffered(offered) else e,
+      ],
+      retired: _snapshot.retired,
+    );
+    try {
+      await _directory.save(_snapshot);
+    } on Object {
+      // Не записалось — предложение живёт до перезапуска.
+    }
   }
 
   /// Названия и обращения подключённых приложений: новое их не займёт.
@@ -220,7 +256,9 @@ final class AppConnections {
     try {
       base = _baseOfInput(address);
     } on ConnectionAddressException catch (error) {
-      return ProbeResult(problems: <String>[error.message]);
+      return ProbeResult(
+        problems: <String>[error.textFor(ConnectionTexts.app)],
+      );
     }
     final fetched = await ManifestFetch.fetch(_transport, base);
     final description = fetched.description;
@@ -407,6 +445,7 @@ final class AppConnections {
     );
     _runtime.add(service);
     _all.add(service);
+    _follow(service);
     _changed();
     return (service: service, warnings: checked.warnings);
   }
