@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/core/chats/chat_models.dart';
 import 'package:local_assistant/core/connectors/manifest/connection.dart';
@@ -13,7 +15,12 @@ void main() {
   late MemoryStorage storage;
   late WidgetSession session;
 
-  WidgetSession make({String version = '1.0.0', bool embedded = true}) {
+  WidgetSession make({
+    String version = '1.0.0',
+    bool embedded = true,
+    Stream<bool>? connectivity,
+    bool online = true,
+  }) {
     host = FakeHost(embedded: embedded);
     return session = WidgetSession(
       host: host,
@@ -23,6 +30,8 @@ void main() {
       version: version,
       updateEvery: const Duration(hours: 1),
       keyWait: const Duration(seconds: 2),
+      connectivity: connectivity,
+      online: online,
     );
   }
 
@@ -380,6 +389,7 @@ void main() {
       expect(host.sent.single['api'], 2);
       expect(host.sent.single['caps'], contains('signal'));
       expect(host.sent.single['caps'], contains('open-chat'));
+      expect(host.sent.single['caps'], contains('open-project'));
     });
 
     test('задача фразой: TasksConnector, чат задачи, на склад my_put',
@@ -626,6 +636,273 @@ void main() {
       final thread = session.book!.thread('session:imp_local');
       expect(thread, isNotNull);
       expect(storage.values.containsKey('svz:hist:ivanov'), isFalse);
+    });
+
+    test(
+        'open-project: проект на экране, неизвестный — «Проекты»; удалили — '
+        'тоже «Проекты»', () async {
+      make();
+      await open();
+      final project = session.createProject('Брак Ромашка')!;
+      host.emit(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': project.id,
+      });
+      await settle();
+      expect(session.view, WidgetView.project);
+      expect(session.projectId, project.id);
+      host.emit(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': 'p_missing_000',
+      });
+      await settle();
+      expect(session.view, WidgetView.projects);
+      session.show(WidgetView.project, project: project.id);
+      await session.deleteProject(project.id);
+      expect(session.view, WidgetView.projects);
+      expect(session.book!.project(project.id), isNull);
+      // «Назад» склада с экрана — в разговор, из разговора — закрыть.
+      host.emit(<String, Object?>{'svz': 1, 'type': 'back'});
+      await settle();
+      expect(session.view, WidgetView.chat);
+      expect(host.types, isNot(contains('close')));
+      host.emit(<String, Object?>{'svz': 1, 'type': 'back'});
+      await settle();
+      expect(host.types.last, 'close');
+    });
+
+    /// Склад с проектом из «В проект»: без метки, задача — по project_id.
+    void serverProject({String status = 'active'}) {
+      server
+        ..withStore()
+        ..on('my_sync', 200, <String, Object?>{
+          'ok': true,
+          'epoch': 'e9',
+          'rev': 2,
+          'mark': 'm2',
+          'full': true,
+          'items': <Object?>[
+            <String, Object?>{
+              'type': 'project',
+              'obj': <String, Object?>{
+                'id': 'project:2_cc',
+                'name': 'Отгрузка 12-26',
+                'created_at': '2026-11-01T10:00:00Z',
+                'updated_at': '2026-11-01T10:00:00Z',
+                'status': status,
+                'rev': 1,
+              },
+            },
+            <String, Object?>{
+              'type': 'task',
+              'obj': <String, Object?>{
+                'id': 'task_2_0002',
+                'title': 'Проверить отгрузку 12-26',
+                'description': '',
+                'status': 'planned',
+                'priority': 'normal',
+                'tags': <String>[],
+                'project_id': 'project:2_cc',
+                'created_at': '2026-11-01T10:00:00Z',
+                'updated_at': '2026-11-01T10:00:00Z',
+                'completed_at': null,
+                'rev': 2,
+              },
+            },
+          ],
+          'gone': <Object?>[],
+          'next': 2,
+          'more': false,
+        });
+    }
+
+    test('проект без метки: задачи по project_id склада', () async {
+      serverProject();
+      make();
+      await open();
+      final task = session.taskList.single;
+      expect(task.tags, isEmpty);
+      expect(session.projectOfTask(task), 'project:2_cc');
+    });
+
+    test('open-project сразу за init при медленной связи — не теряется',
+        () async {
+      serverProject();
+      server.delay = const Duration(milliseconds: 5);
+      make();
+      session.start();
+      host
+        ..emit(initMessage())
+        ..emit(<String, Object?>{
+          'svz': 1,
+          'type': 'open-project',
+          'id': 'project:2_cc',
+          'task': '',
+        });
+      for (var i = 0; i < 100 && session.view != WidgetView.project; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(session.phase, WidgetPhase.ready);
+      expect(session.view, WidgetView.project);
+      expect(session.projectId, 'project:2_cc');
+      // Экран проекта ещё синхронизируется — дождаться до конца теста.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await settle();
+    });
+
+    test('open-project без проекта: задача — её разговор, нет — «Проекты»',
+        () async {
+      serverProject();
+      make();
+      await open();
+      host.emit(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': '',
+        'task': 'task_2_0002',
+      });
+      await settle();
+      expect(session.view, WidgetView.chat);
+      expect(session.book!.current.taskId, 'task_2_0002');
+      host.emit(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': '',
+        'task': '',
+      });
+      await settle();
+      expect(session.view, WidgetView.projects);
+    });
+
+    test('правка задачи архивного проекта не выносит её из проекта', () async {
+      serverProject(status: 'archived');
+      make();
+      await open();
+      expect(session.book!.projects(), isEmpty);
+      final task = session.taskList.single;
+      await session.completeTask(task.id);
+      await settle();
+      final sent = <Map<String, Object?>>[
+        ...server.bodies('my_patch'),
+        ...server.bodies('my_put'),
+      ].where((b) => b['id'] == task.id).toList();
+      expect(sent, isNotEmpty);
+      for (final b in sent) {
+        final fields = (b['set'] ?? b['obj'])! as Map;
+        expect(fields['project_id'], 'project:2_cc');
+      }
+    });
+
+    test('удалить сессию — «Отменить» возвращает её из корзины склада',
+        () async {
+      server.withStore();
+      make();
+      await open();
+      await session.send('где лежит стул');
+      await settle();
+      final id = session.book!.currentId;
+      await session.deleteChat(id);
+      await settle();
+      expect(await session.undoDelete('chat', id), isTrue);
+      final undel = server.bodies('my_undel').single;
+      expect(undel['type'], 'chat');
+      expect(undel['id'], id);
+      expect(
+        server.actions.indexOf('my_del'),
+        lessThan(server.actions.indexOf('my_undel')),
+        reason: 'сначала удаление дошло до склада',
+      );
+    });
+
+    test('метка задач проекта: занятая другим проектом — отказ', () async {
+      make();
+      await open();
+      final a = session.createProject('Ромашка')!;
+      final b = session.createProject('Лютик')!;
+      expect(session.tagProject(a.id, 'romashka'), isTrue);
+      expect(session.tagProject(b.id, 'romashka'), isFalse);
+      session.describeProject(b.id, 'Лютик и Ко', 'Поставщик');
+      expect(session.book!.project(b.id)!.name, 'Лютик и Ко');
+      expect(session.book!.project(b.id)!.description, 'Поставщик');
+    });
+  });
+
+  group('сеть (ADR-040)', () {
+    test('нет сети: правки ждут, связь вернулась — отправлено N', () async {
+      final net = StreamController<bool>.broadcast();
+      addTearDown(net.close);
+      server.withStore();
+      make(connectivity: net.stream);
+      await open();
+      await session.send('добавь задачу проверить акт 12-26 завтра');
+      await settle();
+      final task = session.taskList.single;
+      expect(session.network.offline, isFalse);
+      expect(session.store!.pending, 0);
+
+      server.offline = true;
+      net.add(false);
+      await settle();
+      expect(session.network.offline, isTrue);
+      expect(session.network.visible, isTrue);
+      await session.completeTask(task.id);
+      await settle();
+      final queued = session.store!.pending;
+      expect(queued, greaterThan(0));
+      expect(session.network.offline, isTrue);
+
+      server.offline = false;
+      net.add(true);
+      await settle();
+      expect(session.network.offline, isFalse);
+      expect(session.store!.pending, 0);
+      expect(session.network.sent, queued);
+      final patch = server
+          .bodies('my_patch')
+          .where((b) => b['type'] == 'task' && b['id'] == task.id)
+          .last;
+      expect((patch['set']! as Map)['status'], 'done');
+    });
+
+    test('браузер говорит «online», а склад не отвечает — «Нет сети»',
+        () async {
+      final net = StreamController<bool>.broadcast();
+      addTearDown(net.close);
+      server.withStore();
+      make(connectivity: net.stream, online: false);
+      expect(session.network.offline, isTrue);
+      await open();
+      await session.send('добавь задачу сверить остатки');
+      await settle();
+      // Вход прошёл — значит, связь есть.
+      expect(session.network.offline, isFalse);
+
+      server.offline = true;
+      await session.completeTask(session.taskList.single.id);
+      await settle();
+      expect(session.network.offline, isTrue, reason: 'запрос не дошёл');
+      net.add(true);
+      await settle();
+      expect(session.network.offline, isTrue);
+      expect(session.store!.pending, greaterThan(0));
+    });
+
+    test('без событий браузера: запрос не дошёл, потом дошёл', () async {
+      make();
+      await open();
+      expect(session.network.offline, isFalse);
+      server.offline = true;
+      await session.send('где лежит артикул 1001');
+      await settle();
+      expect(session.network.offline, isTrue);
+      server.offline = false;
+      await session.send('где лежит артикул 1001');
+      await settle();
+      expect(session.network.offline, isFalse);
+      // Без хранилища отложенного нет — просто «Сеть есть».
+      expect(session.network.sent, 0);
     });
   });
 }

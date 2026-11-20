@@ -76,6 +76,15 @@ final class WidgetStore {
   /// Склад сказал, что хранилище есть (`ask_me.store.on`) и оно не
   /// выключилось в этом сеансе.
   bool get remote => _call != null && !_off;
+
+  /// Сколько правок ждут отправки на склад: удаления, проекты, задачи и
+  /// разговоры (ADR-040: «Сеть есть · отправлено N»). Без хранилища — 0.
+  int get pending => !remote
+      ? 0
+      : _state.deletes.length +
+          _state.dirtyProjects.length +
+          _state.dirtyTasks.length +
+          _state.dirtyChats.length;
   bool _off = false;
 
   /// Напоминания склада включены (`ask_me.store.signals`).
@@ -748,7 +757,15 @@ final class WidgetStore {
     return reply;
   }
 
-  String? _projectIdFor(Task task, Iterable<ChatProject> projects) {
+  /// Проект задачи: по метке проекта, иначе `project_id` со склада (у
+  /// проектов из «В проект» метки нет). [archived] — проект, которого нет
+  /// среди открытых, но склад его знает (в архиве): задача остаётся в нём,
+  /// правка её не выносит.
+  String? _projectIdFor(
+    Task task,
+    Iterable<ChatProject> projects, {
+    bool archived = true,
+  }) {
     final tag = task.tags.firstOrNull;
     if (tag != null) {
       for (final p in projects) {
@@ -756,7 +773,39 @@ final class WidgetStore {
       }
     }
     final kept = _state.taskProject[task.id];
-    return projects.any((ChatProject p) => p.id == kept) ? kept : null;
+    if (kept == null) return null;
+    if (projects.any((ChatProject p) => p.id == kept)) return kept;
+    return archived && _state.known.containsKey(kept) ? kept : null;
+  }
+
+  /// Проект задачи для экранов «Проект» и «Проекты»: [projects] — открытые
+  /// проекты книги.
+  String? projectOfTask(Task task, Iterable<ChatProject> projects) =>
+      _projectIdFor(task, projects, archived: false);
+
+  /// Задачу [taskId] завели в разговоре проекта [projectId] без метки: на
+  /// склад она уходит с его `project_id`.
+  void linkTask(String taskId, String projectId) {
+    if (_state.taskProject[taskId] == projectId) return;
+    _state.taskProject[taskId] = projectId;
+    _dirty(_state.dirtyTasks, taskId);
+  }
+
+  /// `my_undel`: вернуть удалённое из корзины склада ([type] — `chat`,
+  /// `project`, `task`). Сначала уходят неотправленные правки — само
+  /// удаление. `true` — вернулось и уже в кэше.
+  Future<bool> undelete(String type, String id) async {
+    if (!remote) return false;
+    await flush();
+    final reply = await _send('my_undel', <String, Object?>{
+      'type': type,
+      'id': id,
+      'op': _op(),
+    });
+    if (!reply.ok) return false;
+    await pull();
+    onPushed?.call();
+    return true;
   }
 
   // ------------------------------------------------------ напоминания

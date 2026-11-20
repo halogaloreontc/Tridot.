@@ -23,6 +23,13 @@ final class FakeWarehouse implements HttpTransport {
   String manifest = builtInSource();
   String? installed;
 
+  /// Медленная связь: каждый ответ — через столько.
+  Duration delay = Duration.zero;
+
+  /// Нет сети: `fetch` браузера отклоняется (TypeError «Failed to fetch»),
+  /// склад запросов не видит.
+  bool offline = false;
+
   /// Ответ `ask_me` по умолчанию, когда сценарий пуст.
   Map<String, Object?> me = <String, Object?>{
     'ok': true,
@@ -106,7 +113,9 @@ final class FakeWarehouse implements HttpTransport {
 
   @override
   Future<HttpResponseData> send(HttpRequestData request) async {
+    if (offline) throw StateError('Failed to fetch');
     requests.add(request);
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
     final path = request.uri.path;
     if (path.endsWith('assistant/current.json')) {
       final v = installed;

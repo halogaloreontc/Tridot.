@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../app/network_status.dart';
+
 import '../core/chats/chat_book.dart';
 import '../core/chats/chat_models.dart';
 import '../core/chats/chat_projects.dart';
@@ -14,6 +16,7 @@ import '../core/connectors/manifest/connection_slots.dart';
 import '../core/connectors/manifest/manifest_connector.dart';
 import '../core/connectors/secret_store.dart';
 import '../core/connectors/tasks_connector.dart';
+import '../core/connectors/watched_transport.dart';
 import '../core/extensions/extension_registry.dart';
 import '../core/models/action_card.dart';
 import '../core/models/task.dart';
@@ -61,6 +64,29 @@ enum WidgetPhase {
   standalone,
 }
 
+/// Что открыто в помощнике: разговор или экран, как разделы приложения
+/// (ADR-038).
+enum WidgetView {
+  /// Разговор ([WidgetSession.book] → `current`).
+  chat,
+
+  /// «Сегодня»: дела на сегодня и просроченные, ждущие карточки (карточка
+  /// «Мой Связной» в меню).
+  today,
+
+  /// Все задачи.
+  tasks,
+
+  /// Проекты: папки и метки задач.
+  projects,
+
+  /// Экран проекта [WidgetSession.projectId]: его разговоры и задачи.
+  project,
+
+  /// Планирование: задачи по дням.
+  planning,
+}
+
 /// Веб-помощник склада без интерфейса (ADR-032, ADR-038): вход по ключу
 /// страницы склада, разговоры (список, проекты, переименовать, закрепить,
 /// удалить, перенести), задачи (`TasksConnector`, «готово», срок),
@@ -78,8 +104,27 @@ final class WidgetSession extends ChangeNotifier {
     Clock clock = const SystemClock(),
     this.updateEvery = const Duration(minutes: 10),
     this.keyWait = const Duration(seconds: 15),
-  })  : _transport = transport,
-        _clock = clock;
+    Stream<bool>? connectivity,
+    bool online = true,
+    NetworkStatus? network,
+  })  : network = network ?? NetworkStatus(),
+        _clock = clock {
+    // Связь со складом (ADR-040): каждый запрос помощника — через
+    // [WatchedTransport]; браузер ещё и сам говорит «online» / «offline».
+    _transport = WatchedTransport(
+      transport,
+      onReachable: _reachable,
+      onUnreachable: _unreachable,
+    );
+    if (!online) this.network.lost();
+    _connectivity = connectivity?.listen((bool up) {
+      if (up) {
+        unawaited(_recover());
+      } else {
+        _unreachable();
+      }
+    });
+  }
 
   final HostChannel host;
   final KeyValueStorage storage;
@@ -95,8 +140,17 @@ final class WidgetSession extends ChangeNotifier {
   /// Сколько ждать новый ключ от страницы склада.
   final Duration keyWait;
 
-  final HttpTransport _transport;
+  late final HttpTransport _transport;
   final Clock _clock;
+
+  /// Есть ли связь со складом — капсула над полем ввода (ADR-040).
+  final NetworkStatus network;
+  StreamSubscription<bool>? _connectivity;
+
+  /// Сколько раз запрос не дошёл: [_recover] видит, что связь опять
+  /// пропала, пока уходило отложенное.
+  int _losses = 0;
+  bool _recovering = false;
 
   /// Как устройство называется в списке подключённых Связных на складе.
   static const String deviceName = 'Веб-помощник';
@@ -166,6 +220,75 @@ final class WidgetSession extends ChangeNotifier {
 
   int _voiceId = 0;
 
+  // ------------------------------------------------------------ экраны
+
+  /// Открытый экран; «Назад» склада и Escape с экрана ведут в разговор.
+  WidgetView view = WidgetView.chat;
+
+  /// Проект экрана [WidgetView.project].
+  String? projectId;
+
+  /// Открыть экран [next]; [project] — для [WidgetView.project].
+  void show(WidgetView next, {String? project}) {
+    view = next;
+    projectId = next == WidgetView.project ? project : null;
+    if (next != WidgetView.chat) unawaited(refresh());
+    notifyListeners();
+  }
+
+  /// Что склад просил открыть, пока помощник не мог: вход ещё идёт или
+  /// готовится ответ (тогда книгу разговоров не перечитываем — ответ лёг
+  /// бы в прежнюю). Открывается, когда помощник готов и свободен.
+  ({String? project, String? task, String? chat})? _pendingOpen;
+
+  /// Проект со склада (`open-project`): нет в кэше — сначала
+  /// синхронизация; так и не нашёлся — экран «Проекты». [id] `null` —
+  /// задача [task] без проекта: её разговор, а нет её — «Проекты».
+  Future<void> openServerProject(String? id, {String? task}) async {
+    var current = book;
+    if (current == null || phase != WidgetPhase.ready) {
+      _pendingOpen = (project: id, task: task, chat: null);
+      return;
+    }
+    final missing = (id != null && current.project(id) == null) ||
+        (id == null && task != null && !await _hasTask(task));
+    if (missing) {
+      if (busy) {
+        _pendingOpen = (project: id, task: task, chat: null);
+        return;
+      }
+      await store?.pull();
+      if (busy) {
+        _pendingOpen = (project: id, task: task, chat: null);
+        return;
+      }
+      await _loadBook(keep: current.currentId);
+      current = book!;
+    }
+    if (id != null && current.project(id) != null) {
+      show(WidgetView.project, project: id);
+    } else if (id == null && task != null && await _hasTask(task)) {
+      await openTask(task);
+    } else {
+      show(WidgetView.projects);
+    }
+  }
+
+  Future<bool> _hasTask(String id) async =>
+      (await tasks?.listAll() ?? const <Task>[]).any((Task t) => t.id == id);
+
+  /// Открыть отложенное ([_pendingOpen]): после входа и после ответа.
+  Future<void> _openPending() async {
+    final pending = _pendingOpen;
+    if (pending == null || phase != WidgetPhase.ready || busy) return;
+    _pendingOpen = null;
+    if (pending.chat case final String chat) {
+      await openServerChat(chat);
+    } else {
+      await openServerProject(pending.project, task: pending.task);
+    }
+  }
+
   // --------------------------------------------------------------- ввод
 
   String _draft = '';
@@ -208,7 +331,38 @@ final class WidgetSession extends ChangeNotifier {
   void dispose() {
     _events?.cancel();
     _updates?.cancel();
+    _connectivity?.cancel();
+    network.dispose();
     super.dispose();
+  }
+
+  // --------------------------------------------------------------- сеть
+
+  void _unreachable() {
+    _losses++;
+    network.lost();
+  }
+
+  void _reachable() {
+    if (network.offline) unawaited(_recover());
+  }
+
+  /// Связь вернулась (браузер сказал «online» или запрос дошёл): отложенные
+  /// правки `my_*` — на склад, потом «Сеть есть · отправлено N». Пока они
+  /// уходили, связь опять пропала — капсула остаётся «Нет сети».
+  Future<void> _recover() async {
+    if (_recovering || !network.offline) return;
+    _recovering = true;
+    try {
+      final losses = _losses;
+      final records = store;
+      final before = records?.pending ?? 0;
+      if (records != null && phase == WidgetPhase.ready) await records.flush();
+      if (_losses != losses) return;
+      network.restored(sent: before - (records?.pending ?? 0));
+    } finally {
+      _recovering = false;
+    }
   }
 
   Future<void> _onEvent(HostEvent event) async {
@@ -229,11 +383,7 @@ final class WidgetSession extends ChangeNotifier {
         this.theme = theme;
         notifyListeners();
       case HostBack():
-        if (listening) {
-          cancelVoice();
-        } else {
-          close();
-        }
+        escape();
       case HostLogout():
         await _logout();
       case HostVisible(:final on):
@@ -248,6 +398,8 @@ final class WidgetSession extends ChangeNotifier {
         _showSignals(items, focus: focus);
       case HostOpenChat(:final id):
         await openServerChat(id);
+      case HostOpenProject(:final id, :final task):
+        await openServerProject(id, task: task);
       case HostVoiceEvent():
         _onVoice(event);
     }
@@ -302,6 +454,7 @@ final class WidgetSession extends ChangeNotifier {
     _updates ??= Timer.periodic(updateEvery, (_) => unawaited(checkUpdate()));
     notifyListeners();
     unawaited(checkUpdate());
+    await _openPending();
     return true;
   }
 
@@ -650,12 +803,14 @@ final class WidgetSession extends ChangeNotifier {
     final thread = await current.newSession(projectId: projectId);
     controller?.clearConversation();
     _enterController(thread);
+    view = WidgetView.chat;
     notifyListeners();
   }
 
   Future<void> openChat(String chatId) async {
     if (busy) return;
     await _enter(chatId);
+    view = WidgetView.chat;
     notifyListeners();
   }
 
@@ -663,9 +818,16 @@ final class WidgetSession extends ChangeNotifier {
   /// — сначала синхронизация.
   Future<void> openServerChat(String chatId) async {
     var current = book;
-    if (current == null) return;
+    if (current == null || phase != WidgetPhase.ready || busy) {
+      _pendingOpen = (project: null, task: null, chat: chatId);
+      return;
+    }
     if (current.thread(chatId) == null) {
       await store?.pull();
+      if (busy) {
+        _pendingOpen = (project: null, task: null, chat: chatId);
+        return;
+      }
       await _loadBook();
       current = book!;
     }
@@ -721,11 +883,83 @@ final class WidgetSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteProject(String projectId) async {
-    final current = book;
-    if (current == null) return;
-    await current.deleteProject(projectId, deleteSessions: false);
+  /// Описание проекта; пустое — убрать.
+  void describeProject(String projectId, String name, String? description) {
+    book
+      ?..renameProject(projectId, name)
+      ..setProjectDescription(projectId, description);
     notifyListeners();
+  }
+
+  /// Метка задач проекта; `null` — снять связь. `false` — метка уже у
+  /// другого проекта.
+  bool tagProject(String projectId, String? tag) {
+    final current = book;
+    if (current == null) return false;
+    final other = tag == null ? null : current.projectForTag(tag);
+    if (other != null && other.id != projectId) return false;
+    current.linkProjectTag(projectId, tag);
+    if (current.current.projectId == projectId) {
+      controller?.setProjectTag(tag);
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// Удалить проект; [deleteSessions] — вместе с его разговорами, иначе
+  /// они остаются без проекта. Открыт экран проекта — «Проекты».
+  /// [removed] — сюда id стёртых разговоров (для «Отменить»).
+  Future<void> deleteProject(
+    String projectId, {
+    bool deleteSessions = false,
+    Set<String>? removed,
+  }) async {
+    final current = book;
+    if (current == null || busy) return;
+    final wasCurrent = await current.deleteProject(
+      projectId,
+      deleteSessions: deleteSessions,
+      removed: removed,
+    );
+    if (wasCurrent) {
+      controller?.clearConversation();
+      _enterController(current.current);
+    } else {
+      controller?.setProjectTag(current.projectOf(current.currentId)?.taskTag);
+    }
+    if (view == WidgetView.project && this.projectId == projectId) {
+      view = WidgetView.projects;
+      this.projectId = null;
+    }
+    notifyListeners();
+  }
+
+  /// «Отменить» после удаления: вернуть из корзины склада проект или
+  /// разговор ([type] `project`, `chat`) и [chats] — стёртые вместе с
+  /// проектом разговоры. `false` — не вышло (нет хранилища склада или
+  /// удалённое на склад ещё не попадало).
+  Future<bool> undoDelete(
+    String type,
+    String id, {
+    Iterable<String> chats = const <String>[],
+  }) async {
+    final records = store;
+    if (records == null || !records.remote || busy) return false;
+    final ok = await records.undelete(type, id);
+    for (final chat in chats) {
+      await records.undelete('chat', chat);
+    }
+    if (ok && !busy) await _loadBook(keep: book?.currentId);
+    notifyListeners();
+    return ok;
+  }
+
+  /// Проект задачи (id открытого проекта) — по метке или по проекту
+  /// склада; `null` — без проекта.
+  String? projectOfTask(Task task) {
+    final current = book;
+    if (current == null) return null;
+    return store?.projectOfTask(task, current.projects());
   }
 
   // ------------------------------------------------------------ задачи
@@ -756,6 +990,7 @@ final class WidgetSession extends ChangeNotifier {
     if (current == null || busy) return;
     final thread = await current.openTask(id);
     _enterController(thread);
+    view = WidgetView.chat;
     notifyListeners();
   }
 
@@ -814,6 +1049,8 @@ final class WidgetSession extends ChangeNotifier {
     book = null;
     store = null;
     _storeLogin = null;
+    view = WidgetView.chat;
+    projectId = null;
     controller?.clearConversation();
     controller = null;
     taskList = const <Task>[];
@@ -875,6 +1112,12 @@ final class WidgetSession extends ChangeNotifier {
           task != null &&
           response.status == AssistantStatus.completed &&
           chats.taskThread(task.id) == null) {
+        // Проект без метки (из «В проект» склада): задача — в нём по
+        // project_id.
+        final project = chats.projectOf(chatId);
+        if (project != null && project.taskTag == null) {
+          store?.linkTask(task.id, project.id);
+        }
         chats.onTaskCreated(
           task.id,
           fromChatId: chatId,
@@ -901,6 +1144,7 @@ final class WidgetSession extends ChangeNotifier {
       busy = false;
       notifyListeners();
       _maybeAnnounce();
+      unawaited(_openPending());
     }
   }
 
@@ -939,6 +1183,7 @@ final class WidgetSession extends ChangeNotifier {
       chats.touch(chatId);
       notifyListeners();
       _maybeAnnounce();
+      unawaited(_openPending());
     }
   }
 
@@ -963,6 +1208,8 @@ final class WidgetSession extends ChangeNotifier {
   void escape() {
     if (listening) {
       cancelVoice();
+    } else if (view != WidgetView.chat) {
+      show(WidgetView.chat);
     } else {
       close();
     }

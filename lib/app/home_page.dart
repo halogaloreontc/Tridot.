@@ -108,7 +108,7 @@ import 'widgets/connection_screen.dart';
 import 'widgets/document_view.dart';
 import 'widgets/extensions_section.dart';
 import 'widgets/history_rail.dart';
-import 'widgets/personas_section.dart';
+import 'widgets/message_row.dart';
 import 'widgets/quick_dock.dart';
 import 'widgets/status_cube.dart';
 import 'widgets/task_chat_header.dart';
@@ -122,6 +122,8 @@ import 'links/incoming_links.dart';
 import 'links/link_opener.dart';
 import '../core/connectors/manifest/warehouse_signals.dart';
 import 'widgets/whole_word_text.dart';
+import 'network_status.dart';
+import 'widgets/network_capsule.dart';
 
 /// Разделы оболочки «Д»: сессия (главный экран), задачи, проекты,
 /// экран одного проекта-папки, планирование и «Мой Связной».
@@ -196,6 +198,7 @@ final class HomePage extends StatefulWidget {
     this.appLock,
     this.incoming,
     this.signals = const <WarehouseSignals>[],
+    this.network,
     this.onAppearanceChanged,
     this.onReduceMotionChanged,
   });
@@ -216,6 +219,10 @@ final class HomePage extends StatefulWidget {
 
   /// Подключения к приложениям (склад): «Настройки → Подключения».
   final List<ConnectionService> connections;
+
+  /// Связь со складом (ADR-040): без неё над полем ввода — капсула «Нет
+  /// сети»; `null` — капсулы нет.
+  final NetworkStatus? network;
 
   /// Выбор файлов для «+» → «Прикрепить файл» (ADR-019); в тестах —
   /// подделка.
@@ -5087,7 +5094,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           at.difference(before.timestamp) > const Duration(minutes: 15);
       if (newGroup) {
         rows.add(
-          _GroupTime(
+          ChatGroupTime(
             key: ValueKey<String>('group-time-${message.id}'),
             label: _groupLabel(at),
             first: rows.isEmpty,
@@ -5136,11 +5143,17 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           _weatherCard(message) ??
           _warehouseCard(message) ??
           _clarifyOptions(message);
-      final row = _MessageRow(
+      final row = MessageRow(
         cast: _settings.personas.cast,
         key: key,
         message: message,
-        attachments: _book.store.attachments,
+        attachmentsView: message.attachments.isEmpty
+            ? null
+            : MessageAttachments(
+                attachments: message.attachments,
+                store: _book.store.attachments,
+                alignEnd: message.fromUser,
+              ),
         commandSpans: _commandSpansOf(message),
         // В чате задачи плитка самой задачи под ответами не нужна: она в
         // шапке.
@@ -5184,7 +5197,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_sending && working != null && _workingChatId == _book.currentId) {
       final author = _settings.personas.cast.find(working.personaId);
       rows.add(
-        _MessageRow(
+        MessageRow(
           cast: _settings.personas.cast,
           key: const Key('working-message'),
           message: working,
@@ -5775,47 +5788,59 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
           composer: SingleChildScrollView(
             reverse: true,
-            child: CommandComposer(
-              controller: _input,
-              focusNode: _inputFocus,
-              sending: _busyHere,
-              mode: _mode,
-              onModeChanged: _setMode,
-              onSend: _send,
-              // Четыре частые команды и «Найти команду» (ADR-020);
-              // действия сейфа — там же, пока навык «Пароли» включён.
-              templates: _catalog.top(_settings.commandUsage),
-              onCommand: _runCommand,
-              onFindCommand: () => unawaited(_findCommand()),
-              // Дисков пока нет: список подключённых пуст (ADR-019).
-              cloudDisks: const <CloudDisk>[],
-              onConnectDisk: () => unawaited(_explainCloudDisks()),
-              onCloudDisk: (CloudDisk disk) => _announce(
-                'Выбор файлов с диска «${disk.label}» — следующий этап',
+            child: _withNetwork(
+              CommandComposer(
+                controller: _input,
+                focusNode: _inputFocus,
+                sending: _busyHere,
+                mode: _mode,
+                onModeChanged: _setMode,
+                onSend: _send,
+                // Четыре частые команды и «Найти команду» (ADR-020);
+                // действия сейфа — там же, пока навык «Пароли» включён.
+                templates: _catalog.top(_settings.commandUsage),
+                onCommand: _runCommand,
+                onFindCommand: () => unawaited(_findCommand()),
+                // Дисков пока нет: список подключённых пуст (ADR-019).
+                cloudDisks: const <CloudDisk>[],
+                onConnectDisk: () => unawaited(_explainCloudDisks()),
+                onCloudDisk: (CloudDisk disk) => _announce(
+                  'Выбор файлов с диска «${disk.label}» — следующий этап',
+                ),
+                onAttach: (PickKind kind) => unawaited(_pickFiles(kind)),
+                pending: <PendingAttachmentChip>[
+                  for (final file in _pendingFiles)
+                    PendingAttachmentChip(
+                      name: file.name,
+                      kind: file.kind,
+                      size: file.size,
+                    ),
+                ],
+                onRemovePending: (int i) =>
+                    setState(() => _pendingFiles.removeAt(i)),
+                voiceMode: _voiceMode,
+                voicePartial: _voiceListening ? _voicePartial : null,
+                voiceNotice: _voiceNotice,
+                onVoiceTap: _voiceTap,
+                onVoiceLongPress: _voiceTap,
+                onVoiceCancel: () => unawaited(_cancelVoice()),
+                previousCommand: _previousCommand,
+                nextCommand: _nextCommand,
               ),
-              onAttach: (PickKind kind) => unawaited(_pickFiles(kind)),
-              pending: <PendingAttachmentChip>[
-                for (final file in _pendingFiles)
-                  PendingAttachmentChip(
-                    name: file.name,
-                    kind: file.kind,
-                    size: file.size,
-                  ),
-              ],
-              onRemovePending: (int i) =>
-                  setState(() => _pendingFiles.removeAt(i)),
-              voiceMode: _voiceMode,
-              voicePartial: _voiceListening ? _voicePartial : null,
-              voiceNotice: _voiceNotice,
-              onVoiceTap: _voiceTap,
-              onVoiceLongPress: _voiceTap,
-              onVoiceCancel: () => unawaited(_cancelVoice()),
-              previousCommand: _previousCommand,
-              nextCommand: _nextCommand,
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// Поле ввода и над ним — капсула «Нет сети» (ADR-040).
+  Widget _withNetwork(Widget composer) {
+    final network = widget.network;
+    if (network == null) return composer;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[NetworkCapsule(status: network), composer],
     );
   }
 
@@ -5959,443 +5984,10 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return label[0].toUpperCase() + label.substring(1);
   }
 
-  static String _timeLabel(DateTime value) =>
-      '${value.hour.toString().padLeft(2, '0')}:'
-      '${value.minute.toString().padLeft(2, '0')}';
+  static String _timeLabel(DateTime value) => clockLabel(value);
 }
 
 // ------------------------------------------------------------------ части
-
-/// Метка времени над группой сообщений: «Сегодня, 14:05» по центру,
-/// без линий (ADR-027). Появляется при смене дня или после паузы больше
-/// 15 минут.
-final class _GroupTime extends StatelessWidget {
-  const _GroupTime({super.key, required this.label, required this.first});
-
-  final String label;
-
-  /// Самая верхняя метка ленты: сверху отступ меньше.
-  final bool first;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        top: first ? AppSpace.xs : AppSpace.timeLabel,
-        bottom: AppSpace.timeLabel,
-      ),
-      child: Center(
-        child: WholeWordText(
-          label,
-          textAlign: TextAlign.center,
-          style: metaStyle(context).copyWith(color: context.colors.muted),
-        ),
-      ),
-    );
-  }
-}
-
-/// Ссылка на другой чат под сообщением: текстовая кнопка цветом акцента
-/// со стрелкой, без рамки (ADR-027). Текст переносится: при узком экране
-/// и крупном шрифте подпись не обрезается.
-final class _ChatLinkChip extends StatelessWidget {
-  const _ChatLinkChip({
-    super.key,
-    required this.label,
-    required this.origin,
-    required this.onTap,
-  });
-
-  final String label;
-
-  /// Ссылка назад, в чат, где создана задача (иначе — в чат задачи).
-  final bool origin;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = context.colors.accent;
-    return Semantics(
-      button: true,
-      label: label,
-      onTap: onTap,
-      excludeSemantics: true,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.inner),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: AppSize.minTap),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                if (origin) ...<Widget>[
-                  Icon(Icons.arrow_back, size: 18, color: accent),
-                  const SizedBox(width: 8),
-                ],
-                Flexible(
-                  child: WholeWordText(
-                    label,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium!
-                        .copyWith(color: accent, fontWeight: FontWeight.w500),
-                  ),
-                ),
-                if (!origin) ...<Widget>[
-                  const SizedBox(width: 8),
-                  Icon(Icons.arrow_forward, size: 18, color: accent),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Абзацы ответа: «\n\n» — промежуток [AppSpace.paragraph] вместо пустой
-/// строки, «\n» остаётся переносом. Текст тот же — выделяется и
-/// копируется целиком.
-TextSpan _paragraphs(String text, TextStyle style) {
-  final parts = text.split('\n\n');
-  return TextSpan(
-    style: style,
-    children: <InlineSpan>[
-      TextSpan(text: parts.first),
-      for (final part in parts.skip(1)) ...<InlineSpan>[
-        const TextSpan(text: '\n'),
-        // Пустая строка высотой с промежуток абзацев.
-        const TextSpan(
-          text: '\n',
-          style: TextStyle(fontSize: AppSpace.paragraph, height: 1),
-        ),
-        TextSpan(text: part),
-      ],
-    ],
-  );
-}
-
-final class _MessageRow extends StatelessWidget {
-  const _MessageRow({
-    super.key,
-    required this.cast,
-    required this.message,
-    required this.now,
-    required this.showTime,
-    required this.onOpenTask,
-    required this.onToggleDone,
-    this.showAuthor = true,
-    this.topGap = 0,
-    this.thinking = false,
-    this.reduceMotion = false,
-    this.task,
-    this.highlighted = false,
-    this.selectedId,
-    this.checklist,
-    this.linkLabel,
-    this.linkKey,
-    this.onOpenLink,
-    this.attachments,
-    this.commandSpans = const <CommandSpan>[],
-  });
-
-  final ChatMessage message;
-
-  /// Распознанные части команды пользователя (ADR-021); в ленте они —
-  /// обычный текст (ADR-027).
-  final List<CommandSpan> commandSpans;
-
-  /// Хранилище копий вложений: превью и «файл не найден» (ADR-019).
-  final AttachmentStore? attachments;
-
-  /// Состав помощников: старые ответы `rio`/`noda` подписаны текущими
-  /// именами.
-  final PersonaCast cast;
-
-  /// Ссылка на другой чат под сообщением: подпись, ключ и действие.
-  final String? linkLabel;
-  final Key? linkKey;
-  final VoidCallback? onOpenLink;
-
-  /// Карточка массовой команды под текстом ответа.
-  final Widget? checklist;
-  final Task? task;
-  final DateTime now;
-  final bool showTime;
-
-  /// Имя помощника над ответом: только при смене автора или после паузы.
-  final bool showAuthor;
-
-  /// Промежуток над сообщением — ритм ленты ([AppSpace]).
-  final double topGap;
-
-  /// Ответ ещё готовится: строка приглушённым текстом.
-  final bool thinking;
-  final bool reduceMotion;
-  final bool highlighted;
-  final String? selectedId;
-  final ValueChanged<Task> onOpenTask;
-  final ValueChanged<Task> onToggleDone;
-
-  /// Время сообщения — в меню выделения текста («Отправлено в 14:05»).
-  Widget _menu(BuildContext context, EditableTextState state) {
-    final time = _HomePageState._timeLabel(message.timestamp);
-    return AdaptiveTextSelectionToolbar.buttonItems(
-      anchors: state.contextMenuAnchors,
-      buttonItems: <ContextMenuButtonItem>[
-        ...state.contextMenuButtonItems,
-        ContextMenuButtonItem(
-          label: message.fromUser ? 'Отправлено в $time' : 'Ответ в $time',
-          onPressed: () => state.hideToolbar(),
-        ),
-      ],
-    );
-  }
-
-  Widget _text(BuildContext context) {
-    final fromUser = message.fromUser;
-    // Тире не начинает строку (длина та же — отметки команд на месте).
-    final text = bindDashes(message.text);
-    final body = Theme.of(context).textTheme.bodyLarge!;
-    if (thinking) {
-      return Text(
-        text,
-        style: Theme.of(context)
-            .textTheme
-            .bodyMedium!
-            .copyWith(color: context.colors.muted),
-      );
-    }
-    if (fromUser && commandSpans.isNotEmpty) {
-      return SelectableText.rich(
-        highlightedCommand(
-          text,
-          CommandSpans.normalize(commandSpans, text.length),
-          body.copyWith(color: context.colors.textStrong),
-          colors: context.colors,
-          // В ленте команда — обычный текст (ADR-027).
-          mode: CommandSpanMode.plain,
-        ),
-        contextMenuBuilder: _menu,
-      );
-    }
-    final style = body.copyWith(
-      color: fromUser ? context.colors.textStrong : context.colors.text,
-    );
-    if (!fromUser && text.contains('\n\n')) {
-      return SelectableText.rich(
-        _paragraphs(text, style),
-        contextMenuBuilder: _menu,
-      );
-    }
-    return SelectableText(
-      text,
-      style: style,
-      contextMenuBuilder: _menu,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final fromUser = message.fromUser;
-    final status = message.status;
-    final label = switch (status) {
-      AssistantStatus.needsClarification => 'Уточните',
-      AssistantStatus.failed => 'Ошибка',
-      _ => null,
-    };
-    final labelColor = status == AssistantStatus.failed
-        ? context.colors.danger
-        : context.colors.warning;
-    final current = task;
-    final author = fromUser ? null : cast.find(message.personaId);
-    final hasText = message.text.isNotEmpty || message.attachments.isEmpty;
-    final Widget? textBlock;
-    if (!hasText) {
-      textBlock = null;
-    } else if (fromUser) {
-      // Пузырь: заливка без рамки и без «хвоста»; найденный поиском или
-      // выбранный в истории — рамкой акцента.
-      textBlock = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: context.colors.bubble,
-          border: highlighted
-              ? Border.all(color: context.colors.accent, width: 1.5)
-              : null,
-          borderRadius: BorderRadius.circular(AppRadius.bubble),
-        ),
-        child: _text(context),
-      );
-    } else if (highlighted) {
-      // Найденный ответ — мягкой заливкой акцента, которая гаснет.
-      textBlock = TweenAnimationBuilder<double>(
-        key: ValueKey<String>('reply-hit-${message.id}'),
-        tween: Tween<double>(begin: 1, end: reduceMotion ? 1 : 0),
-        duration:
-            reduceMotion ? Duration.zero : const Duration(milliseconds: 1200),
-        curve: const Interval(.5, 1, curve: Curves.easeOut),
-        builder: (BuildContext context, double t, Widget? child) =>
-            DecoratedBox(
-          decoration: BoxDecoration(
-            color: context.colors.accent.withValues(alpha: .12 * t),
-            borderRadius: BorderRadius.circular(AppRadius.inner),
-          ),
-          child: child,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: _text(context),
-        ),
-      );
-    } else {
-      // Ответ — обычные абзацы: без фона, рамки, полосы и отступа.
-      textBlock = _text(context);
-    }
-    final content = Column(
-      crossAxisAlignment:
-          fromUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        if (author != null && showAuthor)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpace.nameToText),
-            child: Row(
-              key: ValueKey<String>('author-name-${author.id}'),
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                PersonaDot(persona: author),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    author.russianName,
-                    overflow: TextOverflow.ellipsis,
-                    style: metaStyle(context).copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: PersonaColors.of(author, context).$1,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (label != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              label,
-              style: metaStyle(context).copyWith(color: labelColor),
-            ),
-          ),
-        if (attachments != null && message.attachments.isNotEmpty)
-          Padding(
-            padding: EdgeInsets.only(
-              bottom: message.text.isEmpty ? 0 : 8,
-            ),
-            child: MessageAttachments(
-              attachments: message.attachments,
-              store: attachments!,
-              alignEnd: fromUser,
-            ),
-          ),
-        if (textBlock != null) textBlock,
-        if (checklist != null)
-          Padding(
-            padding: const EdgeInsets.only(top: AppSpace.textToCard),
-            child: checklist!,
-          ),
-        if (current != null)
-          Container(
-            key: ValueKey<String>('message-task-${current.id}'),
-            margin: const EdgeInsets.only(top: AppSpace.textToCard),
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: context.colors.raised,
-              borderRadius: BorderRadius.circular(AppRadius.card),
-            ),
-            child: Material(
-              type: MaterialType.transparency,
-              child: TaskTile(
-                task: current,
-                now: now,
-                dense: true,
-                highlightSelected: false,
-                selected: current.id == selectedId,
-                onTap: () => onOpenTask(current),
-                onToggleDone: () => onToggleDone(current),
-              ),
-            ),
-          ),
-        if (linkLabel != null && onOpenLink != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: _ChatLinkChip(
-              key: linkKey,
-              label: linkLabel!,
-              origin: linkKey == const Key('chat-origin-link'),
-              onTap: onOpenLink!,
-            ),
-          ),
-        if (showTime)
-          Padding(
-            padding: const EdgeInsets.only(top: AppSpace.xxs),
-            child: Text(
-              _HomePageState._timeLabel(message.timestamp),
-              style:
-                  metaNumStyle(context).copyWith(color: context.colors.muted),
-            ),
-          ),
-      ],
-    );
-    // Ответ — колонкой чтения не шире 640 от левого края; пузырь — не
-    // шире 78 % колонки и 460, у правого края.
-    return Padding(
-      padding: EdgeInsets.only(top: topGap),
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          final max = fromUser
-              ? math.min(
-                  constraints.maxWidth * AppSize.maxBubbleFactor,
-                  AppSize.maxBubble,
-                )
-              : AppSize.maxReading;
-          final Widget body = fromUser
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: max),
-                      child: content,
-                    ),
-                  ],
-                )
-              : content;
-          final row = Align(
-            alignment: fromUser ? Alignment.centerRight : Alignment.centerLeft,
-            child: fromUser
-                ? body
-                : ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: max),
-                    child: body,
-                  ),
-          );
-          // У ответа — ключ автора на всей строке, даже когда имя не
-          // повторяется: по нему видно, чей это ответ.
-          return author == null
-              ? row
-              : KeyedSubtree(
-                  key: ValueKey<String>('message-author-${author.id}'),
-                  child: row,
-                );
-        },
-      ),
-    );
-  }
-}
 
 /// Файлы сессии: результаты и вложения ([SessionFiles.of]).
 final class _SessionFileLists {

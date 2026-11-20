@@ -31,12 +31,15 @@ Future<void> main() async {
   } on Object {
     builtIn = null;
   }
+  final network = BrowserNetwork();
   final session = WidgetSession(
     host: BrowserHost(),
     transport: FetchTransport(),
     storage: BrowserStorage(),
     builtInManifest: builtIn,
     version: widgetVersion,
+    connectivity: network.changes,
+    online: network.online,
   );
   runApp(WidgetApp(session: session));
   session.start();

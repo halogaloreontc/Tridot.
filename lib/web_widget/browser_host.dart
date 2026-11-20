@@ -78,3 +78,28 @@ final class BrowserHost implements HostChannel {
     parent.postMessage(message.jsify(), _origin.toJS);
   }
 }
+
+/// Сеть браузера (ADR-040): `navigator.onLine` при запуске и события
+/// `online` / `offline` окна. «online» — лишь повод проверить: капсула
+/// «Сеть есть» появится, когда до склада дойдёт отложенное.
+final class BrowserNetwork {
+  BrowserNetwork() {
+    web.window.addEventListener('online', _up);
+    web.window.addEventListener('offline', _down);
+  }
+
+  late final JSFunction _up = ((web.Event _) => _changes.add(true)).toJS;
+  late final JSFunction _down = ((web.Event _) => _changes.add(false)).toJS;
+
+  final StreamController<bool> _changes = StreamController<bool>.broadcast();
+
+  bool get online {
+    try {
+      return web.window.navigator.onLine;
+    } on Object {
+      return true;
+    }
+  }
+
+  Stream<bool> get changes => _changes.stream;
+}

@@ -8,8 +8,8 @@ import '../../core/cloud/cloud_disk.dart';
 import '../../core/commands/command_catalog.dart';
 import '../assistant_theme.dart';
 import '../layout.dart';
-import '../attachments/attachment_picker.dart';
-import '../attachments/attachment_views.dart';
+import '../attachments/attachment_chip.dart';
+import '../attachments/pick_kind.dart';
 import 'command_finder_sheet.dart';
 import 'grouped.dart' show segmentThumbShadow;
 import 'whole_word_text.dart';
@@ -87,7 +87,31 @@ final class CommandComposer extends StatefulWidget {
     this.onVoiceCancel,
     this.voicePartial,
     this.voiceNotice,
+    this.hint = 'Сообщение',
+    this.modes = true,
+    this.plus = true,
+    this.inputKey = const Key('assistant-input'),
+    this.sendKey = const Key('assistant-send'),
+    this.maxLength,
   });
+
+  /// Подсказка в пустом поле.
+  final String hint;
+
+  /// Переключатель «Диалог / Документ» посередине нижней строки; веб-помощник
+  /// склада (ADR-038) — без документа.
+  final bool modes;
+
+  /// «+» — файлы, диски, шаблоны; в веб-помощнике их нет.
+  final bool plus;
+
+  /// Ключи поля и отправки: у веб-помощника — свои (`widget-input`,
+  /// `widget-send`), их ждут проверки склада.
+  final Key inputKey;
+  final Key sendKey;
+
+  /// Наибольшая длина текста; `null` — без ограничения.
+  final int? maxLength;
 
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -322,7 +346,7 @@ final class _CommandComposerState extends State<CommandComposer>
         final hint = switch (voiceMode) {
           VoiceButtonMode.listening => 'Говорите…',
           VoiceButtonMode.loading => 'Готовлю распознавание…',
-          _ => 'Сообщение',
+          _ => widget.hint,
         };
         final plus = Tooltip(
           message: 'Файлы, диски и шаблоны команд',
@@ -367,7 +391,7 @@ final class _CommandComposerState extends State<CommandComposer>
                   boxShadow: hasText ? null : _controlShadow(context),
                 ),
                 child: IconButton(
-                  key: const Key('assistant-send'),
+                  key: widget.sendKey,
                   // Пустое поле отправка и так пропускает; кнопка лишь тише,
                   // а не выключена: набранный только что текст уходит, даже
                   // если кадр ещё не перерисован.
@@ -442,8 +466,9 @@ final class _CommandComposerState extends State<CommandComposer>
                 ? 'Долгое нажатие на пустое поле — голосовой ввод'
                 : null,
             child: TextField(
-              key: const Key('assistant-input'),
+              key: widget.inputKey,
               controller: widget.controller,
+              maxLength: widget.maxLength,
               focusNode: widget.focusNode,
               // Одна строка растёт до шести (ADR-027).
               minLines: 1,
@@ -477,6 +502,7 @@ final class _CommandComposerState extends State<CommandComposer>
                 filled: false,
                 contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                 isDense: true,
+                counterText: '',
               ),
             ),
           ),
@@ -573,14 +599,17 @@ final class _CommandComposerState extends State<CommandComposer>
                       Expanded(
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: left,
+                          child: widget.plus || voiceActive
+                              ? left
+                              : const SizedBox(height: AppSize.sendButton),
                         ),
                       ),
-                      _ModeSwitch(
-                        mode: widget.mode,
-                        onChanged: widget.onModeChanged,
-                        labels: labels,
-                      ),
+                      if (widget.modes)
+                        _ModeSwitch(
+                          mode: widget.mode,
+                          onChanged: widget.onModeChanged,
+                          labels: labels,
+                        ),
                       Expanded(
                         child: Align(
                           alignment: Alignment.centerRight,
