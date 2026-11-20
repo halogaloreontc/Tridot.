@@ -1,4 +1,4 @@
-"""Эталоны для Dart-токенизаторов запасного слоя (ADR-041, шаг 2).
+"""Эталоны для Dart-токенизаторов запасного слоя (ADR-045, шаг 2).
 
     python -m tools.intent_model.dart_fixtures --packs <папка с распакованными
         пакетами light/ и accurate/>
@@ -139,7 +139,7 @@ def chars() -> None:
         "// Сгенерировано tools/intent_model/dart_fixtures.py по самой библиотеке\n",
         "// tokenizers: классы всех кодовых точек для BertNormalizer (clean_text,\n",
         "// handle_chinese_chars) и BertPreTokenizer. Не править вручную.\n\n",
-        "/// Классы знаков токенизатора WordPiece (ADR-041): пары «от, до»\n",
+        "/// Классы знаков токенизатора WordPiece (ADR-045): пары «от, до»\n",
         "/// включительно, по возрастанию.\n",
         "abstract final class BertCharClasses {\n",
     ]

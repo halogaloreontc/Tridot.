@@ -52,7 +52,7 @@ Future<String?> decodeQrImage(String path) async {
   }
 }
 
-/// Годится ли текст из QR для «Подключить приложение» (ADR-039): ссылка
+/// Годится ли текст из QR для «Подключить приложение» (ADR-043): ссылка
 /// входа ([looksLikeLoginLink]) или адрес приложения `https://…`.
 bool looksLikeAppAddress(String? text) {
   if (text == null || text.length > 2048) return false;

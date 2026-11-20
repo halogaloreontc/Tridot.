@@ -14,7 +14,7 @@ import 'package:local_assistant/core/connectors/manifest/connection_texts.dart';
 import 'package:local_assistant/core/connectors/secret_store.dart';
 import 'package:local_assistant/core/services/clock.dart';
 
-/// Тексты подключения (ADR-039, шаг 3): склад — слово в слово прежние,
+/// Тексты подключения (ADR-043, шаг 3): склад — слово в слово прежние,
 /// приложение — со своим именем и родом; разбор ссылок отдаёт код, а не
 /// текст склада. Приложение — синтетическая CRM `testcrm`, адреса —
 /// `.example`, секреты — поддельные (CANARY).

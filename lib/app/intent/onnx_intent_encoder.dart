@@ -10,7 +10,7 @@ import '../../core/intent/intent_io.dart';
 import '../../core/intent/intent_pack.dart';
 import '../../core/intent/intent_tokenizer.dart';
 
-/// Кодировщик модели понимания в приложении (ADR-041): ONNX Runtime через
+/// Кодировщик модели понимания в приложении (ADR-045): ONNX Runtime через
 /// dart:ffi (`onnxruntime_v2`) в отдельном изоляте — модель, токенизатор и
 /// прогон не держат поток интерфейса. Android, macOS, Windows, Linux; в
 /// веб-помощник не попадает (там onnxruntime-web, шаг 4).

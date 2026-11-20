@@ -25,7 +25,7 @@ enum VoiceEngineChoice {
       };
 }
 
-/// Уровень модели понимания (ADR-041): «Выключено» (по умолчанию),
+/// Уровень модели понимания (ADR-045): «Выключено» (по умолчанию),
 /// «Лёгкая» или «Точная». Модель скачивается по выбору пользователя.
 enum IntentTier {
   off('off', 'Выключено'),
@@ -154,7 +154,7 @@ final class AppSettings {
       appLockAfter: _lockAfter(json['security.app_lock_after']),
       formDefaults: cleanFormDefaults(json['form_defaults']),
       homeScreenShowText: json['widgets.show_text'] != false,
-      // Понимание фраз (ADR-041): прежние настройки без этих ключей —
+      // Понимание фраз (ADR-045): прежние настройки без этих ключей —
       // модель выключена, учёба и журнал включены.
       intentTier: IntentTier.parse(json['intent.tier']),
       intentLearning: json['intent.learning'] != false,
@@ -390,7 +390,7 @@ final class AppSettings {
   /// в любом случае.
   final bool homeScreenShowText;
 
-  /// Уровень модели понимания (ADR-041): выбран в «Понимание фраз».
+  /// Уровень модели понимания (ADR-045): выбран в «Понимание фраз».
   /// Выбранный, но ещё не скачанный уровень заработает после загрузки.
   final IntentTier intentTier;
 

@@ -87,7 +87,7 @@ final class ConverterConnector
     };
   }
 
-  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045).
   static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
     'converter.convert': IntentRecipe(
       carriers: <String>['сконвертируй'],

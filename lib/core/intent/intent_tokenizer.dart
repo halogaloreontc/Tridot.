@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'bert_chars.g.dart';
 
-/// Токенизатор пакета модели понимания (ADR-041): фраза → номера токенов
+/// Токенизатор пакета модели понимания (ADR-045): фраза → номера токенов
 /// со служебными (`[CLS] … [SEP]` или `<s> … </s>`), как у HuggingFace
 /// tokenizers с усечением до [IntentTokenizer.encode] `maxLength`.
 ///

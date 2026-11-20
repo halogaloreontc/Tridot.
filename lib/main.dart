@@ -183,7 +183,7 @@ Future<void> main() async {
         device: device,
       ),
   ];
-  // Приложения из каталога подключений (ADR-039): connections/_directory.json,
+  // Приложения из каталога подключений (ADR-043): connections/_directory.json,
   // закреплённые описания рядом. Склад в каталоге не хранится.
   ExtensionRegistry? registry;
   final appConnections = AppConnections(
@@ -318,7 +318,7 @@ Future<void> main() async {
   );
   await weather.load();
   // Один путь сборки коннекторов — при запуске и после «Подключить» /
-  // «Удалить» приложение (ADR-039): реестр пересобирается между ходами.
+  // «Удалить» приложение (ADR-043): реестр пересобирается между ходами.
   final assembly = ConnectorAssembly(
     connections: appConnections,
     before: <Connector>[
@@ -404,7 +404,7 @@ Future<void> main() async {
     knownSecret: passwords?.facade.knownSecret,
   );
   assembly.attach(extensions, assistant);
-  // Запасной слой понимания (ADR-041): на «не понял» — «Похоже, вы хотите
+  // Запасной слой понимания (ADR-045): на «не понял» — «Похоже, вы хотите
   // …?». Память (личные примеры, журнал непонятых) — в
   // <поддержка>/assistant/intent, только на устройстве. Модель — уровень
   // из «Настройки → Понимание фраз» (IntentKit): скачивается только по
@@ -601,7 +601,7 @@ final class AssistantApp extends StatefulWidget {
   /// Подключения к приложениям: экран «Настройки → Подключения».
   final List<ConnectionService> connections;
 
-  /// Каталог подключений (ADR-039): «Подключить приложение».
+  /// Каталог подключений (ADR-043): «Подключить приложение».
   final AppConnections? appConnections;
 
   /// Навык «Пароли»; `null` — libsodium не загрузилась.
@@ -610,7 +610,7 @@ final class AssistantApp extends StatefulWidget {
   /// Голосовой ввод; `null` — платформа без движка распознавания.
   final VoiceKit? voice;
 
-  /// Модель понимания (ADR-041); `null` — раздела «Понимание фраз» нет.
+  /// Модель понимания (ADR-045); `null` — раздела «Понимание фраз» нет.
   final IntentKit? intent;
 
   /// «Открыть» у результата карточки расширения; `null` — по умолчанию.
@@ -704,7 +704,7 @@ final class _AssistantAppState extends State<AssistantApp> {
       builder: (BuildContext context, Widget? _) => MaterialApp(
         builder: (BuildContext context, Widget? child) {
           final content = child ?? const SizedBox.shrink();
-          // Поле в фокусе — целиком над клавиатурой (ADR-040).
+          // Поле в фокусе — целиком над клавиатурой (ADR-044).
           return KeyboardSafeScope(
             child: _overlay(
               context,

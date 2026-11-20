@@ -66,7 +66,7 @@ final class YtdlUnavailableConnector
         YtdlUnavailableReason.build => 'ytdl.unavailable.build',
       };
 
-  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045).
   static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
     'ytdl.download': IntentRecipe(
       carriers: <String>['скачай видео'],

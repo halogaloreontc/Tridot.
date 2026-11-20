@@ -36,7 +36,7 @@ final class WidgetApp extends StatelessWidget {
         builder: (BuildContext context, Widget? _) => MaterialApp(
           title: 'Связной',
           debugShowCheckedModeBanner: false,
-          // Поле в фокусе — целиком над клавиатурой (ADR-040).
+          // Поле в фокусе — целиком над клавиатурой (ADR-044).
           builder: (BuildContext context, Widget? child) =>
               KeyboardSafeScope(child: child ?? const SizedBox.shrink()),
           theme: AssistantTheme.light(),

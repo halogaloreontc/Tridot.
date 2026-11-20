@@ -108,7 +108,7 @@ typedef IntentPackVerifier = Future<IntentManifest> Function(String dir);
 Future<IntentManifest> _verifyInIsolate(String dir) =>
     Isolate.run(() => verifyPackDirectory(dir), debugName: 'intent-verify');
 
-/// Модель понимания на устройстве (ADR-041, шаг 3): выбор уровня,
+/// Модель понимания на устройстве (ADR-045, шаг 3): выбор уровня,
 /// загрузка, проверка, обновление; переключатели учёбы и журнала.
 ///
 /// Сеть — только по явному действию: «Скачать», «Проверить обновление».

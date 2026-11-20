@@ -9,7 +9,7 @@ import 'package:local_assistant/core/replies/reply_library.dart';
 
 import 'fixtures.dart';
 
-/// Слот приложения из профиля (ADR-039): тексты для мужского, женского,
+/// Слот приложения из профиля (ADR-043): тексты для мужского, женского,
 /// среднего рода, множественного числа и несклоняемого имени.
 void main() {
   AppProfile profile(

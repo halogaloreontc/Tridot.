@@ -10,7 +10,7 @@ import '../../core/services/clock.dart';
 import 'intent_kit.dart' show IntentModelHost;
 import 'onnx_intent_encoder.dart';
 
-/// Запасной слой понимания в приложении (ADR-041): память в
+/// Запасной слой понимания в приложении (ADR-045): память в
 /// `<поддержка>/assistant/intent/memory.json`, модель — из распакованного
 /// пакета.
 ///

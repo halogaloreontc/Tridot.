@@ -75,7 +75,7 @@ class MainActivity : FlutterActivity() {
         // приложения не открывается.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tridot/files")
             .setMethodCallHandler { call, result ->
-                // "share" — «Поделиться» файлом (ADR-041: непонятые фразы,
+                // "share" — «Поделиться» файлом (ADR-045: непонятые фразы,
                 // которые человек сам просмотрел); те же корни, что у "open".
                 if (call.method != "open" && call.method != "share") {
                     result.notImplemented()

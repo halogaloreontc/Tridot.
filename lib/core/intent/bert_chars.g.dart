@@ -2,7 +2,7 @@
 // tokenizers: классы всех кодовых точек для BertNormalizer (clean_text,
 // handle_chinese_chars) и BertPreTokenizer. Не править вручную.
 
-/// Классы знаков токенизатора WordPiece (ADR-041): пары «от, до»
+/// Классы знаков токенизатора WordPiece (ADR-045): пары «от, до»
 /// включительно, по возрастанию.
 abstract final class BertCharClasses {
   /// Знаки, которые `clean_text` убирает: Cc, Cf, Co, суррогаты, U+FFFD.

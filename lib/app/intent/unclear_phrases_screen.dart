@@ -27,7 +27,7 @@ String unclearStatus(IntentKit intent, UnclearPhrase phrase) {
   };
 }
 
-/// «Настройки → Понимание фраз → Непонятые фразы» (ADR-041, п. 8): журнал
+/// «Настройки → Понимание фраз → Непонятые фразы» (ADR-045, п. 8): журнал
 /// на устройстве, новые первыми. Удалить одну, очистить всё, поделиться —
 /// только после просмотра файла ([UnclearExportScreen]).
 final class UnclearPhrasesScreen extends StatelessWidget {

@@ -518,7 +518,7 @@ final class ManifestConnector
   static final RegExp _code = RegExp(r'^\d{5,6}$');
   static final RegExp _spacedDash = RegExp(r'\s-|-\s');
 
-  /// Команда по подсказке запасного слоя (ADR-041): рецепт — из фраз
+  /// Команда по подсказке запасного слоя (ADR-045): рецепт — из фраз
   /// описания ([ManifestIntent]).
   @override
   ConnectorMatch? matchAs(

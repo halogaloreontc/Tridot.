@@ -21,7 +21,7 @@ String connectionStatus(ConnectionService service) {
     return label.isEmpty ? fallback : label;
   }
 
-  // Род — по профилю приложения (ADR-039): «Касса подключена». Склад и
+  // Род — по профилю приложения (ADR-043): «Касса подключена». Склад и
   // несклоняемые имена — «подключён», как раньше.
   final profile = service.slot.profile;
   final on =
@@ -41,7 +41,7 @@ String connectionStatus(ConnectionService service) {
   };
 }
 
-/// Подтверждение «Удалить подключение» к [title] (ADR-039). `true` —
+/// Подтверждение «Удалить подключение» к [title] (ADR-043). `true` —
 /// удалить.
 Future<bool> confirmRemoveConnection(BuildContext context, String title) async {
   final yes = await showDialog<bool>(
@@ -83,7 +83,7 @@ String _moment(DateTime? time) {
 /// Пароли и ссылка с кодом не хранятся в полях дольше одной попытки:
 /// после отправки поля очищаются.
 ///
-/// Тот же экран — у приложения из каталога подключений (ADR-039): тексты
+/// Тот же экран — у приложения из каталога подключений (ADR-043): тексты
 /// с его именем ([ConnectionService.texts]), вход — каким умеет описание
 /// (ссылка, пароль, логин), адрес закреплён; «Удалить» и «Подключить
 /// заново», если приложение предлагает изменения. У склада всё прежнее.
@@ -529,7 +529,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
             _texts.addressLabel,
             hint: 'https://…',
             keyboard: TextInputType.url,
-            // Адрес приложения из каталога закреплён (ADR-039).
+            // Адрес приложения из каталога закреплён (ADR-043).
             readOnly: _service.fixedBase != null,
           ),
           _field(
@@ -602,7 +602,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       );
 
   /// Приложение предлагает изменения, которые без нового согласия не
-  /// приняты (ADR-039): что именно и «Подключить заново».
+  /// приняты (ADR-043): что именно и «Подключить заново».
   Widget _offer(String offered) => Padding(
         key: const ValueKey<String>('connection-offer'),
         padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),

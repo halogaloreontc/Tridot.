@@ -15,7 +15,7 @@ from . import config, data, pack, pipeline
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m tools.intent_model", description="Сборка модели понимания (ADR-041)")
+    ap = argparse.ArgumentParser(prog="python -m tools.intent_model", description="Сборка модели понимания (ADR-045)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def tier_arg(p, required=True):

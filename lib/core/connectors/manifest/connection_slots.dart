@@ -106,7 +106,7 @@ abstract final class ConnectionSlots {
 
   static List<ConnectionSlot> _runtime = const <ConnectionSlot>[];
 
-  /// Слоты приложений из каталога подключений (ADR-039), подключённые
+  /// Слоты приложений из каталога подключений (ADR-043), подключённые
   /// сейчас. Ставит `AppConnections` при запуске и после «Подключить» /
   /// «Удалить»: по ним обращения не достаются помощникам, а фразы
   /// подключений — ведущему расширений.
@@ -118,7 +118,7 @@ abstract final class ConnectionSlots {
   /// Все подключения сейчас: из кода ([all]) и из каталога ([runtime]).
   static List<ConnectionSlot> get live => <ConnectionSlot>[...all, ..._runtime];
 
-  /// Id подключения приложения без слота в коде (ADR-039): строчная
+  /// Id подключения приложения без слота в коде (ADR-043): строчная
   /// латиница и цифры, до 32 знаков. Только такие id годятся в ключи
   /// каталога ответов (`<id>.help`) и в имена файлов.
   static final RegExp idPattern = RegExp(r'^[a-z][a-z0-9]{0,31}$');

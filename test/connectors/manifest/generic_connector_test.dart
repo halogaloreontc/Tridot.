@@ -16,7 +16,7 @@ import 'package:local_assistant/core/services/clock.dart';
 import '../fakes.dart';
 import 'fixtures.dart';
 
-/// Синтетическая CRM `testcrm` (ADR-039): слот из профиля описания,
+/// Синтетическая CRM `testcrm` (ADR-043): слот из профиля описания,
 /// чтение через [ManifestConnector] и спор со складом. Данные выдуманы,
 /// секреты — заведомо поддельные. В корпус testcrm не входит.
 const String testCrmPath = 'test/fixtures/assistant/testcrm.json';

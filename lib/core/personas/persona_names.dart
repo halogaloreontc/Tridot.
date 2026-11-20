@@ -63,7 +63,7 @@ abstract final class PersonaNames {
   };
 
   /// Обычное начало фразы ([_phraseWords]): обращение к приложению
-  /// (ADR-039) таким словом тоже не бывает. Слово — в нижнем регистре, с
+  /// (ADR-043) таким словом тоже не бывает. Слово — в нижнем регистре, с
   /// «е» вместо «ё».
   static bool isPhraseWord(String word) =>
       _phraseWords.contains(Persona.fold(word));

@@ -20,7 +20,7 @@ import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 
 import '../connectors/manifest/fixtures.dart';
 
-/// «Да» на подсказку запасного слоя (ADR-041): каждая команда модели
+/// «Да» на подсказку запасного слоя (ADR-045): каждая команда модели
 /// (tools/intent_model/labels.yaml) выполняется правилами своего навыка —
 /// [IntentTarget.matchAs] находит её во фразе, которую обычный `match` не
 /// понял, или спрашивает недостающее, или есть пример команды.
@@ -86,7 +86,7 @@ void main() {
     expect(missing, isEmpty);
   });
 
-  /// Фразы проб ADR-041 (tools/intent_model/eval), которых правила не
+  /// Фразы проб ADR-045 (tools/intent_model/eval), которых правила не
   /// поняли: с подсказкой модели команда разбирается правилами навыка.
   /// Метка → (фраза, команды-ответы).
   final relaxed = <String, (String, Set<String>)>{

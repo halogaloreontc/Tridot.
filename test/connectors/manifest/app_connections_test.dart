@@ -31,7 +31,7 @@ import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
 import 'fixtures.dart';
 
 /// Каталог подключений, проба адреса, закреплённое описание и сборка
-/// коннекторов (ADR-039, шаг 2). Приложение — синтетическая CRM
+/// коннекторов (ADR-043, шаг 2). Приложение — синтетическая CRM
 /// `testcrm`; адреса — только `.example`, секреты — заведомо поддельные
 /// (CANARY).
 const String testCrmPath = 'test/fixtures/assistant/testcrm.json';

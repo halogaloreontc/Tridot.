@@ -85,7 +85,7 @@ final class IntentLabels {
   }
 }
 
-/// Пример для kNN сверх индекса пакета: личный пример (ADR-041, п. 7).
+/// Пример для kNN сверх индекса пакета: личный пример (ADR-045, п. 7).
 final class IntentExtra {
   const IntentExtra(this.vector, this.label);
 

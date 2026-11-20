@@ -85,7 +85,7 @@ final class CalculatorConnector
   /// ниже задач, чтобы явная команда в начале выигрывала.
   static const double clauseConfidence = 0.6;
 
-  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045).
   static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
     'calc.evaluate': IntentRecipe(
       carriers: <String>['посчитай', 'сколько будет'],

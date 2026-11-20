@@ -91,7 +91,7 @@ final class IntentOffer {
   final IntentSuggestion suggestion;
 }
 
-/// Фраза для модели закрыта (ADR-041, п. 2) — та же проверка, что у
+/// Фраза для модели закрыта (ADR-045, п. 2) — та же проверка, что у
 /// маршрутизатора ([RecognitionLayers.privateForModel]). Время разбора
 /// неважно: смотрят только слова.
 bool intentPrivate(String text, {FingerprintMatcher? knownSecret}) =>
@@ -103,7 +103,7 @@ bool intentPrivate(String text, {FingerprintMatcher? knownSecret}) =>
 
 final DateTime _anyDay = DateTime(2026);
 
-/// Запасной слой понимания (ADR-041): когда правила сказали «не понял»,
+/// Запасной слой понимания (ADR-045): когда правила сказали «не понял»,
 /// по вектору фразы ищет ближайшие примеры корпуса и личные примеры
 /// пользователя и предлагает команду — или молчит.
 ///

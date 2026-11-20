@@ -4,7 +4,7 @@ import 'app_profile.dart';
 import 'connection.dart';
 import 'connection_slots.dart';
 
-/// Приложение из каталога подключений (ADR-039): чужая CRM, подключённая
+/// Приложение из каталога подключений (ADR-043): чужая CRM, подключённая
 /// по адресу. Секретов здесь нет — только их имена, чтобы удалить их
 /// поимённо: у [SecretStore] нет списка ключей.
 final class DirectoryEntry {
@@ -222,7 +222,7 @@ final class DirectorySnapshot {
   }
 }
 
-/// Где лежит каталог подключений и закреплённые описания (ADR-039).
+/// Где лежит каталог подключений и закреплённые описания (ADR-043).
 /// Склад здесь не хранится: его записи — прежние ([ConnectionStore]).
 abstract interface class ConnectionDirectory {
   Future<DirectorySnapshot> load();

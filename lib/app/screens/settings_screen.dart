@@ -94,7 +94,7 @@ class SettingsScreen extends StatelessWidget {
   /// только сообщает об этом.
   final VoiceKit? voice;
 
-  /// Модель понимания (ADR-041); `null` — раздела «Понимание фраз» нет.
+  /// Модель понимания (ADR-045); `null` — раздела «Понимание фраз» нет.
   final IntentKit? intent;
 
   /// ffmpeg конвертера: «Настроить» в плитке «Конвертер».

@@ -226,7 +226,7 @@ final class HomePage extends StatefulWidget {
   /// Подключения к приложениям (склад): «Настройки → Подключения».
   final List<ConnectionService> connections;
 
-  /// Каталог подключений (ADR-039): «Подключения», «Подключить
+  /// Каталог подключений (ADR-043): «Подключения», «Подключить
   /// приложение», входящие ссылки чужих приложений. `null` — только
   /// подключения из [connections] (тесты, прежнее поведение).
   final AppConnections? appConnections;
@@ -239,7 +239,7 @@ final class HomePage extends StatefulWidget {
   /// платформе движка нет, микрофон скрыт.
   final VoiceKit? voice;
 
-  /// Модель понимания (ADR-041): «Настройки → Понимание фраз»; `null` —
+  /// Модель понимания (ADR-045): «Настройки → Понимание фраз»; `null` —
   /// раздела нет.
   final IntentKit? intent;
 
@@ -762,7 +762,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       .firstOrNull;
 
   /// Подключения, чей вход слушаем ([_onSessionChanged]): и те, что
-  /// подключили, пока приложение открыто (ADR-039).
+  /// подключили, пока приложение открыто (ADR-043).
   final Set<ConnectionService> _sessionFollowed = <ConnectionService>{};
 
   void _followSessions() {
@@ -784,7 +784,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (mounted) setState(() {});
   }
 
-  /// Экраны подключений (ADR-039); `null` — каталога нет.
+  /// Экраны подключений (ADR-043); `null` — каталога нет.
   late final ConnectionsHost? _connectionsHost =
       switch (widget.appConnections) {
     final AppConnections apps => ConnectionsHost(
@@ -799,7 +799,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   };
 
   /// Тексты карточки подключения [id]: склад — прежние, приложение — со
-  /// своим именем; подключение удалено — о «приложении» (ADR-039).
+  /// своим именем; подключение удалено — о «приложении» (ADR-043).
   ConnectionTexts _textsOf(String id) =>
       _connectionOf(id)?.texts ??
       (id == ConnectionSlots.warehouse.id
@@ -833,7 +833,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _settingsReady;
     if (!mounted) return;
     // Склад — как раньше; чужое приложение — только через согласие
-    // (ADR-039, lib/app/shell/incoming_connect.dart).
+    // (ADR-043, lib/app/shell/incoming_connect.dart).
     final note = await handleIncomingConnect(
       context,
       text: text,
@@ -3208,7 +3208,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   /// Первое «не понял» без модели понимания: один раз предложить скачать
-  /// «Лёгкую» (ADR-041). Любой ответ — больше само не предлагается.
+  /// «Лёгкую» (ADR-045). Любой ответ — больше само не предлагается.
   Future<void> _offerIntent() async {
     final intent = widget.intent;
     if (intent == null ||

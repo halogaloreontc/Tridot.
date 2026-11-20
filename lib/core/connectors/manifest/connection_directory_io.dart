@@ -7,7 +7,7 @@ import 'connection_slots.dart';
 // путь коннектора не тянет dart:io (веб-помощник, ADR-032). Импортирует
 // его только lib/main.dart.
 
-/// Каталог подключений в `<папка данных>/connections` (ADR-039):
+/// Каталог подключений в `<папка данных>/connections` (ADR-043):
 /// `_directory.json` и закреплённые описания `<id>.pinned.assistant.json`
 /// рядом с записями [JsonConnectionStore]. Имя `_directory` ни с каким id
 /// не совпадёт: id начинается с латинской буквы. Повреждённый файл не

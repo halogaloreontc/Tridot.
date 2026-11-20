@@ -41,7 +41,7 @@ https://github.com/halogaloreontc/Tridot./blob/claude/nice-davinci-swz8vx/docs/C
 ### Что сделать
 
 **1. Дверь для помощника: личный ключ сотрудника по общему договору.**
-Связной подключается к любому приложению одинаково (ADR-039 в Tridot):
+Связной подключается к любому приложению одинаково (ADR-043 в Tridot):
 вход и выход — общие действия Tridot, своих имён у приложения нет.
 - Миграция: таблица `assist_keys(id, staff_id, digest, scope 'assist',
   device, created_at, last_used_at, revoked_at)`. Хранить только хеш, как у

@@ -66,7 +66,7 @@ final class DataConnector implements Connector, ConnectorHealth, IntentTarget {
   @override
   Future<HealthReport> health() async => const HealthReport.ok();
 
-  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045).
   static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
     'data.backup': IntentRecipe(ask: 'сделай резервную копию всех данных'),
     'data.restore': IntentRecipe(ask: 'восстанови все данные из копии'),

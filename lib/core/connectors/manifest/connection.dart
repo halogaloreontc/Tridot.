@@ -31,7 +31,7 @@ final class ConnectionSlot {
     this.profile,
   });
 
-  /// Слот приложения, которого нет в коде (ADR-039): название, обращения,
+  /// Слот приложения, которого нет в коде (ADR-043): название, обращения,
   /// фразы справки и тексты ответов — из профиля [profile], id
   /// подключения — [id] (`ConnectionSlots.idFor`). Только чтение: ни
   /// встроенной копии, ни входа по ссылке из кода, ни своих текстов
@@ -114,7 +114,7 @@ final class ConnectionSlot {
   final String totalExample;
 
   /// Слот приложения из каталога подключений ([ConnectionSlot.generic],
-  /// ADR-039), а не из кода.
+  /// ADR-043), а не из кода.
   final bool runtime;
 
   /// Профиль приложения из каталога ([ConnectionSlot.generic]): имя,

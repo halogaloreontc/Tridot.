@@ -288,7 +288,7 @@ final class ManifestDescription {
   final String about;
 
   /// Профиль приложения из необязательных полей `app` (`name`, `forms`,
-  /// `in`, `gender`, `addressing`; ADR-039); `null` — в описании их нет
+  /// `in`, `gender`, `addressing`; ADR-043); `null` — в описании их нет
   /// или имя не годится. Склад его не читает: у него свой слот.
   final AppProfile? profile;
 

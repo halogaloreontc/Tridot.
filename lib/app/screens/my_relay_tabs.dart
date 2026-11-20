@@ -452,7 +452,7 @@ final class RelayAssistants extends StatefulWidget {
     this.connectionsHost,
   });
 
-  /// Каталог подключений (ADR-039): раздел «Подключения» под «Ролями»;
+  /// Каталог подключений (ADR-043): раздел «Подключения» под «Ролями»;
   /// `null` — раздела нет.
   final ConnectionsHost? connectionsHost;
 
@@ -613,7 +613,7 @@ final class _RelayAssistantsState extends State<RelayAssistants> {
               ),
             ),
           ),
-        // Подключения к приложениям (ADR-039) — рядом с ролями: склад
+        // Подключения к приложениям (ADR-043) — рядом с ролями: склад
         // подключается и в роли «Кладовщик», остальные — только здесь.
         if (widget.connectionsHost case final ConnectionsHost host)
           InsetGroupScope(side: 0, child: ConnectionsSection(host: host)),

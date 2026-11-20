@@ -28,7 +28,7 @@ import 'package:local_assistant/core/skills/calculator/calculator_connector.dart
 
 import '../connectors/manifest/fixtures.dart';
 
-/// Интерфейс подключений приложений (ADR-039, шаг 3): список
+/// Интерфейс подключений приложений (ADR-043, шаг 3): список
 /// «Подключения», «Подключить приложение» с согласием, входящие ссылки,
 /// удаление и карточка ответа с названием приложения. Приложение —
 /// синтетическая CRM `testcrm`, адреса — `.example`, секреты — поддельные
@@ -501,7 +501,7 @@ void main() {
       await tester.runAsync(ui.apps.load);
       final notes = <String?>[];
       // На этом хосте описания нет (сервер молчит, нет сети): как до
-      // ADR-039 — ссылка идёт складу, а не на «Подключить приложение».
+      // ADR-043 — ссылка идёт складу, а не на «Подключить приложение».
       await incoming(tester, ui, link('https://silent.example/'), notes);
       expect(
         find.byKey(const ValueKey<String>('warehouse-link-confirm')),

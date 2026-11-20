@@ -31,7 +31,7 @@ final class ActionCardView extends StatefulWidget {
     this.texts = ConnectionTexts.warehouse,
   });
 
-  /// Тексты подключения карточки: у склада — прежние (ADR-039).
+  /// Тексты подключения карточки: у склада — прежние (ADR-043).
   final ConnectionTexts texts;
 
   final ActionCard card;

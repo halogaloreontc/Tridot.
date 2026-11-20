@@ -1,4 +1,4 @@
-# Выпуск модели понимания «Связного» (ADR-041): запасной слой, который
+# Выпуск модели понимания «Связного» (ADR-045): запасной слой, который
 # подсказывает команду, когда правила ответили «не понял».
 #
 # Actions → «Выпуск модели понимания» → Run workflow → версия.
@@ -245,7 +245,7 @@ jobs:
           python -m tools.intent_model latest --version "$VERSION" --base-url "$dl/$TAG" --out "$RUNNER_TEMP/v/latest.json" "${zips[@]}" > /dev/null
           python -m tools.intent_model latest --version "$VERSION" --base-url "$dl/intent-latest" --out "$RUNNER_TEMP/latest/latest.json" "${zips[@]}" > /dev/null
           {
-            echo "Модель понимания $VERSION: запасной слой «Связного» (ADR-041)."
+            echo "Модель понимания $VERSION: запасной слой «Связного» (ADR-045)."
             echo
             echo 'Уровни: light — «Лёгкая» (cointegrated/rubert-tiny2, MIT), accurate — «Точная» (deepvk/USER-base, Apache-2.0), web — веб-помощник склада (модель «Лёгкой», навыки склада, калькулятора и беседы).'
             echo

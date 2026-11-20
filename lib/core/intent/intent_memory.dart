@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import '../services/clock.dart';
 
-/// Личный пример запасного слоя (ADR-041, п. 7): фраза пользователя и
+/// Личный пример запасного слоя (ADR-045, п. 7): фраза пользователя и
 /// команда, которую он подтвердил «Да» ([IntentMemory.positives]) или
 /// отверг «Нет» ([IntentMemory.negatives]). Только на устройстве.
 final class IntentExample {
@@ -90,7 +90,7 @@ enum UnclearKind {
   accepted,
 }
 
-/// Запись журнала «Непонятые фразы» (ADR-041, п. 8).
+/// Запись журнала «Непонятые фразы» (ADR-045, п. 8).
 final class UnclearPhrase {
   const UnclearPhrase({
     required this.text,
@@ -148,7 +148,7 @@ final class InMemoryIntentMemoryStore implements IntentMemoryStore {
   }
 }
 
-/// Память запасного слоя на устройстве (ADR-041, пп. 7–8): переключатели
+/// Память запасного слоя на устройстве (ADR-045, пп. 7–8): переключатели
 /// «Учиться на моих ответах» и «Собирать непонятые фразы» (оба включены по
 /// умолчанию), личные примеры и журнал непонятых фраз.
 ///

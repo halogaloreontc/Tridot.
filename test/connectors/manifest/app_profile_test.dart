@@ -7,7 +7,7 @@ import 'package:local_assistant/core/connectors/manifest/manifest_format.dart';
 
 import 'fixtures.dart';
 
-/// Профиль приложения из `app` описания (ADR-039). Только выдуманные
+/// Профиль приложения из `app` описания (ADR-043). Только выдуманные
 /// приложения и значения.
 void main() {
   Map<String, Object?> app([Map<String, Object?> extra = const {}]) =>

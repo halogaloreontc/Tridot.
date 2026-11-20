@@ -140,7 +140,7 @@ final class TasksConnector
     }
   }
 
-  /// Как выполнить команду по подсказке запасного слоя (ADR-041): срок,
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045): срок,
   /// название и задачу находит тот же разбор ([ScenarioParser]).
   static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
     'task.create': IntentRecipe(

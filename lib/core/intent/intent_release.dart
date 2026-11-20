@@ -5,7 +5,7 @@ import '../settings/app_settings.dart' show IntentTier;
 export '../settings/app_settings.dart' show IntentTier;
 
 /// Выпуск модели понимания не подошёл: другой формат, чужой адрес, битые
-/// поля (ADR-041, шаг 3).
+/// поля (ADR-045, шаг 3).
 final class IntentReleaseException implements Exception {
   const IntentReleaseException(this.message);
 
@@ -49,7 +49,7 @@ final class IntentReleaseTier {
   final double? threshold;
 }
 
-/// `latest.json` постоянного предвыпуска `intent-latest` (ADR-041, п. 4):
+/// `latest.json` постоянного предвыпуска `intent-latest` (ADR-045, п. 4):
 /// версия и архивы уровней. Приложение читает его только по явному
 /// действию пользователя: «Скачать» или «Проверить обновление».
 final class IntentRelease {

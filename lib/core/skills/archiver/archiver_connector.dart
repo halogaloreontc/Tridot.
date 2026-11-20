@@ -42,7 +42,7 @@ final class ArchiverConnector
         offHint: true,
       );
 
-  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045).
   static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
     'archiver.zip':
         IntentRecipe(ask: 'сожми файлы в zip', example: 'сожми файлы в zip'),

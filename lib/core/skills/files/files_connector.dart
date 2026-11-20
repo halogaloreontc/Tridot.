@@ -343,7 +343,7 @@ final class FilesConnector implements Connector, ConnectorHealth, IntentTarget {
   @override
   Future<HealthReport> health() async => const HealthReport.ok();
 
-  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045).
   static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
     'files.delete':
         IntentRecipe(ask: 'удали этот файл', example: 'удали этот файл'),

@@ -7,7 +7,7 @@ import '../widgets/qr_scan_sheet.dart';
 import '../widgets/warehouse_connection_card.dart';
 
 /// Входящая ссылка или QR (`tridot://connect`, `https://…#qr=`, снимок
-/// экрана с кодом — ADR-031, ADR-039): куда её вести. Ничего не
+/// экрана с кодом — ADR-031, ADR-043): куда её вести. Ничего не
 /// подключает само.
 ///
 /// - Ссылка на адрес подключённого склада — как раньше: подтверждение с
@@ -69,7 +69,7 @@ Future<String?> handleIncomingConnect(
   if (probeIsWarehouse(probe) && warehouse != null) {
     return toWarehouse(warehouse);
   }
-  // Описание не получено (нет сети, сервер молчит): как до ADR-039 —
+  // Описание не получено (нет сети, сервер молчит): как до ADR-043 —
   // ссылка идёт складу, его подтверждение и его «Нет связи». Новое
   // приложение без описания всё равно не подключить.
   if (probe.description == null && warehouse != null) {

@@ -10,7 +10,7 @@ import 'package:local_assistant/core/intent/intent_io.dart';
 
 import 'local_packs.dart';
 
-/// Настоящая модель «Лёгкой» через ONNX Runtime (ADR-041), если пакет
+/// Настоящая модель «Лёгкой» через ONNX Runtime (ADR-045), если пакет
 /// собран и распакован локально, а библиотека onnxruntime находится:
 ///
 /// ```bash
