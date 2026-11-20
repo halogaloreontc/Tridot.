@@ -61,7 +61,7 @@ HomePage → AssistantController.handle(text, chatTaskId: …) / enterChat(taskI
 
 ## Запасной слой понимания
 
-ADR-041 (решение и шаг 2 — «Дополнение»). Ядро — `lib/core/intent/`, чистый Dart без Flutter и без `dart:io` (кроме `intent_io.dart`): тот же код — в приложении и в веб-помощнике.
+ADR-041 (решение, шаги 2 и 3 — «Дополнения»). Ядро — `lib/core/intent/`, чистый Dart без Flutter и без `dart:io` (кроме `intent_io.dart`): тот же код — в приложении и в веб-помощнике.
 
 ```text
 AssistantController._route → RecognitionLayers.route (слои 1–5) → RoutePolicy
@@ -84,7 +84,23 @@ AssistantController._route → RecognitionLayers.route (слои 1–5) → Rout
 - **Решение** (`intent_fallback.dart`): `IntentFallback.decide` — правило подсказки (ADR-041, п. 5 и «Дополнение»), `IntentSuggestion` (первый вариант, второй, вектор фразы — «Да»/«Нет» запоминают его без нового прогона).
 - **Память** (`intent_memory.dart`): «Учиться на моих ответах» и «Собирать непонятые фразы» (оба включены), личные примеры (фраза, метка, вектор и ключ модели — пример другой модели пересчитывается), журнал непонятых (≤ 200, старше 90 дней удаляются). Хранилище — `IntentMemoryStore`: `JsonIntentMemoryStore` (`<поддержка>/assistant/intent/memory.json`), в памяти — тесты.
 - **Команда по подсказке** (`lib/core/connectors/intent_target.dart`): `IntentTarget.matchAs` — разбор послабее обычного тем же разборщиком навыка по рецепту `IntentRecipe` (обычный `match` → носитель + фраза → синонимы → фраза без слотов, на которую навык спрашивает недостающее); `intentExample` — пример, если не вышло. Подключения `assistant/1` — рецепт из фраз описания (`manifest_intent.dart`).
-- **Приложение** (`lib/app/intent/`): `IntentSetup` (память, поиск пакета: `TRIDOT_INTENT_PACK` или `<поддержка>/assistant/intent/active/`, загрузка в фоне), `OnnxIntentEncoder` (свой изолят: токенизатор, сессия ONNX Runtime, ответы `TransferableTypedData`). Веб-помощник этих файлов не тянет (`test/web_widget/web_graph_test.dart`).
+- **Приложение** (`lib/app/intent/`): `IntentSetup` (память, загрузка пакета: `TRIDOT_INTENT_PACK` — при любом уровне, для разработки), `OnnxIntentEncoder` (свой изолят: токенизатор, сессия ONNX Runtime, ответы `TransferableTypedData`). Веб-помощник этих файлов не тянет (`test/web_widget/web_graph_test.dart`).
+- **Скачивание и уровни** (шаг 3, `intent_kit.dart`): `IntentKit` — уровень из настроек (`AppSettings.intentTier`: «Выключено» / «Лёгкая» / «Точная»), установка, обновление, удаление; переключатели `intentLearning` и `intentLogging` передаёт в `IntentMemory` (`apply` — при чтении и каждой смене настроек в `HomePage`). Сеть — только по нажатию «Скачать», «Обновить», «Проверить обновление»:
+
+  ```text
+  latest.json (intent-latest, IntentRelease: формат, адреса только выпусков Tridot)
+    → <уровень>-<версия>.zip.part (IoFileDownloader: продолжение, отмена,
+      переадресация только на файлы выпусков GitHub)
+    → размер и sha256 архива из latest.json → .zip
+    → extractZipSafely в tmp-… → verifyPackDirectory: манифест, sha256 каждого
+      файла целиком, лишних нет, уровень и версия те же
+    → <поддержка>/assistant/intent/<уровень>-<версия>/
+    → active.json (указатель, через временный файл) → IntentSetup.load
+    → удалить прежние версии и уровни
+  ```
+
+  Пока скачивается другой уровень, работает прежний; «Выключено» выгружает модель, файлы остаются до «Удалить модель». Папка `assistant/intent/` не уходит в резервную копию Android.
+- **Настройки** (`intent_section.dart`): раздел «Понимание фраз» под «Голосом» — уровни строками с галочкой, ход загрузки, «Доступна новая версия модели понимания — N МБ», «Удалить модель»; «Учиться на моих ответах» и «Забыть выученное», «Собирать непонятые фразы» и экран «Непонятые фразы» (`unclear_phrases_screen.dart`). «Поделиться для улучшения» — экран просмотра (`unclear_export_screen.dart`): ровно строки файла JSONL (`UnclearExport`, `lib/core/intent/unclear_export.dart`; приватное отсеивается второй раз), любую можно убрать; затем системное «Поделиться» (Android, `tridot/files` → `share`) или «Сохранить файл» (компьютер) — `unclear_share.dart`. Однократное предложение «Лёгкой» — после первого «не понял» (`intent_views.dart`, `AppSettings.intentOffered`).
 
 ## Правила
 

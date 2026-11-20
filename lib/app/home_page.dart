@@ -99,6 +99,8 @@ import 'shell/session_hero.dart';
 import 'shell/today_panel.dart';
 import 'extensions/weather_kit.dart';
 import 'extensions/weather_screen.dart';
+import 'intent/intent_kit.dart';
+import 'intent/intent_views.dart';
 import 'voice/voice_kit.dart';
 import 'voice/voice_views.dart';
 import 'widgets/action_card_view.dart';
@@ -187,6 +189,7 @@ final class HomePage extends StatefulWidget {
     this.passwords,
     this.attachmentPicker = const FileSelectorAttachmentPicker(),
     this.voice,
+    this.intent,
     this.jobRunner,
     this.jobPicker = const FileSelectorJobPicker(),
     this.fileOpener,
@@ -235,6 +238,10 @@ final class HomePage extends StatefulWidget {
   /// Голосовой ввод (ADR-023): модель и распознаватель; `null` — на этой
   /// платформе движка нет, микрофон скрыт.
   final VoiceKit? voice;
+
+  /// Модель понимания (ADR-041): «Настройки → Понимание фраз»; `null` —
+  /// раздела нет.
+  final IntentKit? intent;
 
   /// Исполнитель задач расширений (архиватор); по умолчанию — изоляты.
   final JobRunner? jobRunner;
@@ -1690,6 +1697,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     widget.onAppearanceChanged?.call(settings.appearance);
     widget.onReduceMotionChanged?.call(settings.reduceMotion);
     widget.voice?.choice = settings.voiceEngine;
+    unawaited(widget.intent?.apply(settings));
     setState(() {
       _settings = settings;
       _settingsLoaded = true;
@@ -1783,6 +1791,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       widget.onReduceMotionChanged?.call(settings.reduceMotion);
     }
     widget.voice?.choice = settings.voiceEngine;
+    unawaited(widget.intent?.apply(settings));
     setState(() => _settings = settings);
     unawaited(_settingsStore.save(settings));
     _preloadVoice();
@@ -2111,6 +2120,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _cubeTimer = Timer(const Duration(milliseconds: 1600), () {
       if (mounted && !_sending) setState(() => _cube = CubeState.idle);
     });
+    if (response.intent == 'unknown') unawaited(_offerIntent());
     // «Исправить» на «Понял так: …»: понятая команда — в поле ввода, курсор
     // в конце; черновик, который человек успел набрать, не затирается.
     final draft = response.draft;
@@ -3195,6 +3205,28 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return true;
     }
     return PasswordPhrases.looksLike(Utterance.analyze(text, now: _now));
+  }
+
+  /// Первое «не понял» без модели понимания: один раз предложить скачать
+  /// «Лёгкую» (ADR-041). Любой ответ — больше само не предлагается.
+  Future<void> _offerIntent() async {
+    final intent = widget.intent;
+    if (intent == null ||
+        !_settingsLoaded ||
+        _settings.intentOffered ||
+        _settings.intentTier != IntentTier.off ||
+        intent.installed != null ||
+        intent.isBusy ||
+        intent.running) {
+      return;
+    }
+    _changeSettings(_settings.copyWith(intentOffered: true));
+    final download = await showIntentOffer(context, intent);
+    if (!mounted || !download) return;
+    _changeSettings(_settings.copyWith(intentTier: IntentTier.light));
+    unawaited(intent.install(IntentTier.light));
+    _announce('Модель понимания скачивается. Ход загрузки — в «Настройки → '
+        'Понимание фраз»');
   }
 
   /// Первое нажатие на выключенный микрофон: предложение включить и
@@ -4603,6 +4635,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         connections: widget.connections,
         passwords: widget.passwords,
         voice: widget.voice,
+        intent: widget.intent,
         ffmpeg: widget.ffmpeg,
         nativeMedia: widget.nativeMedia?.caps ?? NativeMediaCaps.none,
         ytdl: widget.ytdl,

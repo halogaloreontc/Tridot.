@@ -24,6 +24,7 @@ import 'app/passwords/device_keys.dart';
 import 'app/passwords/passwords_kit.dart';
 import 'app/security/app_lock.dart';
 import 'app/security/device_auth.dart';
+import 'app/intent/intent_kit.dart';
 import 'app/intent/intent_setup.dart';
 import 'app/voice/device_voice_recognizer.dart';
 import 'app/voice/voice_kit.dart';
@@ -405,16 +406,25 @@ Future<void> main() async {
   assembly.attach(extensions, assistant);
   // Запасной слой понимания (ADR-041): на «не понял» — «Похоже, вы хотите
   // …?». Память (личные примеры, журнал непонятых) — в
-  // <поддержка>/assistant/intent, только на устройстве. Модель — из
-  // распакованного пакета, если он есть; грузится в фоне, не задерживая
-  // запуск. Без модели ответы правил те же.
-  final intent = await IntentSetup.open(
+  // <поддержка>/assistant/intent, только на устройстве. Модель — уровень
+  // из «Настройки → Понимание фраз» (IntentKit): скачивается только по
+  // кнопке, грузится в фоне после чтения настроек, не задерживая запуск.
+  // Без модели ответы правил те же.
+  final intentSetup = await IntentSetup.open(
     support.path,
     knownSecret: passwords?.facade.knownSecret,
     clock: clock,
   );
-  assistant.intent = intent.fallback;
-  unawaited(intent.loadModel());
+  assistant.intent = intentSetup.fallback;
+  final intent = IntentKit(
+    host: intentSetup,
+    transport: transport,
+    downloader: IoFileDownloader(
+      allowedRedirectHosts: IntentRelease.redirectHosts,
+    ),
+    root: intentSetup.root,
+  );
+  await intent.refresh();
   // Вход в приложение по отпечатку / Face ID (ADR-025): включён — экран
   // закрыт с первого кадра, до загрузки остального интерфейса.
   final settingsStore = JsonSettingsStore(p.join(folder, 'settings.json'));
@@ -437,6 +447,7 @@ Future<void> main() async {
       appConnections: appConnections,
       passwords: passwords,
       voice: voice,
+      intent: intent,
       fileOpener: opener,
       ffmpeg: ffmpeg,
       nativeMedia: nativeMedia,
@@ -558,6 +569,7 @@ final class AssistantApp extends StatefulWidget {
     this.appConnections,
     this.passwords,
     this.voice,
+    this.intent,
     this.fileOpener,
     this.ffmpeg,
     this.nativeMedia,
@@ -597,6 +609,9 @@ final class AssistantApp extends StatefulWidget {
 
   /// Голосовой ввод; `null` — платформа без движка распознавания.
   final VoiceKit? voice;
+
+  /// Модель понимания (ADR-041); `null` — раздела «Понимание фраз» нет.
+  final IntentKit? intent;
 
   /// «Открыть» у результата карточки расширения; `null` — по умолчанию.
   final FileOpener? fileOpener;
@@ -669,6 +684,7 @@ final class _AssistantAppState extends State<AssistantApp> {
       appConnections: widget.appConnections,
       passwords: widget.passwords,
       voice: widget.voice,
+      intent: widget.intent,
       fileOpener: widget.fileOpener,
       ffmpeg: widget.ffmpeg,
       nativeMedia: widget.nativeMedia,

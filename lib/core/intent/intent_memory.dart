@@ -301,6 +301,20 @@ final class IntentMemory {
     await _save();
   }
 
+  /// Сколько личных примеров («Да» и «Нет») — для «Забыть выученное».
+  int get learnedCount => _positives.length + _negatives.length;
+
+  /// Удалить одну запись журнала (та же фраза и время).
+  Future<void> removeUnclear(UnclearPhrase phrase) async {
+    final before = _unclear.length;
+    _unclear.removeWhere(
+      (UnclearPhrase e) =>
+          identical(e, phrase) ||
+          (e.at == phrase.at && _same(e.text, phrase.text)),
+    );
+    if (_unclear.length != before) await _save();
+  }
+
   /// Очистить журнал непонятых.
   Future<void> clearUnclear() async {
     if (_unclear.isEmpty) return;

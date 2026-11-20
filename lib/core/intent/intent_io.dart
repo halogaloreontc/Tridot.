@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as crypto;
+
 import 'intent_memory.dart';
 import 'intent_pack.dart';
 
@@ -30,6 +32,40 @@ final class DirectoryPackSource implements IntentPackSource {
       throw IntentPackException('$name: ${error.message}');
     }
   }
+}
+
+/// Полная проверка распакованного пакета в [path] при установке (ADR-041,
+/// шаг 3): манифест, каждый файл манифеста — размер и sha256 целиком (и
+/// модель), лишних файлов нет. Не тот пакет — [IntentPackException].
+/// Читает файлы потоком: звать в отдельном изоляте.
+Future<IntentManifest> verifyPackDirectory(String path) async {
+  final source = DirectoryPackSource(path);
+  final manifest = IntentManifest.parse(
+    utf8.decode(await source.read(IntentManifest.manifestFile)),
+  );
+  final names = <String>{IntentManifest.manifestFile};
+  for (final MapEntry(key: name, value: expected) in manifest.files.entries) {
+    names.add(name);
+    final file = source.file(name);
+    if (!await file.exists()) throw IntentPackException('$name: нет файла');
+    if (await file.length() != expected.size) {
+      throw IntentPackException('$name: не тот размер');
+    }
+    final digest = await crypto.sha256.bind(file.openRead()).first;
+    if (digest.toString() != expected.sha256) {
+      throw IntentPackException('$name: не та sha256');
+    }
+  }
+  await for (final entity in Directory(path).list(followLinks: false)) {
+    final name = entity.uri.pathSegments.lastWhere(
+      (String s) => s.isNotEmpty,
+      orElse: () => '',
+    );
+    if (!names.contains(name)) {
+      throw IntentPackException('$name: лишний файл в пакете');
+    }
+  }
+  return manifest;
 }
 
 /// Память запасного слоя в JSON-файле на устройстве

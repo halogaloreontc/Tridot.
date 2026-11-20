@@ -7,22 +7,24 @@ import '../../core/intent/intent_fallback.dart';
 import '../../core/intent/intent_io.dart';
 import '../../core/passwords/secret_guard.dart';
 import '../../core/services/clock.dart';
+import 'intent_kit.dart' show IntentModelHost;
 import 'onnx_intent_encoder.dart';
 
 /// Запасной слой понимания в приложении (ADR-041): память в
 /// `<поддержка>/assistant/intent/memory.json`, модель — из распакованного
 /// пакета.
 ///
-/// Где пакет (шаг 2 — без скачивания, шаг 3 добавит выбор уровня):
+/// Где пакет:
 /// 1. `TRIDOT_INTENT_PACK` — папка распакованного пакета: переменная
 ///    окружения (рабочий стол) или `--dart-define=TRIDOT_INTENT_PACK=…`
-///    (телефон) — для разработки и проверки;
-/// 2. `<поддержка>/assistant/intent/active/` — туда шаг 3 поставит
-///    выбранный уровень.
+///    (телефон) — для разработки и проверки, загружается при любом уровне;
+/// 2. скачанный уровень: `<поддержка>/assistant/intent/<уровень>-<версия>/`
+///    по указателю `active.json` — выбирает и ставит [IntentKit] (шаг 3);
+/// 3. `<поддержка>/assistant/intent/active/` — пакет, положенный руками.
 ///
 /// Нет пакета — слой работает без модели: ответы правил те же, журнал
 /// непонятых ведётся.
-final class IntentSetup {
+final class IntentSetup implements IntentModelHost {
   IntentSetup._(this.fallback, this.root);
 
   /// Память и слой без модели; модель — [loadModel].
@@ -42,6 +44,7 @@ final class IntentSetup {
     return IntentSetup._(IntentFallback(memory: memory, blocks: blocks), root);
   }
 
+  @override
   final IntentFallback fallback;
 
   /// `<поддержка>/assistant/intent`.
@@ -55,20 +58,22 @@ final class IntentSetup {
     return env == null || env.isEmpty ? null : env;
   }
 
-  /// Папка пакета, который нужно загрузить, или `null`.
-  String? get packDir {
-    for (final dir in <String?>[devPackDir, p.join(root, 'active')]) {
-      if (dir != null && DirectoryPackSource(dir).exists) return dir;
-    }
-    return null;
+  @override
+  String? get devPack {
+    final dir = devPackDir;
+    return dir != null && DirectoryPackSource(dir).exists ? dir : null;
   }
 
-  /// Загрузить модель из [dir] (по умолчанию — [packDir]). Индекс
-  /// разбирается в отдельном изоляте, модель живёт в своём. Ошибка пакета
-  /// — модели нет, слой работает без неё; прежняя модель закрывается.
-  Future<IntentModel?> loadModel([String? dir]) async {
-    final path = dir ?? packDir;
-    if (path == null) return null;
+  @override
+  Future<bool> load(String dir) async => await loadModel(dir) != null;
+
+  @override
+  Future<void> unload() => unloadModel();
+
+  /// Загрузить модель из [path]. Индекс разбирается в отдельном изоляте,
+  /// модель живёт в своём; прежняя модель закрывается. Ошибка пакета —
+  /// `null`, прежняя модель остаётся.
+  Future<IntentModel?> loadModel(String path) async {
     try {
       final pack = await Isolate.run(
         () => IntentPack.load(DirectoryPackSource(path)),
