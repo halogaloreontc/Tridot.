@@ -130,10 +130,73 @@ void main() {
     expect(find.text('Говорите…'), findsOneWidget);
   });
 
-  testWidgets('«Закрыть» — сообщение странице', (WidgetTester tester) async {
+  testWidgets('«Закрыть помощника» — на месте «+», сообщение странице',
+      (WidgetTester tester) async {
     await openPanel(tester);
+    // В разговоре один выход: кнопка слева в поле, «✕» в шапке нет.
+    expect(find.byKey(const ValueKey<String>('widget-close')), findsNothing);
+    expect(find.byKey(const Key('templates-button')), findsNothing);
+    final exit = find.byKey(const ValueKey<String>('widget-exit'));
+    expect(exit, findsOneWidget);
+    expect(find.byTooltip('Закрыть помощника'), findsOneWidget);
+    expect(find.bySemanticsLabel('Закрыть помощника'), findsOneWidget);
+    // Тот же круг 44×44, что «+» приложения, слева от поля, на одной
+    // строке с отправкой.
+    expect(tester.getSize(exit), const Size(44, 44));
+    final input = tester.getRect(
+      find.byKey(const ValueKey<String>('widget-input')),
+    );
+    final send = tester.getRect(
+      find.byKey(const ValueKey<String>('widget-send')),
+    );
+    final at = tester.getRect(exit);
+    expect(at.left, lessThan(input.center.dx));
+    expect(at.top, greaterThanOrEqualTo(input.bottom));
+    expect(at.center.dy, closeTo(send.center.dy, 1));
+    await tester.tap(exit);
+    expect(host.sent.last['type'], 'close');
+  });
+
+  testWidgets('на экране раздела поля нет — «✕» в шапке',
+      (WidgetTester tester) async {
+    await openPanel(tester);
+    session.show(WidgetView.tasks);
+    await tester.pump();
+    expect(find.byKey(const ValueKey<String>('widget-exit')), findsNothing);
     await tester.tap(find.byKey(const ValueKey<String>('widget-close')));
     expect(host.sent.last['type'], 'close');
+  });
+
+  testWidgets('до входа — «✕» в шапке', (WidgetTester tester) async {
+    await tester.pumpWidget(WidgetApp(session: session));
+    expect(find.byKey(const ValueKey<String>('widget-exit')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey<String>('widget-close')));
+    expect(host.sent.last['type'], 'close');
+  });
+
+  testWidgets('поле над клавиатурой: панель сжимается вместе с фреймом',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await openPanel(tester);
+    final input = find.byKey(const ValueKey<String>('widget-input'));
+    expect(tester.getRect(input).bottom, lessThan(844));
+    // Склад подгоняет фрейм под visualViewport: окно — 500 по высоте.
+    tester.view.physicalSize = const Size(390, 500);
+    await tester.pump();
+    final exit = tester.getRect(
+      find.byKey(const ValueKey<String>('widget-exit')),
+    );
+    expect(tester.getRect(input).bottom, lessThan(500));
+    expect(exit.bottom, lessThanOrEqualTo(500));
+    expect(exit.bottom, greaterThan(400));
+    // И клавиатура самого окна (viewInsets) — то же.
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 344);
+    await tester.pump();
+    expect(tester.getRect(input).bottom, lessThan(500));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Escape на компьютере закрывает панель',

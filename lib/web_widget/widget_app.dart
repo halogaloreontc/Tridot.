@@ -286,7 +286,7 @@ final class _WidgetChatState extends State<WidgetChat> {
               wide: wide,
               sessionTitle: 'Связной',
               persona: null,
-              trailing: _trailing(context, ready: false),
+              trailing: _trailing(context, ready: false, close: true),
             ),
             Expanded(
               child: Center(
@@ -326,9 +326,12 @@ final class _WidgetChatState extends State<WidgetChat> {
   }
 
   /// Кнопки справа в шапке: «Показать «Сегодня»», широкая панель, закрыть.
+  /// [close] — «✕» в шапке только там, где нет поля: в разговоре выход —
+  /// кнопка слева в поле, на месте «+» приложения (один выход на экране).
   Widget _trailing(
     BuildContext context, {
     required bool ready,
+    required bool close,
     bool todayHidden = false,
   }) {
     final color = context.colors.text;
@@ -358,13 +361,14 @@ final class _WidgetChatState extends State<WidgetChat> {
               color: color,
             ),
           ),
-        IconButton(
-          key: const ValueKey<String>('widget-close'),
-          tooltip: 'Закрыть',
-          style: style,
-          onPressed: _session.close,
-          icon: Icon(Icons.close_rounded, color: color),
-        ),
+        if (close)
+          IconButton(
+            key: const ValueKey<String>('widget-close'),
+            tooltip: 'Закрыть',
+            style: style,
+            onPressed: _session.close,
+            icon: Icon(Icons.close_rounded, color: color),
+          ),
       ],
     );
   }
@@ -432,6 +436,7 @@ final class _WidgetChatState extends State<WidgetChat> {
             trailing: _trailing(
               context,
               ready: true,
+              close: !inChat,
               todayHidden: todayHidden,
             ),
           ),
@@ -668,6 +673,15 @@ final class _WidgetChatState extends State<WidgetChat> {
               onModeChanged: (_) {},
               modes: false,
               plus: false,
+              // Выход — на месте «+» приложения, того же вида; «✕» в шапке
+              // разговора нет.
+              leading: ComposerRoundButton(
+                key: const ValueKey<String>('widget-exit'),
+                icon: Icons.arrow_back_rounded,
+                tooltip: 'Закрыть помощника',
+                semanticsLabel: 'Закрыть помощника',
+                onTap: session.close,
+              ),
               hint: 'Спросите склад…',
               inputKey: const ValueKey<String>('widget-input'),
               sendKey: const ValueKey<String>('widget-send'),
