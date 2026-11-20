@@ -93,6 +93,11 @@ void main() {
 
   testWidgets('вопрос из поля ввода — ответ в ленте',
       (WidgetTester tester) async {
+    // Ответ «что умеет склад» длинный: вопрос над ним должен поместиться в
+    // окно вместе с кнопкой «Копировать» под ответом.
+    tester.view.physicalSize = const Size(420, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await openPanel(tester);
     await tester.enterText(
       find.byKey(const ValueKey<String>('widget-input')),

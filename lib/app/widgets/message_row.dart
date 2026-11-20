@@ -16,6 +16,7 @@ import '../assistant_theme.dart';
 import '../layout.dart';
 import 'chat_feed_rhythm.dart';
 import 'command_highlight.dart';
+import 'message_copy_button.dart';
 import 'persona_mark.dart';
 import 'task_tile.dart';
 import 'whole_word_text.dart';
@@ -312,6 +313,9 @@ final class MessageRow extends StatelessWidget {
       // Ответ — обычные абзацы: без фона, рамки, полосы и отступа.
       textBlock = _text(context);
     }
+    final copyable = !thinking &&
+        message.text.trim().isNotEmpty &&
+        message.secureCard == null;
     final content = Column(
       crossAxisAlignment:
           fromUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -392,6 +396,17 @@ final class MessageRow extends StatelessWidget {
               onTap: onOpenLink!,
             ),
           ),
+        // Под ответом — «Копировать» (как у чатов с ассистентом): весь текст
+        // одним нажатием. Не у строки «думает» и не у карточки паролей.
+        if (!fromUser && copyable)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpace.xxs),
+            child: Transform.translate(
+              // Значок — вровень с текстом, а не с краем цели нажатия.
+              offset: const Offset(-15, 0),
+              child: MessageCopyButton(text: message.text),
+            ),
+          ),
         if (showTime)
           Padding(
             padding: const EdgeInsets.only(top: AppSpace.xxs),
@@ -422,7 +437,9 @@ final class MessageRow extends StatelessWidget {
                   children: <Widget>[
                     ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: max),
-                      child: content,
+                      child: copyable
+                          ? HoverCopy(text: message.text, child: content)
+                          : content,
                     ),
                   ],
                 )
