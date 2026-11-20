@@ -4,7 +4,7 @@ import '../../core/formatting/plural.dart';
 import '../../core/personas/persona.dart';
 import '../../core/replies/reply_library.dart';
 import '../assistant_theme.dart';
-import '../widgets/personas_section.dart';
+import '../widgets/persona_mark.dart';
 
 /// Пустая новая сессия (макет «Д») — она же приветствие: знак главного,
 /// «Что сделать?» и, если какую-то роль ведёт помощник, строка об этом.

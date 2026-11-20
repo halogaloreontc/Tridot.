@@ -19,10 +19,12 @@ import '../core/models/warehouse_card.dart';
 const int widgetApi = 2;
 
 /// Что умеет помощник сверх договора 1 — в `hello.caps`. `layout` —
-/// помощник просит у склада широкую панель на компьютере ([WidgetMessages.layout]).
+/// помощник просит у склада широкую панель на компьютере ([WidgetMessages.layout]);
+/// `open-project` — склад открывает проект сразу на его экране (ADR-038).
 const List<String> widgetCaps = <String>[
   'signal',
   'open-chat',
+  'open-project',
   'changed',
   'layout',
 ];
@@ -141,6 +143,10 @@ sealed class HostEvent {
         final id = text('id', 80);
         if (!RegExp(r'^[a-z0-9][a-z0-9:_\-.]{2,79}$').hasMatch(id)) return null;
         return HostOpenChat(id);
+      case 'open-project':
+        final id = text('id', 80);
+        if (!RegExp(r'^[a-z0-9][a-z0-9:_\-.]{2,79}$').hasMatch(id)) return null;
+        return HostOpenProject(id);
       case 'voice-ev':
         final id = data['id'];
         final ev = data['ev'];
@@ -213,6 +219,13 @@ final class HostSignal extends HostEvent {
 /// Открыть разговор [id] из личного хранилища склада.
 final class HostOpenChat extends HostEvent {
   const HostOpenChat(this.id);
+  final String id;
+}
+
+/// Открыть проект [id] из личного хранилища склада: экран проекта с его
+/// разговорами и задачами.
+final class HostOpenProject extends HostEvent {
+  const HostOpenProject(this.id);
   final String id;
 }
 

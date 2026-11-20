@@ -4,573 +4,599 @@ import 'package:flutter/material.dart';
 
 import '../app/assistant_theme.dart';
 import '../app/layout.dart';
+import '../app/screens/planning_screen.dart';
+import '../app/screens/project_screen.dart';
+import '../app/screens/projects_screen.dart';
+import '../app/shell/project_dialogs.dart';
+import '../app/shell/relay_drawer.dart';
+import '../app/shell/session_hold_menu.dart';
+import '../app/shell/today_panel.dart';
+import '../app/widgets/grouped.dart';
+import '../app/widgets/task_tile.dart';
 import '../core/chats/chat_book.dart';
 import '../core/chats/chat_models.dart';
-import '../core/chats/chat_projects.dart';
+import '../core/chats/chat_search.dart';
+import '../core/formatting/due_format.dart';
+import '../core/models/action_card.dart';
 import '../core/models/task.dart';
+import '../core/personas/persona.dart';
 import 'widget_session.dart';
 
-/// Левая колонка (широкая панель) или выдвижное меню (узкая панель,
-/// телефон): задачи, проекты, разговоры — как меню сессий Tridot, но
-/// компактно, для склада.
-final class WidgetSide extends StatelessWidget {
-  const WidgetSide({super.key, required this.session, this.onPicked});
+// Меню и экраны веб-помощника — те же виджеты, что в приложении (ADR-038):
+// RelayDrawer (сессии по дням, проекты, «Мой Связной»), ProjectScreen,
+// ProjectsScreen, PlanningScreen, TodayPanel. Здесь только данные из
+// WidgetSession и действия меню.
 
-  final WidgetSession session;
+/// Помощник в вебе один — Связной.
+const List<Persona> widgetCast = <Persona>[Personas.sado];
 
-  /// Выбрали разговор — в узкой панели меню закрывается.
-  final VoidCallback? onPicked;
-
-  @override
-  Widget build(BuildContext context) {
-    final book = session.book;
-    final colors = context.colors;
-    final text = Theme.of(context).textTheme;
-    if (book == null) return const SizedBox.shrink();
-    final groups = book.groups(DateTime.now());
-    final projects = book.projects();
-    bool loose(ChatThread t) => t.projectId == null;
-    final tasks = session.taskList;
-    Widget title(String label, {Widget? action}) => Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.m,
-            AppSpace.m,
-            AppSpace.xxs,
-            AppSpace.xxs,
-          ),
-          child: Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  label,
-                  style: text.labelMedium?.copyWith(color: colors.muted),
-                ),
-              ),
-              if (action != null) action,
-            ],
-          ),
-        );
-    final days = <(String, List<ChatThread>)>[
-      ('Закреплённые', groups.pinned),
-      ('Сегодня', groups.today.where(loose).toList()),
-      ('Вчера', groups.yesterday.where(loose).toList()),
-      ('Неделя', groups.week.where(loose).toList()),
-      ('Раньше', groups.earlier.where(loose).toList()),
+/// Активные задачи.
+List<Task> activeTasks(WidgetSession session) => <Task>[
+      for (final task in session.taskList)
+        if (task.isActive) task,
     ];
-    return ColoredBox(
-      color: colors.raised,
-      child: ListView(
-        key: const ValueKey<String>('widget-side'),
-        padding: const EdgeInsets.only(bottom: AppSpace.l),
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.s,
-              AppSpace.s,
-              AppSpace.s,
-              0,
-            ),
-            child: FilledButton.tonalIcon(
-              key: const ValueKey<String>('side-new'),
-              onPressed: session.busy
-                  ? null
-                  : () {
-                      unawaited(session.newChat());
-                      onPicked?.call();
-                    },
-              icon: const Icon(Icons.add_comment_outlined, size: 18),
-              label: const Text('Новый разговор'),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.m,
-              AppSpace.xs,
-              AppSpace.m,
-              0,
-            ),
-            child: Text(
-              session.synced
-                  ? 'Хранится на складе — видно с любого устройства.'
-                  : 'Хранится только в этом браузере: склад пока не '
-                      'хранит записи помощника.',
-              key: const ValueKey<String>('side-sync'),
-              style: text.bodySmall?.copyWith(color: colors.muted),
-            ),
-          ),
-          title(
-            'Задачи',
-            action: tasks.isEmpty
-                ? null
-                : Text(
-                    '${tasks.where((Task t) => t.status != TaskStatus.done).length}',
-                    style: text.labelSmall?.copyWith(color: colors.muted),
-                  ),
-          ),
-          if (tasks.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpace.m),
-              child: Text(
-                'Скажите: «напомни завтра проверить акт 12-26».',
-                style: text.bodySmall?.copyWith(color: colors.muted),
-              ),
-            ),
-          for (final task in tasks.take(12))
-            _TaskRow(session: session, task: task, onPicked: onPicked),
-          title(
-            'Проекты',
-            action: IconButton(
-              key: const ValueKey<String>('side-project-new'),
-              tooltip: 'Новый проект',
-              visualDensity: VisualDensity.compact,
-              icon: Icon(
-                Icons.create_new_folder_outlined,
-                size: 18,
-                color: colors.icon,
-              ),
-              onPressed: () => unawaited(_newProject(context)),
-            ),
-          ),
-          for (final project in projects)
-            _ProjectTile(
-              session: session,
-              project: project,
-              onPicked: onPicked,
-            ),
-          for (final (label, list) in days)
-            if (list.isNotEmpty) ...<Widget>[
-              title(label),
-              for (final thread in list)
-                ChatRow(session: session, thread: thread, onPicked: onPicked),
-            ],
-        ],
-      ),
-    );
+
+/// Меню приложения: колонкой слева ([wide]) или выдвижное.
+Widget widgetDrawer(
+  BuildContext context,
+  WidgetSession session, {
+  required bool wide,
+  required int sessionsShown,
+  required VoidCallback onShowMore,
+  VoidCallback? onCollapse,
+  VoidCallback? onPicked,
+}) {
+  final book = session.book!;
+  final now = DateTime.now();
+  final active = activeTasks(session);
+  final groups = book.groups(now, limit: sessionsShown);
+  void picked(void Function() action) {
+    action();
+    onPicked?.call();
   }
 
-  Future<void> _newProject(BuildContext context) async {
-    final name = await askText(
-      context,
-      title: 'Новый проект',
-      hint: 'Название: «Брак Ромашка»',
-    );
-    if (name == null) return;
-    session.createProject(name);
+  SessionGroupEntry group(String id, String label, List<ChatThread> list) =>
+      SessionGroupEntry(
+        id: id,
+        label: label,
+        entries: <SessionEntry>[
+          for (final thread in list)
+            if (sessionEntry(session, thread, now, id)
+                case final SessionEntry e)
+              e,
+        ],
+      );
+  final planning = upcomingCount(active, now);
+  final projects = book.projects();
+  return RelayDrawer(
+    wide: wide,
+    onCollapse: onCollapse,
+    assistants: widgetCast,
+    activeSection: switch (session.view) {
+      WidgetView.tasks => 'tasks',
+      WidgetView.projects => 'projects',
+      WidgetView.planning => 'planning',
+      _ => null,
+    },
+    projects: <ProjectEntry>[
+      for (final project in projects)
+        ProjectEntry(
+          id: project.id,
+          name: project.name,
+          sessions: book.projectSessionCount(project.id),
+          active: session.view == WidgetView.project &&
+              session.projectId == project.id,
+        ),
+    ],
+    onOpenProject: (String id) =>
+        picked(() => session.show(WidgetView.project, project: id)),
+    onNewProject: () => unawaited(
+      createProject(context, session).then((_) => onPicked?.call()),
+    ),
+    groups: <SessionGroupEntry>[
+      group('pinned', 'Закреплённые', groups.pinned),
+      group('today', 'Сегодня', groups.today),
+      group('yesterday', 'Вчера', groups.yesterday),
+      group('week', 'На неделе', groups.week),
+      group('earlier', 'Ранее', groups.earlier),
+    ],
+    hiddenSessions: groups.hidden,
+    onShowMoreSessions: onShowMore,
+    counts: SectionCounts(
+      tasks: active.length,
+      overdue: active.where((Task t) => isOverdue(t, now)).length,
+      projects: projects.isEmpty ? null : projects.length,
+      planning: planning == 0 ? null : planning,
+    ),
+    extensions: <ExtensionEntry>[
+      ExtensionEntry(
+        id: 'warehouse',
+        title: 'Склад',
+        icon: Icons.inventory_2_outlined,
+        status: 'на связи',
+        statusColor: context.colors.success,
+        dot: true,
+        onTap: () => picked(session.openWarehouse),
+      ),
+    ],
+    onOpenMyRelay: () => picked(() => session.show(WidgetView.today)),
+    onTasks: () => picked(() => session.show(WidgetView.tasks)),
+    onProjects: () => picked(() => session.show(WidgetView.projects)),
+    onPlanning: () => picked(() => session.show(WidgetView.planning)),
+    onOpenSession: (String id) => picked(() => openEntry(session, id)),
+    onNewSession: () => picked(() => unawaited(session.newChat())),
+    onSessionAction: (String id, SessionAction action) =>
+        unawaited(sessionAction(context, session, id, action)),
+    search: (String query) => book.search(
+      query,
+      titles: <String, String>{
+        for (final task in session.taskList) task.id: task.title,
+      },
+    ),
+    onOpenHit: (ChatSearchHit hit) =>
+        picked(() => openEntry(session, hit.chatId)),
+    timeLabel: (DateTime at) => sessionTimeLabel(at, DateTime.now()),
+  );
+}
+
+/// Строка разговора в меню и на экране проекта — как в приложении.
+SessionEntry? sessionEntry(
+  WidgetSession session,
+  ChatThread thread,
+  DateTime now,
+  String group, {
+  bool showProject = true,
+}) {
+  final book = session.book!;
+  final active = session.view == WidgetView.chat && book.currentId == thread.id;
+  final time = sessionRowTimeLabel(thread.lastActivityAt, now, group);
+  final canAct = thread.messageCount > 0;
+  final projectName = showProject ? book.project(thread.projectId)?.name : null;
+  switch (thread.kind) {
+    case ChatKind.main:
+    case ChatKind.session:
+      return SessionEntry(
+        id: thread.id,
+        title: ChatBook.titleOf(thread),
+        time: time,
+        itemKey: Key('chat-${thread.id}'),
+        dotKey: Key('chat-unread-${thread.id}'),
+        active: active,
+        unread: thread.unread,
+        persona: Personas.sado,
+        pinned: thread.pinned,
+        canAct: canAct,
+        canRename: canAct,
+        canMove: canAct,
+        projectName: projectName,
+      );
+    case ChatKind.task:
+      final task =
+          session.taskList.where((Task t) => t.id == thread.taskId).firstOrNull;
+      if (task == null) return null;
+      return SessionEntry(
+        id: thread.id,
+        title: task.title,
+        time: time,
+        itemKey: Key('chat-${task.id}'),
+        dotKey: Key('chat-unread-${task.id}'),
+        active: active,
+        unread: thread.unread,
+        muted: task.status == TaskStatus.done,
+        persona: Personas.sado,
+        pinned: thread.pinned,
+        canAct: canAct,
+        projectName: projectName,
+      );
   }
 }
 
-/// Строка разговора: открыть по нажатию, меню — переименовать,
-/// закрепить, в проект, удалить.
-final class ChatRow extends StatelessWidget {
-  const ChatRow({
+/// Открыть строку меню: чат задачи — через задачу, остальное — разговор.
+void openEntry(WidgetSession session, String chatId) {
+  final thread = session.book?.thread(chatId);
+  final taskId = thread?.taskId;
+  if (thread != null && thread.kind == ChatKind.task && taskId != null) {
+    unawaited(session.openTask(taskId));
+  } else {
+    unawaited(session.openChat(chatId));
+  }
+}
+
+/// Меню сессии: переименовать, закрепить, в проект, удалить — те же окна,
+/// что в приложении.
+Future<void> sessionAction(
+  BuildContext context,
+  WidgetSession session,
+  String chatId,
+  SessionAction action,
+) async {
+  final book = session.book;
+  final thread = book?.thread(chatId);
+  if (book == null || thread == null) return;
+  final task = thread.kind == ChatKind.task
+      ? session.taskList.where((Task t) => t.id == thread.taskId).firstOrNull
+      : null;
+  final title = task?.title ?? ChatBook.titleOf(thread);
+  switch (action) {
+    case SessionAction.rename:
+      final name = await showRenameSessionDialog(context, current: title);
+      if (name != null) session.renameChat(chatId, name);
+    case SessionAction.pin:
+      session.pinChat(chatId, pinned: !thread.pinned);
+    case SessionAction.move:
+      final choice = await showMoveToProjectSheet(
+        context,
+        projects: book.projects(),
+        currentProjectId: thread.projectId,
+      );
+      if (choice == null || !context.mounted) return;
+      switch (choice) {
+        case MoveToProject(:final projectId):
+          session.moveChat(chatId, projectId);
+        case MoveOutOfProject():
+          session.moveChat(chatId, null);
+        case MoveToNewProject():
+          final created = await createProject(context, session, open: false);
+          if (created != null) session.moveChat(chatId, created);
+      }
+    case SessionAction.delete:
+      final ok = await showDeleteSessionDialog(
+        context,
+        title: title,
+        task: thread.kind == ChatKind.task,
+      );
+      if (ok) await session.deleteChat(chatId);
+  }
+}
+
+/// «Новый проект»: окно приложения с названием и описанием; [open] —
+/// сразу его экран. Возвращает id проекта.
+Future<String?> createProject(
+  BuildContext context,
+  WidgetSession session, {
+  bool open = true,
+  String? name,
+  String? tag,
+}) async {
+  final draft = await showProjectDialog(context, name: name ?? '');
+  if (draft == null) return null;
+  final project = session.createProject(draft.name, tag: tag);
+  if (project == null) return null;
+  if (draft.description != null) {
+    session.describeProject(project.id, project.name, draft.description);
+  }
+  if (open) session.show(WidgetView.project, project: project.id);
+  return project.id;
+}
+
+/// Меню «⋯» на экране проекта.
+Future<void> projectAction(
+  BuildContext context,
+  WidgetSession session,
+  String projectId,
+  ProjectAction action,
+) async {
+  final book = session.book;
+  final project = book?.project(projectId);
+  if (book == null || project == null) return;
+  switch (action) {
+    case ProjectAction.rename:
+      final name = await showRenameSessionDialog(
+        context,
+        current: project.name,
+        title: 'Переименовать проект',
+      );
+      if (name != null) session.renameProject(projectId, name);
+    case ProjectAction.describe:
+      final draft = await showProjectDialog(
+        context,
+        title: 'Проект',
+        action: 'Сохранить',
+        name: project.name,
+        description: project.description,
+      );
+      if (draft != null) {
+        session.describeProject(projectId, draft.name, draft.description);
+      }
+    case ProjectAction.tag:
+      final linked = <String>{
+        for (final p in book.projects())
+          if (p.taskTag case final String tag) tag,
+      };
+      final free = <String>{
+        for (final task in activeTasks(session))
+          if (task.project case final String tag)
+            if (!linked.contains(tag)) tag,
+      }.toList()
+        ..sort();
+      final result = await showProjectTagDialog(
+        context,
+        current: project.taskTag,
+        suggestions: free.take(8).toList(),
+      );
+      if (result == null || !context.mounted) return;
+      if (!session.tagProject(projectId, result.tag)) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text('Метка #${result.tag} уже у другого проекта')),
+        );
+      }
+    case ProjectAction.pin:
+      session.pinProject(projectId, pinned: !project.pinned);
+    case ProjectAction.delete:
+      final choice = await showDeleteProjectDialog(
+        context,
+        name: project.name,
+        sessions: book.projectSessionCount(projectId),
+      );
+      if (choice == null) return;
+      await session.deleteProject(
+        projectId,
+        deleteSessions: choice == ProjectDeleteChoice.deleteSessions,
+      );
+  }
+}
+
+/// Срок задачи — выбор дня.
+Future<void> pickDue(
+  BuildContext context,
+  WidgetSession session,
+  Task task,
+) async {
+  final now = DateTime.now();
+  final picked = await showDatePicker(
+    context: context,
+    initialDate: task.dueAt ?? now,
+    firstDate: DateTime(now.year - 1),
+    lastDate: DateTime(now.year + 5),
+    helpText: 'Срок задачи',
+  );
+  if (picked != null) await session.setDue(task.id, picked);
+}
+
+/// Отметить задачу выполненной или вернуть в работу.
+void toggleDone(WidgetSession session, Task task) => unawaited(
+      task.status == TaskStatus.done
+          ? session.reopenTask(task.id)
+          : session.completeTask(task.id),
+    );
+
+/// Экран раздела (не разговор): «Сегодня», задачи, проекты, проект,
+/// планирование.
+Widget widgetScreen(BuildContext context, WidgetSession session) {
+  final book = session.book!;
+  final now = DateTime.now();
+  final active = activeTasks(session);
+  void open(Task task) => unawaited(session.openTask(task.id));
+  void toggle(Task task) => toggleDone(session, task);
+  switch (session.view) {
+    case WidgetView.chat:
+      return const SizedBox.shrink();
+    case WidgetView.today:
+      return todayPanel(context, session);
+    case WidgetView.tasks:
+      return WidgetTasksScreen(session: session, now: now);
+    case WidgetView.planning:
+      return PlanningScreen(
+        tasks: active,
+        now: now,
+        selectedId: null,
+        onOpenTask: open,
+        onToggleDone: toggle,
+      );
+    case WidgetView.projects:
+      return ProjectsScreen(
+        tasks: active,
+        now: now,
+        selectedId: null,
+        onOpenTask: open,
+        onToggleDone: toggle,
+        folders: <ProjectFolderCard>[
+          for (final project in book.projects())
+            ProjectFolderCard(
+              id: project.id,
+              name: project.name,
+              description: project.description,
+              taskTag: project.taskTag,
+              sessions: book.projectSessionCount(project.id),
+            ),
+        ],
+        onOpenFolder: (String id) =>
+            session.show(WidgetView.project, project: id),
+        onNewFolder: () => unawaited(createProject(context, session)),
+        onMakeFolder: (String tag) =>
+            unawaited(createProject(context, session, name: tag, tag: tag)),
+      );
+    case WidgetView.project:
+      final project = book.project(session.projectId);
+      if (project == null) {
+        return ProjectsScreen(
+          tasks: active,
+          now: now,
+          selectedId: null,
+          onOpenTask: open,
+          onToggleDone: toggle,
+        );
+      }
+      final tag = project.taskTag;
+      return ProjectScreen(
+        project: project,
+        now: now,
+        sessions: <SessionEntry>[
+          for (final thread in book.sessionsOf(project.id))
+            if (sessionEntry(
+              session,
+              thread,
+              now,
+              'pinned',
+              showProject: false,
+            )
+                case final SessionEntry e)
+              e,
+        ],
+        tasks: tag == null
+            ? const <Task>[]
+            : <Task>[
+                for (final task in active)
+                  if (task.tags.contains(tag)) task,
+              ],
+        onOpenTask: open,
+        onToggleDone: toggle,
+        onNewSession: () => unawaited(session.newChat(projectId: project.id)),
+        onOpenSession: (String id) => openEntry(session, id),
+        onSessionAction: (String id, SessionAction action) =>
+            unawaited(sessionAction(context, session, id, action)),
+        onAction: (ProjectAction action) =>
+            unawaited(projectAction(context, session, project.id, action)),
+      );
+  }
+}
+
+/// «Сегодня» приложения: дела на сегодня и просроченные, ждущие
+/// подтверждения карточки склада, разделы; [onClose] — свернуть колонку.
+Widget todayPanel(
+  BuildContext context,
+  WidgetSession session, {
+  VoidCallback? onClose,
+}) {
+  final now = DateTime.now();
+  final active = activeTasks(session);
+  final book = session.book!;
+  return TodayPanel(
+    now: now,
+    tasks: todayTasks(active, now),
+    onOpenTask: (Task task) => unawaited(session.openTask(task.id)),
+    onToggleDone: (Task task) => toggleDone(session, task),
+    onAllTasks: () => session.show(WidgetView.tasks),
+    onClose: onClose,
+    emptyHint: active.isEmpty
+        ? 'Задач нет. Скажите: «напомни завтра проверить акт 12-26».'
+        : null,
+    pending: <TodayPending>[
+      for (final pending in book.pendingCards(now))
+        TodayPending(
+          id: pending.message.card!.id,
+          title: switch (pending.message.card!.kind) {
+            ActionKind.post => 'Отметка прихода ждёт подтверждения',
+            ActionKind.move => 'Перемещение ждёт подтверждения',
+          },
+          subtitle: 'Связной · склад',
+          lead: Personas.sado,
+          onTap: () => openEntry(session, pending.chatId),
+        ),
+    ],
+    sections: <TodaySection>[
+      TodaySection(
+        id: 'projects',
+        label: 'Проекты',
+        onTap: () => session.show(WidgetView.projects),
+      ),
+      TodaySection(
+        id: 'planning',
+        label: 'Планирование',
+        onTap: () => session.show(WidgetView.planning),
+      ),
+      TodaySection(
+        id: 'warehouse',
+        label: 'Склад',
+        semantics: 'Склад, на связи',
+        dot: context.colors.success,
+        onTap: session.openWarehouse,
+      ),
+    ],
+  );
+}
+
+/// «Задачи»: группы задач — как списки приложения ([TaskTile],
+/// [InsetGroup]); срок — кнопкой календаря.
+final class WidgetTasksScreen extends StatelessWidget {
+  const WidgetTasksScreen({
     super.key,
     required this.session,
-    required this.thread,
-    this.onPicked,
-    this.indent = 0,
+    required this.now,
   });
 
   final WidgetSession session;
-  final ChatThread thread;
-  final VoidCallback? onPicked;
-  final double indent;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    final text = Theme.of(context).textTheme;
-    final book = session.book!;
-    final current = thread.id == book.currentId;
-    final taskTitle = thread.kind == ChatKind.task
-        ? session.taskList
-            .where((Task t) => t.id == thread.taskId)
-            .firstOrNull
-            ?.title
-        : null;
-    final name = ChatBook.titleOf(thread, taskTitle: taskTitle);
-    return Material(
-      color: current ? colors.workspace : Colors.transparent,
-      child: InkWell(
-        key: ValueKey<String>('chat-${thread.id}'),
-        onTap: () {
-          unawaited(session.openChat(thread.id));
-          onPicked?.call();
-        },
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(AppSpace.m + indent, 2, 0, 2),
-          child: Row(
-            children: <Widget>[
-              if (thread.pinned)
-                Padding(
-                  padding: const EdgeInsets.only(right: AppSpace.xxs),
-                  child: Icon(Icons.push_pin, size: 14, color: colors.muted),
-                ),
-              Expanded(
-                child: Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: text.bodyMedium?.copyWith(
-                    color: current ? colors.textStrong : colors.text,
-                    fontWeight: thread.unread ? FontWeight.w600 : null,
-                  ),
-                ),
-              ),
-              if (thread.messageCount > 0)
-                PopupMenuButton<String>(
-                  key: ValueKey<String>('chat-menu-${thread.id}'),
-                  tooltip: 'Действия',
-                  icon: Icon(Icons.more_horiz, size: 18, color: colors.icon),
-                  onSelected: (String v) => unawaited(_act(context, v)),
-                  itemBuilder: (_) => <PopupMenuEntry<String>>[
-                    if (thread.isSession)
-                      const PopupMenuItem<String>(
-                        value: 'rename',
-                        child: Text('Переименовать'),
-                      ),
-                    PopupMenuItem<String>(
-                      value: 'pin',
-                      child: Text(thread.pinned ? 'Открепить' : 'Закрепить'),
-                    ),
-                    if (thread.isSession)
-                      const PopupMenuItem<String>(
-                        value: 'move',
-                        child: Text('В проект…'),
-                      ),
-                    const PopupMenuItem<String>(
-                      value: 'delete',
-                      child: Text('Удалить'),
-                    ),
-                  ],
-                ),
-              if (thread.messageCount == 0) const SizedBox(height: 40),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _act(BuildContext context, String action) async {
-    switch (action) {
-      case 'rename':
-        final name = await askText(
-          context,
-          title: 'Переименовать',
-          initial: ChatBook.titleOf(thread),
-        );
-        if (name != null) session.renameChat(thread.id, name);
-      case 'pin':
-        session.pinChat(thread.id, pinned: !thread.pinned);
-      case 'move':
-        if (!context.mounted) return;
-        final target = await pickProject(context, session, thread.projectId);
-        if (target != null) {
-          session.moveChat(thread.id, target.isEmpty ? null : target);
-        }
-      case 'delete':
-        if (!context.mounted) return;
-        final ok = await confirm(
-          context,
-          'Удалить разговор?',
-          thread.kind == ChatKind.task
-              ? 'Сама задача останется.'
-              : 'Его не будет ни здесь, ни на складе.',
-        );
-        if (ok) await session.deleteChat(thread.id);
+    final tasks = session.taskList;
+    final tomorrow =
+        DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+    final late = <Task>[];
+    final todays = <Task>[];
+    final later = <Task>[];
+    final open = <Task>[];
+    final done = <Task>[];
+    for (final task in tasks) {
+      final due = task.dueAt?.toLocal();
+      if (!task.isActive) {
+        done.add(task);
+      } else if (isOverdue(task, now)) {
+        late.add(task);
+      } else if (due != null && due.isBefore(tomorrow)) {
+        todays.add(task);
+      } else if (due != null) {
+        later.add(task);
+      } else {
+        open.add(task);
+      }
     }
-  }
-}
-
-final class _ProjectTile extends StatelessWidget {
-  const _ProjectTile({
-    required this.session,
-    required this.project,
-    this.onPicked,
-  });
-
-  final WidgetSession session;
-  final ChatProject project;
-  final VoidCallback? onPicked;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final text = Theme.of(context).textTheme;
-    final sessions = session.book!.sessionsOf(project.id);
-    return ExpansionTile(
-      key: ValueKey<String>('project-${project.id}'),
-      dense: true,
-      tilePadding: const EdgeInsets.only(left: AppSpace.m, right: 0),
-      childrenPadding: EdgeInsets.zero,
-      leading: Icon(
-        project.pinnedAt != null ? Icons.folder_special : Icons.folder_outlined,
-        size: 18,
-        color: colors.icon,
-      ),
-      title: Text(
-        project.name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: text.bodyMedium?.copyWith(color: colors.text),
-      ),
-      subtitle: project.taskTag == null
-          ? null
-          : Text('#${project.taskTag}', style: text.bodySmall),
-      trailing: PopupMenuButton<String>(
-        key: ValueKey<String>('project-menu-${project.id}'),
-        tooltip: 'Действия',
-        icon: Icon(Icons.more_horiz, size: 18, color: colors.icon),
-        onSelected: (String v) => unawaited(_act(context, v)),
-        itemBuilder: (_) => <PopupMenuEntry<String>>[
-          const PopupMenuItem<String>(
-            value: 'new',
-            child: Text('Новый разговор в проекте'),
-          ),
-          const PopupMenuItem<String>(
-            value: 'rename',
-            child: Text('Переименовать'),
-          ),
-          PopupMenuItem<String>(
-            value: 'pin',
-            child: Text(project.pinnedAt != null ? 'Открепить' : 'Закрепить'),
-          ),
-          const PopupMenuItem<String>(
-            value: 'delete',
-            child: Text('Удалить проект'),
-          ),
-        ],
-      ),
-      children: <Widget>[
-        if (sessions.isEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpace.xl,
-              0,
-              AppSpace.m,
-              AppSpace.xs,
-            ),
-            child: Text('Разговоров пока нет', style: text.bodySmall),
-          ),
-        for (final thread in sessions)
-          ChatRow(
-            session: session,
-            thread: thread,
-            onPicked: onPicked,
-            indent: AppSpace.m,
-          ),
-      ],
-    );
-  }
-
-  Future<void> _act(BuildContext context, String action) async {
-    switch (action) {
-      case 'new':
-        await session.newChat(projectId: project.id);
-        onPicked?.call();
-      case 'rename':
-        final name = await askText(
-          context,
-          title: 'Переименовать проект',
-          initial: project.name,
-        );
-        if (name != null) session.renameProject(project.id, name);
-      case 'pin':
-        session.pinProject(project.id, pinned: project.pinnedAt == null);
-      case 'delete':
-        final ok = await confirm(
-          context,
-          'Удалить проект «${project.name}»?',
-          'Разговоры и задачи останутся — без проекта.',
-        );
-        if (ok) await session.deleteProject(project.id);
-    }
-  }
-}
-
-final class _TaskRow extends StatelessWidget {
-  const _TaskRow({required this.session, required this.task, this.onPicked});
-
-  final WidgetSession session;
-  final Task task;
-  final VoidCallback? onPicked;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final text = Theme.of(context).textTheme;
-    final done = task.status == TaskStatus.done;
-    final late = session.overdue(task);
-    final due = task.dueAt;
-    return InkWell(
-      key: ValueKey<String>('task-${task.id}'),
-      onTap: () {
-        unawaited(session.openTask(task.id));
-        onPicked?.call();
-      },
-      child: Padding(
-        padding: const EdgeInsets.only(left: AppSpace.xxs),
-        child: Row(
+    Widget row(Task task) => Row(
           children: <Widget>[
-            Checkbox(
-              key: ValueKey<String>('task-done-${task.id}'),
-              value: done,
-              visualDensity: VisualDensity.compact,
-              onChanged: (bool? v) => unawaited(
-                v ?? false
-                    ? session.completeTask(task.id)
-                    : session.reopenTask(task.id),
-              ),
-            ),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    task.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: text.bodyMedium?.copyWith(
-                      color: done ? colors.muted : colors.text,
-                      decoration: done ? TextDecoration.lineThrough : null,
-                    ),
-                  ),
-                  if (due != null)
-                    Text(
-                      dueLabel(task),
-                      style: text.bodySmall?.copyWith(
-                        color: late ? colors.danger : colors.muted,
-                      ),
-                    ),
-                ],
+              child: TaskTile(
+                task: task,
+                now: now,
+                onTap: () => unawaited(session.openTask(task.id)),
+                onToggleDone: () => toggleDone(session, task),
               ),
             ),
-            if (!done)
+            if (task.isActive)
               IconButton(
                 key: ValueKey<String>('task-due-${task.id}'),
                 tooltip: 'Срок',
-                visualDensity: VisualDensity.compact,
-                icon: Icon(Icons.event_outlined, size: 18, color: colors.icon),
-                onPressed: () => unawaited(_pickDue(context)),
+                onPressed: () => unawaited(pickDue(context, session, task)),
+                icon: Icon(
+                  Icons.event_outlined,
+                  size: 20,
+                  color: context.colors.icon,
+                ),
               ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickDue(BuildContext context) async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: task.dueAt ?? now,
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 5),
-      helpText: 'Срок задачи',
-    );
-    if (picked != null) await session.setDue(task.id, picked);
-  }
-}
-
-/// «18.11», «18.11 15:00».
-String dueLabel(Task task) {
-  final d = task.dueAt?.toLocal();
-  if (d == null) return '';
-  String two(int n) => n.toString().padLeft(2, '0');
-  final day = '${two(d.day)}.${two(d.month)}';
-  return task.duePrecision == DuePrecision.dateTime
-      ? '$day ${two(d.hour)}:${two(d.minute)}'
-      : day;
-}
-
-/// Строка текста в окне; `null` — отмена.
-Future<String?> askText(
-  BuildContext context, {
-  required String title,
-  String initial = '',
-  String hint = '',
-}) {
-  final controller = TextEditingController(text: initial);
-  return showDialog<String>(
-    context: context,
-    builder: (BuildContext context) => AlertDialog(
-      title: Text(title),
-      content: TextField(
-        key: const ValueKey<String>('ask-text'),
-        controller: controller,
-        autofocus: true,
-        maxLength: ChatThread.customTitleLimit,
-        decoration: InputDecoration(hintText: hint, counterText: ''),
-        onSubmitted: (String v) => Navigator.of(context).pop(v),
-      ),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(
-          key: const ValueKey<String>('ask-ok'),
-          onPressed: () => Navigator.of(context).pop(controller.text),
-          child: const Text('Готово'),
-        ),
+        );
+    final groups = <(String, List<Task>, bool)>[
+      ('Просрочено', late, true),
+      ('Сегодня', todays, false),
+      ('Дальше', later, false),
+      ('Без срока', open, false),
+      ('Готово', done.take(10).toList(), false),
+    ];
+    return ListView(
+      key: const Key('tasks-screen'),
+      padding: const EdgeInsets.only(top: AppSpace.m, bottom: AppSpace.xl),
+      children: <Widget>[
+        const LargeTitle('Задачи'),
+        if (tasks.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.pageH),
+            child: Text(
+              'Задач нет. Скажите: «добавь задачу проверить акт 12-26» или '
+              '«напомни завтра позвонить поставщику».',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyLarge!
+                  .copyWith(color: context.colors.muted),
+            ),
+          ),
+        for (final (label, list, danger) in groups)
+          if (list.isNotEmpty)
+            InsetGroup(
+              header: label,
+              headerDanger: danger,
+              children: <Widget>[for (final task in list) row(task)],
+            ),
       ],
-    ),
-  ).then((String? v) => v == null || v.trim().isEmpty ? null : v.trim());
-}
-
-Future<bool> confirm(BuildContext context, String title, String body) =>
-    showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: Text(title),
-        content: Text(body),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            key: const ValueKey<String>('confirm-ok'),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Да'),
-          ),
-        ],
-      ),
-    ).then((bool? v) => v ?? false);
-
-/// Куда перенести разговор: id проекта, `''` — «Без проекта», `null` —
-/// отмена.
-Future<String?> pickProject(
-  BuildContext context,
-  WidgetSession session,
-  String? current,
-) =>
-    showDialog<String>(
-      context: context,
-      builder: (BuildContext context) => SimpleDialog(
-        title: const Text('В проект'),
-        children: <Widget>[
-          for (final p in session.book?.projects() ?? const <ChatProject>[])
-            SimpleDialogOption(
-              key: ValueKey<String>('pick-${p.id}'),
-              onPressed: () => Navigator.of(context).pop(p.id),
-              child: Text(p.id == current ? '${p.name} ✓' : p.name),
-            ),
-          if (current != null)
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(context).pop(''),
-              child: const Text('Без проекта'),
-            ),
-          SimpleDialogOption(
-            key: const ValueKey<String>('pick-new'),
-            onPressed: () async {
-              final name = await askText(context, title: 'Новый проект');
-              if (!context.mounted) return;
-              final project = name == null ? null : session.createProject(name);
-              Navigator.of(context).pop(project?.id);
-            },
-            child: const Text('Новый проект…'),
-          ),
-        ],
-      ),
     );
+  }
+}

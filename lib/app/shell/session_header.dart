@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
-import '../widgets/personas_section.dart';
+import '../widgets/persona_mark.dart';
 import 'session_hold_menu.dart';
 
 /// Шапка сессии (макет «Д»): слева меню или «назад», в центре название

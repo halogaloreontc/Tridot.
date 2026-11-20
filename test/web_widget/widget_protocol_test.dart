@@ -226,6 +226,24 @@ void main() {
       expect(first.actions.last.dateLabel, 'Дата отгрузки');
     });
 
+    test('open-project: только id хранилища', () {
+      expect(
+        (HostEvent.parse(<String, Object?>{
+          'svz': 1,
+          'type': 'open-project',
+          'id': 'p_1700000000_ab',
+        })! as HostOpenProject)
+            .id,
+        'p_1700000000_ab',
+      );
+      expect(
+        HostEvent.parse(
+          <String, Object?>{'svz': 1, 'type': 'open-project', 'id': '../x'},
+        ),
+        isNull,
+      );
+    });
+
     test('open-chat: только id хранилища', () {
       expect(
         (HostEvent.parse(<String, Object?>{

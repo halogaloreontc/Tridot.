@@ -380,6 +380,7 @@ void main() {
       expect(host.sent.single['api'], 2);
       expect(host.sent.single['caps'], contains('signal'));
       expect(host.sent.single['caps'], contains('open-chat'));
+      expect(host.sent.single['caps'], contains('open-project'));
     });
 
     test('задача фразой: TasksConnector, чат задачи, на склад my_put',
@@ -626,6 +627,53 @@ void main() {
       final thread = session.book!.thread('session:imp_local');
       expect(thread, isNotNull);
       expect(storage.values.containsKey('svz:hist:ivanov'), isFalse);
+    });
+
+    test(
+        'open-project: проект на экране, неизвестный — «Проекты»; удалили — '
+        'тоже «Проекты»', () async {
+      make();
+      await open();
+      final project = session.createProject('Брак Ромашка')!;
+      host.emit(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': project.id,
+      });
+      await settle();
+      expect(session.view, WidgetView.project);
+      expect(session.projectId, project.id);
+      host.emit(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': 'p_missing_000',
+      });
+      await settle();
+      expect(session.view, WidgetView.projects);
+      session.show(WidgetView.project, project: project.id);
+      await session.deleteProject(project.id);
+      expect(session.view, WidgetView.projects);
+      expect(session.book!.project(project.id), isNull);
+      // «Назад» склада с экрана — в разговор, из разговора — закрыть.
+      host.emit(<String, Object?>{'svz': 1, 'type': 'back'});
+      await settle();
+      expect(session.view, WidgetView.chat);
+      expect(host.types, isNot(contains('close')));
+      host.emit(<String, Object?>{'svz': 1, 'type': 'back'});
+      await settle();
+      expect(host.types.last, 'close');
+    });
+
+    test('метка задач проекта: занятая другим проектом — отказ', () async {
+      make();
+      await open();
+      final a = session.createProject('Ромашка')!;
+      final b = session.createProject('Лютик')!;
+      expect(session.tagProject(a.id, 'romashka'), isTrue);
+      expect(session.tagProject(b.id, 'romashka'), isFalse);
+      session.describeProject(b.id, 'Лютик и Ко', 'Поставщик');
+      expect(session.book!.project(b.id)!.name, 'Лютик и Ко');
+      expect(session.book!.project(b.id)!.description, 'Поставщик');
     });
   });
 }

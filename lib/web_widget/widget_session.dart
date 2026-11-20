@@ -61,6 +61,29 @@ enum WidgetPhase {
   standalone,
 }
 
+/// Что открыто в помощнике: разговор или экран, как разделы приложения
+/// (ADR-038).
+enum WidgetView {
+  /// Разговор ([WidgetSession.book] → `current`).
+  chat,
+
+  /// «Сегодня»: дела на сегодня и просроченные, ждущие карточки (карточка
+  /// «Мой Связной» в меню).
+  today,
+
+  /// Все задачи.
+  tasks,
+
+  /// Проекты: папки и метки задач.
+  projects,
+
+  /// Экран проекта [WidgetSession.projectId]: его разговоры и задачи.
+  project,
+
+  /// Планирование: задачи по дням.
+  planning,
+}
+
 /// Веб-помощник склада без интерфейса (ADR-032, ADR-038): вход по ключу
 /// страницы склада, разговоры (список, проекты, переименовать, закрепить,
 /// удалить, перенести), задачи (`TasksConnector`, «готово», срок),
@@ -166,6 +189,39 @@ final class WidgetSession extends ChangeNotifier {
 
   int _voiceId = 0;
 
+  // ------------------------------------------------------------ экраны
+
+  /// Открытый экран; «Назад» склада и Escape с экрана ведут в разговор.
+  WidgetView view = WidgetView.chat;
+
+  /// Проект экрана [WidgetView.project].
+  String? projectId;
+
+  /// Открыть экран [next]; [project] — для [WidgetView.project].
+  void show(WidgetView next, {String? project}) {
+    view = next;
+    projectId = next == WidgetView.project ? project : null;
+    if (next != WidgetView.chat) unawaited(refresh());
+    notifyListeners();
+  }
+
+  /// Проект со склада (`open-project`): нет в кэше — сначала
+  /// синхронизация; так и не нашёлся — экран «Проекты».
+  Future<void> openServerProject(String id) async {
+    var current = book;
+    if (current == null) return;
+    if (current.project(id) == null) {
+      await store?.pull();
+      await _loadBook(keep: current.currentId);
+      current = book!;
+    }
+    if (current.project(id) != null) {
+      show(WidgetView.project, project: id);
+    } else {
+      show(WidgetView.projects);
+    }
+  }
+
   // --------------------------------------------------------------- ввод
 
   String _draft = '';
@@ -229,11 +285,7 @@ final class WidgetSession extends ChangeNotifier {
         this.theme = theme;
         notifyListeners();
       case HostBack():
-        if (listening) {
-          cancelVoice();
-        } else {
-          close();
-        }
+        escape();
       case HostLogout():
         await _logout();
       case HostVisible(:final on):
@@ -248,6 +300,8 @@ final class WidgetSession extends ChangeNotifier {
         _showSignals(items, focus: focus);
       case HostOpenChat(:final id):
         await openServerChat(id);
+      case HostOpenProject(:final id):
+        await openServerProject(id);
       case HostVoiceEvent():
         _onVoice(event);
     }
@@ -650,12 +704,14 @@ final class WidgetSession extends ChangeNotifier {
     final thread = await current.newSession(projectId: projectId);
     controller?.clearConversation();
     _enterController(thread);
+    view = WidgetView.chat;
     notifyListeners();
   }
 
   Future<void> openChat(String chatId) async {
     if (busy) return;
     await _enter(chatId);
+    view = WidgetView.chat;
     notifyListeners();
   }
 
@@ -721,10 +777,51 @@ final class WidgetSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteProject(String projectId) async {
+  /// Описание проекта; пустое — убрать.
+  void describeProject(String projectId, String name, String? description) {
+    book
+      ?..renameProject(projectId, name)
+      ..setProjectDescription(projectId, description);
+    notifyListeners();
+  }
+
+  /// Метка задач проекта; `null` — снять связь. `false` — метка уже у
+  /// другого проекта.
+  bool tagProject(String projectId, String? tag) {
+    final current = book;
+    if (current == null) return false;
+    final other = tag == null ? null : current.projectForTag(tag);
+    if (other != null && other.id != projectId) return false;
+    current.linkProjectTag(projectId, tag);
+    if (current.current.projectId == projectId) {
+      controller?.setProjectTag(tag);
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// Удалить проект; [deleteSessions] — вместе с его разговорами, иначе
+  /// они остаются без проекта. Открыт экран проекта — «Проекты».
+  Future<void> deleteProject(
+    String projectId, {
+    bool deleteSessions = false,
+  }) async {
     final current = book;
     if (current == null) return;
-    await current.deleteProject(projectId, deleteSessions: false);
+    final wasCurrent = await current.deleteProject(
+      projectId,
+      deleteSessions: deleteSessions,
+    );
+    if (wasCurrent) {
+      controller?.clearConversation();
+      _enterController(current.current);
+    } else {
+      controller?.setProjectTag(current.projectOf(current.currentId)?.taskTag);
+    }
+    if (view == WidgetView.project && this.projectId == projectId) {
+      view = WidgetView.projects;
+      this.projectId = null;
+    }
     notifyListeners();
   }
 
@@ -756,6 +853,7 @@ final class WidgetSession extends ChangeNotifier {
     if (current == null || busy) return;
     final thread = await current.openTask(id);
     _enterController(thread);
+    view = WidgetView.chat;
     notifyListeners();
   }
 
@@ -814,6 +912,8 @@ final class WidgetSession extends ChangeNotifier {
     book = null;
     store = null;
     _storeLogin = null;
+    view = WidgetView.chat;
+    projectId = null;
     controller?.clearConversation();
     controller = null;
     taskList = const <Task>[];
@@ -963,6 +1063,8 @@ final class WidgetSession extends ChangeNotifier {
   void escape() {
     if (listening) {
       cancelVoice();
+    } else if (view != WidgetView.chat) {
+      show(WidgetView.chat);
     } else {
       close();
     }
