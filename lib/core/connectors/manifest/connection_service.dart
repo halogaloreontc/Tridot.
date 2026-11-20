@@ -869,6 +869,11 @@ final class ConnectionService {
     return text.length > 40 ? text.substring(0, 40) : text;
   }
 
+  /// Последний ответ `ask_me` как есть — для полей, которых нет в
+  /// [ConnectionMe] (у склада 1.4.74 — `store`: личное хранилище `my_*`).
+  /// Только в памяти.
+  Map<String, Object?>? lastMe;
+
   /// «Кто я и что мне можно» (`auth.me`, склад `ask_me`): имя, роль и
   /// права входа — в запись подключения, для карточки и проверки прав
   /// перед действием. Склад без `ask_me` (400) — прежние сведения
@@ -918,6 +923,7 @@ final class ConnectionService {
       permsField: me.perms,
       at: _clock.now(),
     );
+    lastMe = json;
     final login = _text(json['login']);
     await _save(
       record.copyWith(

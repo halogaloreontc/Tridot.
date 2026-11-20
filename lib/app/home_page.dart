@@ -129,6 +129,8 @@ import 'links/incoming_links.dart';
 import 'links/link_opener.dart';
 import '../core/connectors/manifest/warehouse_signals.dart';
 import 'widgets/whole_word_text.dart';
+import 'network_status.dart';
+import 'widgets/network_capsule.dart';
 
 /// Разделы оболочки «Д»: сессия (главный экран), задачи, проекты,
 /// экран одного проекта-папки, планирование и «Мой Связной».
@@ -204,6 +206,7 @@ final class HomePage extends StatefulWidget {
     this.appLock,
     this.incoming,
     this.signals = const <WarehouseSignals>[],
+    this.network,
     this.appConnections,
     this.onAppearanceChanged,
     this.onReduceMotionChanged,
@@ -225,6 +228,10 @@ final class HomePage extends StatefulWidget {
 
   /// Подключения к приложениям (склад): «Настройки → Подключения».
   final List<ConnectionService> connections;
+
+  /// Связь со складом (ADR-040): без неё над полем ввода — капсула «Нет
+  /// сети»; `null` — капсулы нет.
+  final NetworkStatus? network;
 
   /// Каталог подключений (ADR-043): «Подключения», «Подключить
   /// приложение», входящие ссылки чужих приложений. `null` — только
@@ -5176,7 +5183,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       );
       if (beat.newGroup) {
         rows.add(
-          GroupTime(
+          ChatGroupTime(
             key: ValueKey<String>('group-time-${message.id}'),
             label: groupTimeLabel(at, _now),
             first: rows.isEmpty,
@@ -5212,7 +5219,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         cast: _settings.personas.cast,
         key: key,
         message: message,
-        attachments: message.attachments.isEmpty
+        attachmentsView: message.attachments.isEmpty
             ? null
             : MessageAttachments(
                 attachments: message.attachments,
@@ -5845,47 +5852,59 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
           composer: SingleChildScrollView(
             reverse: true,
-            child: CommandComposer(
-              controller: _input,
-              focusNode: _inputFocus,
-              sending: _busyHere,
-              mode: _mode,
-              onModeChanged: _setMode,
-              onSend: _send,
-              // Четыре частые команды и «Найти команду» (ADR-020);
-              // действия сейфа — там же, пока навык «Пароли» включён.
-              templates: _catalog.top(_settings.commandUsage),
-              onCommand: _runCommand,
-              onFindCommand: () => unawaited(_findCommand()),
-              // Дисков пока нет: список подключённых пуст (ADR-019).
-              cloudDisks: const <CloudDisk>[],
-              onConnectDisk: () => unawaited(_explainCloudDisks()),
-              onCloudDisk: (CloudDisk disk) => _announce(
-                'Выбор файлов с диска «${disk.label}» — следующий этап',
+            child: _withNetwork(
+              CommandComposer(
+                controller: _input,
+                focusNode: _inputFocus,
+                sending: _busyHere,
+                mode: _mode,
+                onModeChanged: _setMode,
+                onSend: _send,
+                // Четыре частые команды и «Найти команду» (ADR-020);
+                // действия сейфа — там же, пока навык «Пароли» включён.
+                templates: _catalog.top(_settings.commandUsage),
+                onCommand: _runCommand,
+                onFindCommand: () => unawaited(_findCommand()),
+                // Дисков пока нет: список подключённых пуст (ADR-019).
+                cloudDisks: const <CloudDisk>[],
+                onConnectDisk: () => unawaited(_explainCloudDisks()),
+                onCloudDisk: (CloudDisk disk) => _announce(
+                  'Выбор файлов с диска «${disk.label}» — следующий этап',
+                ),
+                onAttach: (PickKind kind) => unawaited(_pickFiles(kind)),
+                pending: <PendingAttachmentChip>[
+                  for (final file in _pendingFiles)
+                    PendingAttachmentChip(
+                      name: file.name,
+                      kind: file.kind,
+                      size: file.size,
+                    ),
+                ],
+                onRemovePending: (int i) =>
+                    setState(() => _pendingFiles.removeAt(i)),
+                voiceMode: _voiceMode,
+                voicePartial: _voiceListening ? _voicePartial : null,
+                voiceNotice: _voiceNotice,
+                onVoiceTap: _voiceTap,
+                onVoiceLongPress: _voiceTap,
+                onVoiceCancel: () => unawaited(_cancelVoice()),
+                previousCommand: _previousCommand,
+                nextCommand: _nextCommand,
               ),
-              onAttach: (PickKind kind) => unawaited(_pickFiles(kind)),
-              pending: <PendingAttachmentChip>[
-                for (final file in _pendingFiles)
-                  PendingAttachmentChip(
-                    name: file.name,
-                    kind: file.kind,
-                    size: file.size,
-                  ),
-              ],
-              onRemovePending: (int i) =>
-                  setState(() => _pendingFiles.removeAt(i)),
-              voiceMode: _voiceMode,
-              voicePartial: _voiceListening ? _voicePartial : null,
-              voiceNotice: _voiceNotice,
-              onVoiceTap: _voiceTap,
-              onVoiceLongPress: _voiceTap,
-              onVoiceCancel: () => unawaited(_cancelVoice()),
-              previousCommand: _previousCommand,
-              nextCommand: _nextCommand,
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// Поле ввода и над ним — капсула «Нет сети» (ADR-040).
+  Widget _withNetwork(Widget composer) {
+    final network = widget.network;
+    if (network == null) return composer;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[NetworkCapsule(status: network), composer],
     );
   }
 

@@ -3,24 +3,33 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../app/network_status.dart';
+
+import '../core/chats/chat_book.dart';
 import '../core/chats/chat_models.dart';
+import '../core/chats/chat_projects.dart';
 import '../core/connectors/connector.dart';
 import '../core/connectors/http_transport.dart';
 import '../core/connectors/manifest/connection.dart';
 import '../core/connectors/manifest/connection_service.dart';
 import '../core/connectors/manifest/connection_slots.dart';
+import '../core/connectors/manifest/manifest_connector.dart';
 import '../core/connectors/secret_store.dart';
+import '../core/connectors/tasks_connector.dart';
+import '../core/connectors/watched_transport.dart';
 import '../core/extensions/extension_registry.dart';
 import '../core/models/action_card.dart';
+import '../core/models/task.dart';
 import '../core/personas/persona.dart';
 import '../core/scenario/assistant_controller.dart';
+import '../core/scenario/scenario_parser.dart';
 import '../core/services/clock.dart';
 import '../core/services/task_service.dart';
 import '../core/skills/calculator/calculator_connector.dart';
 import '../core/skills/talk/talk_connector.dart';
-import '../core/storage/in_memory_task_repository.dart';
 import 'widget_protocol.dart';
 import 'widget_storage.dart';
+import 'widget_store.dart';
 import 'widget_texts.dart';
 
 /// Связь со страницей склада: `postMessage` в браузере
@@ -55,10 +64,36 @@ enum WidgetPhase {
   standalone,
 }
 
-/// Веб-помощник склада без интерфейса (ADR-032): вход по ключу страницы
-/// склада, разговор, карточки, новый ключ на «ключ устарел», голос через
-/// оболочку Android и «есть новая версия». Без `package:web` — проверяется
-/// тестами на VM.
+/// Что открыто в помощнике: разговор или экран, как разделы приложения
+/// (ADR-038).
+enum WidgetView {
+  /// Разговор ([WidgetSession.book] → `current`).
+  chat,
+
+  /// «Сегодня»: дела на сегодня и просроченные, ждущие карточки (карточка
+  /// «Мой Связной» в меню).
+  today,
+
+  /// Все задачи.
+  tasks,
+
+  /// Проекты: папки и метки задач.
+  projects,
+
+  /// Экран проекта [WidgetSession.projectId]: его разговоры и задачи.
+  project,
+
+  /// Планирование: задачи по дням.
+  planning,
+}
+
+/// Веб-помощник склада без интерфейса (ADR-032, ADR-038): вход по ключу
+/// страницы склада, разговоры (список, проекты, переименовать, закрепить,
+/// удалить, перенести), задачи (`TasksConnector`, «готово», срок),
+/// напоминания при открытии, карточки, новый ключ на «ключ устарел», голос
+/// через оболочку Android и «есть новая версия». Записи — в личном
+/// хранилище склада `my_*` ([WidgetStore]). Без `package:web` —
+/// проверяется тестами на VM.
 final class WidgetSession extends ChangeNotifier {
   WidgetSession({
     required this.host,
@@ -69,8 +104,27 @@ final class WidgetSession extends ChangeNotifier {
     Clock clock = const SystemClock(),
     this.updateEvery = const Duration(minutes: 10),
     this.keyWait = const Duration(seconds: 15),
-  })  : _transport = transport,
-        _clock = clock;
+    Stream<bool>? connectivity,
+    bool online = true,
+    NetworkStatus? network,
+  })  : network = network ?? NetworkStatus(),
+        _clock = clock {
+    // Связь со складом (ADR-040): каждый запрос помощника — через
+    // [WatchedTransport]; браузер ещё и сам говорит «online» / «offline».
+    _transport = WatchedTransport(
+      transport,
+      onReachable: _reachable,
+      onUnreachable: _unreachable,
+    );
+    if (!online) this.network.lost();
+    _connectivity = connectivity?.listen((bool up) {
+      if (up) {
+        unawaited(_recover());
+      } else {
+        _unreachable();
+      }
+    });
+  }
 
   final HostChannel host;
   final KeyValueStorage storage;
@@ -86,8 +140,17 @@ final class WidgetSession extends ChangeNotifier {
   /// Сколько ждать новый ключ от страницы склада.
   final Duration keyWait;
 
-  final HttpTransport _transport;
+  late final HttpTransport _transport;
   final Clock _clock;
+
+  /// Есть ли связь со складом — капсула над полем ввода (ADR-040).
+  final NetworkStatus network;
+  StreamSubscription<bool>? _connectivity;
+
+  /// Сколько раз запрос не дошёл: [_recover] видит, что связь опять
+  /// пропала, пока уходило отложенное.
+  int _losses = 0;
+  bool _recovering = false;
 
   /// Как устройство называется в списке подключённых Связных на складе.
   static const String deviceName = 'Веб-помощник';
@@ -105,10 +168,26 @@ final class WidgetSession extends ChangeNotifier {
 
   ConnectionService? service;
   AssistantController? controller;
-  WidgetHistory? _history;
-  String? _historyLogin;
 
-  final List<ChatMessage> messages = <ChatMessage>[];
+  /// Записи этого входа: разговоры, проекты, задачи.
+  WidgetStore? store;
+  ChatBook? book;
+  TaskService? tasks;
+  String? _storeLogin;
+  String _sid = '';
+
+  /// Открытый разговор.
+  List<ChatMessage> get messages => book?.current.messages ?? const [];
+
+  /// Задачи для списка: активные, потом сделанные сегодня.
+  List<Task> taskList = const <Task>[];
+
+  /// Напоминания при открытии: со склада (`signal`, `my_signals`) и свои —
+  /// просроченные и на сегодня задачи. Не в истории разговора.
+  List<WidgetSignal> reminders = const <WidgetSignal>[];
+
+  /// Хранилище склада включено (иначе — только этот браузер).
+  bool get synced => store?.remote ?? false;
 
   /// Ответ готовится.
   bool busy = false;
@@ -140,6 +219,75 @@ final class WidgetSession extends ChangeNotifier {
   String voiceNote = '';
 
   int _voiceId = 0;
+
+  // ------------------------------------------------------------ экраны
+
+  /// Открытый экран; «Назад» склада и Escape с экрана ведут в разговор.
+  WidgetView view = WidgetView.chat;
+
+  /// Проект экрана [WidgetView.project].
+  String? projectId;
+
+  /// Открыть экран [next]; [project] — для [WidgetView.project].
+  void show(WidgetView next, {String? project}) {
+    view = next;
+    projectId = next == WidgetView.project ? project : null;
+    if (next != WidgetView.chat) unawaited(refresh());
+    notifyListeners();
+  }
+
+  /// Что склад просил открыть, пока помощник не мог: вход ещё идёт или
+  /// готовится ответ (тогда книгу разговоров не перечитываем — ответ лёг
+  /// бы в прежнюю). Открывается, когда помощник готов и свободен.
+  ({String? project, String? task, String? chat})? _pendingOpen;
+
+  /// Проект со склада (`open-project`): нет в кэше — сначала
+  /// синхронизация; так и не нашёлся — экран «Проекты». [id] `null` —
+  /// задача [task] без проекта: её разговор, а нет её — «Проекты».
+  Future<void> openServerProject(String? id, {String? task}) async {
+    var current = book;
+    if (current == null || phase != WidgetPhase.ready) {
+      _pendingOpen = (project: id, task: task, chat: null);
+      return;
+    }
+    final missing = (id != null && current.project(id) == null) ||
+        (id == null && task != null && !await _hasTask(task));
+    if (missing) {
+      if (busy) {
+        _pendingOpen = (project: id, task: task, chat: null);
+        return;
+      }
+      await store?.pull();
+      if (busy) {
+        _pendingOpen = (project: id, task: task, chat: null);
+        return;
+      }
+      await _loadBook(keep: current.currentId);
+      current = book!;
+    }
+    if (id != null && current.project(id) != null) {
+      show(WidgetView.project, project: id);
+    } else if (id == null && task != null && await _hasTask(task)) {
+      await openTask(task);
+    } else {
+      show(WidgetView.projects);
+    }
+  }
+
+  Future<bool> _hasTask(String id) async =>
+      (await tasks?.listAll() ?? const <Task>[]).any((Task t) => t.id == id);
+
+  /// Открыть отложенное ([_pendingOpen]): после входа и после ответа.
+  Future<void> _openPending() async {
+    final pending = _pendingOpen;
+    if (pending == null || phase != WidgetPhase.ready || busy) return;
+    _pendingOpen = null;
+    if (pending.chat case final String chat) {
+      await openServerChat(chat);
+    } else {
+      await openServerProject(pending.project, task: pending.task);
+    }
+  }
 
   // --------------------------------------------------------------- ввод
 
@@ -217,7 +365,38 @@ final class WidgetSession extends ChangeNotifier {
   void dispose() {
     _events?.cancel();
     _updates?.cancel();
+    _connectivity?.cancel();
+    network.dispose();
     super.dispose();
+  }
+
+  // --------------------------------------------------------------- сеть
+
+  void _unreachable() {
+    _losses++;
+    network.lost();
+  }
+
+  void _reachable() {
+    if (network.offline) unawaited(_recover());
+  }
+
+  /// Связь вернулась (браузер сказал «online» или запрос дошёл): отложенные
+  /// правки `my_*` — на склад, потом «Сеть есть · отправлено N». Пока они
+  /// уходили, связь опять пропала — капсула остаётся «Нет сети».
+  Future<void> _recover() async {
+    if (_recovering || !network.offline) return;
+    _recovering = true;
+    try {
+      final losses = _losses;
+      final records = store;
+      final before = records?.pending ?? 0;
+      if (records != null && phase == WidgetPhase.ready) await records.flush();
+      if (_losses != losses) return;
+      network.restored(sent: before - (records?.pending ?? 0));
+    } finally {
+      _recovering = false;
+    }
   }
 
   Future<void> _onEvent(HostEvent event) async {
@@ -238,18 +417,23 @@ final class WidgetSession extends ChangeNotifier {
         this.theme = theme;
         notifyListeners();
       case HostBack():
-        if (listening) {
-          cancelVoice();
-        } else {
-          close();
-        }
+        escape();
       case HostLogout():
         await _logout();
       case HostVisible(:final on):
         visible = on;
         if (!on && listening) cancelVoice();
-        if (on) unawaited(checkUpdate());
+        if (on) {
+          unawaited(checkUpdate());
+          unawaited(refresh());
+        }
         _maybeAnnounce();
+      case HostSignal(:final items, :final focus):
+        _showSignals(items, focus: focus);
+      case HostOpenChat(:final id):
+        await openServerChat(id);
+      case HostOpenProject(:final id, :final task):
+        await openServerProject(id, task: task);
       case HostVoiceEvent():
         _onVoice(event);
     }
@@ -296,19 +480,56 @@ final class WidgetSession extends ChangeNotifier {
       _fail(result.message);
       return false;
     }
+    _sid = sid;
     final login = current.record.login ?? start.login.toLowerCase();
-    _build(current, login);
+    await _build(current, login);
     phase = WidgetPhase.ready;
     problem = '';
     _updates ??= Timer.periodic(updateEvery, (_) => unawaited(checkUpdate()));
     notifyListeners();
     unawaited(checkUpdate());
+    await _openPending();
     return true;
   }
 
-  /// Помощник и история — под логином входа; другой логин — другой
-  /// разговор.
-  void _build(ConnectionService service, String login) {
+  /// Запрос `my_*` под ключом помощника — тем же путём и с теми же
+  /// заголовками, что вопросы складу.
+  Future<MyReply> _my(String action, Map<String, Object?> body) async {
+    final current = service;
+    final description = current?.description;
+    final base = current?.record.manifestUri;
+    if (description == null || base == null || _sid.isEmpty) {
+      return const MyReply(0);
+    }
+    try {
+      final response = await _transport.send(
+        HttpRequestData(
+          method: 'POST',
+          uri: ManifestConnector.actionUri(description, base, action),
+          headers: ManifestConnector.headersFor(
+            description,
+            <String, String>{'sid': _sid},
+          ),
+          body: jsonEncode(body),
+          timeout: const Duration(seconds: 20),
+        ),
+      );
+      Map<String, Object?>? json;
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, Object?>) json = decoded;
+      } on Object {
+        json = null;
+      }
+      return MyReply(response.statusCode, json);
+    } on Object {
+      return const MyReply(0);
+    }
+  }
+
+  /// Помощник, разговоры и задачи — под логином входа; другой логин —
+  /// другие записи.
+  Future<void> _build(ConnectionService service, String login) async {
     final choice = ExtensionChoice(
       enabledRoles: const <String>{Roles.storekeeperId},
       // Склад ведёт сам Связной; действия — для этого входа, а можно ли
@@ -320,19 +541,29 @@ final class WidgetSession extends ChangeNotifier {
       },
     );
     final existing = controller;
-    if (existing != null && _historyLogin == login) {
+    if (existing != null && _storeLogin == login) {
       existing.extensions.apply(choice);
+      store?.attach(service.lastMe, _my);
       return;
     }
-    final tasks = TaskService(
-      repository: InMemoryTaskRepository(),
-      clock: _clock,
-    );
+    final records = WidgetStore(storage: storage, login: login, clock: _clock)
+      ..onPushed = () => host.post(WidgetMessages.changed(<String>['my']));
+    records.attach(service.lastMe, _my);
+    await records.importHistory();
+    await records.pull();
+    store = records;
+    _storeLogin = login;
+    final taskService = TaskService(repository: records.tasks, clock: _clock);
+    tasks = taskService;
     final registry = ExtensionRegistry(
       connectors: <Connector>[
+        TasksConnector(
+          taskService: taskService,
+          parser: ScenarioParser(clock: _clock),
+        ),
         service.connector,
         const CalculatorConnector(),
-        TalkConnector(taskService: tasks),
+        TalkConnector(taskService: taskService),
       ],
       choice: choice,
       replyOverrides: WidgetTexts.replies,
@@ -344,12 +575,472 @@ final class WidgetSession extends ChangeNotifier {
       // а за чужими шрифтами он не ходит.
       personas: const PersonaSettings(teamMode: TeamMode.solo, emoji: false),
     );
-    _historyLogin = login;
-    final history = WidgetHistory(storage, login);
-    _history = history;
-    messages
-      ..clear()
-      ..addAll(history.load());
+    await _loadBook();
+    await _openRecent();
+    await _remind();
+  }
+
+  /// Разговоры заново из кэша (после синхронизации со складом).
+  Future<void> _loadBook({String? keep}) async {
+    final records = store;
+    if (records == null) return;
+    final next = ChatBook(store: records.chats, clock: _clock);
+    await next.load();
+    final all = await tasks?.listAll() ?? const <Task>[];
+    next.prune(<String>{for (final t in all) t.id});
+    book = next;
+    await _refreshTasks();
+    if (keep != null && next.thread(keep) != null) await _enter(keep);
+  }
+
+  /// Открыть последний разговор, если он был сегодня; иначе — новый.
+  Future<void> _openRecent() async {
+    final current = book;
+    if (current == null) return;
+    final now = _clock.now();
+    final recent = current.sessions(limit: 1).firstOrNull;
+    if (recent != null &&
+        now.difference(recent.lastActivityAt) < const Duration(hours: 12)) {
+      await _enter(recent.id);
+    } else {
+      _enterController(current.current);
+    }
+  }
+
+  Future<void> _enter(String chatId) async {
+    final current = book;
+    if (current == null) return;
+    final thread = await current.open(chatId);
+    _enterController(thread);
+  }
+
+  void _enterController(ChatThread thread) {
+    controller?.enterChat(
+      taskId: thread.kind == ChatKind.task ? thread.taskId : null,
+      sessionId: thread.isSession ? thread.id : null,
+      projectTag: book?.project(thread.projectId)?.taskTag,
+    );
+  }
+
+  /// Панель снова открыли: изменения со склада (другое устройство,
+  /// вкладка «Проекты») и напоминания.
+  Future<void> refresh() async {
+    final records = store;
+    if (records == null || phase != WidgetPhase.ready) return;
+    await records.flush();
+    if (await records.pull() && idle) {
+      await _loadBook(keep: book?.currentId);
+    }
+    await _remind();
+    notifyListeners();
+  }
+
+  Future<void> _refreshTasks() async {
+    final service = tasks;
+    if (service == null) return;
+    final all = await service.listAll();
+    final now = _clock.now();
+    final active = all
+        .where(
+          (Task t) =>
+              t.status != TaskStatus.done && t.status != TaskStatus.cancelled,
+        )
+        .toList()
+      ..sort((Task a, Task b) {
+        final da = a.dueAt;
+        final db = b.dueAt;
+        if (da == null && db == null) return b.createdAt.compareTo(a.createdAt);
+        if (da == null) return 1;
+        if (db == null) return -1;
+        return da.compareTo(db);
+      });
+    final done = all
+        .where(
+          (Task t) =>
+              t.status == TaskStatus.done &&
+              t.completedAt != null &&
+              now.difference(t.completedAt!) < const Duration(days: 1),
+        )
+        .toList();
+    taskList = <Task>[...active, ...done];
+  }
+
+  /// Задача просрочена: срок прошёл (у даты без времени — день прошёл).
+  bool overdue(Task task) {
+    final due = task.dueAt;
+    if (due == null || task.status == TaskStatus.done) return false;
+    final now = _clock.now();
+    if (task.duePrecision == DuePrecision.date) {
+      final today = DateTime(now.year, now.month, now.day);
+      return DateTime(due.year, due.month, due.day).isBefore(today);
+    }
+    return due.isBefore(now);
+  }
+
+  bool _today(Task task) {
+    final due = task.dueAt?.toLocal();
+    final now = _clock.now();
+    return due != null &&
+        due.year == now.year &&
+        due.month == now.month &&
+        due.day == now.day;
+  }
+
+  // ------------------------------------------------------ напоминания
+
+  /// Напоминания при открытии: склад (`my_signals`, если включены), а без
+  /// него — свои: просроченные и на сегодня.
+  Future<void> _remind() async {
+    final records = store;
+    final server = await records?.fetchSignals();
+    if (server != null) {
+      final items = <WidgetSignal>[
+        for (final item in server)
+          if (WidgetSignal.fromJson(item) case final WidgetSignal s) s,
+      ];
+      _showSignals(items.where((WidgetSignal s) => !s.seen).toList());
+      return;
+    }
+    final open = taskList
+        .where((Task t) => t.status != TaskStatus.done && t.dueAt != null)
+        .toList();
+    final late = open.where(overdue).toList();
+    final today = open.where((Task t) => !overdue(t) && _today(t)).toList();
+    reminders = <WidgetSignal>[
+      for (final t in <Task>[...late, ...today].take(5))
+        WidgetSignal(
+          id: 'local:${t.id}',
+          title: t.title,
+          text: overdue(t) ? 'Просрочена' : 'На сегодня',
+          level: overdue(t) ? 'warn' : 'info',
+          actions: <SignalAction>[
+            SignalAction(
+              id: 'done',
+              label: 'Готово',
+              my: <String, Object?>{
+                'action': 'local_done',
+                'body': <String, Object?>{'id': t.id},
+              },
+            ),
+            SignalAction(id: 'tomorrow', label: 'На завтра', ack: 'snooze'),
+          ],
+        ),
+    ];
+    notifyListeners();
+  }
+
+  void _showSignals(List<WidgetSignal> items, {String focus = ''}) {
+    final list = <WidgetSignal>[
+      ...items.where((WidgetSignal s) => s.id == focus),
+      ...items.where((WidgetSignal s) => s.id != focus),
+    ];
+    final known = <String>{for (final r in reminders) r.id};
+    reminders = <WidgetSignal>[
+      ...list,
+      ...reminders.where(
+        (WidgetSignal r) =>
+            !r.id.startsWith('local:') && !list.any((s) => s.id == r.id),
+      ),
+    ].take(5).toList();
+    final fresh = <String>[
+      for (final s in list)
+        if (!known.contains(s.id)) s.id,
+    ];
+    if (fresh.isNotEmpty) {
+      unawaited(
+        store?.ackSignals('seen', fresh).then((bool ok) {
+          if (ok) host.post(WidgetMessages.changed(<String>['sig']));
+        }),
+      );
+    }
+    notifyListeners();
+  }
+
+  /// Убрать напоминание с экрана (на складе оно остаётся увиденным).
+  void dismissReminder(WidgetSignal signal) {
+    reminders = reminders.where((WidgetSignal r) => r.id != signal.id).toList();
+    notifyListeners();
+  }
+
+  /// Кнопка напоминания. [date] — для действий с выбором даты.
+  Future<void> runReminder(
+    WidgetSignal signal,
+    SignalAction action, {
+    DateTime? date,
+  }) async {
+    if (action.ask case final String ask) {
+      dismissReminder(signal);
+      await send(ask);
+      return;
+    }
+    final open = action.open;
+    if (open != null) {
+      openWarehouse(open);
+      return;
+    }
+    final localId =
+        signal.id.startsWith('local:') ? signal.id.substring(6) : null;
+    if (localId != null) {
+      if (action.my != null) {
+        await completeTask(localId);
+      } else if (action.ack == 'snooze') {
+        final now = _clock.now();
+        await setDue(localId, DateTime(now.year, now.month, now.day + 1));
+      }
+      dismissReminder(signal);
+      return;
+    }
+    final records = store;
+    if (records == null) return;
+    if (action.ack case final String op) {
+      if (await records.ackSignals(op, <String>[signal.id])) {
+        host.post(WidgetMessages.changed(<String>['sig']));
+      }
+      dismissReminder(signal);
+      return;
+    }
+    final my = action.my;
+    if (my != null) {
+      final body = my['body'];
+      if (body is! Map) return;
+      var json = jsonEncode(body);
+      if (action.dateLabel != null) {
+        if (date == null) return;
+        final d = '${date.year.toString().padLeft(4, '0')}-'
+            '${date.month.toString().padLeft(2, '0')}-'
+            '${date.day.toString().padLeft(2, '0')}';
+        json = json.replaceAll('{date}', d);
+      }
+      final ok = await records.runMy(
+        my['action']! as String,
+        Map<String, Object?>.from(jsonDecode(json) as Map),
+      );
+      if (ok) {
+        await _loadBook(keep: book?.currentId);
+        dismissReminder(signal);
+      }
+      return;
+    }
+    if (action.call != null) {
+      // Действие склада — через карточку на странице склада: там его
+      // подтверждают кнопкой.
+      openWarehouse(signal.open);
+    }
+  }
+
+  // --------------------------------------------- разговоры и проекты
+
+  /// Новый разговор; [projectId] — сразу в проекте.
+  Future<void> newChat({String? projectId}) async {
+    final current = book;
+    if (busy || current == null) return;
+    final thread = await current.newSession(projectId: projectId);
+    controller?.clearConversation();
+    _enterController(thread);
+    view = WidgetView.chat;
+    notifyListeners();
+  }
+
+  Future<void> openChat(String chatId) async {
+    if (busy) return;
+    await _enter(chatId);
+    view = WidgetView.chat;
+    notifyListeners();
+  }
+
+  /// Разговор со склада (`open-chat`, «Открыть в помощнике»): нет в кэше
+  /// — сначала синхронизация.
+  Future<void> openServerChat(String chatId) async {
+    var current = book;
+    if (current == null || phase != WidgetPhase.ready || busy) {
+      _pendingOpen = (project: null, task: null, chat: chatId);
+      return;
+    }
+    if (current.thread(chatId) == null) {
+      await store?.pull();
+      if (busy) {
+        _pendingOpen = (project: null, task: null, chat: chatId);
+        return;
+      }
+      await _loadBook();
+      current = book!;
+    }
+    if (current.thread(chatId) != null) await openChat(chatId);
+  }
+
+  bool renameChat(String chatId, String title) {
+    final ok = book?.rename(chatId, title) ?? false;
+    notifyListeners();
+    return ok;
+  }
+
+  void pinChat(String chatId, {required bool pinned}) {
+    book?.setPinned(chatId, pinned);
+    notifyListeners();
+  }
+
+  Future<void> deleteChat(String chatId) async {
+    final current = book;
+    if (current == null || busy) return;
+    final wasCurrent = await current.remove(chatId);
+    if (wasCurrent) {
+      controller?.clearConversation();
+      _enterController(current.current);
+    }
+    notifyListeners();
+  }
+
+  void moveChat(String chatId, String? projectId) {
+    final current = book;
+    if (current == null) return;
+    current.moveToProject(chatId, projectId);
+    if (chatId == current.currentId) {
+      controller?.setProjectTag(current.project(projectId)?.taskTag);
+    }
+    notifyListeners();
+  }
+
+  ChatProject? createProject(String name, {String? tag}) {
+    final project = book?.createProject(name, taskTag: tag);
+    notifyListeners();
+    return project;
+  }
+
+  bool renameProject(String projectId, String name) {
+    final ok = book?.renameProject(projectId, name) ?? false;
+    notifyListeners();
+    return ok;
+  }
+
+  void pinProject(String projectId, {required bool pinned}) {
+    book?.setProjectPinned(projectId, pinned);
+    notifyListeners();
+  }
+
+  /// Описание проекта; пустое — убрать.
+  void describeProject(String projectId, String name, String? description) {
+    book
+      ?..renameProject(projectId, name)
+      ..setProjectDescription(projectId, description);
+    notifyListeners();
+  }
+
+  /// Метка задач проекта; `null` — снять связь. `false` — метка уже у
+  /// другого проекта.
+  bool tagProject(String projectId, String? tag) {
+    final current = book;
+    if (current == null) return false;
+    final other = tag == null ? null : current.projectForTag(tag);
+    if (other != null && other.id != projectId) return false;
+    current.linkProjectTag(projectId, tag);
+    if (current.current.projectId == projectId) {
+      controller?.setProjectTag(tag);
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// Удалить проект; [deleteSessions] — вместе с его разговорами, иначе
+  /// они остаются без проекта. Открыт экран проекта — «Проекты».
+  /// [removed] — сюда id стёртых разговоров (для «Отменить»).
+  Future<void> deleteProject(
+    String projectId, {
+    bool deleteSessions = false,
+    Set<String>? removed,
+  }) async {
+    final current = book;
+    if (current == null || busy) return;
+    final wasCurrent = await current.deleteProject(
+      projectId,
+      deleteSessions: deleteSessions,
+      removed: removed,
+    );
+    if (wasCurrent) {
+      controller?.clearConversation();
+      _enterController(current.current);
+    } else {
+      controller?.setProjectTag(current.projectOf(current.currentId)?.taskTag);
+    }
+    if (view == WidgetView.project && this.projectId == projectId) {
+      view = WidgetView.projects;
+      this.projectId = null;
+    }
+    notifyListeners();
+  }
+
+  /// «Отменить» после удаления: вернуть из корзины склада проект или
+  /// разговор ([type] `project`, `chat`) и [chats] — стёртые вместе с
+  /// проектом разговоры. `false` — не вышло (нет хранилища склада или
+  /// удалённое на склад ещё не попадало).
+  Future<bool> undoDelete(
+    String type,
+    String id, {
+    Iterable<String> chats = const <String>[],
+  }) async {
+    final records = store;
+    if (records == null || !records.remote || busy) return false;
+    final ok = await records.undelete(type, id);
+    for (final chat in chats) {
+      await records.undelete('chat', chat);
+    }
+    if (ok && !busy) await _loadBook(keep: book?.currentId);
+    notifyListeners();
+    return ok;
+  }
+
+  /// Проект задачи (id открытого проекта) — по метке или по проекту
+  /// склада; `null` — без проекта.
+  String? projectOfTask(Task task) {
+    final current = book;
+    if (current == null) return null;
+    return store?.projectOfTask(task, current.projects());
+  }
+
+  // ------------------------------------------------------------ задачи
+
+  Future<void> completeTask(String id) async {
+    await tasks?.complete(id);
+    await _afterTask();
+  }
+
+  Future<void> reopenTask(String id) async {
+    await tasks?.reopen(id);
+    await _afterTask();
+  }
+
+  /// Срок задачи: дата без времени.
+  Future<void> setDue(String id, DateTime day) async {
+    await tasks?.reschedule(
+      id,
+      DateTime(day.year, day.month, day.day),
+      DuePrecision.date,
+    );
+    await _afterTask();
+  }
+
+  /// Разговор задачи: её чат (заводится при первом открытии).
+  Future<void> openTask(String id) async {
+    final current = book;
+    if (current == null || busy) return;
+    final thread = await current.openTask(id);
+    _enterController(thread);
+    view = WidgetView.chat;
+    notifyListeners();
+  }
+
+  Future<void> _afterTask() async {
+    await _refreshTasks();
+    reminders = reminders
+        .where(
+          (WidgetSignal r) =>
+              !r.id.startsWith('local:') ||
+              taskList.any(
+                (Task t) =>
+                    'local:${t.id}' == r.id && t.status != TaskStatus.done,
+              ),
+        )
+        .toList();
+    notifyListeners();
   }
 
   /// Новый ключ от страницы склада; `false` — не дали.
@@ -382,14 +1073,22 @@ final class WidgetSession extends ChangeNotifier {
   Future<void> _logout() async {
     cancelVoice();
     await service?.logout(remote: false);
-    _history?.clear();
+    store?.clear();
+    WidgetHistory(storage, _storeLogin ?? '').clear();
     storage
       ..remove(WidgetConnectionStore.recordKey(ConnectionSlots.warehouse.appId))
       ..remove(
         WidgetConnectionStore.manifestKey(ConnectionSlots.warehouse.appId),
       );
-    messages.clear();
+    book = null;
+    store = null;
+    _storeLogin = null;
+    view = WidgetView.chat;
+    projectId = null;
     controller?.clearConversation();
+    controller = null;
+    taskList = const <Task>[];
+    reminders = const <WidgetSignal>[];
     phase = WidgetPhase.loggedOut;
     notifyListeners();
   }
@@ -420,16 +1119,17 @@ final class WidgetSession extends ChangeNotifier {
   /// новый и повторяет вопрос.
   Future<void> send(String text, {bool fromVoice = false}) async {
     final assistant = controller;
+    final chats = book;
     final message = text.trim();
-    if (assistant == null || busy || message.isEmpty) return;
-    messages.add(
-      ChatMessage(
-        id: _newId(),
-        author: ChatAuthor.user,
-        text: message,
-        timestamp: _clock.now(),
-      ),
+    if (assistant == null || chats == null || busy || message.isEmpty) return;
+    final chatId = chats.currentId;
+    final command = ChatMessage(
+      id: _newId(),
+      author: ChatAuthor.user,
+      text: message,
+      timestamp: _clock.now(),
     );
+    chats.append(chatId, command);
     busy = true;
     voiceNote = '';
     notifyListeners();
@@ -439,9 +1139,32 @@ final class WidgetSession extends ChangeNotifier {
         response = await (controller ?? assistant)
             .handle(message, fromVoice: fromVoice);
       }
-      messages.add(_answer(response));
+      final reply = _answer(response);
+      chats.append(chatId, reply);
+      final task = response.task;
+      if (response.intent == 'task.create' &&
+          task != null &&
+          response.status == AssistantStatus.completed &&
+          chats.taskThread(task.id) == null) {
+        // Проект без метки (из «В проект» склада): задача — в нём по
+        // project_id.
+        final project = chats.projectOf(chatId);
+        if (project != null && project.taskTag == null) {
+          store?.linkTask(task.id, project.id);
+        }
+        chats.onTaskCreated(
+          task.id,
+          fromChatId: chatId,
+          command: command,
+          reply: reply,
+        );
+      }
+      if (task != null || response.intent.startsWith('task.')) {
+        await _afterTask();
+      }
     } on Object {
-      messages.add(
+      chats.append(
+        chatId,
         ChatMessage(
           id: _newId(),
           author: ChatAuthor.persona,
@@ -453,16 +1176,16 @@ final class WidgetSession extends ChangeNotifier {
       );
     } finally {
       busy = false;
-      _save();
       notifyListeners();
       _maybeAnnounce();
+      unawaited(_openPending());
     }
   }
 
   /// «Подтвердить» и «Отмена» на карточке действия.
   Future<void> answerCard(ActionCard card, {required bool apply}) =>
       _cardAction(() {
-        if (apply) card.onSending = () async => _save();
+        if (apply) card.onSending = () async => book?.touch(book!.currentId);
         return controller!
             .answerCard(card, apply: apply)
             .whenComplete(() => card.onSending = null);
@@ -475,32 +1198,42 @@ final class WidgetSession extends ChangeNotifier {
   Future<void> _cardAction(
     Future<AssistantResponse?> Function() action,
   ) async {
-    if (controller == null || busy) return;
+    final chats = book;
+    if (controller == null || chats == null || busy) return;
+    final chatId = chats.currentId;
     busy = true;
     notifyListeners();
     try {
       final response = await action();
-      if (response != null) messages.add(_answer(response));
+      if (response != null) {
+        chats.append(chatId, _answer(response));
+        // Записали на складе: страница склада перечитывает данные.
+        if (response.status == AssistantStatus.completed) {
+          host.post(WidgetMessages.changed(<String>['data']));
+        }
+      }
     } finally {
       busy = false;
-      _save();
+      chats.touch(chatId);
       notifyListeners();
       _maybeAnnounce();
+      unawaited(_openPending());
     }
   }
 
-  void _save() => _history?.save(messages);
-
-  /// «Новый чат»: история и ожидающий вопрос — долой.
-  void newChat() {
-    if (busy) return;
-    messages.clear();
-    _history?.clear();
-    controller
-      ?..clearConversation()
-      ..enterChat(sessionId: _newId());
+  /// Попросить у склада широкую (или обычную) панель.
+  void setWide({required bool wide}) {
+    host.post(WidgetMessages.layout(wide: wide));
+    wideAsked = wide;
     notifyListeners();
   }
+
+  /// Что помощник попросил у склада последним; `null` — как в `init`.
+  bool? wideAsked;
+
+  bool get canWide => (init?.canWide ?? false) && !(init?.phone ?? false);
+
+  bool get wide => wideAsked ?? init?.wide ?? false;
 
   void close() => host.post(WidgetMessages.close());
 
@@ -509,6 +1242,8 @@ final class WidgetSession extends ChangeNotifier {
   void escape() {
     if (listening) {
       cancelVoice();
+    } else if (view != WidgetView.chat) {
+      show(WidgetView.chat);
     } else {
       close();
     }

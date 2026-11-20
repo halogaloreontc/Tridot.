@@ -12,7 +12,7 @@ import '../../core/personas/persona.dart';
 import '../assistant_theme.dart';
 import '../layout.dart';
 import '../widgets/grouped.dart';
-import '../widgets/personas_section.dart';
+import '../widgets/persona_mark.dart';
 import '../widgets/whole_word_text.dart';
 import 'session_hold_menu.dart';
 

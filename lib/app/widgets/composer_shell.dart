@@ -656,3 +656,41 @@ List<BoxShadow>? _controlShadow(BuildContext context) =>
             ),
           ]
         : null;
+
+/// Круглая кнопка слева в поле — того же вида и размера, что «+»: у
+/// веб-помощника на его месте «Закрыть помощника».
+final class ComposerRoundButton extends StatelessWidget {
+  const ComposerRoundButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.semanticsLabel,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  final String? semanticsLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget button = Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 24,
+        child: ComposerRoundIcon(icon: icon),
+      ),
+    );
+    final label = semanticsLabel;
+    if (label == null) return button;
+    return Semantics(
+      button: true,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: button,
+    );
+  }
+}

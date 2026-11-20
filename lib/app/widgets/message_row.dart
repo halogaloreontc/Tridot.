@@ -24,8 +24,8 @@ import 'whole_word_text.dart';
 /// Метка времени над группой сообщений: «Сегодня, 14:05» по центру,
 /// без линий (ADR-027). Появляется при смене дня или после паузы больше
 /// 15 минут.
-final class GroupTime extends StatelessWidget {
-  const GroupTime({super.key, required this.label, required this.first});
+final class ChatGroupTime extends StatelessWidget {
+  const ChatGroupTime({super.key, required this.label, required this.first});
 
   final String label;
 
@@ -114,7 +114,7 @@ final class ChatLinkChip extends StatelessWidget {
 /// Абзацы ответа: «\n\n» — промежуток [AppSpace.paragraph] вместо пустой
 /// строки, «\n» остаётся переносом. Текст тот же — выделяется и
 /// копируется целиком.
-TextSpan paragraphs(String text, TextStyle style) {
+TextSpan _paragraphs(String text, TextStyle style) {
   final parts = text.split('\n\n');
   return TextSpan(
     style: style,
@@ -155,9 +155,14 @@ final class MessageRow extends StatelessWidget {
     this.linkLabel,
     this.linkKey,
     this.onOpenLink,
-    this.attachments,
+    this.attachmentsView,
     this.commandSpans = const <CommandSpan>[],
+    this.selectable = true,
   });
+
+  /// Свой `SelectableText` у каждого сообщения (приложение). `false` — простой
+  /// текст: выделяет общий `SelectionArea` ленты (веб-помощник, ADR-042).
+  final bool selectable;
 
   final ChatMessage message;
 
@@ -167,7 +172,7 @@ final class MessageRow extends StatelessWidget {
 
   /// Превью вложений над текстом (ADR-019). Строит вызывающий: так строка
   /// не тянет `dart:io` и годится веб-виджету, где вложений нет.
-  final Widget? attachments;
+  final Widget? attachmentsView;
 
   /// Состав помощников: старые ответы `rio`/`noda` подписаны текущими
   /// именами.
@@ -227,6 +232,25 @@ final class MessageRow extends StatelessWidget {
             .copyWith(color: context.colors.muted),
       );
     }
+    if (!selectable) {
+      if (fromUser && commandSpans.isNotEmpty) {
+        return Text.rich(
+          highlightedCommand(
+            text,
+            CommandSpans.normalize(commandSpans, text.length),
+            body.copyWith(color: context.colors.textStrong),
+            colors: context.colors,
+            mode: CommandSpanMode.plain,
+          ),
+        );
+      }
+      final plain = body.copyWith(
+        color: fromUser ? context.colors.textStrong : context.colors.text,
+      );
+      return !fromUser && text.contains('\n\n')
+          ? Text.rich(_paragraphs(text, plain))
+          : Text(text, style: plain);
+    }
     if (fromUser && commandSpans.isNotEmpty) {
       return SelectableText.rich(
         highlightedCommand(
@@ -245,7 +269,7 @@ final class MessageRow extends StatelessWidget {
     );
     if (!fromUser && text.contains('\n\n')) {
       return SelectableText.rich(
-        paragraphs(text, style),
+        _paragraphs(text, style),
         contextMenuBuilder: _menu,
       );
     }
@@ -351,12 +375,12 @@ final class MessageRow extends StatelessWidget {
               style: metaStyle(context).copyWith(color: labelColor),
             ),
           ),
-        if (attachments != null && message.attachments.isNotEmpty)
+        if (attachmentsView case final Widget view)
           Padding(
             padding: EdgeInsets.only(
               bottom: message.text.isEmpty ? 0 : 8,
             ),
-            child: attachments!,
+            child: view,
           ),
         if (textBlock != null) textBlock,
         if (checklist != null)
@@ -466,3 +490,6 @@ final class MessageRow extends StatelessWidget {
     );
   }
 }
+
+/// «14:05» — прежнее имя [chatTimeLabel].
+String clockLabel(DateTime value) => chatTimeLabel(value);

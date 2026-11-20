@@ -177,4 +177,143 @@ void main() {
       expect(() => WidgetMessages.voice('cloud', 2), throwsArgumentError);
     });
   });
+
+  group('договор 2', () {
+    test('signal: до 5 напоминаний, действия и чистка', () {
+      final event = HostEvent.parse(<String, Object?>{
+        'svz': 1,
+        'type': 'signal',
+        'reason': 'bell',
+        'focus': 'task:t1:e',
+        'items': <Object?>[
+          for (var i = 0; i < 7; i++)
+            <String, Object?>{
+              'id': 'task:t$i:e',
+              'title': 'Задача $i\u202e',
+              'level': 'warn',
+              'open': 'javascript:alert(1)',
+              'actions': <Object?>[
+                <String, Object?>{
+                  'id': 'done',
+                  'label': 'Готово',
+                  'my': <String, Object?>{
+                    'action': 'my_patch',
+                    'body': <String, Object?>{'type': 'task'},
+                  },
+                },
+                <String, Object?>{
+                  'id': 'when',
+                  'label': 'Срок',
+                  'date': <String, Object?>{'label': 'Дата отгрузки'},
+                  'my': <String, Object?>{
+                    'action': 'my_put',
+                    'body': <String, Object?>{},
+                  },
+                },
+                <String, Object?>{'label': 'без id'},
+              ],
+            },
+          'мусор',
+        ],
+      })! as HostSignal;
+      expect(event.items, hasLength(5));
+      expect(event.focus, 'task:t1:e');
+      final first = event.items.first;
+      expect(first.title, 'Задача 0');
+      expect(first.level, 'warn');
+      expect(first.open, '', reason: 'только адреса внутри склада');
+      expect(first.actions, hasLength(2));
+      expect(first.actions.last.dateLabel, 'Дата отгрузки');
+    });
+
+    test('open-project: только id хранилища', () {
+      expect(
+        (HostEvent.parse(<String, Object?>{
+          'svz': 1,
+          'type': 'open-project',
+          'id': 'p_1700000000_ab',
+        })! as HostOpenProject)
+            .id,
+        'p_1700000000_ab',
+      );
+      expect(
+        HostEvent.parse(
+          <String, Object?>{'svz': 1, 'type': 'open-project', 'id': '../x'},
+        ),
+        isNull,
+      );
+    });
+
+    test('open-project: задача без проекта — пустой id и task', () {
+      final event = HostEvent.parse(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': '',
+        'task': 'task_1_0001',
+      })! as HostOpenProject;
+      expect(event.id, isNull);
+      expect(event.task, 'task_1_0001');
+      final none = HostEvent.parse(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': '',
+        'task': '',
+      })! as HostOpenProject;
+      expect(none.id, isNull);
+      expect(none.task, isNull);
+      expect(
+        HostEvent.parse(<String, Object?>{
+          'svz': 1,
+          'type': 'open-project',
+          'id': '',
+          'task': '../x',
+        }),
+        isNull,
+      );
+    });
+
+    test('open-chat: только id хранилища', () {
+      expect(
+        (HostEvent.parse(<String, Object?>{
+          'svz': 1,
+          'type': 'open-chat',
+          'id': 'session:1_ab',
+        })! as HostOpenChat)
+            .id,
+        'session:1_ab',
+      );
+      expect(
+        HostEvent.parse(
+          <String, Object?>{'svz': 1, 'type': 'open-chat', 'id': '../x'},
+        ),
+        isNull,
+      );
+    });
+
+    test('init: широкая панель, changed и layout', () {
+      final init = HostEvent.parse(<String, Object?>{
+        'svz': 1,
+        'type': 'init',
+        'base': 'https://w.example/',
+        'layout': <String, Object?>{'can': true, 'wide': true},
+      })! as HostInit;
+      expect(init.canWide, isTrue);
+      expect(init.wide, isTrue);
+      expect(
+        (HostEvent.parse(<String, Object?>{
+          'svz': 1,
+          'type': 'init',
+          'base': 'https://w.example/',
+        })! as HostInit)
+            .canWide,
+        isFalse,
+      );
+      expect(
+        WidgetMessages.changed(<String>['my', 'evil'])['what'],
+        <String>['my'],
+      );
+      expect(WidgetMessages.layout(wide: true)['wide'], isTrue);
+      expect(WidgetMessages.hello('1.0.0')['caps'], widgetCaps);
+    });
+  });
 }

@@ -5,15 +5,16 @@ import '../../core/cloud/cloud_disk.dart';
 import '../../core/commands/command_catalog.dart';
 import '../assistant_theme.dart';
 import '../layout.dart';
-import '../attachments/attachment_picker.dart';
-import '../attachments/attachment_views.dart';
+import '../attachments/attachment_chip.dart';
+import '../attachments/pick_kind.dart';
 import 'command_finder_sheet.dart';
 import 'composer_shell.dart';
 import 'mode_switch.dart';
 import 'whole_word_text.dart';
 
 // Прежние импорты этого файла продолжают находить голос и режим.
-export 'composer_shell.dart' show VoiceButtonMode, voiceLongPressDuration;
+export 'composer_shell.dart'
+    show ComposerRoundButton, VoiceButtonMode, voiceLongPressDuration;
 export 'mode_switch.dart' show AssistantViewMode;
 
 /// Файл, выбранный для следующего сообщения: чип над полем ввода.
@@ -66,7 +67,24 @@ final class CommandComposer extends StatefulWidget {
     this.onVoiceCancel,
     this.voicePartial,
     this.voiceNotice,
+    this.hint = 'Сообщение',
+    this.modes = true,
+    this.plus = true,
+    this.leading,
+    this.inputKey = const Key('assistant-input'),
+    this.sendKey = const Key('assistant-send'),
+    this.maxLength,
+    this.onEditingComplete,
   });
+
+  final String hint;
+  final bool modes;
+  final bool plus;
+  final Widget? leading;
+  final Key inputKey;
+  final Key sendKey;
+  final int? maxLength;
+  final VoidCallback? onEditingComplete;
 
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -176,14 +194,11 @@ final class _CommandComposerState extends State<CommandComposer> {
 
   @override
   Widget build(BuildContext context) {
-    final plus = Tooltip(
-      message: 'Файлы, диски и шаблоны команд',
-      child: InkResponse(
-        key: const Key('templates-button'),
-        onTap: _openPlus,
-        radius: 24,
-        child: const ComposerRoundIcon(icon: Icons.add),
-      ),
+    final plus = ComposerRoundButton(
+      key: const Key('templates-button'),
+      icon: Icons.add,
+      tooltip: 'Файлы, диски и шаблоны команд',
+      onTap: _openPlus,
     );
     final header = widget.header;
     final pending = widget.pending;
@@ -226,13 +241,20 @@ final class _CommandComposerState extends State<CommandComposer> {
       onSend: widget.onSend,
       previousCommand: widget.previousCommand,
       nextCommand: widget.nextCommand,
-      leading: plus,
+      leading: widget.plus ? plus : widget.leading,
       // Подписи «Диалог / Документ» — если помещаются целиком.
-      center: (BuildContext context, double width) => ModeSwitch(
-        mode: widget.mode,
-        onChanged: widget.onModeChanged,
-        labels: ModeSwitch.labelsFit(context, width),
-      ),
+      center: !widget.modes
+          ? null
+          : (BuildContext context, double width) => ModeSwitch(
+                mode: widget.mode,
+                onChanged: widget.onModeChanged,
+                labels: ModeSwitch.labelsFit(context, width),
+              ),
+      hintText: widget.hint,
+      maxLength: widget.maxLength,
+      onEditingComplete: widget.onEditingComplete,
+      inputKey: widget.inputKey,
+      sendKey: widget.sendKey,
       above: above,
       hasAttachments: pending.isNotEmpty,
       voiceMode: widget.voiceMode,

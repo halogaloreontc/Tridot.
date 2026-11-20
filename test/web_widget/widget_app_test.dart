@@ -1,7 +1,15 @@
+import 'dart:async';
+import 'dart:ui' show Tristate;
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_assistant/app/network_status.dart';
 import 'package:local_assistant/app/widgets/message_row.dart';
+import 'package:local_assistant/app/widgets/whole_word_text.dart';
+import 'package:local_assistant/app/widgets/network_capsule.dart';
 import 'package:local_assistant/web_widget/widget_app.dart';
 import 'package:local_assistant/web_widget/widget_session.dart';
 import 'package:local_assistant/web_widget/widget_storage.dart';
@@ -12,10 +20,12 @@ void main() {
   late FakeWarehouse server;
   late FakeHost host;
   late WidgetSession session;
+  late StreamController<bool> net;
 
   setUp(() {
     server = FakeWarehouse();
     host = FakeHost();
+    net = StreamController<bool>.broadcast();
     session = WidgetSession(
       host: host,
       transport: server,
@@ -23,10 +33,16 @@ void main() {
       builtInManifest: builtInSource(),
       version: '1.0.0',
       updateEvery: const Duration(hours: 1),
+      connectivity: net.stream,
+      // «Сеть есть» — коротко: таймер идёт в настоящем времени runAsync.
+      network: NetworkStatus(backFor: const Duration(milliseconds: 60)),
     );
   });
 
-  tearDown(() => session.dispose());
+  tearDown(() {
+    session.dispose();
+    unawaited(net.close());
+  });
 
   Future<void> openPanel(
     WidgetTester tester, {
@@ -49,30 +65,13 @@ void main() {
     await tester.pumpWidget(WidgetApp(session: session));
     expect(find.text('Подключаюсь к складу…'), findsOneWidget);
     await openPanel(tester);
-    expect(find.text('Связной'), findsOneWidget);
-    expect(find.text('Иван Петров · Кладовщик'), findsOneWidget);
+    // Шапка сессии приложения: «Новая сессия ▾» и кто отвечает.
+    expect(find.byKey(const Key('session-title')), findsOneWidget);
+    expect(find.text('Связной'), findsWidgets);
+    expect(find.byKey(const Key('session-hero')), findsOneWidget);
+    expect(find.textContaining('Иван Петров · Кладовщик'), findsOneWidget);
     expect(find.byKey(const ValueKey<String>('widget-input')), findsOneWidget);
-    expect(find.byKey(const ValueKey<String>('widget-mic')), findsNothing);
-  });
-
-  testWidgets(
-      'пустой чат — как новая сессия: «Что сделать?» и примеры '
-      'кнопками, нажатие спрашивает', (WidgetTester tester) async {
-    await openPanel(tester);
-    expect(find.text('Что сделать?'), findsOneWidget);
-    expect(find.text('Склад'), findsOneWidget);
-    final example = find.byKey(
-      const ValueKey<String>('widget-example-где лежит 64115'),
-    );
-    expect(example, findsOneWidget);
-    await tester.runAsync(() async {
-      await tester.tap(example);
-      await settle();
-    });
-    await tester.pump();
-    expect(session.messages.first.text, 'где лежит 64115');
-    expect(find.text('Что сделать?'), findsNothing);
-    expect(example, findsNothing);
+    expect(find.byKey(const Key('assistant-voice')), findsNothing);
   });
 
   testWidgets(
@@ -84,7 +83,7 @@ void main() {
       await settle();
     });
     await tester.pump();
-    expect(find.byType(GroupTime), findsOneWidget);
+    expect(find.byType(ChatGroupTime), findsOneWidget);
     expect(find.byType(MessageRow), findsNWidgets(2));
     expect(find.textContaining('84'), findsWidgets);
     // Имя Связного — в шапке и над ответом.
@@ -108,8 +107,10 @@ void main() {
       await settle();
     });
     await tester.pump();
-    expect(find.text('что умеет склад'), findsOneWidget);
+    // Пузырь, строка разговора слева и название в заголовке.
+    expect(find.text('что умеет склад'), findsWidgets);
     expect(session.messages, hasLength(2));
+    expect(find.byType(MessageRow), findsWidgets);
   });
 
   testWidgets('после Enter курсор остаётся в поле — следующий вопрос сразу',
@@ -148,16 +149,240 @@ void main() {
       tester,
       voice: const <String, Object?>{'available': true, 'reason': 'ok'},
     );
-    await tester.tap(find.byKey(const ValueKey<String>('widget-mic')));
+    await tester.tap(find.byKey(const Key('assistant-voice')));
     await tester.pump();
     expect(host.sent.last['op'], 'start');
-    expect(find.text('Слушаю…'), findsOneWidget);
+    expect(find.text('Говорите…'), findsOneWidget);
   });
 
-  testWidgets('«Закрыть» — сообщение странице', (WidgetTester tester) async {
+  group('копирование из ленты и ввод', () {
+    Future<void> ask(WidgetTester tester, String text) async {
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('widget-input')),
+        text,
+      );
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const ValueKey<String>('widget-send')));
+        await settle();
+      });
+      await tester.pump();
+    }
+
+    /// Текст ответа в ленте (тире в нём — неразрывные, `bindDashes`).
+    Finder replyText() => find.byWidgetPredicate(
+          (Widget w) => w is Text && (w.data ?? '').startsWith('Склад пока'),
+        );
+
+    testWidgets('сообщения — простой текст, поле ввода в семантике одно',
+        (WidgetTester tester) async {
+      final semantics = tester.ensureSemantics();
+      tester.view.physicalSize = const Size(420, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await openPanel(tester);
+      await ask(tester, 'где лежит 64115');
+      expect(session.messages, hasLength(2));
+      // В браузере `SelectableText` — `<textarea>` поверх сообщения:
+      // щелчок в ленту уводил фокус из поля ввода.
+      expect(find.byType(SelectableText), findsNothing);
+      expect(find.byType(SelectionArea), findsOneWidget);
+      final fields = <SemanticsNode>[];
+      final wide = <SemanticsNode>[];
+      final screen = tester.getRect(find.byType(WidgetChat));
+      bool visit(SemanticsNode node) {
+        final data = node.getSemanticsData();
+        if (data.flagsCollection.isTextField) fields.add(node);
+        // Фокусируемый узел во весь экран (Focus(autofocus) приложения):
+        // браузер отдавал ему фокус, когда поле ввода его теряло.
+        final rect = node.transform == null
+            ? node.rect
+            : MatrixUtils.transformRect(node.transform!, node.rect);
+        if (data.flagsCollection.isFocused != Tristate.none &&
+            rect.width >= screen.width &&
+            rect.height >= screen.height * .9) {
+          wide.add(node);
+        }
+        node.visitChildren(visit);
+        return true;
+      }
+
+      visit(
+        tester.binding.renderViews.first.owner!.semanticsOwner!
+            .rootSemanticsNode!,
+      );
+      expect(fields, hasLength(1));
+      expect(wide, isEmpty);
+      semantics.dispose();
+    });
+
+    testWidgets('выделение через два сообщения копируется с переводом строки',
+        (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(420, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      await openPanel(tester);
+      await ask(tester, 'где лежит 64115');
+      final reply = session.messages.last.text;
+      final question = find.text('где лежит 64115').last;
+      final answer = replyText();
+      expect(answer, findsOneWidget);
+      // Мышью: от начала вопроса до конца ответа.
+      final gesture = await tester.startGesture(
+        tester.getTopLeft(question) + const Offset(1, 4),
+        kind: PointerDeviceKind.mouse,
+      );
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+      await gesture.moveTo(tester.getBottomRight(answer) - const Offset(1, 4));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(copied, isNotNull);
+      // Вопрос, имя помощника и ответ — каждый с новой строки, без склейки.
+      expect(copied, 'где лежит 64115\nСвязной\n${bindDashes(reply)}');
+    });
+
+    testWidgets('двойной щелчок по слову ответа копирует слово',
+        (WidgetTester tester) async {
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      await openPanel(tester);
+      await ask(tester, 'где лежит 64115');
+      final answer = replyText();
+      final at = tester.getTopLeft(answer) + const Offset(3, 8);
+      final gesture = await tester.startGesture(
+        at,
+        kind: PointerDeviceKind.mouse,
+      );
+      addTearDown(gesture.removePointer);
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 50));
+      await gesture.down(at);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(copied, session.messages.last.text.split(' ').first);
+    });
+
+    testWidgets('после щелчка в ленту поле снова принимает буквы',
+        (WidgetTester tester) async {
+      await openPanel(tester);
+      await ask(tester, 'где лежит 64115');
+      await tester.tap(replyText());
+      await tester.pump();
+      final input = find.byKey(const ValueKey<String>('widget-input'));
+      await tester.tap(input);
+      await tester.pump();
+      await tester.enterText(input, 'привет мир');
+      await tester.pump();
+      expect(tester.widget<TextField>(input).controller!.text, 'привет мир');
+      expect(
+        tester.widget<TextField>(input).focusNode!.hasFocus,
+        isTrue,
+      );
+    });
+  });
+
+  testWidgets('«Закрыть помощника» — на месте «+», сообщение странице',
+      (WidgetTester tester) async {
     await openPanel(tester);
+    // В разговоре один выход: кнопка слева в поле, «✕» в шапке нет.
+    expect(find.byKey(const ValueKey<String>('widget-close')), findsNothing);
+    expect(find.byKey(const Key('templates-button')), findsNothing);
+    final exit = find.byKey(const ValueKey<String>('widget-exit'));
+    expect(exit, findsOneWidget);
+    expect(find.byTooltip('Закрыть помощника'), findsOneWidget);
+    expect(find.bySemanticsLabel('Закрыть помощника'), findsOneWidget);
+    // Тот же круг 44×44, что «+» приложения, слева от поля, на одной
+    // строке с отправкой.
+    expect(tester.getSize(exit), const Size(44, 44));
+    final input = tester.getRect(
+      find.byKey(const ValueKey<String>('widget-input')),
+    );
+    final send = tester.getRect(
+      find.byKey(const ValueKey<String>('widget-send')),
+    );
+    final at = tester.getRect(exit);
+    expect(at.left, lessThan(input.center.dx));
+    expect(at.top, greaterThanOrEqualTo(input.bottom));
+    expect(at.center.dy, closeTo(send.center.dy, 1));
+    await tester.tap(exit);
+    expect(host.sent.last['type'], 'close');
+  });
+
+  testWidgets('на экране раздела поля нет — «✕» в шапке',
+      (WidgetTester tester) async {
+    await openPanel(tester);
+    session.show(WidgetView.tasks);
+    await tester.pump();
+    expect(find.byKey(const ValueKey<String>('widget-exit')), findsNothing);
     await tester.tap(find.byKey(const ValueKey<String>('widget-close')));
     expect(host.sent.last['type'], 'close');
+  });
+
+  testWidgets('до входа — «✕» в шапке', (WidgetTester tester) async {
+    await tester.pumpWidget(WidgetApp(session: session));
+    expect(find.byKey(const ValueKey<String>('widget-exit')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey<String>('widget-close')));
+    expect(host.sent.last['type'], 'close');
+  });
+
+  testWidgets('поле над клавиатурой: панель сжимается вместе с фреймом',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await openPanel(tester);
+    final input = find.byKey(const ValueKey<String>('widget-input'));
+    expect(tester.getRect(input).bottom, lessThan(844));
+    // Склад подгоняет фрейм под visualViewport: окно — 500 по высоте.
+    tester.view.physicalSize = const Size(390, 500);
+    await tester.pump();
+    final exit = tester.getRect(
+      find.byKey(const ValueKey<String>('widget-exit')),
+    );
+    expect(tester.getRect(input).bottom, lessThan(500));
+    expect(exit.bottom, lessThanOrEqualTo(500));
+    expect(exit.bottom, greaterThan(400));
+    // И клавиатура самого окна (viewInsets) — то же.
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 344);
+    await tester.pump();
+    expect(tester.getRect(input).bottom, lessThan(500));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Escape на компьютере закрывает панель',
@@ -169,7 +394,7 @@ void main() {
       await settle();
     });
     await tester.pump();
-    await tester.tap(find.byType(TextField));
+    await tester.tap(find.byKey(const ValueKey<String>('widget-input')));
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
@@ -251,5 +476,264 @@ void main() {
     await tester.pump();
     expect(find.textContaining('шапке склада'), findsOneWidget);
     alone.dispose();
+  });
+
+  group('разговоры, проекты, задачи (ADR-038)', () {
+    Future<void> sized(WidgetTester tester, Size size) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
+
+    testWidgets('панель 420: меню приложения по кнопке в шапке',
+        (WidgetTester tester) async {
+      await sized(tester, const Size(420, 800));
+      await openPanel(tester);
+      expect(find.byKey(const Key('app-sidebar')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey<String>('widget-menu')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
+      expect(find.byKey(const Key('drawer-my-relay')), findsOneWidget);
+      expect(find.text('Задачи'), findsOneWidget);
+      expect(find.text('Проекты'), findsOneWidget);
+      expect(find.byKey(const Key('new-session')), findsOneWidget);
+      expect(find.text('на связи'), findsOneWidget);
+      // «Мой Связной» — «Сегодня» внутри помощника, меню закрывается.
+      await tester.tap(find.byKey(const Key('drawer-my-relay')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('app-sidebar')), findsNothing);
+      expect(find.byKey(const Key('today-panel')), findsOneWidget);
+    });
+
+    testWidgets('телефон 390: меню выдвигается, сессия открывается из него',
+        (WidgetTester tester) async {
+      await sized(tester, const Size(390, 760));
+      await openPanel(tester);
+      await tester.runAsync(() async {
+        await session.send('2+2');
+        await settle();
+        await session.newChat();
+        await settle();
+      });
+      await tester.pump();
+      final first = session.book!.sessions().last;
+      await tester.tap(find.byKey(const ValueKey<String>('widget-menu')));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(Key('chat-${first.id}')));
+        await settle();
+      });
+      await tester.pumpAndSettle();
+      expect(session.book!.currentId, first.id);
+      expect(find.byKey(const Key('app-sidebar')), findsNothing);
+      expect(find.text('2+2'), findsWidgets);
+    });
+
+    testWidgets('широкая панель: меню колонкой слева, задачи — экраном',
+        (WidgetTester tester) async {
+      await sized(tester, const Size(760, 800));
+      await openPanel(tester);
+      expect(find.byKey(const Key('app-sidebar')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('widget-menu')), findsNothing);
+      await tester.runAsync(() async {
+        await session.send('добавь задачу проверить акт 12-26');
+        await settle();
+      });
+      await tester.pump();
+      final task = session.taskList.single;
+      await tester.tap(find.text('Задачи'));
+      await tester.pump();
+      expect(find.byKey(const Key('tasks-screen')), findsOneWidget);
+      expect(find.byKey(ValueKey<String>('task-${task.id}')), findsOneWidget);
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(ValueKey<String>('toggle-${task.id}')));
+        await settle();
+      });
+      await tester.pump();
+      expect(session.taskList.single.status.name, 'done');
+      // Колонку можно свернуть — тогда меню кнопкой в шапке.
+      await tester.tap(find.byKey(const Key('sidebar-collapse')));
+      await tester.pump();
+      expect(find.byKey(const Key('app-sidebar')), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('widget-menu')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'open-project: склад открывает экран проекта, «Назад» — в '
+        'разговор', (WidgetTester tester) async {
+      await sized(tester, const Size(420, 800));
+      await openPanel(tester);
+      final project = session.createProject('Брак Ромашка')!;
+      await tester.runAsync(() async {
+        host.emit(<String, Object?>{
+          'svz': 1,
+          'type': 'open-project',
+          'id': project.id,
+        });
+        await settle();
+      });
+      await tester.pump();
+      expect(find.byKey(const Key('project-screen')), findsOneWidget);
+      expect(find.byKey(const Key('project-title')), findsOneWidget);
+      expect(find.text('Брак Ромашка'), findsWidgets);
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const Key('project-new-session')));
+        await settle();
+      });
+      await tester.pump();
+      expect(session.view, WidgetView.chat);
+      expect(session.book!.current.projectId, project.id);
+      expect(find.byKey(const Key('hero-project')), findsOneWidget);
+      session.show(WidgetView.project, project: project.id);
+      await tester.pump();
+      await tester.runAsync(() async {
+        host.emit(<String, Object?>{'svz': 1, 'type': 'back'});
+        await settle();
+      });
+      await tester.pump();
+      expect(find.byKey(const Key('project-screen')), findsNothing);
+      expect(host.types, isNot(contains('close')));
+    });
+
+    testWidgets('напоминание склада над лентой, «Отложить» убирает',
+        (WidgetTester tester) async {
+      await sized(tester, const Size(420, 800));
+      await openPanel(tester);
+      await tester.runAsync(() async {
+        host.emit(<String, Object?>{
+          'svz': 1,
+          'type': 'signal',
+          'items': <Object?>[
+            <String, Object?>{
+              'id': 'ship.collect:gr9:1',
+              'title': 'Отгрузка ГР-00009 не собрана 26 ч',
+              'actions': <Object?>[
+                <String, Object?>{
+                  'id': 'open',
+                  'label': 'Открыть',
+                  'open': '#/ship/gr9',
+                },
+              ],
+            },
+          ],
+        });
+        await settle();
+      });
+      await tester.pump();
+      expect(
+        find.text('Напоминание: Отгрузка ГР-00009 не собрана 26 ч'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey<String>('reminder-open')));
+      await tester.pump();
+      expect(host.sent.last['hash'], '#/ship/gr9');
+      await tester.tap(find.byKey(const ValueKey<String>('reminder-close')));
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey<String>('widget-reminders')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('склад умеет широкую панель — кнопка просит layout',
+        (WidgetTester tester) async {
+      await sized(tester, const Size(420, 800));
+      await tester.pumpWidget(WidgetApp(session: session));
+      await tester.runAsync(() async {
+        session.start();
+        host.emit(<String, Object?>{
+          ...initMessage(device: 'desktop'),
+          'layout': <String, Object?>{'can': true, 'wide': false},
+        });
+        await settle();
+      });
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey<String>('widget-wide')));
+      await tester.pump();
+      expect(host.sent.last['type'], 'layout');
+      expect(host.sent.last['wide'], isTrue);
+    });
+  });
+
+  group('капсула сети (ADR-040)', () {
+    Future<void> size(WidgetTester tester, double width) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
+
+    Finder capsule() => find.byKey(const Key('network-capsule'));
+
+    testWidgets('панель 420: нет сети — над полем, сеть есть — отправлено N',
+        (WidgetTester tester) async {
+      await size(tester, 420);
+      server.withStore();
+      await openPanel(tester);
+      expect(capsule(), findsNothing);
+      await tester.runAsync(() async {
+        await session.send('добавь задачу проверить акт 12-26 завтра');
+        await settle();
+      });
+      await tester.pump();
+
+      await tester.runAsync(() async {
+        server.offline = true;
+        net.add(false);
+        await settle();
+        await session.completeTask(session.taskList.single.id);
+        await settle();
+      });
+      await tester.pumpAndSettle();
+      expect(capsule(), findsOneWidget);
+      // Узко — короткая фраза; капсула над полем ввода.
+      expect(find.text(NetworkCapsule.offlineShort), findsOneWidget);
+      final input = find.byKey(const ValueKey<String>('widget-input'));
+      expect(
+        tester.getBottomLeft(capsule()).dy,
+        lessThanOrEqualTo(tester.getTopLeft(input).dy),
+      );
+      final queued = session.store!.pending;
+      expect(queued, greaterThan(0));
+
+      await tester.runAsync(() async {
+        server.offline = false;
+        net.add(true);
+        await settle();
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Сеть есть · отправлено $queued'), findsOneWidget);
+      expect(find.text(NetworkCapsule.offlineShort), findsNothing);
+
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 120)),
+      );
+      await tester.pumpAndSettle();
+      expect(capsule(), findsNothing);
+    });
+
+    testWidgets('телефон 390: короткая фраза, поле на месте',
+        (WidgetTester tester) async {
+      await size(tester, 390);
+      await openPanel(tester);
+      final input = find.byKey(const ValueKey<String>('widget-input'));
+      final before = tester.getTopLeft(input).dy;
+      await tester.runAsync(() async {
+        net.add(false);
+        await settle();
+      });
+      await tester.pumpAndSettle();
+      expect(find.text(NetworkCapsule.offlineShort), findsOneWidget);
+      // Поле ввода внизу не сдвинулось: капсула растёт вверх.
+      expect(tester.getTopLeft(input).dy, closeTo(before, 0.1));
+      await tester.runAsync(() async {
+        net.add(true);
+        await settle();
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Сеть есть'), findsOneWidget);
+    });
   });
 }

@@ -11,6 +11,8 @@ Future<void> _pump(
   WidgetTester tester, {
   required ThemeData theme,
   VoiceButtonMode voice = VoiceButtonMode.hidden,
+  bool plus = true,
+  Widget? leading,
 }) async {
   final controller = TextEditingController();
   final focus = FocusNode();
@@ -33,6 +35,8 @@ Future<void> _pump(
             previousCommand: () => null,
             nextCommand: () => null,
             voiceMode: voice,
+            plus: plus,
+            leading: leading,
             onVoiceTap: () {},
             onVoiceCancel: () {},
           ),
@@ -113,6 +117,33 @@ void main() {
       await _pump(tester, theme: theme(), voice: VoiceButtonMode.off);
       final (mic, _) = _circle(tester, 'assistant-voice');
       expect(mic, isNot(_panel(tester)));
+    });
+
+    testWidgets('$name: своя кнопка вместо «+» — тот же круг на том же месте',
+        (tester) async {
+      await _pump(tester, theme: theme());
+      final plusRect =
+          tester.getRect(find.byKey(const Key('templates-button')));
+      var tapped = 0;
+      await _pump(
+        tester,
+        theme: theme(),
+        plus: false,
+        leading: ComposerRoundButton(
+          key: const Key('leading-exit'),
+          icon: Icons.arrow_back_rounded,
+          tooltip: 'Закрыть помощника',
+          semanticsLabel: 'Закрыть помощника',
+          onTap: () => tapped++,
+        ),
+      );
+      expect(find.byKey(const Key('templates-button')), findsNothing);
+      final (color, size) = _circle(tester, 'leading-exit');
+      expect(color, palette.fieldOnRaised);
+      expect(size, const Size(44, 44));
+      expect(tester.getRect(find.byKey(const Key('leading-exit'))), plusRect);
+      await tester.tap(find.byKey(const Key('leading-exit')));
+      expect(tapped, 1);
     });
   }
 }

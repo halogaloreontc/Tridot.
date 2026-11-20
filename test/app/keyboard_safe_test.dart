@@ -177,6 +177,17 @@ Future<void> _webWidget(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Окно приложения поверх веб-помощника: [show] открывает его из
+/// контекста помощника — как меню сессии и проекта в `widget_side.dart`.
+Future<void> _webWidgetDialog(
+  WidgetTester tester,
+  void Function(BuildContext context) show,
+) async {
+  await _webWidget(tester);
+  show(tester.element(_value('widget-input')));
+  await tester.pumpAndSettle();
+}
+
 /// Загрузок в тесте нет: yt-dlp «не установлен».
 final class _NoDownloads implements FileDownloader {
   @override
@@ -274,6 +285,41 @@ final List<_Case> _cases = <_Case>[
     <Finder>[_key('ext-card-url'), _key('assistant-input')],
   ),
   _Case('веб-помощник склада', _webWidget, <Finder>[_value('widget-input')]),
+  _Case(
+    'веб-помощник: поиск по сессиям в меню',
+    (tester) async {
+      await _webWidget(tester);
+      await tester.tap(_value('widget-menu'));
+      await tester.pumpAndSettle();
+    },
+    <Finder>[_key('session-search')],
+  ),
+  _Case(
+    'веб-помощник: переименовать сессию',
+    (tester) => _webWidgetDialog(
+      tester,
+      (context) => unawaited(showRenameSessionDialog(context, current: 'План')),
+    ),
+    <Finder>[_key('rename-field')],
+  ),
+  _Case(
+    'веб-помощник: новый проект',
+    (tester) => _webWidgetDialog(
+      tester,
+      (context) => unawaited(showProjectDialog(context)),
+    ),
+    <Finder>[_key('project-name-field'), _key('project-description-field')],
+  ),
+  _Case(
+    'веб-помощник: метка задач проекта',
+    (tester) => _webWidgetDialog(
+      tester,
+      (context) => unawaited(
+        showProjectTagDialog(context, suggestions: const <String>['склад']),
+      ),
+    ),
+    <Finder>[_key('project-tag-field')],
+  ),
   _Case(
     'склад: вставить ссылку',
     (tester) async {
