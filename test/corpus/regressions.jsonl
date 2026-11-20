@@ -80,3 +80,37 @@
 {"id":"reg-080","text":"напомни завтра, что надо оплатить счёт","intent":"createTask","title":"Оплатить счёт","due":"2026-11-03","precision":"date","note":"«что» — союз, дело есть"}
 {"id":"reg-081","text":"отметь отчёт выполненым","intent":"completeTask","targetQuery":"Отчёт","note":"опечатка с одной «н»: завершение, а не новая задача «Отчёт выполненым»"}
 {"id":"reg-082","text":"отметь отчёт сделаной","intent":"completeTask","targetQuery":"Отчёт"}
+{"id":"reg-083","text":"где записан пин от домофона?","connector":"warehouse","intent":"unknown","route":"talk","connected":true,"note":"ПИН — секрет: фраза не уходит на сетевой склад (раздел 5.9), отвечает беседа","source":"probe"}
+{"id":"reg-084","text":"сколько на складе пин-кодов от ячеек","connector":"warehouse","intent":"unknown","route":"talk","connected":true,"note":"пин-код — секрет даже рядом со «складе»: склад фразу не видит","source":"probe"}
+{"id":"reg-085","text":"запиши, что код от сейфа CANARY","intent":"unknown","route":"none","after":"tasks","note":"секрет не становится заметкой к задаче","source":"probe"}
+{"id":"reg-086","text":"запиши пин от карты CANARY","intent":"unknown","route":"none","note":"сам секрет — не название задачи","source":"probe"}
+{"id":"reg-087","text":"напомни сменить пин-код на карте","intent":"createTask","title":"Сменить пин-код на карте","note":"дело про ПИН-код (глагол в начале) — задача, секрета в нём нет","source":"probe"}
+{"id":"reg-088","text":"доьавь пароль от почты","intent":"unknown","route":"none","note":"раньше — задача «Пароль от почты» по исправленному глаголу; фразы о паролях не исправляются","source":"probe"}
+{"id":"reg-089","text":"а как перенести задачу на другой день?","intent":"unknown","route":"none","note":"вопрос «как сделать», а не просьба; опечатка-исправление не делает «перенести» → «перенеси»","source":"probe"}
+{"id":"reg-090","text":"перенеси меня на море","intent":"unknown","route":"none","note":"переносят задачи, а не людей","source":"probe"}
+{"id":"reg-091","text":"запиши меня в неудачники","intent":"unknown","route":"none","note":"оценка себя, а не «записаться к врачу»","source":"probe"}
+{"id":"reg-092","text":"создай мне настроение","intent":"unknown","route":"none","note":"«создай мне» и одно существительное без срока — не дело","source":"probe"}
+{"id":"reg-093","text":"отметь, как ты ко мне относишься","intent":"unknown","route":"none","after":"tasks","note":"вопрос к помощнику: «отметь» похоже на инфинитив, но «ты» — не дело","source":"probe"}
+{"id":"reg-094","text":"я обещал Лене перезвонить вечером","intent":"createTask","title":"Перезвонить Лене","due":"2026-11-02T19:00","precision":"partOfDay","note":"обещание — дело впереди, а не сделанное","source":"probe"}
+{"id":"reg-095","text":"я имел в виду в 19:00","intent":"task.edit","after":"tasks","form":{"kind":"due","due":"2026-11-02T19:00","precision":"dateTime","bare":"true"},"note":"поправка «я имел в виду …» — срок текущей задачи, а не отметка «Имел в виду»","source":"probe"}
+{"id":"reg-096","text":"покажи что я уже сделал","intent":"unknown","route":"none","note":"вопрос о сделанном, а не отметка «Покажи что»; список выполненных не показываем","source":"probe"}
+{"id":"reg-097","text":"что поступило сегодня","connector":"warehouse","intent":"warehouse.today","connected":true,"note":"«поступило» — «пришло»; не отметка задачи «Что поступило»","source":"probe"}
+{"id":"reg-098","text":"сколько осталось на таймере","connector":"warehouse","intent":"unknown","route":"none","note":"таймер — часы телефона, не товар","source":"probe"}
+{"id":"reg-099","text":"сколько сантиметров в дюйме","connector":"warehouse","intent":"unknown","route":"talk","connected":true,"note":"перевод единиц, не остаток","source":"probe"}
+{"id":"reg-100","text":"сколько стульев нужно для гостей","connector":"warehouse","intent":"unknown","route":"talk","connected":true,"note":"расчёт «нужно», не остаток","source":"probe"}
+{"id":"reg-101","text":"сколько стоят пуфы","connector":"warehouse","intent":"warehouse.price","connected":true,"note":"«стоят» — та же цена, что «стоит»","source":"probe"}
+{"id":"reg-102","text":"сколько сттоит 64115","connector":"warehouse","intent":"warehouse.price","note":"опечатка в «стоит» — цена, а не остаток «сттоит 64115»","source":"probe"}
+{"id":"reg-103","text":"мне вставать в 5:40, поставь будильник","connector":"alarm","intent":"alarm.set","form":{"hour":"5","minute":"40"},"note":"время в начале, просьба в конце","source":"probe"}
+{"id":"reg-104","text":"перенеси будильник на полчаса позже","intent":"unknown","route":"none","note":"будильник — не задача; сдвиг будильника не умеем","source":"probe"}
+{"id":"reg-105","text":"погоду не надо, спасибо","connector":"weather","intent":"unknown","route":"none","note":"отказ, а не вопрос о погоде","source":"probe"}
+{"id":"reg-106","text":"погода на рынке недвижимости","connector":"weather","intent":"unknown","route":"none","note":"переносный смысл","source":"probe"}
+{"id":"reg-107","text":"переведи 30 градусов цельсия в фаренгейты","connector":"weather","intent":"unknown","route":"talk","note":"перевод единиц, не погода; беседа честно отвечает: единиц и курсов нет (talk.question.units)","source":"probe"}
+{"id":"reg-108","text":"прогноз на 10 дней","connector":"weather","intent":"weather.week","form":{"range":"week"},"note":"несколько дней — прогноз на неделю","source":"probe"}
+{"id":"reg-109","text":"чо надеть завтра а то холодно","connector":"weather","intent":"weather.wear","form":{"day":"2026-11-03"},"note":"«чо» — «что»","source":"probe"}
+{"id":"reg-110","text":"убери только что сделанную картинку","connector":"files","intent":"files.delete","after":"converter","note":"файл сессии, а не отметка задачи","source":"probe"}
+{"id":"reg-111","text":"запиши что в четверг стрижка в 11","intent":"createTask","title":"Стрижка","due":"2026-11-05T11:00","precision":"dateTime","note":"вне разговора о задаче со сроком внутри — новое дело, а не заметка","source":"probe"}
+{"id":"reg-112","text":"отметь отметь что я сдал отчёт","intent":"completeTask","targetQuery":"Отчёт","note":"повтор слова в надиктованном; «я» перед глаголом сделанного","source":"probe"}
+{"id":"reg-113","text":"склад вчера чё было по приходам","connector":"warehouse","intent":"warehouse.yesterday","connected":true,"note":"разговорное «чё было по приходам» — приходы за день","source":"probe"}
+{"id":"reg-114","text":"перемести 2 стула венских из 215-1-1-1 в 215-3-2-1 плиз","connector":"warehouse","intent":"warehouse.act.move","note":"«плиз» в конце — не часть ячейки","source":"probe"}
+{"id":"reg-115","text":"все задачи на эту неделю перенеси на следующую","intent":"unknown","route":"none","note":"«все задачи» перед глаголом — массовая просьба, а не одна задача «Все на следующую»","source":"probe"}
+{"id":"reg-116","text":"в пятницу в пятнадцать ноль ноль созвон, напомни","intent":"createTask","title":"Созвон","due":"2026-11-06T15:00","precision":"dateTime","note":"повтор «ноль ноль» — время, его не схлопываем","source":"probe"}

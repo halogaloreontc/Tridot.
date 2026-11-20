@@ -33,7 +33,8 @@ enum YtdlUnavailableReason {
   }
 }
 
-final class YtdlUnavailableConnector implements Connector, FormConnector {
+final class YtdlUnavailableConnector
+    implements Connector, FormConnector, IntentTarget {
   const YtdlUnavailableConnector(this.reason);
 
   /// Тот же id, что у настоящего загрузчика: отвечает его ведущий (Лиорио).
@@ -64,6 +65,28 @@ final class YtdlUnavailableConnector implements Connector, FormConnector {
         YtdlUnavailableReason.platform => 'ytdl.unavailable.platform',
         YtdlUnavailableReason.build => 'ytdl.unavailable.build',
       };
+
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'ytdl.download': IntentRecipe(
+      carriers: <String>['скачай видео'],
+      ask: 'скачай видео',
+      accepts: <String>{'ytdl.unavailable'},
+      example: 'скачай видео по ссылке',
+    ),
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
 
   @override
   ConnectorMatch? match(Utterance utterance) {

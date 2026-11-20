@@ -313,6 +313,40 @@ final class WidgetSession extends ChangeNotifier {
     ].join(' · ');
   }
 
+  /// Сейчас по часам помощника: метки времени в ленте.
+  DateTime get now => _clock.now();
+
+  /// Строка «думает» под вопросом, пока ждём ответа, — голосом того, кто
+  /// ответит ([AssistantController.working]), как в ленте приложения.
+  /// Считается один раз на ожидание, а не на каждый кадр.
+  ChatMessage? get thinking {
+    final assistant = controller;
+    if (!busy || assistant == null) return _thinking = null;
+    return _thinking ??= _working(assistant);
+  }
+
+  ChatMessage? _thinking;
+
+  ChatMessage _working(AssistantController assistant) {
+    final asked = messages.lastWhere(
+      (ChatMessage m) => m.fromUser,
+      orElse: () => ChatMessage(
+        id: '',
+        author: ChatAuthor.user,
+        text: '',
+        timestamp: _clock.now(),
+      ),
+    );
+    final working = assistant.working(asked.text);
+    return ChatMessage(
+      id: 'working',
+      author: ChatAuthor.persona,
+      text: working.message,
+      timestamp: _clock.now(),
+      personaId: working.personaId,
+    );
+  }
+
   /// Примеры вопросов для пустого чата.
   List<String> get examples =>
       (service?.connector.examples ?? const <String>[]).take(3).toList();

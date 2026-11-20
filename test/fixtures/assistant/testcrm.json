@@ -1,0 +1,93 @@
+{
+    "format": "assistant/1",
+    "app": {
+        "id": "testcrm",
+        "title": "Тестовая CRM",
+        "lang": "ru",
+        "about": "Синтетическое описание для тестов: клиенты и записи. Данные выдуманы.",
+        "name": "автосервис",
+        "forms": {
+            "nom": "автосервис",
+            "gen": "автосервиса",
+            "dat": "автосервису",
+            "acc": "автосервис",
+            "ins": "автосервисом",
+            "prep": "автосервисе"
+        },
+        "in": "в автосервисе",
+        "gender": "m",
+        "addressing": ["сервис"]
+    },
+    "api": {
+        "url": "assist.php",
+        "method": "POST",
+        "action": {
+            "in": "query",
+            "name": "action"
+        },
+        "body": "json",
+        "only": ["ask_client"],
+        "errors": {
+            "message": "error",
+            "need": "need"
+        }
+    },
+    "auth": {
+        "headers": {
+            "X-Crm-Token": "{$token}"
+        },
+        "credentials": {
+            "token": {
+                "label": "Пароль CRM"
+            }
+        },
+        "access": {
+            "shared": {
+                "label": "по паролю",
+                "needs": ["token"]
+            }
+        }
+    },
+    "commands": [
+        {
+            "id": "client",
+            "title": "Найти клиента",
+            "say": [
+                "найди клиента {q}",
+                "клиент {q}",
+                "найди {q}"
+            ],
+            "examples": ["найди клиента Тестов"],
+            "slots": {
+                "q": {
+                    "label": "имя или телефон",
+                    "type": "text"
+                }
+            },
+            "access": "shared",
+            "call": {
+                "action": "ask_client",
+                "body": {
+                    "q": "{q}"
+                }
+            },
+            "answer": {
+                "say": "«{q}»: {count|plural:клиент,клиента,клиентов}.",
+                "empty": "«{q}» — клиентов нет.",
+                "list": "items",
+                "item": {
+                    "title": "{name}",
+                    "text": "{car}"
+                }
+            }
+        },
+        {
+            "id": "help",
+            "title": "Что умеет помощник",
+            "say": ["помощь", "что ты умеешь"],
+            "examples": ["что ты умеешь"],
+            "slots": {},
+            "help": true
+        }
+    ]
+}

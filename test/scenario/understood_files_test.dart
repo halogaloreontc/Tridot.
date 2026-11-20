@@ -98,6 +98,12 @@ void main() {
       expect(created.task?.title, 'Узнать, какая формула суммы');
     });
 
+    test('перевод единиц — честный ответ беседы', () async {
+      final answer = await assistant.handle('переведи 5 миль в километры');
+      expect(answer.intent, TalkConnector.questionCommand);
+      expect(answer.replyId, 'talk.question.units');
+    });
+
     test('вопрос без срока — не задача, а честный ответ', () async {
       final answer = await assistant.handle(
         'Нужен напомни пожалуйста какая формула суммы в гугл таблицах?',

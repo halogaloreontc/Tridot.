@@ -71,6 +71,18 @@ void main() {
       expect(kind('напомни что я хотел купить'), QuestionKind.recall);
     });
 
+    test('перевод единиц и валют — честный ответ, а не конвертер', () {
+      expect(kind('переведи 5 миль в километры'), QuestionKind.units);
+      expect(kind('переведи 320 рублей в доллары'), QuestionKind.units);
+      expect(kind('сколько метров в миле'), QuestionKind.units);
+      expect(kind('переведи видео в mp3'), isNull);
+      expect(kind('напомни перевести 100 долларов в рубли'), isNull);
+      expect(
+        kind('сколько стульев в ячейке 215-1-1'),
+        isNot(QuestionKind.units),
+      );
+    });
+
     test('дело, а не вопрос', () {
       expect(kind('напомни купить хлеб'), isNull);
       expect(kind('напомни что надо купить хлеб'), isNull);

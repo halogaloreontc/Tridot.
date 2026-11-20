@@ -18,6 +18,7 @@ import 'utterance.dart';
 export '../extensions/extension_kind.dart';
 export '../models/assistant_types.dart' show AssistantResponse, AssistantStatus;
 export '../models/clarification.dart';
+export 'intent_target.dart';
 export 'utterance.dart';
 
 /// Что коннектору разрешено делать с данными своего приложения.
@@ -137,6 +138,7 @@ final class ConnectorMatch {
     this.implicit = false,
     this.fallback = false,
     this.acknowledgement = false,
+    this.aliased = false,
   }) : assert(confidence >= 0 && confidence <= 1);
 
   /// [ConnectorInfo.id] коннектора, который вернул совпадение.
@@ -173,6 +175,11 @@ final class ConnectorMatch {
   /// пропадает молча, а помощник переспрашивает «да» или «нет» и ничего не
   /// делает ([AssistantController]).
   final bool acknowledgement;
+
+  /// Фраза обращалась к приложению: «в автосервисе найди …», «склад, …»
+  /// (ADR-043). Обращение решает спор двух приложений: совпадения без
+  /// обращения уступают (`RoutePolicy`).
+  final bool aliased;
 }
 
 /// Состояние коннектора для «Как дела?».

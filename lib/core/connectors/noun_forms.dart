@@ -675,15 +675,26 @@ abstract final class NounForms {
       return true;
     }
     if (!RegExp('^[а-я]+\$').hasMatch(next)) return true;
-    if (next.endsWith('ы') || next.endsWith('и')) {
-      final length = head.length;
-      return (head.endsWith('ку') &&
-              length >= 4 &&
-              !_vowels.contains(head[length - 3])) ||
-          head.endsWith('цию') ||
-          head.endsWith('сию') ||
-          head.endsWith('ачу') ||
-          head.endsWith('ечу');
+    final length = head.length;
+    final surelyFeminine = (head.endsWith('ку') &&
+            length >= 4 &&
+            !_vowels.contains(head[length - 3])) ||
+        head.endsWith('цию') ||
+        head.endsWith('сию') ||
+        head.endsWith('ачу') ||
+        head.endsWith('ечу') ||
+        // «Оплату аренды», «предоплату за мебель», «зарплату сотрудникам».
+        head.endsWith('плату');
+    if (next.endsWith('ы') || next.endsWith('и')) return surelyFeminine;
+    // «Покупку шин», «доставку штор» — родительный множественного без
+    // окончания: только при точно женском главном слове.
+    final last = next[next.length - 1];
+    // «Встречу провёл» — глагол прошедшего времени, а не родительный.
+    if (surelyFeminine &&
+        !_vowels.contains(last) &&
+        last != 'й' &&
+        last != 'л') {
+      return true;
     }
     return next.endsWith('а') ||
         next.endsWith('я') ||

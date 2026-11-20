@@ -1,0 +1,81 @@
+# Описания команд для подсказки запасного слоя понимания (ADR-045):
+# «Похоже, вы хотите <описание>?». С маленькой буквы, без точки, глагол
+# в неопределённой форме — фраза читается после «хотите».
+#
+# Ключ — метка корпуса `<навык>:<команда>` (tools/intent_model/data.py,
+# corpus_label). У каждой метки корпуса должно быть описание: иначе сборка
+# модели падает, а тест test/corpus/intent_labels_test.dart — красный.
+# Навык «Пароли» модель не видит, его меток здесь нет.
+labels:
+  # Задачи
+  "tasks:task.create": создать задачу или напоминание
+  "tasks:task.list": посмотреть список задач
+  "tasks:task.complete": отметить задачу выполненной
+  "tasks:task.reschedule": перенести задачу на другое время
+  "tasks:task.rescheduleMany": перенести несколько задач сразу
+  "tasks:task.completeMany": отметить выполненными несколько задач
+  "tasks:task.edit": изменить задачу
+  "tasks:task.bulk.undo": отменить последнее массовое изменение
+
+  # Будильник и таймер
+  "alarm:alarm.set": поставить будильник
+  "alarm:alarm.date": поставить будильник на определённый день
+  "alarm:alarm.timer": запустить таймер
+  "alarm:alarm.clarify": поставить будильник или таймер
+
+  # Калькулятор и конвертер
+  "calc:calc.evaluate": посчитать на калькуляторе
+  "converter:converter.convert": перевести файл в другой формат
+
+  # Файлы, архивы, загрузки
+  "archiver:archiver.zip": упаковать файлы в архив
+  "archiver:archiver.extract": распаковать архив
+  "archiver:archiver.list": посмотреть, что в архиве
+  "files:files.delete": удалить файл
+  "ytdl:ytdl.download": скачать видео по ссылке
+
+  # Данные приложения
+  "data:data.backup": сделать резервную копию данных
+  "data:data.restore": восстановить данные из копии
+  "data:data.clarify": сделать копию или перенести данные
+  "data:data.open": открыть раздел «Данные»
+  "data:data.lock": закрыть данные приложения паролем
+
+  # Беседа
+  "talk:talk.greet": поздороваться
+  "talk:talk.bye": попрощаться
+  "talk:talk.thanks": поблагодарить
+  "talk:talk.joke": услышать шутку
+  "talk:talk.howAreYou": спросить, как у меня дела
+  "talk:talk.whoAreYou": узнать, кто я
+  "talk:talk.capabilities": узнать, что я умею
+  "talk:talk.question": задать справочный вопрос
+  "talk:talk.reaction": оценить мой ответ
+  "talk:talk.rude": высказать недовольство
+  "talk:talk.setting": изменить, как я общаюсь
+  "talk:talk.openHub": открыть «Мой Связной»
+
+  # Погода
+  "weather:weather.now": узнать погоду сейчас
+  "weather:weather.day": узнать погоду на день
+  "weather:weather.week": узнать погоду на неделю
+  "weather:weather.rain": узнать, будет ли дождь
+  "weather:weather.wear": узнать, как одеться по погоде
+  "weather:weather.past": узнать, какая была погода
+  "weather:weather.range": узнать погоду на дальний срок
+  "weather:weather.open": открыть погоду
+
+  # Склад
+  "warehouse:warehouse.where": узнать, где лежит товар
+  "warehouse:warehouse.count": узнать, сколько товара на складе
+  "warehouse:warehouse.cell": посмотреть, что в ячейке
+  "warehouse:warehouse.price": узнать цену товара
+  "warehouse:warehouse.today": посмотреть приходы за сегодня
+  "warehouse:warehouse.yesterday": посмотреть приходы за вчера
+  "warehouse:warehouse.week": посмотреть приходы за неделю
+  "warehouse:warehouse.nophoto": найти приходы без фото
+  "warehouse:warehouse.unposted": найти непроведённые приходы
+  "warehouse:warehouse.act.move": переместить товар в другую ячейку
+  "warehouse:warehouse.act.post": провести приход в 1С
+  "warehouse:warehouse.me": узнать свою роль и права на складе
+  "warehouse:warehouse.help": узнать, что умеет склад

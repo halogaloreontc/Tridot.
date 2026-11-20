@@ -44,6 +44,12 @@ dependencies:
   # lib/web_widget/ — только там. Уже была транзитивно (у Flutter web и
   # плагинов); версия закреплена по pubspec.lock.
   web: 1.1.2
+  # Запасной слой понимания (ADR-045): ONNX Runtime через dart:ffi —
+  # Android (onnxruntime-android из Maven), macOS, Windows и Linux (готовые
+  # библиотеки в пакете). MIT, как и сам ONNX Runtime; версия закреплена.
+  # Модель скачивается, а не встроена; в веб-помощник не попадает
+  # (test/web_widget/web_graph_test.dart).
+  onnxruntime_v2: 1.23.2+2
 
 dev_dependencies:
   flutter_test:

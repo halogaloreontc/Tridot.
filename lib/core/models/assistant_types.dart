@@ -203,4 +203,27 @@ final class AssistantResponse {
         launch: launch,
         draft: draft,
       );
+
+  /// Тот же ответ с командой [draft] для поля ввода.
+  AssistantResponse withDraft(String? draft) => AssistantResponse(
+        message: message,
+        intent: intent,
+        status: status,
+        task: task,
+        replyId: replyId,
+        values: values,
+        personaId: personaId,
+        settingsChange: settingsChange,
+        addressedPersonaId: addressedPersonaId,
+        checklist: checklist,
+        card: card,
+        secureCard: secureCard,
+        clarification: clarification,
+        suggestions: suggestions,
+        job: job,
+        weather: weather,
+        warehouse: warehouse,
+        launch: launch,
+        draft: draft,
+      );
 }

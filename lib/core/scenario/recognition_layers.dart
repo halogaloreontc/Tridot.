@@ -1,9 +1,11 @@
 import '../commands/command_suggest.dart';
-import '../connectors/utterance.dart';
+import '../connectors/connector.dart';
+import '../connectors/login_link.dart';
 import '../passwords/secret_guard.dart';
 import '../personas/persona_address.dart';
 import '../skills/passwords/passwords_phrases.dart';
 import 'command_frame.dart';
+import 'command_split.dart';
 import 'layout_fix.dart';
 import 'route_policy.dart';
 import 'typo_fix.dart';
@@ -20,6 +22,7 @@ final class Layered<T> {
     required this.found,
     required this.decision,
     this.repair,
+    this.rest,
   });
 
   /// Текст, который понят: исходный, без обёртки, с исправленным сроком
@@ -36,6 +39,12 @@ final class Layered<T> {
   /// `router.typo` (опечатка) — ответ с пояснением «понял как «…»», а
   /// запись только после «Да». `null` — фраза понята первым проходом.
   final String? repair;
+
+  /// Вторая команда того же сообщения ([CommandSplit]): «поставь будильник
+  /// на 7» из «напомни купить молоко и поставь будильник на 7». Понята
+  /// только первая ([text]); вторую помощник не выполняет, а предлагает
+  /// кнопкой. `null` — команда одна.
+  final String? rest;
 }
 
 /// Слои распознавания перед общим выбором [RoutePolicy] — одни и те же в
@@ -46,12 +55,41 @@ final class Layered<T> {
 /// 2. разговорная обёртка ([CommandFrame]) — по [CommandFrame.prefer]; без
 ///    обёртки фраза о ПИН, коде, логине не становится новым делом;
 /// 3. опечатка в слове срока при понятой команде ([TypoFix.repairDue]);
-/// 4. если как есть не понял никто явно — спасательные проходы: не та
+/// 4. две команды в одном сообщении ([CommandSplit]): если обе половины
+///    понял явный навык сами по себе — первая выполняется, вторая
+///    ([Layered.rest]) предлагается кнопкой;
+/// 5. если как есть не понял никто явно — спасательные проходы: не та
 ///    раскладка ([LayoutFix]), опечатка ([TypoFix.repair]); исправленный
 ///    текст проходит те же шаги 2–3, поэтому проверяется ровно та команда,
 ///    которая выполнится. Фразы о паролях, ПИН, кодах не исправляются:
-///    исправленный текст повторяется в чате.
+///    исправленный текст повторяется в чате;
+/// 6. если и после них никто не понял ([gaveUp]) — запасной слой понимания
+///    (ADR-045, `IntentFallback`): модель только предлагает команду
+///    вопросом. Он асинхронный и живёт в маршрутизаторе, но решает, можно
+///    ли показывать фразу модели, здесь ([privateForModel]).
 abstract final class RecognitionLayers {
+  /// Правила сдались: никто не взял фразу и спора нет. Только тогда
+  /// маршрутизатор спрашивает запасной слой (ADR-045).
+  static bool gaveUp(RouteDecision decision) =>
+      decision.winner == null && !decision.isAmbiguous;
+
+  /// Фразу нельзя показывать модели понимания, запоминать и писать в
+  /// журнал непонятых (ADR-045, п. 2): о паролях (и с опечаткой), с ПИН,
+  /// кодом, логином или похожим на пароль словом ([CommandSuggester.isPrivate]),
+  /// с паролем по отпечатку ([SecretGuard]), со скрытым `•••` или со
+  /// ссылкой входа.
+  static bool privateForModel(
+    String text, {
+    required Utterance Function(String text) analyze,
+    FingerprintMatcher? knownSecret,
+  }) {
+    if (text.trim().isEmpty) return true;
+    if (text.contains('•') || LoginLinks.contains(text)) return true;
+    if (CommandSuggester.isPrivate(text)) return true;
+    if (SecretGuard.redact(text, known: knownSecret).guarded) return true;
+    return hidesFromNetwork(analyze(text), analyze);
+  }
+
   /// Фразу о паролях не получает ни один сетевой коннектор (раздел 5.9) —
   /// и с опечаткой: «где лежит парль от почты» — тоже о паролях.
   static bool hidesFromNetwork(
@@ -89,6 +127,14 @@ abstract final class RecognitionLayers {
         SecretGuard.redact(message, known: knownSecret).guarded) {
       return asIs;
     }
+    final split = _split<T>(
+      message: message,
+      hide: hide,
+      router: router,
+      analyze: analyze,
+      fromVoice: fromVoice,
+    );
+    if (split != null) return split;
     final original = asIs.decision;
     final rescues = <(String, String, bool Function(RouteDecision))>[
       for (final repaired in LayoutFix.candidates(message))
@@ -130,6 +176,82 @@ abstract final class RecognitionLayers {
     }
     return asIs;
   }
+
+  /// Первая из двух команд сообщения ([CommandSplit]) или `null`. Обе
+  /// половины должны быть поняты явным навыком без спора; вторая — не
+  /// запись над существующей задачей после создания («напомни прийти
+  /// домой и закрой окно» — одно дело). Фраза о паролях не режется.
+  static Layered<T>? _split<T>({
+    required String message,
+    required bool hide,
+    required LayerRoute<T> Function(Utterance utterance, bool hide) router,
+    required Utterance Function(String text) analyze,
+    required bool fromVoice,
+  }) {
+    for (final (head, rest) in CommandSplit.candidates(message)) {
+      if (_private(rest) || _private(head)) return null;
+      final headUtterance = analyze(head);
+      final restUtterance = analyze(rest);
+      if (PasswordPhrases.looksLike(restUtterance) ||
+          PasswordPhrases.looksLike(headUtterance)) {
+        return null;
+      }
+      final first = decide<T>(
+        text: head,
+        utterance: headUtterance,
+        hide: hide,
+        router: router,
+        analyze: analyze,
+        fromVoice: fromVoice,
+      );
+      final second = decide<T>(
+        text: rest,
+        utterance: restUtterance,
+        hide: hide,
+        router: router,
+        analyze: analyze,
+        fromVoice: fromVoice,
+      );
+      final a = first.decision.winner;
+      final b = second.decision.winner;
+      if (!_firm(a) || !_firm(b)) continue;
+      if (a!.connectorId == _tasksId &&
+          a.commandId == _createCommand &&
+          b!.connectorId == _tasksId &&
+          _overExisting.contains(b.commandId)) {
+        continue;
+      }
+      return Layered<T>(
+        text: first.text,
+        utterance: first.utterance,
+        hide: first.hide,
+        found: first.found,
+        decision: first.decision,
+        rest: rest,
+      );
+    }
+    return null;
+  }
+
+  /// Явное совпадение: не догадка, не беседа, не уточнение и не
+  /// перенаправление по контексту.
+  static bool _firm(ConnectorMatch? match) =>
+      match != null &&
+      !match.implicit &&
+      !match.fallback &&
+      match.payload is! Reroute &&
+      match.confidence >= 0.8;
+
+  static const String _tasksId = 'tasks';
+  static const String _createCommand = 'task.create';
+
+  /// Записи над существующими задачами: после создания задачи это чаще
+  /// часть дела, чем вторая команда.
+  static const Set<String> _overExisting = <String>{
+    'task.complete',
+    'task.reschedule',
+    'task.edit',
+  };
 
   /// ПИН, код, логин, пароль во фразе ([CommandSuggester.isPrivate]).
   /// Ссылка — не секрет: «скачай видео https://…/v/1» исправлять можно.

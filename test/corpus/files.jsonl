@@ -16,3 +16,4 @@
 {"id":"files-016","text":"файл удали","connector":"files","intent":"files.delete","source":"manual"}
 {"id":"files-017","text":"удали исходник","connector":"files","intent":"files.delete","source":"manual"}
 {"id":"files-018","text":"удали все файлы","connector":"files","intent":"files.delete","source":"manual"}
+{"id":"files-019","text":"удали скачанный файл","connector":"files","intent":"files.delete","source":"manual","note":"«скачанный» — как «сделанный»: какой файл, а не другой предмет"}

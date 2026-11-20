@@ -15,6 +15,8 @@ const Set<String> forbidden = <String>{
   'package:record',
   'package:tridot_lame',
   'package:ffi',
+  // Модель понимания в приложении (ADR-045): у помощника — onnxruntime-web.
+  'package:onnxruntime_v2',
 };
 
 /// Файлы, которые тянут `dart:io`, а помощник их файловый код не вызывает:
@@ -36,6 +38,12 @@ const List<String> ioFree = <String>[
   'lib/core/connectors/manifest/connection_service.dart',
   'lib/core/connectors/manifest/manifest_connector.dart',
   'lib/core/connectors/http_transport.dart',
+  // Запасной слой понимания (ADR-045): ядро без файлов — их часть в
+  // intent_io.dart.
+  'lib/core/intent/intent_fallback.dart',
+  'lib/core/intent/intent_memory.dart',
+  'lib/core/intent/intent_pack.dart',
+  'lib/core/intent/intent_tokenizer.dart',
 ];
 
 final RegExp _import = RegExp(
@@ -108,6 +116,12 @@ void main() {
       files
           .containsKey('lib/core/connectors/manifest/connection_store_io.dart'),
       isFalse,
+    );
+    // Модель приложения и файлы пакета — не в помощнике (ADR-045).
+    expect(files.containsKey('lib/core/intent/intent_io.dart'), isFalse);
+    expect(
+      files.keys.where((String f) => f.startsWith('lib/app/intent/')),
+      isEmpty,
     );
   });
 }

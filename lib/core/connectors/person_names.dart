@@ -266,10 +266,15 @@ abstract final class PersonNames {
     return result;
   }
 
+  /// Падежи имён, которые чаще — обычные слова: «позвонить жене» — жена,
+  /// а не Женя. Со строчной такое слово остаётся со строчной.
+  static const Set<String> _commonForms = <String>{'жене', 'сене'};
+
   /// Похоже ли слово [word] (нижний регистр) на имя, если перед ним
   /// [previous].
   static bool isName(String word, {String? previous}) {
     final normalized = word.toLowerCase().replaceAll('ё', 'е');
+    if (_commonForms.contains(normalized)) return false;
     if (_plain.contains(normalized)) return true;
     return previous != null &&
         _contextual.contains(normalized) &&

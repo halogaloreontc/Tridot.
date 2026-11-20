@@ -13,6 +13,9 @@ abstract final class TaskRephrase {
     'что',
     'чтобы',
     'чтоб',
+    // Просторечное «шоб/шобы» — то же «чтоб».
+    'шоб',
+    'шобы',
     'нужно',
     'надо',
     'бы',
@@ -27,6 +30,8 @@ abstract final class TaskRephrase {
     'мы',
     'еще',
     'ещё',
+    // «Завтра же надо оплатить садик» — «же» после срока.
+    'же',
   };
 
   /// Местоимения, которые не бывают названием: «напомни про них» — о
@@ -79,6 +84,7 @@ abstract final class TaskRephrase {
   static String title(String raw) {
     var text = raw.replaceAll(_edgeJunk, '').replaceAll(_space, ' ');
     if (text.isEmpty) return '';
+    text = _withoutStory(text);
     var words = text.split(' ');
     final keys = words.map(_key).toList();
     if (keys.every(
@@ -120,6 +126,89 @@ abstract final class TaskRephrase {
     if (text.isEmpty) return '';
     return text[0].toUpperCase() + text.substring(1);
   }
+
+  /// Рассказ вокруг дела, сказанного внутри длинного сообщения:
+  ///
+  /// - части через запятую до первой части с инфинитивом — о себе («у
+  ///   меня тут завал, ничего не успеваю, будь другом, скинуть Лене
+  ///   фотки») и без инфинитива — снимаются;
+  /// - в конце — части только из слов [_tailAdverbs] («…, заранее»);
+  /// - рассказ о себе без инфинитива перед «надо/нужно (бы)» и делом
+  ///   («я тут подумал что надо бы записаться к стоматологу», «блин совсем
+  ///   вылетело из головы, же надо оплатить садик») — дело;
+  /// - «у меня/у нас (тут)» в начале перед событием («у меня ужин с
+  ///   родителями») — событие.
+  ///
+  /// Только с признаком рассказа о себе ([_selfWords]): «Вася говорил,
+  /// что надо починить кран» остаётся словами пользователя.
+  static String _withoutStory(String text) {
+    var clauses = text.split(RegExp(r'\s*,\s*'));
+    List<String> keysOf(String clause) =>
+        clause.split(' ').map(_key).where((String k) => k.isNotEmpty).toList();
+    bool hasInfinitive(String clause) =>
+        keysOf(clause).any(VerbForms.isInfinitive);
+    bool aboutSelf(String clause) => keysOf(clause).any(_selfWords.contains);
+    while (clauses.length > 1 &&
+        keysOf(clauses.last).every(_tailAdverbs.contains)) {
+      clauses = clauses.sublist(0, clauses.length - 1);
+    }
+    final deed = clauses.indexWhere(
+      (String c) =>
+          keysOf(c).isNotEmpty && VerbForms.isInfinitive(keysOf(c)[0]),
+    );
+    if (deed > 0 &&
+        !clauses.take(deed).any(hasInfinitive) &&
+        clauses.take(deed).any(aboutSelf)) {
+      clauses = clauses.sublist(deed);
+    }
+    final split = text.split(RegExp(r'\s*,\s*')).length;
+    var result = clauses.length == split ? text : clauses.join(', ');
+    // «… надо (бы) <инфинитив>» после рассказа о себе.
+    final words = result.split(' ');
+    final keys = words.map(_key).toList();
+    for (var i = 1; i < keys.length - 1; i++) {
+      if (keys[i] != 'надо' && keys[i] != 'нужно') continue;
+      final at = keys[i + 1] == 'бы' ? i + 2 : i + 1;
+      if (at >= keys.length || !VerbForms.isInfinitive(keys[at])) break;
+      final story = keys.take(i);
+      if (story.any(VerbForms.isInfinitive) ||
+          !story.any(_selfWords.contains)) {
+        break;
+      }
+      result = words.sublist(at).join(' ');
+      break;
+    }
+    // «У меня ужин с родителями» → «Ужин с родителями».
+    final own = RegExp(
+      r'^у\s+(?:меня|нас)\s+(?:тут\s+)?(?=\S+\s+\S)',
+      caseSensitive: false,
+    ).firstMatch(result);
+    if (own != null && !hasInfinitive(result)) {
+      result = result.substring(own.end);
+    }
+    return result;
+  }
+
+  /// Признаки рассказа о себе.
+  static const Set<String> _selfWords = <String>{
+    'я',
+    'меня',
+    'мне',
+    'блин',
+    'головы',
+    'другом',
+    'подумал',
+    'подумала',
+  };
+
+  /// Слова в конце названия, которые ничего не говорят о деле.
+  static const Set<String> _tailAdverbs = <String>{
+    'заранее',
+    'обязательно',
+    'срочно',
+    'пожалуйста',
+    'плиз',
+  };
 
   /// Заметка к задаче — короткая строка фактов: «их 22шт в ок, 1шт в
   /// уценке под артикулом 67782» → «22 шт в ОК, 1 шт в уценке, арт.

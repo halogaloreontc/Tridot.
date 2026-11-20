@@ -21,3 +21,7 @@ test/_scratch_*
 
 # Рабочие копии агентов (git worktree)
 .claude/worktrees/
+
+# Сборка модели понимания: модели и архивы не коммитятся (ADR-045)
+tools/intent_model/out/
+tools/intent_model/webcheck/node_modules/

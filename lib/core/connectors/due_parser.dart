@@ -1,4 +1,5 @@
 import '../models/task.dart';
+import 'number_words.dart';
 import 'speech_noise.dart';
 import 'spoken_time.dart';
 import 'verb_forms.dart';
@@ -65,6 +66,7 @@ final class DueParseResult {
     this.spans = const <CharSpan>[],
     this.hasSource = false,
     this.recurring = false,
+    this.sameTime = false,
   });
 
   final DateTime? dueAt;
@@ -88,6 +90,10 @@ final class DueParseResult {
   /// Срок назван повторением: «по пятницам», «каждую пятницу». Повторяющихся
   /// задач пока нет — срок равен ближайшему такому дню (docs/PLANS.md).
   final bool recurring;
+
+  /// Время названо как «то же»: «на завтра на то же время». В [dueAt] —
+  /// нынешнее время; перенос берёт время самой задачи.
+  final bool sameTime;
 }
 
 /// Разбор сроков в русском тексте: только то, что можно понять однозначно.
@@ -161,7 +167,22 @@ final class DueParser {
   };
 
   /// После этих слов может идти ещё и часть суток: «в 2 часа дня».
-  static const Set<String> _hourWords = <String>{'час', 'часа', 'часов'};
+  /// «К 3 часам», «к двум часам дня» — дательный после «к».
+  static const Set<String> _hourWords = <String>{
+    'час',
+    'часа',
+    'часов',
+    'часам',
+  };
+
+  /// «Часов в шесть», «часиков в десять», «часика в два» — примерно.
+  static const Set<String> _hedgeHourWords = <String>{
+    'час',
+    'часа',
+    'часов',
+    'часика',
+    'часиков',
+  };
 
   /// Вежливые слова после часа не мешают ему быть временем:
   /// «завтра в 10 пожалуйста».
@@ -236,6 +257,10 @@ final class DueParser {
 
   /// Окончания порядкового числа дня после дефиса: «20-е», «12-го», «к
   /// 20-му».
+  /// Число месяца с окончанием вплотную: «5го», «15ое».
+  static final RegExp _gluedOrdinal =
+      RegExp(r'^(\d{1,2})(го|ого|му|ому|е|ое)$');
+
   static const Set<String> _ordinalEndings = <String>{
     'е',
     'ое',
@@ -262,6 +287,86 @@ final class DueParser {
     buffer.write(text.substring(position));
     return buffer.toString();
   }
+
+  /// Фрагменты срока вместе со словом «ровно», «примерно» сразу перед
+  /// ними: «ровно в шесть» не оставит «Ровно» в названии.
+  static List<CharSpan> _hedged(
+    String text,
+    List<RegExpMatch> words,
+    List<CharSpan> spans,
+  ) {
+    if (spans.isEmpty) return spans;
+    return <CharSpan>[
+      for (final span in spans)
+        () {
+          for (var i = 0; i < words.length; i++) {
+            final word = words[i];
+            if (word.end > span.start) break;
+            if (!_onlySpaces(text, word.end, span.start)) continue;
+            if (_clockHedges.contains(word.group(0))) {
+              return CharSpan(word.start, span.end);
+            }
+            // «Часов в шесть», «часа в два» — примерно в шесть; «8 часов в
+            // пятницу» — длительность, она остаётся в названии.
+            final previous = i > 0 ? words[i - 1].group(0)! : '';
+            if (_hedgeHourWords.contains(word.group(0)) &&
+                _hedgedHour.hasMatch(text.substring(span.start, span.end)) &&
+                !_allDigits.hasMatch(previous) &&
+                !_numberWords.containsKey(previous)) {
+              return CharSpan(word.start, span.end);
+            }
+          }
+          return span;
+        }(),
+    ];
+  }
+
+  /// «в 18 30 забрать заказ» — так распознаватель и спешащий человек пишут
+  /// «18:30». Пробел меняется на двоеточие (длина та же), только после
+  /// «в/к/до/на», с минутами 00–59 и если дальше не слово счёта: «в 2 50
+  /// рублей», «на 10 15 человек» — числа, а не время. Минуты с нулём
+  /// впереди («в 21 00 таблетки») — время при любом слове дальше.
+  static String _spacedClock(String text) => text.replaceAllMapped(
+        _spacedTime,
+        (Match m) {
+          final hour = int.parse(m.group(2)!);
+          final minute = int.parse(m.group(3)!);
+          final after = m.group(4);
+          // «В 21 00 таблетки»: минуты с нулём впереди — так числа не
+          // считают («в 2 50 рублей»), это время.
+          final free = after == null ||
+              m.group(3)!.startsWith('0') ||
+              _bareHourSuffixes.contains(after) ||
+              _hourSuffixes.contains(after) ||
+              _dayWords.containsKey(after) ||
+              _politeWords.contains(after) ||
+              isInfinitive(after) ||
+              after == 'напомни' ||
+              after == 'и';
+          if (hour > 23 || minute > 59 || !free) return m.group(0)!;
+          final colon = m.group(1)!.length + m.group(2)!.length;
+          return m.group(0)!.replaceRange(colon, colon + 1, ':');
+        },
+      );
+
+  /// «Минут через двадцать», «часа через два» — единица впереди, как
+  /// «через минут двадцать»: слова меняются местами (длина та же), если
+  /// после «через» — число.
+  static String _unitFirst(String text) => text.replaceAllMapped(
+        _unitBeforeThrough,
+        (Match m) => '${m.group(3)}${m.group(2)}${m.group(1)}',
+      );
+
+  static final RegExp _unitBeforeThrough = RegExp(
+    r'(?<![а-я])(минут|минуты|часа|часов|дня|дней|недели|недель)(\s+)(через)'
+    r'(?=\s+(?:\d|пар|полтор|один|одну|две|два|три|четыре|пять|шесть|семь|'
+    r'восемь|девять|десять|пятнадцать|двадцать|тридцать|сорок|пятьдесят))',
+  );
+
+  static final RegExp _spacedTime = RegExp(
+    r'((?:^|(?<=\s))(?:в|во|к|ко|до|на)\s)(\d{1,2}) (\d{2})(?![\d:.,])'
+    r'(?:\s*[,.!?]?\s*([a-zа-я]+))?',
+  );
 
   /// Фрагменты срока, расширенные на время словами целиком: цифры «9»
   /// заняли только начало слова «девять».
@@ -302,7 +407,9 @@ final class DueParser {
     // же длины: фрагменты срока по-прежнему указывают в исходную строку,
     // а в конце расширяются на всё слово ([_spoken]).
     final spoken = SpokenTime.find(normalizeChars(text));
-    final normalized = _spellDigits(normalizeChars(text), spoken);
+    final normalized = _unitFirst(
+      _spacedClock(_spellDigits(normalizeChars(text), spoken)),
+    );
     final today = DateTime(now.year, now.month, now.day);
     final words = _word.allMatches(normalized).toList(growable: false);
 
@@ -316,6 +423,7 @@ final class DueParser {
     final moments = <DateTime>[];
     var dateText = normalized;
     var recurring = false;
+    var sameTime = false;
     // Номера в [times] времён без уточнения «утра/вечера»: их уточняет часть
     // суток («вечером в 8» — 20:00). Среди них — час 1–6 без уточнения
     // («к 5»), который без части суток неоднозначен.
@@ -334,6 +442,7 @@ final class DueParser {
     final monthDates = <_Found>[
       ..._monthMentions(normalized, words, today),
       ..._dayOfMonthMentions(normalized, words, today),
+      ..._newYearMentions(normalized, words, today),
     ];
     // Ошибка в дате или времени: разбор доходит до конца, чтобы все
     // фрагменты срока заняли свои места и не попали в название. Если неверны
@@ -465,10 +574,11 @@ final class DueParser {
           dueAt: dueAt,
           precision: precision,
           issue: issue,
-          spans: _spoken(spans, spoken),
+          spans: _hedged(normalized, words, _spoken(spans, spoken)),
           hasSource: dates.any((_Mention<DateTime> m) => m.isSource) ||
               times.any((_Mention<(int, int)> m) => m.isSource),
           recurring: recurring,
+          sameTime: sameTime,
         );
 
     DueParseResult fail(DueIssue issue) {
@@ -509,6 +619,17 @@ final class DueParser {
         }
         hour = adjusted;
       } else {
+        // «без четверти пять», «полшестого» — как «в 5»: утро или вечер,
+        // решает часть суток или вопрос. Набранное «в 4:45» и «в шесть
+        // ноль пять» — как сказано.
+        if (hour >= 1 &&
+            hour <= 6 &&
+            spoken.any(
+              (SpokenTimeMatch s) =>
+                  s.twelveHour && s.start <= match.start && match.start < s.end,
+            )) {
+          ambiguous.add(times.length);
+        }
         unqualified.add(times.length);
       }
       times.add(
@@ -579,6 +700,22 @@ final class DueParser {
     for (final found in monthDates) {
       mask(found.start, found.end);
       if (found.invalid) defer(DueIssue.invalidDate);
+    }
+
+    // «Через неделю в это же время», «на завтра на то же время»: время —
+    // нынешнее (у переноса — время самой задачи, [DueParseResult.sameTime]).
+    for (var k = 0; k + 3 < words.length; k++) {
+      if (!_sameTimePrepositions.contains(words[k].group(0)) ||
+          !_sameTimePronouns.contains(words[k + 1].group(0)) ||
+          words[k + 2].group(0) != 'же' ||
+          words[k + 3].group(0) != 'время') {
+        continue;
+      }
+      consume(words[k].start, words[k + 3].end);
+      mask(words[k].start, words[k + 3].end);
+      times.add(_Mention((now.hour, now.minute), false));
+      sameTime = true;
+      break;
     }
 
     // Одиночный час: «в 10», «к 9 утра», «в 7 вечера». Только после «в/к»
@@ -662,10 +799,10 @@ final class DueParser {
                 postpone: postpone,
               ) ||
               // «завтра на 10 позвонить»: «на» с часом сразу после дня —
-              // время, а не «на 10 минут».
+              // время, а не «на 10 минут». После глагола отсрочки тоже:
+              // «сдвинь созвон на завтра на 11».
               (masked[i - 1].group(0) == 'на' &&
                   suffix.isEmpty &&
-                  !postpone &&
                   afterDay(masked[i - 1]) &&
                   !_naCounted(masked, i))) &&
           _onlySpaces(dateText, masked[i - 1].end, token.start);
@@ -694,6 +831,10 @@ final class DueParser {
               // «в 10 позвонить»: час перед действием.
               (_onlySpaces(dateText, token.end, next.start) &&
                   isInfinitive(nextWord!)) ||
+              // «в 10 по мск»: часовой пояс — ещё часть времени.
+              (nextWord == 'по' &&
+                  afterNext != null &&
+                  _moscowWords.contains(afterNext.group(0))) ||
               // «в 10 или в 11», «в 9 и в 18» — перечисление времён,
               // а не «10 штук».
               nextWord == 'или' ||
@@ -724,7 +865,34 @@ final class DueParser {
         }
         continue;
       }
-      consume(token.start, suffix.isEmpty ? token.end : suffix.last.end);
+      // «в 17 часов 20 минут» — минуты после часа.
+      var minute = 0;
+      var timeEnd = suffix.isEmpty ? token.end : suffix.last.end;
+      final hourAt = suffix.isEmpty ? -1 : masked.indexOf(suffix.first);
+      if (hourAt > 0 &&
+          _hourWords.contains(suffix.first.group(0)) &&
+          hourAt + 2 < masked.length &&
+          _onlySpaces(dateText, masked[hourAt].end, masked[hourAt + 1].start) &&
+          _onlySpaces(
+            dateText,
+            masked[hourAt + 1].end,
+            masked[hourAt + 2].start,
+          ) &&
+          masked[hourAt + 2].group(0)!.startsWith('минут')) {
+        final minutes = int.tryParse(masked[hourAt + 1].group(0)!);
+        if (minutes != null && minutes <= 59) {
+          minute = minutes;
+          timeEnd = masked[hourAt + 2].end;
+        }
+      }
+      final zoneAt = suffix.isEmpty ? i + 1 : masked.indexOf(suffix.last) + 1;
+      if (zoneAt > 0 &&
+          zoneAt + 1 < masked.length &&
+          masked[zoneAt].group(0) == 'по' &&
+          _moscowWords.contains(masked[zoneAt + 1].group(0))) {
+        timeEnd = masked[zoneAt + 1].end;
+      }
+      consume(token.start, timeEnd);
       if (suffix.isNotEmpty) {
         final adjusted = _applySuffix(hour, suffix.last.group(0)!);
         if (adjusted == null) {
@@ -732,6 +900,17 @@ final class DueParser {
           continue;
         }
         hour = adjusted;
+        // «В 3 часа», «к трём часам» без части суток — как «к 3»: и ночь,
+        // и день. С минутами («в 3 часа 20 минут») — как сказано.
+        if (suffix.length == 1 &&
+            _hourWords.contains(suffix.single.group(0)) &&
+            timeEnd == suffix.single.end &&
+            hour >= 1 &&
+            hour <= 6) {
+          ambiguous.add(times.length);
+          unqualified.add(times.length);
+          bare.add(times.length);
+        }
       } else {
         // «к 5» — и 05:00, и 17:00. Фрагмент уже занят, чтобы «к 5» не
         // попало в название; срок уточняется у пользователя, если его
@@ -740,7 +919,7 @@ final class DueParser {
         unqualified.add(times.length);
         bare.add(times.length);
       }
-      times.add(_Mention((hour, 0), false));
+      times.add(_Mention((hour, minute), false));
     }
 
     // Часть суток уточняет время без «утра/вечера»: «завтра вечером в 8» —
@@ -880,6 +1059,13 @@ final class DueParser {
     'вечерком': PartOfDay.evening,
   };
 
+  /// «ближе к вечеру», «ближе к утру», «ближе к обеду».
+  static const Map<String, PartOfDay> _closerParts = <String, PartOfDay>{
+    'вечеру': PartOfDay.evening,
+    'утру': PartOfDay.morning,
+    'обеду': PartOfDay.day,
+  };
+
   /// Слова перед частью суток, с которыми она не срок: «с утром» («с днём
   /// рождения»), «за вечером», «каждым утром», «перед вечером».
   static const Set<String> _partBlockersBefore = <String>{
@@ -903,6 +1089,13 @@ final class DueParser {
   static const Map<String, PartOfDay> _partNouns = <String, PartOfDay>{
     'утро': PartOfDay.morning,
     'вечер': PartOfDay.evening,
+  };
+
+  /// «К вечеру пятницы», «к утру понедельника» — часть суток названного
+  /// дня. Без дня «к вечеру» — не срок (решение корпуса, b3 nl-012).
+  static const Map<String, PartOfDay> _partDatives = <String, PartOfDay>{
+    'утру': PartOfDay.morning,
+    'вечеру': PartOfDay.evening,
   };
 
   /// Прилагательные дня перед «утро»/«вечер» после «на»: «на завтрашнее
@@ -990,11 +1183,10 @@ final class DueParser {
     'декабр',
   ];
 
-  /// Слова дня, которые разбор не понимает: «5-го», «числа», «вчера».
-  /// Рядом с ними часть суток не срок.
+  /// Слова дня, которые разбор не понимает: «вчера», месяц без числа.
+  /// Рядом с ними часть суток не срок. «5-го», «15 числа» теперь
+  /// понимаются и без предлога ([_dayOfMonthMentions]).
   static bool _unparsedDayWord(String word) =>
-      word == 'го' ||
-      word == 'числа' ||
       word == 'вчера' ||
       word == 'позавчера' ||
       _monthStems.any(word.startsWith);
@@ -1095,6 +1287,18 @@ final class DueParser {
         );
         continue;
       }
+      // «К вечеру пятницы»: часть суток дня в родительном падеже.
+      final dative = _partDatives[word(i)];
+      if (dative != null &&
+          i > 0 &&
+          i + 1 < words.length &&
+          adjacent(i - 1, i) &&
+          adjacent(i, i + 1) &&
+          (word(i - 1) == 'к' || word(i - 1) == 'ко') &&
+          _weekdayForms[word(i + 1)]?.$2 == _genitivePrepositions) {
+        result.add(_PartFound(words[i - 1].start, words[i].end, dative));
+        continue;
+      }
       // «на вечер», «на утро пятницы», «с утра на вечер».
       final noun = _partNouns[word(i)];
       final followed = noun != null &&
@@ -1165,6 +1369,27 @@ final class DueParser {
         );
         i = last;
         continue;
+      }
+      // «ближе к вечеру», «ближе к обеду» — та же часть суток. Голое «к
+      // вечеру» — крайний срок, оно пока не срок (см. [_partWords]).
+      if (word(i) == 'ближе' &&
+          i + 2 < words.length &&
+          adjacent(i, i + 1) &&
+          adjacent(i + 1, i + 2) &&
+          (word(i + 1) == 'к' || word(i + 1) == 'ко')) {
+        final closer = _closerParts[word(i + 2)];
+        if (closer != null && !nextToUnparsedDay(i, i + 2)) {
+          result.add(
+            _PartFound(
+              words[i].start,
+              words[i + 2].end,
+              closer,
+              lunch: closer == PartOfDay.day,
+            ),
+          );
+          i += 2;
+          continue;
+        }
       }
       var part = _partWords[word(i)];
       var last = i;
@@ -1340,7 +1565,10 @@ final class DueParser {
 
   /// «следующую», «эту», «ближайшую» перед днём недели или «неделе».
   static _WeekScope? _weekModifier(String word) {
-    if (word.startsWith('следующ') || word.startsWith('будущ')) {
+    // «на след неделе» — сокращение, как пишут в спешке.
+    if (word.startsWith('следующ') ||
+        word.startsWith('будущ') ||
+        word == 'след') {
       return _WeekScope.next;
     }
     if (word.startsWith('ближайш')) return _WeekScope.nearest;
@@ -1443,11 +1671,44 @@ final class DueParser {
     'полчасика': (_Unit.minute, 30),
     'день': (_Unit.day, 1),
     'денек': (_Unit.day, 1),
-    'сутки': (_Unit.day, 1),
+    // «Через сутки» — ровно 24 часа, с тем же временем, а не «на завтра».
+    'сутки': (_Unit.hour, 24),
     'неделю': (_Unit.week, 1),
     'недельку': (_Unit.week, 1),
     'месяц': (_Unit.month, 1),
     'месяцок': (_Unit.month, 1),
+  };
+
+  /// «в 10 по мск», «в 9 по Москве»: время уже местное — пояс не меняет.
+  static const Set<String> _moscowWords = <String>{
+    'мск',
+    'москве',
+    'московскому',
+  };
+
+  /// Слова приблизительности или точности перед временем: «ровно в шесть»,
+  /// «примерно в 10» — часть срока, а не названия.
+  /// Срок — час после «в/к»: «в шесть», «в 6».
+  static final RegExp _hedgedHour = RegExp(r'^(?:в|во|к|ко)\s+\d');
+
+  static const Set<String> _clockHedges = <String>{
+    'ровно',
+    'примерно',
+    'приблизительно',
+    // «…, лучше в среду», «желательно до пятницы» — оговорка срока.
+    'лучше',
+    'желательно',
+  };
+
+  /// «в это же время», «на то же время».
+  static const Set<String> _sameTimePrepositions = <String>{'в', 'во', 'на'};
+  static const Set<String> _sameTimePronouns = <String>{'это', 'то'};
+
+  /// «через час с небольшим», «через неделю с лишним».
+  static const Set<String> _approximately = <String>{
+    'небольшим',
+    'лишним',
+    'хвостиком',
   };
 
   /// «2ч», «15мин» — число вплотную к единице.
@@ -1559,6 +1820,22 @@ final class DueParser {
         adjacentTo(i) &&
         _relativeUnits[words[i + 1].group(0)!] == _Unit.hour) {
       return (_Unit.minute, <double>[90], i + 1);
+    }
+    // «через часа полтора», «через минут десять», «через дня три» —
+    // единица перед числом: так говорят о приблизительном сроке.
+    final inverted = _relativeUnits[value];
+    if (inverted != null && value.length > 1 && adjacentTo(i)) {
+      final next = words[i + 1].group(0)!;
+      if ((next == 'полтора' || next == 'полторы') && inverted == _Unit.hour) {
+        return (_Unit.minute, <double>[90], i + 1);
+      }
+      final number = _readNumber(text, words, i + 1);
+      if (number != null &&
+          number.$1.every((double v) => v > 0 && v == v.roundToDouble()) &&
+          !(adjacentTo(number.$2) &&
+              _relativeUnits.containsKey(words[number.$2 + 1].group(0)))) {
+        return (inverted, number.$1, number.$2);
+      }
     }
     final number = _readNumber(text, words, i);
     if (number == null) return null;
@@ -1707,6 +1984,55 @@ final class DueParser {
   /// Год после даты словами: «2026» или слитно «2026г».
   static final RegExp _yearWord = RegExp(r'^(\d{4})(г)?$');
 
+  /// «В Новый год», «к Новому году», «до нового года», «в нг» — 1 января
+  /// (ближайшее, сегодня — если сегодня 1 января). Только после предлога
+  /// «в/на/к/до»: «новый год прошёл весело» — не срок.
+  static List<_Found> _newYearMentions(
+    String text,
+    List<RegExpMatch> words,
+    DateTime today,
+  ) {
+    String word(int i) => words[i].group(0)!;
+    bool adjacent(int left, int right) =>
+        _onlySpaces(text, words[left].end, words[right].start);
+    final date =
+        today.month == 1 && today.day == 1 ? today : DateTime(today.year + 1);
+    final result = <_Found>[];
+    for (var i = 1; i < words.length; i++) {
+      final preposition = word(i - 1);
+      if (!_newYearPrepositions.contains(preposition) || !adjacent(i - 1, i)) {
+        continue;
+      }
+      var last = -1;
+      if (word(i) == 'нг') {
+        last = i;
+      } else if (i + 1 < words.length &&
+          adjacent(i, i + 1) &&
+          _newYearForms[word(i)] == word(i + 1)) {
+        last = i + 1;
+      }
+      if (last < 0) continue;
+      result.add(_Found(words[i].start, words[last].end, date: date));
+      i = last;
+    }
+    return result;
+  }
+
+  static const Set<String> _newYearPrepositions = <String>{
+    'в',
+    'на',
+    'к',
+    'ко',
+    'до',
+  };
+
+  /// «Новый год» в падежах после предлогов: прилагательное → существительное.
+  static const Map<String, String> _newYearForms = <String, String>{
+    'новый': 'год',
+    'новому': 'году',
+    'нового': 'года',
+  };
+
   /// Год без «года»: только похожий на год — 1900…2199. Другое число
   /// после даты («15 ноября 5000 рублей») годом не считается.
   static final RegExp _plainYear = RegExp(r'^(?:19|20|21)\d\d$');
@@ -1740,16 +2066,31 @@ final class DueParser {
     final bare = <_Found>[];
     for (var i = 0; i < words.length; i++) {
       final value = word(i);
-      if (value.length > 2 || !_allDigits.hasMatch(value)) continue;
-      final day = int.parse(value);
+      // «5го», «15ое» — окончание вплотную, как пишут в спешке.
+      final glued = _gluedOrdinal.firstMatch(value);
+      // «К первому числу», «до пятого числа» — порядковое словом, только
+      // со словом «число».
+      final spelled = glued == null ? NumberWords.ordinal(value) : null;
+      if (spelled != null) {
+        if (i + 1 >= words.length ||
+            !adjacent(i, i + 1) ||
+            !_monthDayNouns.contains(word(i + 1))) {
+          continue;
+        }
+      } else if (glued == null &&
+          (value.length > 2 || !_allDigits.hasMatch(value))) {
+        continue;
+      }
+      final day = spelled?.$1 ?? int.parse(glued?.group(1) ?? value);
       if (day < 1 || day > 31) continue;
       if (_touchesNumberPunctuation(text, words[i].start, words[i].end)) {
         continue;
       }
       var last = i;
-      String? ending;
+      String? ending = glued?.group(2) ?? spelled?.$2;
       final end = words[i].end;
-      if (i + 1 < words.length &&
+      if (glued == null &&
+          i + 1 < words.length &&
           end < text.length &&
           (text[end] == '-' || text[end] == '–') &&
           words[i + 1].start == end + 1 &&
@@ -1760,7 +2101,7 @@ final class DueParser {
       var noun = false;
       if (last + 1 < words.length &&
           adjacent(last, last + 1) &&
-          (word(last + 1) == 'число' || word(last + 1) == 'числа')) {
+          _monthDayNouns.contains(word(last + 1))) {
         noun = true;
         last++;
       }
@@ -1770,7 +2111,9 @@ final class DueParser {
       final accusative = ending == 'е' ||
           ending == 'ое' ||
           (ending == null && word(last) == 'число');
-      final dative = ending == 'му' || ending == 'ому';
+      final dative = ending == 'му' ||
+          ending == 'ому' ||
+          (ending == null && word(last) == 'числу');
       final date = resolve(day);
       final source = _sourcePrepositions.contains(preposition);
       if ((preposition == 'на' && accusative) ||
@@ -1790,7 +2133,7 @@ final class DueParser {
         i = last;
         continue;
       }
-      if (genitive &&
+      if ((genitive || (ending == null && word(last) == 'числа')) &&
           date != null &&
           (preposition == null ||
               !_attachedPrepositions.contains(preposition))) {
@@ -1802,9 +2145,21 @@ final class DueParser {
     }
     if (result.any((_Found f) => !f.isSource && !f.invalid)) {
       result.addAll(bare);
+    } else if (result.isEmpty && bare.length == 1) {
+      // «Напомни 15-го записаться», «5го оплатить кредит», «15 числа
+      // заплатить»: единственное число месяца без предлога — сам срок.
+      // Рядом с другим днём («встречу 12-го на 18-е») — исходный.
+      final only = bare.single;
+      result.add(_Found(only.start, only.end, date: only.date));
     }
     return result;
   }
+
+  static const Set<String> _monthDayNouns = <String>{
+    'число',
+    'числа',
+    'числу',
+  };
 
   /// «на 5 дней назад», «на неделю назад» — прошедший день: перенос туда —
   /// «уже прошло».
@@ -1850,6 +2205,53 @@ final class DueParser {
   /// и разбор переспрашивает. Минуты и часы отсчитываются по реальному
   /// времени (переход на зимнее время не сдвигает срок), дни — по
   /// календарю.
+  /// Минуты числом или словами сразу после [last] («час сорок», «два
+  /// часа 15»): (минуты, номер последнего слова) или `null`.
+  static (int, int)? _bareMinutes(
+    String text,
+    List<RegExpMatch> words,
+    int last,
+  ) {
+    final first = last + 1;
+    if (first >= words.length ||
+        !_onlySpaces(text, words[last].end, words[first].start)) {
+      return null;
+    }
+    int? value;
+    var end = first;
+    final digits = int.tryParse(words[first].group(0)!);
+    if (digits != null) {
+      value = digits;
+    } else {
+      final spelled = NumberWords.find(
+        text.substring(words[first].start),
+      ).firstOrNull;
+      if (spelled == null || spelled.start != 0) return null;
+      value = spelled.value;
+      final stop = words[first].start + spelled.end;
+      while (end + 1 < words.length && words[end + 1].end <= stop) {
+        end++;
+      }
+    }
+    if (value < 1 || value > 59) return null;
+    final after = end + 1;
+    if (after < words.length &&
+        _onlySpaces(text, words[end].end, words[after].start)) {
+      final word = words[after].group(0)!;
+      if (!isInfinitive(word) && !_bareMinutesFollowers.contains(word)) {
+        return null;
+      }
+    }
+    return (value, end);
+  }
+
+  static const Set<String> _bareMinutesFollowers = <String>{
+    'надо',
+    'нужно',
+    'напомни',
+    'мне',
+  };
+
   List<_Found> _relativeMentions(
     String text,
     List<RegExpMatch> words,
@@ -1882,6 +2284,26 @@ final class DueParser {
         if (more == null || more.$1.index >= components.last.$1.index) break;
         components.add((more.$1, more.$2));
         last = more.$3;
+      }
+      // «Через час сорок», «через два часа двадцать» — минуты без слова
+      // «минут» после часов. Дальше — конец, знак или инфинитив: «через
+      // час двадцать человек» — не срок минут.
+      if (components.last.$1 == _Unit.hour) {
+        final minutes = _bareMinutes(text, words, last);
+        if (minutes != null) {
+          components.add((_Unit.minute, <double>[minutes.$1.toDouble()]));
+          last = minutes.$2;
+        }
+      }
+      // «через час с небольшим», «через неделю с лишним» — тот же срок,
+      // приблизительно: уточнение не попадает в название.
+      if (head == 'через' &&
+          last + 2 < words.length &&
+          words[last + 1].group(0) == 'с' &&
+          _approximately.contains(words[last + 2].group(0)) &&
+          _onlySpaces(text, words[last].end, words[last + 1].start) &&
+          _onlySpaces(text, words[last + 1].end, words[last + 2].start)) {
+        last += 2;
       }
       // «через минуту-другую», «через час пик», «через 2 часа дня» —
       // не срок: фраза остаётся в названии целиком.
@@ -2094,23 +2516,39 @@ final class DueParser {
     final used = <int>{};
     final result = <_Found>[];
 
-    // «в конце недели», «к концу следующей недели» — пятница той недели.
+    // «в конце недели», «к концу следующей недели» — пятница той недели;
+    // «в начале (следующей) недели» — понедельник, «в середине недели» —
+    // среда. Без уточнения начало и середина — ближайшие: в четверг
+    // «в начале недели» — уже следующий понедельник.
     for (var i = 0; i + 1 < words.length; i++) {
       final value = word(i);
-      if (value != 'конце' && value != 'концу' && value != 'конца') continue;
+      final weekday = _weekParts[value];
+      if (weekday == null) continue;
+      if (weekday != DateTime.friday &&
+          (i == 0 ||
+              !adjacent(i - 1, i) ||
+              !_weekPartPrepositions.contains(word(i - 1)))) {
+        continue;
+      }
       var j = i + 1;
       var scope = _WeekScope.current;
+      var named = false;
       final modifier = _weekModifier(word(j));
       if (modifier != null && j + 1 < words.length && adjacent(i, j)) {
         scope = modifier;
+        named = true;
         j++;
       }
       if (word(j) != 'недели' || !adjacent(j - 1, j)) continue;
+      final week = scope == _WeekScope.next ||
+              (!named && weekday != DateTime.friday && today.weekday > weekday)
+          ? 1
+          : 0;
       result.add(
         _Found(
           words[i].start,
           words[j].end,
-          date: weekDay(scope == _WeekScope.next ? 1 : 0, DateTime.friday),
+          date: weekDay(week, weekday),
         ),
       );
       for (var k = i; k <= j; k++) {
@@ -2361,10 +2799,11 @@ final class DueParser {
       // «на вечер пятницы», «на утро понедельника»: родительный падеж
       // после части суток.
       final afterPartNoun = prepositions == _genitivePrepositions &&
-          _partNouns.containsKey(preposition) &&
           start > 1 &&
           adjacent(start - 2, start - 1) &&
-          word(start - 2) == 'на';
+          ((_partNouns.containsKey(preposition) && word(start - 2) == 'на') ||
+              (_partDatives.containsKey(preposition) &&
+                  (word(start - 2) == 'к' || word(start - 2) == 'ко')));
       // «на следующую неделю вторник»: день сразу за неделей.
       final afterWeek = start > 0 &&
           weekSpans.any((_Found w) => w.end == words[start - 1].end) &&
@@ -2454,6 +2893,27 @@ final class DueParser {
     }
     return result;
   }
+
+  /// Части недели и их день: «в начале недели» — понедельник.
+  static const Map<String, int> _weekParts = <String, int>{
+    'конце': DateTime.friday,
+    'концу': DateTime.friday,
+    'конца': DateTime.friday,
+    'начале': DateTime.monday,
+    'началу': DateTime.monday,
+    'середине': DateTime.wednesday,
+    'середину': DateTime.wednesday,
+  };
+
+  /// Предлоги перед началом и серединой недели: «с начала недели» — не
+  /// срок.
+  static const Set<String> _weekPartPrepositions = <String>{
+    'в',
+    'во',
+    'к',
+    'ко',
+    'на',
+  };
 
   /// «в начале», «в середине», «в конце» месяца.
   static const Map<String, _MonthPart> _monthParts = <String, _MonthPart>{

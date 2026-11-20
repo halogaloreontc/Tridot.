@@ -1,3 +1,8 @@
+/// Строка ленты чата и её части (ADR-027): общие у ленты приложения и у
+/// веб-виджета. Вложения сюда приходят готовым виджетом — файл не тянет
+/// `dart:io` и выбор файлов.
+library;
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -9,18 +14,12 @@ import '../../core/personas/persona_cast.dart';
 import '../../core/scenario/command_spans.dart';
 import '../assistant_theme.dart';
 import '../layout.dart';
+import 'chat_feed_rhythm.dart';
 import 'command_highlight.dart';
+import 'message_copy_button.dart';
 import 'persona_mark.dart';
 import 'task_tile.dart';
 import 'whole_word_text.dart';
-
-/// Строка ленты (ADR-027): пузырь команды, ответ абзацами, имя помощника,
-/// карточка под текстом. Общая для приложения и веб-помощника склада
-/// (ADR-038): без файлов и `dart:io` — вложения строит хозяин.
-
-/// «14:05».
-String clockLabel(DateTime value) => '${value.hour.toString().padLeft(2, '0')}:'
-    '${value.minute.toString().padLeft(2, '0')}';
 
 /// Метка времени над группой сообщений: «Сегодня, 14:05» по центру,
 /// без линий (ADR-027). Появляется при смене дня или после паузы больше
@@ -134,6 +133,8 @@ TextSpan _paragraphs(String text, TextStyle style) {
   );
 }
 
+/// Строка ленты: пузырь пользователя или ответ помощника с именем,
+/// пометкой «Ошибка»/«Уточните», карточкой, задачей и ссылкой под ним.
 final class MessageRow extends StatelessWidget {
   const MessageRow({
     super.key,
@@ -159,21 +160,18 @@ final class MessageRow extends StatelessWidget {
     this.selectable = true,
   });
 
-  final ChatMessage message;
-
   /// Свой `SelectableText` у каждого сообщения (приложение). `false` — простой
-  /// текст: выделяет общий `SelectionArea` ленты. Так у веб-помощника: в
-  /// браузере с включённой семантикой `SelectableText` — это поле ввода
-  /// (`<textarea>`) поверх сообщения; щелчок в ленту забирал фокус у поля
-  /// ввода (буквы терялись), а двойной щелчок копировал «.» вместо слова.
+  /// текст: выделяет общий `SelectionArea` ленты (веб-помощник, ADR-042).
   final bool selectable;
+
+  final ChatMessage message;
 
   /// Распознанные части команды пользователя (ADR-021); в ленте они —
   /// обычный текст (ADR-027).
   final List<CommandSpan> commandSpans;
 
-  /// Вложения сообщения (превью и чипы, ADR-019) — строит хозяин: в
-  /// приложении они читают файлы, в веб-помощнике их нет.
+  /// Превью вложений над текстом (ADR-019). Строит вызывающий: так строка
+  /// не тянет `dart:io` и годится веб-виджету, где вложений нет.
   final Widget? attachmentsView;
 
   /// Состав помощников: старые ответы `rio`/`noda` подписаны текущими
@@ -207,7 +205,7 @@ final class MessageRow extends StatelessWidget {
 
   /// Время сообщения — в меню выделения текста («Отправлено в 14:05»).
   Widget _menu(BuildContext context, EditableTextState state) {
-    final time = clockLabel(message.timestamp);
+    final time = chatTimeLabel(message.timestamp);
     return AdaptiveTextSelectionToolbar.buttonItems(
       anchors: state.contextMenuAnchors,
       buttonItems: <ContextMenuButtonItem>[
@@ -339,6 +337,9 @@ final class MessageRow extends StatelessWidget {
       // Ответ — обычные абзацы: без фона, рамки, полосы и отступа.
       textBlock = _text(context);
     }
+    final copyable = !thinking &&
+        message.text.trim().isNotEmpty &&
+        message.secureCard == null;
     final content = Column(
       crossAxisAlignment:
           fromUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -419,11 +420,22 @@ final class MessageRow extends StatelessWidget {
               onTap: onOpenLink!,
             ),
           ),
+        // Под ответом — «Копировать» (как у чатов с ассистентом): весь текст
+        // одним нажатием. Не у строки «думает» и не у карточки паролей.
+        if (!fromUser && copyable)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpace.xxs),
+            child: Transform.translate(
+              // Значок — вровень с текстом, а не с краем цели нажатия.
+              offset: const Offset(-15, 0),
+              child: MessageCopyButton(text: message.text),
+            ),
+          ),
         if (showTime)
           Padding(
             padding: const EdgeInsets.only(top: AppSpace.xxs),
             child: Text(
-              clockLabel(message.timestamp),
+              chatTimeLabel(message.timestamp),
               style:
                   metaNumStyle(context).copyWith(color: context.colors.muted),
             ),
@@ -449,7 +461,9 @@ final class MessageRow extends StatelessWidget {
                   children: <Widget>[
                     ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: max),
-                      child: content,
+                      child: copyable
+                          ? HoverCopy(text: message.text, child: content)
+                          : content,
                     ),
                   ],
                 )
@@ -476,3 +490,6 @@ final class MessageRow extends StatelessWidget {
     );
   }
 }
+
+/// «14:05» — прежнее имя [chatTimeLabel].
+String clockLabel(DateTime value) => chatTimeLabel(value);

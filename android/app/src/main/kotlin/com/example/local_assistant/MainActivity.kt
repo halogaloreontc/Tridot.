@@ -75,7 +75,9 @@ class MainActivity : FlutterActivity() {
         // приложения не открывается.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tridot/files")
             .setMethodCallHandler { call, result ->
-                if (call.method != "open") {
+                // "share" — «Поделиться» файлом (ADR-045: непонятые фразы,
+                // которые человек сам просмотрел); те же корни, что у "open".
+                if (call.method != "open" && call.method != "share") {
                     result.notImplemented()
                     return@setMethodCallHandler
                 }
@@ -97,7 +99,9 @@ class MainActivity : FlutterActivity() {
                         if (uri == null) {
                             result.success(false)
                         } else {
-                            result.success(view(uri.first, uri.second))
+                            result.success(
+                                if (call.method == "share") send(uri.first) else view(uri.first, uri.second),
+                            )
                         }
                     }
                 }.start()
@@ -189,6 +193,20 @@ class MainActivity : FlutterActivity() {
         val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
             ?: "application/octet-stream"
         return Pair(FileProvider.getUriForFile(this, "$packageName.files", copy), mime)
+    }
+
+    /** Системное «Поделиться» текстовым файлом [uri]: только чтение. */
+    private fun send(uri: android.net.Uri): Boolean {
+        val intent = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        return try {
+            startActivity(Intent.createChooser(intent, null))
+            true
+        } catch (error: ActivityNotFoundException) {
+            false
+        }
     }
 
     private fun view(uri: android.net.Uri, mime: String): Boolean {

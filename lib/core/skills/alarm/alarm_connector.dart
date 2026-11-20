@@ -30,7 +30,7 @@ abstract interface class AlarmSetter {
 /// нет (компьютер, телефон без них), предлагает то же напоминание.
 ///
 /// Зона ведущего оповещений ([DutyZones.notifications]): отвечает Нода.
-final class AlarmConnector implements Connector, ConnectorHealth {
+final class AlarmConnector implements Connector, ConnectorHealth, IntentTarget {
   AlarmConnector({this.setter, this.clock = const SystemClock()});
 
   /// Часы для «на 7» — ближайшие 7:00.
@@ -65,6 +65,46 @@ final class AlarmConnector implements Connector, ConnectorHealth {
 
   @override
   Future<HealthReport> health() async => const HealthReport.ok();
+
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'alarm.set': IntentRecipe(
+      carriers: <String>['поставь будильник на', 'разбуди меня'],
+      ask: 'поставь будильник',
+      accepts: <String>{'alarm.date', 'alarm.clarify'},
+      example: 'поставь будильник на 7:00',
+    ),
+    'alarm.date': IntentRecipe(
+      carriers: <String>['поставь будильник', 'поставь будильник на'],
+      ask: 'поставь будильник',
+      accepts: <String>{'alarm.set', 'alarm.clarify'},
+      example: 'поставь будильник в пятницу в 7',
+    ),
+    'alarm.timer': IntentRecipe(
+      carriers: <String>['поставь таймер на', 'засеки'],
+      ask: 'поставь таймер',
+      accepts: <String>{'alarm.clarify'},
+      example: 'таймер на 10 минут',
+    ),
+    'alarm.clarify': IntentRecipe(
+      carriers: <String>['поставь будильник на', 'поставь таймер на'],
+      ask: 'поставь будильник',
+      accepts: <String>{'alarm.set', 'alarm.date', 'alarm.timer'},
+      example: 'поставь будильник на 7:00',
+    ),
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
 
   @override
   ConnectorMatch? match(Utterance utterance) {

@@ -287,7 +287,8 @@ const Set<String> _taskOnlyKeys = <String>{
   'shift',
 };
 
-/// Намерения массовых команд: только у них есть `scope` и `shift`.
+/// Намерения массовых команд: только у них есть `scope` (и `shift`, который
+/// бывает ещё у переноса одной задачи).
 const Set<String> _bulkIntents = <String>{'rescheduleMany', 'completeMany'};
 
 /// `all`, `overdue`, `noDue` или `date:ГГГГ-ММ-ДД`, затем метки `#тег`.
@@ -357,8 +358,12 @@ void _validate(Map<String, dynamic> json, String location) {
   for (final key in <String>['scope', 'shift']) {
     if (!json.containsKey(key)) continue;
     final value = json[key];
-    if (!_bulkIntents.contains(json['intent'])) {
-      fail('поле $key бывает только у намерений $_bulkIntents');
+    // Сдвиг одной задачи: «перенеси звонок на час позже».
+    final allowed = key == 'shift'
+        ? <String>{..._bulkIntents, 'rescheduleTask'}
+        : _bulkIntents;
+    if (!allowed.contains(json['intent'])) {
+      fail('поле $key бывает только у намерений $allowed');
     }
     if (value == null) continue;
     if (key == 'scope' &&

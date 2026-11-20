@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/connectors/manifest/connection_texts.dart';
 import '../../core/models/warehouse_card.dart';
 import '../assistant_theme.dart';
 import 'whole_word_text.dart';
@@ -7,6 +8,10 @@ import 'whole_word_text.dart';
 /// Карточка ответа склада под сообщением (ADR-031, оформление — ADR-027 и
 /// компактная поправка: 16/14/13): итог, строки «артикул — название —
 /// количество», вложенные ячейки, «Открыть склад».
+///
+/// Карточка любого приложения по описанию (ADR-043): название и обращения
+/// — из [texts] подключения («Автосервис», «Открыть в автосервисе»); у
+/// склада — прежние. Подключение удалено — карточка без кнопок.
 final class WarehouseCardView extends StatefulWidget {
   const WarehouseCardView({
     super.key,
@@ -14,9 +19,13 @@ final class WarehouseCardView extends StatefulWidget {
     this.onOpen,
     this.onOpenLink,
     this.showSay = true,
+    this.texts = ConnectionTexts.warehouse,
   });
 
   final WarehouseCard card;
+
+  /// Тексты подключения карточки: у склада — прежние.
+  final ConnectionTexts texts;
 
   /// Итог ответа ([WarehouseCard.say]) под заголовком: не нужен, когда
   /// тот же текст стоит в пузыре чата.
@@ -91,14 +100,18 @@ final class _WarehouseCardViewState extends State<WarehouseCardView> {
                       Padding(
                         padding: const EdgeInsets.only(top: 1, right: 8),
                         child: Icon(
-                          Icons.inventory_2_outlined,
+                          widget.texts.isWarehouse
+                              ? Icons.inventory_2_outlined
+                              : Icons.hub_outlined,
                           size: 18,
                           color: colors.icon,
                         ),
                       ),
                       Expanded(
                         child: WholeWordText(
-                          card.title.isEmpty ? 'Склад' : card.title,
+                          card.title.isEmpty
+                              ? widget.texts.cardTitle
+                              : card.title,
                           key: const ValueKey<String>('warehouse-card-title'),
                           style: _style(
                             16,
@@ -137,7 +150,7 @@ final class _WarehouseCardViewState extends State<WarehouseCardView> {
                       padding: const EdgeInsets.only(top: 4),
                       child: WholeWordText(
                         card.more
-                            ? 'Склад показал не всё — уточните запрос.'
+                            ? widget.texts.cardPartial
                             : 'И ещё ${card.hidden}.',
                         style: _style(13, color: colors.muted),
                       ),
@@ -149,7 +162,7 @@ final class _WarehouseCardViewState extends State<WarehouseCardView> {
                         key: const ValueKey<String>('warehouse-card-open'),
                         onPressed: () => widget.onOpenLink!(only.kind, only.id),
                         icon: const Icon(Icons.open_in_new, size: 18),
-                        label: const Text('Открыть в складе'),
+                        label: Text(widget.texts.cardOpenIn),
                       ),
                     )
                   else if (widget.onOpen != null)
@@ -159,7 +172,7 @@ final class _WarehouseCardViewState extends State<WarehouseCardView> {
                         key: const ValueKey<String>('warehouse-card-open'),
                         onPressed: widget.onOpen,
                         icon: const Icon(Icons.open_in_new, size: 18),
-                        label: const Text('Открыть склад'),
+                        label: Text(widget.texts.cardOpen),
                       ),
                     ),
                 ],
@@ -178,7 +191,7 @@ final class _WarehouseCardViewState extends State<WarehouseCardView> {
     return Semantics(
       container: true,
       button: true,
-      label: 'Открыть в складе: $head',
+      label: '${widget.texts.cardOpenIn}: $head',
       child: InkWell(
         key: ValueKey<String>('warehouse-card-link-$index'),
         onTap: onTap,

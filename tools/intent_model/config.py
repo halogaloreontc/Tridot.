@@ -1,0 +1,130 @@
+"""Настройки сборки модели понимания (ADR-045): уровни, обучение, пороги.
+
+Меняются здесь, а не флагами: что записано в репозитории, то и выпускается.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+PKG = Path(__file__).resolve().parent
+REPO = PKG.parent.parent
+EVAL_DIR = PKG / "eval"
+LABELS_YAML = PKG / "labels.yaml"
+OUT = Path(os.environ.get("INTENT_MODEL_OUT", PKG / "out"))
+
+# Формат пакета и индекса: приложение (шаг 2) читает только известный ему.
+PACK_FORMAT = "tridot-intent/1"
+LATEST_FORMAT = "tridot-intent-latest/1"
+INDEX_MAGIC = b"TRIX"
+INDEX_VERSION = 1
+
+# kNN по примерам корпуса: k ближайших, голос — сходство.
+K = 5
+MAX_LEN = 64
+# Сетка порогов уверенности (сходство лучшего примера победившей метки).
+GRID = [round(0.70 + 0.005 * i, 3) for i in range(57)]  # 0.70 … 0.98
+
+# Бюджет ошибок (решение владельца): неверных — не больше ~6 % подсказок,
+# ложных тревог на фразах «не команда» — не больше 5 %. Порог выбирается
+# на fresh, выпуск падает, если на всех трёх пробах бюджет превышен.
+MAX_WRONG_OF_SUGGESTED = 6.0
+MAX_FALSE_ALARM = 5.0
+
+# Обучение SupCon: пакет — P меток по K фраз, температура TAU.
+SEED = 0
+BATCH_LABELS = 16
+BATCH_PER_LABEL = 4
+TAU = 0.05
+
+# Наборы проверки и порядок: первый — для выбора порога, остальные — проверка.
+EVAL_SETS = ("fresh", "held2", "held3")
+DEV_SET = "fresh"
+
+# Навыки, которые веб-помощник склада выполняет сам
+# (lib/web_widget/widget_session.dart: описание склада, калькулятор, беседа).
+WEB_CONNECTORS = ("warehouse", "calc", "talk")
+
+
+@dataclass(frozen=True)
+class Tier:
+    name: str
+    title: str
+    base_model: str = ""
+    revision: str = ""
+    license: str = ""
+    lr: float = 0.0
+    epochs: float = 0.0
+    prefix: str = ""
+    per_channel: bool = False
+    # Уровень без своей модели: берёт модель и пробы другого уровня,
+    # индекс — только по своим меткам (остальные становятся «none»).
+    model_from: str = ""
+    connectors: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def source(self) -> str:
+        """Уровень, чья модель обучается для этого пакета."""
+        return self.model_from or self.name
+
+
+TIERS: dict[str, Tier] = {
+    "light": Tier(
+        name="light",
+        title="Лёгкая",
+        base_model="cointegrated/rubert-tiny2",
+        revision="e8ed3b0c8bbf4fb6984c3de043bf7d2f4e5969ae",
+        license="MIT",
+        lr=1e-4,
+        epochs=4,
+    ),
+    "accurate": Tier(
+        name="accurate",
+        title="Точная",
+        base_model="deepvk/USER-base",
+        revision="e8446472f6024df155a04b2f0911b6044cabc51f",
+        license="Apache-2.0",
+        lr=3e-5,
+        epochs=3,
+        # Подсказка модели для запросов (config_sentence_transformers.json,
+        # default_prompt_name = query): и в обучении, и на устройстве.
+        prefix="query: ",
+        # int8 по каналам точнее для этой модели (сходства сдвигаются
+        # меньше); порог всё равно подбирается на int8.
+        per_channel=True,
+    ),
+    "web": Tier(
+        name="web",
+        title="Веб-помощник",
+        model_from="light",
+        connectors=WEB_CONNECTORS,
+    ),
+}
+
+
+def tier(name: str) -> Tier:
+    if name not in TIERS:
+        raise SystemExit(f"Неизвестный уровень {name!r}: {', '.join(TIERS)}")
+    t = TIERS[name]
+    if t.model_from:
+        base = TIERS[t.model_from]
+        return Tier(
+            name=t.name,
+            title=t.title,
+            base_model=base.base_model,
+            revision=base.revision,
+            license=base.license,
+            lr=base.lr,
+            epochs=base.epochs,
+            prefix=base.prefix,
+            per_channel=base.per_channel,
+            model_from=t.model_from,
+            connectors=t.connectors,
+        )
+    return t
+
+
+def tier_dir(name: str) -> Path:
+    return OUT / name

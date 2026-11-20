@@ -43,7 +43,7 @@ abstract final class DutyZones {
     if (main.contains(connectorId)) return PersonaDuty.main;
     if (notifications.contains(connectorId)) return PersonaDuty.notifications;
     if (extensions.contains(connectorId) ||
-        ConnectionSlots.all.any((slot) => slot.id == connectorId)) {
+        ConnectionSlots.live.any((slot) => slot.id == connectorId)) {
       return PersonaDuty.extensions;
     }
     return PersonaDuty.main;

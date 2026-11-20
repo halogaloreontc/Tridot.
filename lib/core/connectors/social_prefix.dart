@@ -95,6 +95,9 @@ abstract final class SocialPrefix {
 
   static final RegExp _separator = RegExp(r'[,!.:;—–-]');
 
+  /// [word] (нижний регистр) — имя помощника: «нода», «связной».
+  static bool isAssistantName(String word) => _names.contains(word);
+
   /// Сколько первых слов [utterance] — вступление. 0 — вступления нет.
   static int length(Utterance utterance) {
     final tokens = utterance.tokens;
@@ -132,7 +135,9 @@ abstract final class SocialPrefix {
           i + 2 < tokens.length &&
           _forgotWords.contains(tokens[i + 2].text)) {
         i += 3;
-      } else if (greeted && _names.contains(word)) {
+      } else if (_names.contains(word) && (greeted || separated(i))) {
+        // «Связной, а Связной, перенеси …» — обращение и без приветствия,
+        // если за именем знак.
         i++;
       } else if (greeted &&
           word == 'как' &&

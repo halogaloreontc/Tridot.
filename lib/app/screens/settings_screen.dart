@@ -14,6 +14,8 @@ import '../extensions/weather_kit.dart';
 import '../extensions/ytdl_kit.dart';
 import '../homescreen/home_screen_channel.dart';
 import '../homescreen/home_screen_section.dart';
+import '../intent/intent_kit.dart';
+import '../intent/intent_section.dart';
 import '../passwords/passwords_kit.dart';
 import '../shell/relay_drawer.dart';
 import '../voice/voice_kit.dart';
@@ -44,6 +46,7 @@ class SettingsScreen extends StatelessWidget {
     this.onOpenAssistants,
     this.onOpenStorage,
     this.voice,
+    this.intent,
     this.ffmpeg,
     this.nativeMedia = NativeMediaCaps.none,
     this.ytdl,
@@ -90,6 +93,9 @@ class SettingsScreen extends StatelessWidget {
   /// Голосовой ввод (ADR-023); `null` — на этой платформе его нет, раздел
   /// только сообщает об этом.
   final VoiceKit? voice;
+
+  /// Модель понимания (ADR-045); `null` — раздела «Понимание фраз» нет.
+  final IntentKit? intent;
 
   /// ffmpeg конвертера: «Настроить» в плитке «Конвертер».
   final ToolKit? ffmpeg;
@@ -208,6 +214,12 @@ class SettingsScreen extends StatelessWidget {
                   onChanged: onChanged,
                   voice: voice,
                 ),
+                if (intent case final IntentKit kit)
+                  IntentSettingsSection(
+                    settings: settings,
+                    onChanged: onChanged,
+                    intent: kit,
+                  ),
                 if (appLock case final AppLockController lock)
                   SecuritySection(
                     settings: settings,

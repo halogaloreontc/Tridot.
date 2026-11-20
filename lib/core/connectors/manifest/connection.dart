@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import '../secret_store.dart';
+import 'app_profile.dart';
+import 'connection_slots.dart';
+import 'generic_slot.dart';
 import 'manifest_format.dart';
 
 /// Подключение к приложению с описанием `assistant/1`: склад halowarekeep,
@@ -22,7 +25,34 @@ final class ConnectionSlot {
     this.builtInAsset,
     this.commandReplies = const <String, String>{},
     this.alsoAccepts = const <String>{},
+    this.queryLabel = GenericSlotTexts.queryLabel,
+    this.totalExample = '',
+    this.runtime = false,
+    this.profile,
   });
+
+  /// Слот приложения, которого нет в коде (ADR-043): название, обращения,
+  /// фразы справки и тексты ответов — из профиля [profile], id
+  /// подключения — [id] (`ConnectionSlots.idFor`). Только чтение: ни
+  /// встроенной копии, ни входа по ссылке из кода, ни своих текстов
+  /// команд.
+  factory ConnectionSlot.generic(AppProfile profile, String id) {
+    if (!ConnectionSlots.validId(id)) {
+      throw ArgumentError.value(id, 'id', 'id подключения не годится');
+    }
+    return ConnectionSlot(
+      id: id,
+      title: GenericSlotTexts.title(profile),
+      appId: profile.appId,
+      description: GenericSlotTexts.description(profile),
+      aliases: GenericSlotTexts.aliases(profile),
+      helpPhrases: GenericSlotTexts.helpPhrases(profile),
+      replies: GenericSlotTexts.replies(profile, id),
+      protectedReplies: GenericSlotTexts.protectedReplies(id),
+      runtime: true,
+      profile: profile,
+    );
+  }
 
   /// Id коннектора: `warehouse`. Ключи секретов — `<id>.token`, `<id>.sid`;
   /// команды — `<id>.<id команды>`.
@@ -74,6 +104,29 @@ final class ConnectionSlot {
   /// Встроенная копия описания в assets: по ней коннектор понимает фразы
   /// и до подключения.
   final String? builtInAsset;
+
+  /// Что искать, если у поля команды нет подписи: «артикул или
+  /// название» у склада.
+  final String queryLabel;
+
+  /// Пример для ответа «сколько всего» (`how: total`),
+  /// если у команды нет своих примеров.
+  final String totalExample;
+
+  /// Слот приложения из каталога подключений ([ConnectionSlot.generic],
+  /// ADR-043), а не из кода.
+  final bool runtime;
+
+  /// Профиль приложения из каталога ([ConnectionSlot.generic]): имя,
+  /// падежи и род для текстов экрана и карточки (`ConnectionTexts`).
+  /// `null` — слот из кода (склад), тексты прежние.
+  final AppProfile? profile;
+
+  /// Имя файлов подключения (`connections/<ключ>.json`,
+  /// `<ключ>.assistant.json`): у слотов из кода — [appId], как раньше; у
+  /// приложений из каталога — id подключения: два подключения одного
+  /// `app.id` не делят файлы.
+  String get fileKey => runtime ? id : appId;
 
   String get tokenKey => '$id.token';
   String get sidKey => '$id.sid';

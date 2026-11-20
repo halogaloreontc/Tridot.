@@ -22,7 +22,7 @@ abstract final class VoiceText {
     // Время словами — цифрами: позиции те же, что в нормализованном тексте.
     final spoken = <SpokenTimeMatch>[
       for (final match in SpokenTime.find(DueParser.normalizeChars(text)))
-        if (!inQuotes(match.start)) match,
+        if (!inQuotes(match.start) && !match.named && !match.bareDay) match,
     ];
     final withDigits = StringBuffer();
     var position = 0;

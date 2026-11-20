@@ -22,7 +22,8 @@ const int historyDrumShowAll = -1;
 ///
 /// Нажатие на карточку по центру — переход к команде (её номер в сессии),
 /// на боковую — она встаёт в центр. «Весь список» — [historyDrumShowAll].
-/// Нажатие мимо, «Назад», Esc и свайп вниз закрывают окошко (`null`).
+/// Нажатие мимо, «Назад», Esc и свайп вниз или вверх закрывают окошко
+/// (`null`).
 Future<int?> showHistoryDrum(
   BuildContext context, {
   required List<HistoryEntry> entries,
@@ -114,10 +115,11 @@ final class _DrumPopup extends StatefulWidget {
 
 final class _DrumPopupState extends State<_DrumPopup>
     with SingleTickerProviderStateMixin {
-  /// Сдвиг вниз пальцем (свайп вниз закрывает окошко).
+  /// Сдвиг пальцем по вертикали: вниз — плюс, вверх — минус. Свайп в любую
+  /// из сторон закрывает окошко.
   late final AnimationController _drag = AnimationController(
     vsync: this,
-    lowerBound: 0,
+    lowerBound: double.negativeInfinity,
     upperBound: double.infinity,
     value: 0,
   );
@@ -140,12 +142,17 @@ final class _DrumPopupState extends State<_DrumPopup>
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
-    _drag.value = math.max(0, _drag.value + details.delta.dy);
+    _drag.value += details.delta.dy;
   }
 
   void _onDragEnd(DragEndDetails details) {
     final velocity = details.velocity.pixelsPerSecond.dy;
-    if (_drag.value > _closeDistance || velocity > _closeVelocity) {
+    final dy = _drag.value;
+    // Бросок считается только в ту же сторону, куда сдвинуто окошко: вниз и
+    // тут же вверх — не закрытие.
+    final down = dy > _closeDistance || (dy >= 0 && velocity > _closeVelocity);
+    final up = dy < -_closeDistance || (dy <= 0 && velocity < -_closeVelocity);
+    if (down || up) {
       Navigator.of(context).maybePop();
       return;
     }
@@ -229,7 +236,7 @@ final class _DrumPopupState extends State<_DrumPopup>
                 return Positioned.fromRect(
                   rect: rect.shift(Offset(0, dy)),
                   child: Opacity(
-                    opacity: (1 - dy / 160).clamp(0.0, 1.0),
+                    opacity: (1 - dy.abs() / 160).clamp(0.0, 1.0),
                     child: GestureDetector(
                       key: const Key('history-drum-popup'),
                       behavior: HitTestBehavior.opaque,

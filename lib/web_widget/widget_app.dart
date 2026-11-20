@@ -11,7 +11,10 @@ import '../app/shell/relay_drawer.dart';
 import '../app/shell/session_header.dart';
 import '../app/shell/session_hero.dart';
 import '../app/widgets/action_card_view.dart';
+import '../app/widgets/chat_feed_rhythm.dart';
 import '../app/widgets/command_composer.dart';
+import '../app/widgets/command_highlight.dart';
+import '../app/widgets/keyboard_safe.dart';
 import '../app/widgets/message_row.dart';
 import '../app/widgets/network_capsule.dart';
 import '../app/widgets/status_cube.dart';
@@ -25,7 +28,7 @@ import 'widget_protocol.dart';
 import 'widget_session.dart';
 import 'widget_side.dart';
 
-/// Веб-помощник склада выглядит как приложение Tridot (ADR-038): шапка
+/// Веб-помощник склада выглядит как приложение Tridot (ADR-039): шапка
 /// сессии («Название ▾» и кто отвечает), меню [RelayDrawer] (сессии по
 /// дням, проекты, «Мой Связной»), лента [MessageRow], карточки склада и
 /// действий, поле [CommandComposer], экраны проекта, задач и «Сегодня». От
@@ -43,6 +46,9 @@ final class WidgetApp extends StatelessWidget {
         builder: (BuildContext context, Widget? _) => MaterialApp(
           title: 'Связной',
           debugShowCheckedModeBanner: false,
+          // Поле в фокусе — целиком над клавиатурой (ADR-044).
+          builder: (BuildContext context, Widget? child) =>
+              KeyboardSafeScope(child: child ?? const SizedBox.shrink()),
           theme: AssistantTheme.light(),
           darkTheme: AssistantTheme.dark(),
           themeMode: switch (session.theme) {
@@ -102,7 +108,7 @@ final class WidgetChat extends StatefulWidget {
 }
 
 final class _WidgetChatState extends State<WidgetChat> {
-  final TextEditingController _input = TextEditingController();
+  final CommandInputController _input = CommandInputController();
   final ScrollController _scroll = ScrollController();
   final FocusNode _focus = FocusNode();
   final GlobalKey<ScaffoldState> _scaffold = GlobalKey<ScaffoldState>();
@@ -486,7 +492,7 @@ final class _WidgetChatState extends State<WidgetChat> {
     final book = session.book!;
     final current = book.current;
     final messages = session.messages;
-    final now = DateTime.now();
+    final now = session.now;
     if (messages.isEmpty && !session.busy) {
       final overdue =
           activeTasks(session).where((Task t) => isOverdue(t, now)).length;
@@ -518,41 +524,27 @@ final class _WidgetChatState extends State<WidgetChat> {
       final card = messages[i].card;
       if (card != null) lastWithCard[card.id] = i;
     }
-    // Ритм ленты (ADR-027) — как в приложении: метка времени над группой
-    // при смене дня или после паузы больше 15 минут, имя помощника — при
-    // смене автора или после паузы больше 10 минут.
-    ChatMessage? previous;
-    DateTime? lastReplyAt;
-    var previousHadCard = false;
+    // Ритм ленты (ADR-027) — как в приложении: [ChatFeedRhythm] ставит
+    // метку времени над группой, имя помощника и промежутки.
+    final rhythm = ChatFeedRhythm();
     for (var i = 0; i < messages.length; i++) {
       final message = messages[i];
       final at = message.timestamp;
-      final before = previous;
-      final newGroup = before == null ||
-          !_sameDay(before.timestamp, at) ||
-          at.difference(before.timestamp) > const Duration(minutes: 15);
-      if (newGroup) {
+      final author = message.fromUser ? null : cast.find(message.personaId);
+      final beat = rhythm.next(
+        at: at,
+        fromUser: message.fromUser,
+        authorId: author?.id,
+      );
+      if (beat.newGroup) {
         rows.add(
           ChatGroupTime(
             key: ValueKey<String>('group-time-${message.id}'),
-            label: _groupLabel(at, now),
+            label: groupTimeLabel(at, now),
             first: rows.isEmpty,
           ),
         );
       }
-      final showAuthor = !message.fromUser &&
-          (newGroup ||
-              lastReplyAt == null ||
-              at.difference(lastReplyAt) > const Duration(minutes: 10));
-      final double gap = newGroup
-          ? 0
-          : previousHadCard
-              ? AppSpace.afterCard
-              : message.fromUser
-                  ? (before.fromUser ? AppSpace.xs : AppSpace.toUser)
-                  : showAuthor && !before.fromUser
-                      ? AppSpace.toUser
-                      : AppSpace.toReply;
       final card = _card(message, i, lastWithCard);
       rows.add(
         MessageRow(
@@ -561,44 +553,39 @@ final class _WidgetChatState extends State<WidgetChat> {
           message: message,
           now: now,
           showTime: false,
-          showAuthor: showAuthor,
-          topGap: gap,
+          showAuthor: beat.showAuthor,
+          topGap: beat.topGap,
           checklist: card,
           onOpenTask: (Task task) => unawaited(session.openTask(task.id)),
           onToggleDone: (Task task) => toggleDone(session, task),
           selectable: false,
         ),
       );
-      previous = message;
-      previousHadCard = card != null;
-      if (!message.fromUser) lastReplyAt = at;
+      rhythm.placed(hadCard: card != null);
     }
     if (session.busy) {
-      final last = messages.lastWhere(
-        (ChatMessage m) => m.fromUser,
-        orElse: () => ChatMessage(
-          id: '',
-          author: ChatAuthor.user,
-          text: '',
-          timestamp: now,
-        ),
+      // Строка «думает» — голосом того, кто ответит
+      // ([WidgetSession.thinking]); без помощника — от имени Связного.
+      final thinking = session.thinking ??
+          ChatMessage(
+            id: 'working',
+            author: ChatAuthor.persona,
+            text: 'Связной думает…',
+            timestamp: now,
+            personaId: Personas.sado.id,
+          );
+      final beat = rhythm.working(
+        authorId: cast.find(thinking.personaId)?.id,
       );
-      final working = session.controller?.working(last.text);
       rows.add(
         MessageRow(
           key: const Key('working-message'),
           cast: cast,
-          message: ChatMessage(
-            id: 'working',
-            author: ChatAuthor.persona,
-            text: working?.message ?? 'Связной думает…',
-            timestamp: now,
-            personaId: working?.personaId ?? Personas.sado.id,
-          ),
+          message: thinking,
           now: now,
           showTime: false,
-          showAuthor: lastReplyAt == null,
-          topGap: previous == null ? 0 : AppSpace.toReply,
+          showAuthor: beat.showAuthor,
+          topGap: beat.topGap,
           thinking: true,
           selectable: false,
           onOpenTask: (_) {},
@@ -690,17 +677,10 @@ final class _WidgetChatState extends State<WidgetChat> {
     );
   }
 
-  static bool _sameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  /// «Сегодня, 14:05».
-  static String _groupLabel(DateTime at, DateTime now) {
-    final day = formatDay(DateTime(at.year, at.month, at.day), now);
-    return '${day[0].toUpperCase()}${day.substring(1)}, ${clockLabel(at)}';
-  }
-
   Widget _composer(BuildContext context) {
     final session = _session;
+    // Помощник пересоздаётся при смене входа: подсветка — от текущего.
+    _input.highlighter = session.controller?.highlight;
     final voice = session.voice;
     final mode = !voice.showButton
         ? VoiceButtonMode.hidden
@@ -748,7 +728,12 @@ final class _WidgetChatState extends State<WidgetChat> {
               voicePartial: session.listening ? session.partial : null,
               voiceNotice: session.listening ? null : session.voiceNote,
               onVoiceTap: session.startVoice,
+              // Долгое нажатие на пустое поле — голос, только если
+              // распознавание есть: иначе оно отняло бы меню «Вставить».
+              onVoiceLongPress: voice.available ? session.startVoice : null,
               onVoiceCancel: session.cancelVoice,
+              // Enter не снимает фокус: Escape по-прежнему закрывает панель.
+              onEditingComplete: () {},
             ),
           ],
         ),

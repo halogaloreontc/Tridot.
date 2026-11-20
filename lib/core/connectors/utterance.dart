@@ -151,6 +151,22 @@ final class Utterance {
               recentConnectorId: recentConnectorId,
             );
 
+  /// То же сообщение с другим разбором срока: часть дат во фразе — не срок,
+  /// а часть названия («билеты на 8 марта»).
+  Utterance withDue(DueParseResult due) => Utterance._(
+        original: original,
+        normalized: normalized,
+        analysisText: analysisText,
+        tokens: tokens,
+        quotedTitles: quotedTitles,
+        unbalancedQuotes: unbalancedQuotes,
+        hashtags: hashtags,
+        due: due,
+        chatTaskId: chatTaskId,
+        awaitingAnswer: awaitingAnswer,
+        recentConnectorId: recentConnectorId,
+      );
+
   /// Коннектор, который отвечал в этом чате одно-два сообщения назад и не
   /// дольше нескольких минут назад (контекст сессии,
   /// `AssistantController`); `null` — контекста нет. Так «сделай бэкап»
@@ -292,10 +308,17 @@ final class Utterance {
   /// и меток. Регистр пользователя сохраняется, пробелы схлопываются, знаки
   /// препинания по краям и «осиротевшие» запятые убираются. Пустая строка,
   /// если не осталось ни одного слова.
-  String remainder(Iterable<CharSpan> remove) {
+  ///
+  /// [keepQuoted] — оставить названия в кавычках вместе с кавычками:
+  /// «посмотреть фильм «1+1»» — кавычки здесь часть дела, а не название.
+  String remainder(Iterable<CharSpan> remove, {bool keepQuoted = false}) {
     final source = allCaps ? _lowerSameLength(original) : original;
     final chars = source.split('');
     for (var i = 0; i < chars.length; i++) {
+      if (keepQuoted &&
+          quotedTitles.any((QuotedTitle q) => q.span.contains(i))) {
+        continue;
+      }
       // Кавычки и метки уже заменены пробелами в analysisText.
       if (analysisText[i] == ' ' && original[i].trim().isNotEmpty) {
         chars[i] = ' ';
@@ -347,6 +370,9 @@ final class Utterance {
     'k': 'к',
     'm': 'м',
     't': 'т',
+    // «Напомнi»: «i» внутри русского слова — «и» (украинская раскладка,
+    // латинская «i» вместо «и»).
+    'i': 'и',
     'A': 'А',
     'B': 'В',
     'C': 'С',
@@ -362,6 +388,9 @@ final class Utterance {
   };
 
   static final RegExp _mixedWord = RegExp('[A-Za-zА-Яа-яЁё]+');
+  static final RegExp _ukrainianI = RegExp('[іІ]');
+  static final RegExp _ukrainianWord = RegExp('[А-Яа-яЁёіІ]+');
+  static final RegExp _russianLetters = RegExp('[А-Яа-яЁё]');
   static final RegExp _cyrillic = RegExp('[А-Яа-яЁё]');
   static final RegExp _latinLetter = RegExp('[A-Za-z]');
 
@@ -373,6 +402,14 @@ final class Utterance {
   /// «PDFку», «Excelе», «SMSку» (в каждом есть латинская буква без
   /// русского двойника или латиницы больше). Длина строки сохраняется.
   static String fixHomoglyphs(String text) {
+    // Украинская «і» внутри русского слова — «и»: «напомні».
+    if (text.contains(_ukrainianI)) {
+      text = text.replaceAllMapped(_ukrainianWord, (Match match) {
+        final word = match.group(0)!;
+        if (_russianLetters.allMatches(word).length < 2) return word;
+        return word.replaceAll('і', 'и').replaceAll('І', 'И');
+      });
+    }
     if (!_latinLetter.hasMatch(text)) return text;
     return text.replaceAllMapped(_mixedWord, (Match match) {
       final word = match.group(0)!;
@@ -482,6 +519,16 @@ final class Utterance {
         if (entry.key.length < 5) continue;
         if (_isTypo(word, entry.key)) return entry.value;
       }
+      // «Отмеьт»: две последние буквы переставлены, и вышло то, чего в
+      // русском слове не бывает, — «ь» или «ъ» после гласной. Тут это не
+      // другая форма слова, а опечатка.
+      if (_impossibleSign.hasMatch(word)) {
+        final swapped = word.substring(0, word.length - 2) +
+            word[word.length - 1] +
+            word[word.length - 2];
+        final value = dictionary[swapped];
+        if (value != null) return value;
+      }
       return null;
     }
 
@@ -494,6 +541,12 @@ final class Utterance {
       if (object != null) words[i] = object;
     }
   }
+
+  /// Гласная, а за ней «ь» или «ъ».
+  static final RegExp _impossibleSign = RegExp('[аеиоуыэюя][ьъ]');
+
+  /// [word] — глагол команды задач («напомни», «поставь», «отметь»).
+  static bool isCommandVerb(String word) => _commandWords.containsKey(word);
 
   /// [word] — настоящее слово рядом с командами («наполни», «записи»): не
   /// опечатка, даже если похоже на команду.

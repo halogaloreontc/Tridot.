@@ -17,7 +17,8 @@ export 'weather_service.dart';
 /// [WeatherBackend], который без разрешения в сеть не ходит. Адрес своей
 /// ссылки в текст ответа не попадает: его открывает интерфейс
 /// ([LaunchRequest]), только у живого ответа. Ведёт Связной.
-final class WeatherConnector implements Connector, ConnectorHealth {
+final class WeatherConnector
+    implements Connector, ConnectorHealth, IntentTarget {
   WeatherConnector({
     required this.backend,
     this.clock = const SystemClock(),
@@ -87,6 +88,62 @@ final class WeatherConnector implements Connector, ConnectorHealth {
     return const HealthReport.ok();
   }
 
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'weather.now': IntentRecipe(
+      carriers: <String>['какая погода'],
+      ask: 'какая погода',
+      accepts: <String>{'weather.day', 'weather.week', 'weather.range'},
+      example: 'какая погода сейчас',
+    ),
+    'weather.day': IntentRecipe(
+      carriers: <String>['какая погода'],
+      ask: 'какая погода завтра',
+      accepts: <String>{'weather.now', 'weather.week', 'weather.range'},
+      example: 'какая погода завтра',
+    ),
+    'weather.week': IntentRecipe(
+      carriers: <String>['прогноз погоды'],
+      ask: 'прогноз на неделю',
+      accepts: <String>{'weather.day', 'weather.range'},
+      example: 'прогноз на неделю',
+    ),
+    'weather.rain': IntentRecipe(
+      carriers: <String>['будет ли дождь'],
+      ask: 'будет дождь?',
+      example: 'будет ли дождь завтра',
+    ),
+    'weather.wear': IntentRecipe(
+      carriers: <String>['что надеть'],
+      ask: 'что надеть',
+      example: 'что надеть завтра',
+    ),
+    'weather.past': IntentRecipe(
+      carriers: <String>['какая была погода'],
+      ask: 'какая была погода вчера',
+      example: 'какая была погода в субботу',
+    ),
+    'weather.range': IntentRecipe(
+      carriers: <String>['какая погода'],
+      ask: 'погода через две недели',
+      accepts: <String>{'weather.week', 'weather.day'},
+      example: 'погода через две недели',
+    ),
+    'weather.open': IntentRecipe(ask: 'открой погоду'),
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
+
   @override
   ConnectorMatch? match(Utterance utterance) {
     final ask =
@@ -108,19 +165,37 @@ final class WeatherConnector implements Connector, ConnectorHealth {
     if (utterance.recentConnectorId != id) return null;
     final match = _fragment.firstMatch(utterance.original.trim());
     if (match == null) return null;
-    final rest = match.group(1)!.trim();
+    // «А к вечеру как?» — часть суток: «вечером».
+    // «А у сестры в Казани там как?» — «у кого» перед городом не меняет
+    // вопроса.
+    final rest = match
+        .group(1)!
+        .trim()
+        .replaceAllMapped(
+          _towardDaypart,
+          (Match m) => _dayparts[m.group(1)!.toLowerCase()]!,
+        )
+        .replaceFirst(_whoseLead, '');
     final now = clock.now();
     final fragment = Utterance.analyze(rest, now: now);
     final words = fragment.words;
     if (words.isEmpty || words.length > 4) return null;
-    final dateOnly = fragment.tokens.every(
-      (UtteranceToken t) =>
-          Utterance.isCovered(t, fragment.due.spans) ||
-          t.text == 'на' ||
-          t.text == 'в' ||
-          t.text == 'во',
-    );
-    final place = _placeFragment.hasMatch(rest);
+    final dateOnly = (fragment.due.spans.isNotEmpty ||
+            words.contains('сейчас') ||
+            words.contains('неделю')) &&
+        fragment.tokens.every(
+          (UtteranceToken t) =>
+              Utterance.isCovered(t, fragment.due.spans) ||
+              _fragmentWords.contains(t.text),
+        );
+    // «А в Казани завтра?», «а завтра в Казани?» — город и день вместе.
+    final placed = _placeWithin.firstMatch(rest);
+    final withDay = placed != null &&
+        _dateOnly(
+          '${rest.substring(0, placed.start)} ${rest.substring(placed.end)}',
+          now,
+        );
+    final place = _placeFragment.hasMatch(rest) || withDay;
     final weekend = _weekend.hasMatch(rest.toLowerCase());
     if (!dateOnly && !place && !weekend) return null;
     return WeatherPhrases.parse(
@@ -129,17 +204,69 @@ final class WeatherConnector implements Connector, ConnectorHealth {
     );
   }
 
+  /// Слова обрывка, кроме срока: «а на неделю вперёд», «а в Мурманске
+  /// сейчас?», «а вечером как?».
+  static const Set<String> _fragmentWords = <String>{
+    'на',
+    'в',
+    'во',
+    'сейчас',
+    'там',
+    'как',
+    'неделю',
+    'вперед',
+    // «Ну а послезавтра к ночи что обещают?»: ночь — не срок задачи.
+    'ночью',
+    'что',
+    'обещают',
+    'обещает',
+    'будет',
+  };
+
+  /// «У сестры», «у мамы», «у нас» перед городом.
+  static final RegExp _whoseLead = RegExp(
+    r'^у\s+[а-яё]+\s+(?=(?:в|во)\s+[А-ЯЁ])',
+  );
+
+  static final RegExp _towardDaypart = RegExp(
+    r'(?<![а-яё])к\s+(вечеру|утру|ночи)(?![а-яё])',
+    caseSensitive: false,
+  );
+
+  static const Map<String, String> _dayparts = <String, String>{
+    'вечеру': 'вечером',
+    'утру': 'утром',
+    'ночи': 'ночью',
+  };
+
   static final RegExp _fragment = RegExp(
-    r'^(?:а|и)\s+(?:как\s+|что\s+)?(?:насчет\s+|насчёт\s+)?'
+    r'^(?:ну\s+)?(?:а|и)\s+(?:как\s+|что\s+)?(?:насчет\s+|насчёт\s+)?'
     r'([^?!.]+?)\s*[?!.]*$',
     caseSensitive: false,
   );
 
   static final RegExp _placeFragment = RegExp(
-    r'^(?:в|во)\s+[А-ЯЁ][а-яё-]+(?:\s+[А-ЯЁ][а-яё-]+)?$',
+    r'^(?:в|во)\s+[А-ЯЁ][а-яё-]+(?:\s+[А-ЯЁ][а-яё-]+)?'
+    r'(?:\s+(?:там|сейчас))?(?:\s+как)?$',
   );
 
   static final RegExp _weekend = RegExp(r'^на\s+выходных$');
+
+  /// «в Казани» внутри обрывка.
+  static final RegExp _placeWithin = RegExp(
+    r'(?:^|\s)(?:в|во)\s+[А-ЯЁ][а-яё-]+(?:\s+[А-ЯЁ][а-яё-]+)?(?=\s|$)',
+  );
+
+  /// В [text] — только срок: «завтра», «на выходных», «в субботу».
+  static bool _dateOnly(String text, DateTime now) {
+    final fragment = Utterance.analyze(text.trim(), now: now);
+    if (fragment.words.isEmpty) return false;
+    return fragment.tokens.every(
+      (UtteranceToken t) =>
+          Utterance.isCovered(t, fragment.due.spans) ||
+          _fragmentWords.contains(t.text),
+    );
+  }
 
   @override
   Future<AssistantResponse> run(

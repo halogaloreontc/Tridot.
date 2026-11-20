@@ -43,7 +43,7 @@
 {"id":"wh-043","text":"привет","connector":"talk","intent":"talk.greet","note":"«привет» в help описания не перехватывает приветствие беседы","source":"manual"}
 {"id":"wh-044","text":"что ты умеешь","connector":"talk","intent":"talk.capabilities","note":"справка склада — только своими фразами","source":"manual"}
 {"id":"wh-045","text":"сколько будет 2+2","connector":"calc","intent":"calc.evaluate","note":"пример — калькулятору","source":"manual"}
-{"id":"wh-046","text":"сколько у меня задач","connector":"warehouse","intent":"unknown","route":"none","note":"слова задач — не товар","source":"manual"}
+{"id": "wh-046", "text": "сколько у меня задач", "intent": "listTasks", "note": "expect fixed: счёт задач — список задач (не склад)", "source": "manual"}
 {"id":"wh-047","text":"найди задачу отчёт","connector":"warehouse","intent":"unknown","route":"none","source":"manual"}
 {"id":"wh-048","text":"Добавь задачу проверить, где лежит 64115","intent":"createTask","note":"образцы склада привязаны к началу и концу фразы","source":"manual"}
 {"id":"wh-049","text":"через 2 часа позвонить","intent":"createTask","note":"срок — не товар","source":"manual"}
@@ -89,7 +89,7 @@
 {"id":"wh-090","text":"закрой задачу отчёт","intent":"completeTask","note":"«закрой» — задачи","source":"manual"}
 {"id":"wh-091","text":"перемести задачу из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"unknown","route":"none","note":"слово задач в {what} — не товар","source":"manual"}
 {"id":"wh-092","text":"закрой приход 318","connector":"warehouse","intent":"warehouse.act.post","status":"known_gap","note":"«закрой» — слово задач; правка маршрутизатора отложена (ADR-013)","source":"manual"}
-{"id":"wh-093","text":"перенеси 3 стула из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","status":"known_gap","note":"«перенеси» — слово задач; правка маршрутизатора отложена (ADR-013)","source":"manual"}
+{"id":"wh-093","text":"перенеси 3 стула из 215-1-1-1 в 215-3-2-1","connector":"warehouse","intent":"warehouse.act.move","note":"«перенеси» — слово задач, но из ячейки в ячейку переносят только товар (ADR-013, ADR-037)","source":"manual"}
 {"id":"wh-094","text":"отметь проведение прихода утром","intent":"createTask","title":"Отметь проведение прихода","due":"2026-11-03T09:00","precision":"partOfDay","note":"слово срока — не номер прихода: в {no} нужна цифра (ревью 1.4.57)","source":"manual"}
 {"id":"wh-095","text":"проведи приход завтра","intent":"unknown","route":"none","note":"«завтра» — не номер прихода, действие склада не берёт (ревью 1.4.57)","source":"manual"}
 {"id":"wh-096","text":"проведи приход ВЗ12","connector":"warehouse","intent":"warehouse.act.post","note":"номер с буквами и цифрой","source":"manual"}
@@ -157,3 +157,34 @@
 {"id":"wh-158","text":"сколько стоит доллар","connector":"warehouse","intent":"unknown","route":"talk","note":"курс валюты, не цена товара","source":"manual"}
 {"id":"wh-159","text":"наличие задач","connector":"warehouse","intent":"unknown","route":"none","source":"manual"}
 {"id":"wh-160","text":"где лежит парль от почты","connector":"warehouse","intent":"unknown","route":"talk","connected":true,"note":"фраза о паролях и с опечаткой не уходит сетевому складу (раздел 5.9)","source":"review"}
+{"id":"wh-161","text":"покажи содержимое ячейки 303-1-1","connector":"warehouse","intent":"warehouse.cell","form":{"cell":"303-1-1"},"connected":true,"note":"«содержимое ячейки» — «что в ячейке»","source":"manual"}
+{"id":"wh-162","text":"что ещё не проведено","connector":"warehouse","intent":"warehouse.unposted","connected":true,"source":"manual"}
+{"id":"wh-163","text":"чо не проведено ещё","connector":"warehouse","intent":"warehouse.unposted","connected":true,"note":"«чо» — «что», «ещё» ничего не меняет","source":"manual"}
+{"id":"wh-165","text":"какая у меня роль","connector":"warehouse","intent":"warehouse.me","connected":true,"source":"manual"}
+{"id":"wh-166","text":"щас где лежат венские стулья?","connector":"warehouse","intent":"warehouse.where","form":{"q":"венские стулья"},"connected":true,"source":"manual"}
+{"id":"wh-167","text":"скока у нас 64115 осталось","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"connected":true,"source":"manual"}
+{"id":"wh-168","text":"скока стоят венские стулья???","connector":"warehouse","intent":"warehouse.price","form":{"q":"венские стулья"},"connected":true,"source":"manual"}
+{"id":"wh-169","text":"что лежит в ячейке 215 3 2 1","connector":"warehouse","intent":"warehouse.cell","form":{"cell":"215-3-2-1"},"connected":true,"note":"голос съел дефисы: после «ячейке» — код по группам","source":"manual"}
+{"id":"wh-170","text":"есть ещё табуретки?","connector":"warehouse","intent":"warehouse.count","form":{"q":"табуретки"},"connected":true,"source":"manual"}
+{"id":"wh-171","text":"сколько можно ждать","intent":"talk.question","connected":true,"note":"«сколько можно» + глагол — риторика, не остаток","source":"probe","connector":"talk"}
+{"id":"wh-172","text":"скока можно звонить","intent":"unknown","route":"none","connected":true,"source":"probe"}
+{"id":"wh-173","text":"сколько ещё терпеть","intent":"talk.question","connected":true,"note":"инфинитив в поле — не товар","source":"probe","connector":"talk"}
+{"id":"wh-174","text":"остался ещё 64115?","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"connected":true,"note":"«остался» с артикулом — остаток, не «где лежит»","source":"probe"}
+{"id":"wh-175","text":"а 64115 ещё осталось?","connector":"warehouse","intent":"warehouse.count","form":{"q":"64115"},"connected":true,"source":"probe"}
+{"id":"wh-176","text":"стульев много ещё осталось?","connector":"warehouse","intent":"warehouse.count","connected":true,"note":"«X много осталось» — только в разговоре о складе","source":"probe"}
+{"id":"wh-177","text":"денег много осталось?","intent":"unknown","route":"none","note":"без склада — не товар","source":"probe"}
+{"id":"wh-178","text":"покажи что в 215-1-1-1 лежит","connector":"warehouse","intent":"warehouse.cell","form":{"cell":"215-1-1-1"},"connected":true,"note":"глагол после кода ячейки","source":"probe"}
+{"id":"wh-179","text":"покажи поступления за 7 дней","connector":"warehouse","intent":"warehouse.week","connected":true,"source":"probe"}
+{"id":"wh-180","text":"какие висят непроведённые","connector":"warehouse","intent":"warehouse.unposted","connected":true,"source":"probe"}
+{"id":"wh-181","text":"у которых приходов нет фото","connector":"warehouse","intent":"warehouse.nophoto","connected":true,"source":"probe"}
+{"id":"wh-182","text":"кем я записан на складе","connector":"warehouse","intent":"warehouse.me","connected":true,"source":"probe"}
+{"id":"wh-183","text":"чем мне склад может помочь","connector":"warehouse","intent":"warehouse.help","connected":true,"source":"probe"}
+{"id":"b6-026","text":"есть ли приходы, которые не провели?","connector":"warehouse","intent":"warehouse.unposted","connected":true,"source":"probe"}
+{"id":"b6-027","text":"какие поступления никто не провёл","connector":"warehouse","intent":"warehouse.unposted","connected":true,"source":"probe"}
+{"id":"b6-028","text":"кто не сфотографировал приход","connector":"warehouse","intent":"warehouse.nophoto","connected":true,"source":"probe"}
+{"id":"b6-029","text":"за вчерашний день какие поступления","connector":"warehouse","intent":"warehouse.yesterday","connected":true,"source":"probe"}
+{"id":"b6-030","text":"сегодня много ли товара завезли?","connector":"warehouse","intent":"warehouse.today","connected":true,"source":"probe"}
+{"id":"b6-031","text":"под какими правами я работаю","connector":"warehouse","intent":"warehouse.me","connected":true,"source":"probe"}
+{"id":"b6-032","text":"на какой полке искать 64115","connector":"warehouse","intent":"warehouse.where","connected":true,"source":"probe"}
+{"id":"b6-088","text":"сколько осталось венских стульев","connector":"warehouse","intent":"warehouse.count","connected":true,"source":"probe"}
+{"id":"b6-104","text":"остались ли приёмки, которые никто не провёл?","connector":"warehouse","intent":"warehouse.unposted","connected":true,"source":"probe"}

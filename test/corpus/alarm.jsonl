@@ -66,3 +66,32 @@
 {"id":"alm-064","text":"поставь будильник на 5 и 6","connector":"alarm","intent":"alarm.clarify","source":"manual","note":"два времени — вопрос, а не 5:00"}
 {"id":"alm-065","text":"таймер на час двадцать","connector":"alarm","intent":"alarm.timer","form":{"seconds":"4800"},"source":"manual"}
 {"id":"alm-066","text":"поставь таймер на два часа десять","connector":"alarm","intent":"alarm.timer","form":{"seconds":"7800"},"source":"manual"}
+{"id":"alm-067","text":"подними меня в 6:15","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"15"},"source":"manual","note":"«подними меня» — «разбуди»; «подними цену» — нет"}
+{"id":"alm-068","text":"подними цену на 7","connector":"alarm","intent":"unknown","route":"none","source":"manual","note":"«подними» без «меня» — не будильник"}
+{"id":"alm-069","text":"по субботам буди меня в 9","connector":"alarm","intent":"alarm.set","form":{"hour":"9","minute":"0","days":"6"},"source":"manual","note":"повтор до якоря"}
+{"id":"alm-070","text":"будильник по рабочим дням в 6:50","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"50","days":"1-5"},"source":"manual"}
+{"id":"alm-071","text":"таймер на 4 минуты, яйца варю","connector":"alarm","intent":"alarm.timer","form":{"seconds":"240"},"source":"manual","note":"пояснение после запятой без чисел и сроков"}
+{"id":"alm-072","text":"таймер на 1,5 часа","connector":"alarm","intent":"alarm.timer","form":{"seconds":"5400"},"source":"manual","note":"дробь перед единицей"}
+{"id":"alm-073","text":"мне завтра рано вставать, разбуди в пять двадцать","connector":"alarm","intent":"alarm.set","form":{"hour":"5","minute":"20"},"source":"manual","note":"день до якоря — в просьбу"}
+{"id":"alm-074","text":"поставь будильник на 7, не надо","connector":"alarm","intent":"unknown","route":"none","source":"manual","note":"отказ после запятой не снимается"}
+{"id":"alm-075","text":"таймер на 5 минут яйца сварить","connector":"alarm","intent":"alarm.timer","form":{"seconds":"300"},"note":"цель в конце без запятой","source":"probe"}
+{"id":"alm-076","text":"засеки 3 минуты чай заварить","connector":"alarm","intent":"alarm.timer","form":{"seconds":"180"},"source":"probe"}
+{"id":"alm-077","text":"таймерок на 5 минуток","connector":"alarm","intent":"alarm.timer","form":{"seconds":"300"},"source":"probe"}
+{"id":"alm-078","text":"засеки четверть часа","connector":"alarm","intent":"alarm.timer","form":{"seconds":"900"},"source":"probe"}
+{"id":"alm-079","text":"таймер на полторы минуты пж","connector":"alarm","intent":"alarm.timer","form":{"seconds":"90"},"source":"probe"}
+{"id":"alm-080","text":"и таймер на 20 минут","connector":"alarm","intent":"alarm.timer","form":{"seconds":"1200"},"source":"probe"}
+{"id":"alm-081","text":"засеки три с половиной минуты","connector":"alarm","intent":"alarm.timer","form":{"seconds":"210"},"source":"probe"}
+{"id":"alm-082","text":"мне к семи утра встать надо поставь будильник","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"probe"}
+{"id":"alm-083","text":"будильник на пол восьмого пж","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"30"},"source":"probe"}
+{"id":"alm-084","text":"таймер на 5 минут отменить","intent":"unknown","route":"none","note":"одно слово хвоста — не цель таймера","source":"probe"}
+{"id":"b6-033","text":"мне в полседьмого вставать, разбуди","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"30"},"source":"probe"}
+{"id":"b6-034","text":"у меня электричка, в пять утра чтоб звенело","connector":"alarm","intent":"alarm.set","form":{"hour":"5","minute":"0"},"source":"probe"}
+{"id":"b6-035","text":"разбуди меня в семь ноль-ноль","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"probe"}
+{"id":"b6-036","text":"завтра на работу встать в шесть сорок, поставь будильник","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"40"},"source":"probe"}
+{"id":"b6-037","text":"на сто двадцать секунд засекай","connector":"alarm","intent":"alarm.timer","form":{"seconds":"120"},"source":"probe"}
+{"id":"b6-038","text":"минут на пятнадцать таймер поставь","connector":"alarm","intent":"alarm.timer","form":{"seconds":"900"},"source":"probe"}
+{"id":"b6-039","text":"отсчитай тридцать пять секунд","connector":"alarm","intent":"alarm.timer","form":{"seconds":"35"},"source":"probe"}
+{"id":"b6-089","text":"подними нас в шесть тридцать","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"30"},"source":"probe"}
+{"id":"b6-090","text":"таймер на сорок секунд","connector":"alarm","intent":"alarm.timer","form":{"seconds":"40"},"source":"probe"}
+{"id":"b6-100","text":"мне в полшестого утра подниматься, разбуди","connector":"alarm","intent":"alarm.set","form":{"hour":"5","minute":"30"},"source":"probe"}
+{"id":"b6-101","text":"у меня рейс ранний, в шесть утра чтоб звенело","connector":"alarm","intent":"alarm.set","form":{"hour":"6","minute":"0"},"source":"probe","note":"водитель/пилот; причина в хвосте"}

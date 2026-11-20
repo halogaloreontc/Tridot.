@@ -195,3 +195,28 @@
 {"id":"talk-q16","text":"который сейчас час?","connector":"talk","intent":"talk.question","source":"manual"}
 {"id":"talk-q17","text":"какой сегодня день недели","connector":"talk","intent":"talk.question","source":"manual"}
 {"id":"talk-q18","text":"а какое сегодня число","connector":"talk","intent":"talk.question","source":"manual"}
+{"id":"talk-s01","text":"дарова 👋!!!","connector":"talk","intent":"talk.greet","source":"manual","note":"разговорное приветствие"}
+{"id":"talk-s02","text":"прив","connector":"talk","intent":"talk.greet","source":"manual"}
+{"id":"talk-s03","text":"спс бро 👍","connector":"talk","intent":"talk.thanks","source":"manual","note":"«бро» — обращение"}
+{"id":"talk-s04","text":"благодарочка","connector":"talk","intent":"talk.thanks","source":"manual"}
+{"id":"talk-s05","text":"ну всё давай пока","connector":"talk","intent":"talk.bye","source":"manual"}
+{"id":"talk-s06","text":"как дела бро","connector":"talk","intent":"talk.howAreYou","source":"manual"}
+{"id":"talk-s07","text":"умеешь ставить будильник?","connector":"talk","intent":"talk.capabilities","source":"manual","note":"«умеешь» и инфинитив — вопрос о возможностях"}
+{"id":"talk-s08","text":"как пользоваться калькулятором","connector":"talk","intent":"talk.capabilities","source":"manual"}
+{"id":"talk-s09","text":"можешь поставить будильник на 7?","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"manual","note":"«можешь» + глагол — вежливая просьба, а не вопрос о возможностях"}
+{"id":"talk-u01","text":"переведи 5 миль в километры","connector":"talk","intent":"talk.question","source":"manual","note":"единицы: конвертер — для файлов; честный ответ и что можно посчитать"}
+{"id":"talk-u02","text":"переведи 30 градусов цельсия в фаренгейты","connector":"talk","intent":"talk.question","source":"manual"}
+{"id":"talk-u03","text":"сколько метров в миле","connector":"talk","intent":"talk.question","source":"manual"}
+{"id":"talk-u04","text":"напомни перевести 100 долларов в рубли","intent":"createTask","title":"Перевести 100 долларов в рубли","source":"manual","note":"просьба напомнить — дело, а не вопрос о курсе"}
+{"id":"talk-v01","text":"спс, ясно","connector":"talk","intent":"talk.thanks","note":"отклик после благодарности — благодарность","source":"probe"}
+{"id":"talk-v02","text":"спасибо понятно","connector":"talk","intent":"talk.thanks","source":"probe"}
+{"id":"talk-v03","text":"спасибо, всё правильно","connector":"talk","intent":"talk.thanks","source":"probe"}
+{"id":"talk-v04","text":"доброго утречка","connector":"talk","intent":"talk.greet","source":"probe"}
+{"id":"talk-v05","text":"как ты поживаешь","connector":"talk","intent":"talk.howAreYou","source":"probe"}
+{"id":"talk-v06","text":"чем ты полезен","connector":"talk","intent":"talk.capabilities","source":"probe"}
+{"id":"talk-v07","text":"ты тупой что ли","connector":"talk","intent":"talk.rude","source":"probe"}
+{"id":"b6-078","text":"день добрый","connector":"talk","intent":"talk.greet","source":"probe"}
+{"id":"b6-079","text":"от души спасибо","connector":"talk","intent":"talk.thanks","source":"probe"}
+{"id":"b6-080","text":"развесели меня","connector":"talk","intent":"talk.joke","source":"probe"}
+{"id":"b6-081","text":"ну всё, бывай","connector":"talk","intent":"talk.bye","source":"probe"}
+{"id":"b6-082","text":"как у тебя настроение","connector":"talk","intent":"talk.howAreYou","source":"probe"}

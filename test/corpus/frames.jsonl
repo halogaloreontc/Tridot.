@@ -41,3 +41,29 @@
 {"id":"frm-041","text":"сможешь завершить отчёт до пятницы?","intent":"unknown","route":"none","source":"review","note":"о сроке, а не «заверши сейчас»"}
 {"id":"frm-042","text":"будь добр, добавь задачу «купить будилку»","intent":"createTask","title":"купить будилку","source":"review","note":"внутри кавычек обёртка ничего не меняет"}
 {"id":"frm-043","text":"добавь задачу «перенеси-ка шкаф»","intent":"createTask","title":"перенеси-ка шкаф","source":"review"}
+{"id":"frm-044","text":"кстати не дай мне забыть в субботу съездить к бабушке","intent":"createTask","title":"Съездить к бабушке","due":"2026-11-07","precision":"date","source":"probe"}
+{"id":"frm-045","text":"будь другом, закинь в список заказать воду","intent":"createTask","title":"Заказать воду","source":"probe"}
+{"id":"frm-046","text":"так, записывай: послезавтра в 14:00 встреча с арендодателем","intent":"createTask","title":"Встреча с арендодателем","due":"2026-11-04T14:00","precision":"dateTime","source":"probe"}
+{"id":"frm-047","text":"хочется не забыть поздравить Сергея в пятницу","intent":"createTask","title":"Поздравить Сергея","due":"2026-11-06","precision":"date","source":"probe"}
+{"id":"frm-048","text":"было бы здорово не забыть про врача в четверг","intent":"createTask","title":"Про врача","due":"2026-11-05","precision":"date","source":"probe"}
+{"id":"frm-049","text":"хорошо бы в выходные помыть машину","intent":"createTask","title":"Помыть машину","due":"2026-11-07","precision":"date","source":"probe"}
+{"id":"frm-050","text":"неплохо бы созвониться с бухгалтером до среды","intent":"createTask","title":"Созвониться с бухгалтером","due":"2026-11-04","precision":"date","source":"probe"}
+{"id":"frm-051","text":"буду признателен, если напомнишь оплатить кредит 10-го","intent":"createTask","title":"Оплатить кредит","due":"2026-11-10","precision":"date","source":"probe"}
+{"id":"frm-052","text":"ты напомнишь мне в 6 полить цветы?","intent":"createTask","title":"Полить цветы","issue":"ambiguousHour","source":"probe"}
+{"id":"frm-053","text":"я хочу в субботу разобрать балкон","intent":"createTask","title":"Разобрать балкон","due":"2026-11-07","precision":"date","source":"probe"}
+{"id":"frm-054","text":"не забудь, что у Маши день рождения в субботу","intent":"createTask","title":"У Маши день рождения","due":"2026-11-07","precision":"date","source":"probe"}
+{"id":"frm-055","text":"не мог бы ты завтра утром напомнить про анализы?","intent":"createTask","title":"Анализы","due":"2026-11-03T09:00","precision":"partOfDay","source":"probe"}
+{"id":"frm-056","text":"хочется не забыть этот вечер","intent":"unknown","route":"none","note":"без срока и дела — не задача","source":"probe"}
+{"id":"frm-057","text":"хочу спать","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-040","text":"будильник не прозвенел в семь","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-041","text":"вот бы в отпуск поскорее","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-042","text":"съездить бы на море этим летом","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-043","text":"эх, выспаться бы в субботу","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-044","text":"помнишь, как мы на дачу ездили","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-045","text":"а помню, когда я в школе учился","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-062","text":"можно ли перенести все задачи сразу?","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-067","text":"переставь шкаф на кухню","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-091","text":"закрыть бы все хвосты до пятницы","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-105","text":"закрыть бы этот год поскорее","intent":"unknown","route":"none","source":"probe","note":"образное «закрыть»"}
+{"id":"b6-106","text":"вот бы на выходных отоспаться","intent":"unknown","route":"none","source":"probe","note":"мечта, не дело"}
+{"id":"b6-107","text":"а помнишь, как мы в детстве на речку ходили","intent":"unknown","route":"none","source":"probe","note":"воспоминание"}

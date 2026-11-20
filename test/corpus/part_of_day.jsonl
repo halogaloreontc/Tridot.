@@ -36,3 +36,7 @@
 {"id":"pod-035","text":"что в меню на обед?","intent":"unknown","route":"none"}
 {"id":"pod-036","text":"перенеси созвон на сегодняшний вечер","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-02T19:00","precision":"partOfDay"}
 {"id":"pod-037","text":"перенеси созвон на завтрашний вечер встречи выпускников","intent":"rescheduleTask","due":null,"note":"«вечер встречи» — событие, не срок"}
+{"id":"pod-038","text":"напомни ближе к вечеру проверить почту","intent":"createTask","title":"Проверить почту","due":"2026-11-02T19:00","precision":"partOfDay","source":"probe"}
+{"id":"pod-039","text":"напомни ближе к обеду позвонить","intent":"createTask","title":"Позвонить","due":"2026-11-03T13:00","precision":"partOfDay","source":"probe"}
+{"id":"pod-040","text":"напомни после работы зайти в химчистку","intent":"createTask","title":"После работы зайти в химчистку","due":null,"note":"«после работы» — не срок: у всех своё время","source":"probe"}
+{"id":"pod-041","text":"работать с утра до обеда","intent":"createTask","title":"Работать с утра до обеда","due":null,"note":"промежуток, а не «к полудню»","source":"probe"}

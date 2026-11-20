@@ -27,6 +27,16 @@ abstract final class PlaceNames {
         .map(_capitalize)
         .toList();
     if (words.isEmpty) return const <String>[];
+    // «Питер», «в Питере», «СПб», «мск» — разговорные имена городов.
+    if (words.length == 1) {
+      for (final variant in <String>[
+        words.single,
+        ..._nominative(words.single),
+      ]) {
+        final alias = _aliases[key(variant)];
+        if (alias != null) return <String>[alias];
+      }
+    }
     // Прилагательные перед последним словом: «Нижнем» → «Нижний».
     final head = <String>[
       for (final word in words.sublist(0, words.length - 1)) _adjective(word),
@@ -68,6 +78,23 @@ abstract final class PlaceNames {
     return _nominative(word);
   }
 
+  /// Разговорные и короткие имена городов — полное название.
+  static const Map<String, String> _aliases = <String, String>{
+    'питер': 'Санкт-Петербург',
+    'спб': 'Санкт-Петербург',
+    'петербург': 'Санкт-Петербург',
+    'мск': 'Москва',
+    'екб': 'Екатеринбург',
+    'ебург': 'Екатеринбург',
+    'нск': 'Новосибирск',
+    'новосиб': 'Новосибирск',
+    'нн': 'Нижний Новгород',
+    // «В Нижнем» — так зовут Нижний Новгород.
+    'нижний': 'Нижний Новгород',
+    'нижнем': 'Нижний Новгород',
+    'нижнего': 'Нижний Новгород',
+  };
+
   /// Несклоняемые названия, которые похожи на косвенный падеж.
   static const Set<String> _indeclinable = <String>{
     'сочи',
@@ -79,12 +106,17 @@ abstract final class PlaceNames {
   };
 
   /// «Москве» → «Москва», «Москв»; «Новгороде» → «Новгорода», «Новгород»;
-  /// «Казани» → «Казань»; иное — без изменений.
+  /// «Казани» → «Казань»; «Ярославле» → «Ярославль», «Ярославла»; иное —
+  /// без изменений.
   static List<String> _nominative(String word) {
     final lower = word.toLowerCase();
     if (word.length < 3 || _indeclinable.contains(lower)) return <String>[word];
     final stem = word.substring(0, word.length - 1);
     if (lower.endsWith('ии')) return <String>['$stemя'];
+    if (lower.endsWith('ле')) {
+      // «Ярославле» → «Ярославль», «Туле» → «Тула».
+      return <String>['$stemь', '$stemа'];
+    }
     if (lower.endsWith('е')) {
       // «Петербурге», «Новгороде», «Ростове» — мужской род чаще: без «-е».
       if (lower.endsWith('ге') ||
@@ -103,6 +135,41 @@ abstract final class PlaceNames {
     return <String>[word];
   }
 
+  /// Родительный падеж после «для», «из» — в именительный: «Нижнего
+  /// Новгорода» → «Нижний Новгород», «Москвы» → «Москва», «Казани» →
+  /// «Казань», «Ярославля» → «Ярославль», «Омска» → «Омск».
+  static String fromGenitive(String query) {
+    final words = query.trim().split(RegExp(r'\s+'));
+    String noun(String word) {
+      final lower = word.toLowerCase();
+      if (word.length < 4 || _indeclinable.contains(lower)) return word;
+      final stem = word.substring(0, word.length - 1);
+      if (lower.endsWith('ля')) return '$stemь';
+      if (lower.endsWith('ы')) return '$stemа';
+      if (lower.endsWith('и')) return '$stemь';
+      if (lower.endsWith('а')) return stem;
+      return word;
+    }
+
+    String adjective(String word) {
+      final lower = word.toLowerCase();
+      if (word.length < 5) return word;
+      final stem = word.substring(0, word.length - 3);
+      if (lower.endsWith('его')) return '$stemий';
+      if (lower.endsWith('ого')) {
+        return 'кгхжшчщ'.contains(lower[lower.length - 4])
+            ? '$stemий'
+            : '$stemый';
+      }
+      return word;
+    }
+
+    return <String>[
+      for (var i = 0; i < words.length; i++)
+        i == words.length - 1 ? noun(words[i]) : adjective(words[i]),
+    ].join(' ');
+  }
+
   /// «Нижнем» → «Нижний», «Великом» → «Великий», «Новом» → «Новый».
   static String _adjective(String word) {
     final lower = word.toLowerCase();
@@ -116,12 +183,16 @@ abstract final class PlaceNames {
     return word;
   }
 
+  /// «казани» → «Казани»; набранное заглавными «ЕКАТЕРИНБУРГЕ» →
+  /// «Екатеринбурге» (короткие «США», «ОАЭ» — как есть).
   static String _capitalize(String word) => word
       .split('-')
       .map(
         (String part) => part.isEmpty || _linkWords.contains(part.toLowerCase())
             ? part.toLowerCase()
-            : part[0].toUpperCase() + part.substring(1),
+            : part.length > 3 && part == part.toUpperCase()
+                ? part[0] + part.substring(1).toLowerCase()
+                : part[0].toUpperCase() + part.substring(1),
       )
       .join('-');
 

@@ -7,11 +7,13 @@ import '../../models/action_card.dart';
 import '../../models/warehouse_card.dart';
 import '../connector.dart';
 import '../http_transport.dart';
+import '../number_words.dart';
 import '../secret_store.dart';
 import '../social_prefix.dart';
 import '../verb_forms.dart';
 import 'connection.dart';
 import 'manifest_format.dart';
+import 'manifest_intent.dart';
 import 'manifest_matcher.dart';
 import 'manifest_query.dart';
 import 'manifest_text.dart';
@@ -59,7 +61,8 @@ final class ManifestConnector
         ConnectorHealth,
         RoleHints,
         RoleActions,
-        ConfirmationFollowUp {
+        ConfirmationFollowUp,
+        IntentTarget {
   ManifestConnector({
     required this.slot,
     required HttpTransport transport,
@@ -71,7 +74,7 @@ final class ManifestConnector
   })  : _transport = transport,
         _secrets = secrets,
         _random = random ?? Random.secure(),
-        record = record ?? ConnectionRecord(appId: slot.appId) {
+        record = record ?? ConnectionRecord(appId: slot.fileKey) {
     if (description != null) load(description);
     this.builtIn = builtIn;
   }
@@ -249,6 +252,108 @@ final class ManifestConnector
     'годиков',
   };
 
+  /// Часы телефона: «сколько осталось на таймере» — не склад.
+  static const List<String> _deviceStems = <String>[
+    'таймер',
+    'будильник',
+    'секундомер',
+  ];
+
+  /// Надобность: «сколько стульев нужно для гостей», «сколько надо краски».
+  static const Set<String> _needWords = <String>{
+    'нужно',
+    'надо',
+    'нужен',
+    'нужна',
+    'нужны',
+    'понадобится',
+    'понадобятся',
+    'потребуется',
+    'потребуются',
+    'хватит',
+  };
+
+  /// «Сколько можно …», «сколько нельзя …» — риторика, а не остаток.
+  static const Set<String> _modalWords = <String>{'можно', 'нельзя'};
+
+  /// Меры погоды и тела: «сколько градусов за окном», «сколько калорий в
+  /// яблоке» — не позиции склада.
+  static const List<String> _measureStems = <String>[
+    'градус',
+    'калори',
+    'килокалори',
+  ];
+
+  /// Слова между числами примера: «48 на 25», «12 и 7», «3 с половиной на 2».
+  static const Set<String> _arithmeticWords = <String>{
+    'на',
+    'и',
+    'с',
+    'половиной',
+    'х',
+    'x',
+    'по',
+    'это',
+  };
+
+  /// В поле только числа (не меньше двух, ни одного кода артикула) и слова
+  /// действия между ними: «48 на 25» — пример, а не товар.
+  ///
+  /// Числа словами — тоже числа ([NumberWords]): «сто сорок четыре
+  /// поделённое на шестнадцать» — пример, «куб семёрки» — тоже.
+  static bool _arithmetic(List<String> words) {
+    final joined = words.join(' ');
+    final spelled = NumberWords.find(joined);
+    var numbers = spelled.length;
+    var position = 0;
+    for (final word in words) {
+      final start = position;
+      position += word.length + 1;
+      if (spelled.any(
+        (NumberWordMatch m) => start >= m.start && start < m.end,
+      )) {
+        continue;
+      }
+      if (RegExp(r'^\d{1,4}(?:[.,]\d+)?$').hasMatch(word) ||
+          NumberWords.nouns.containsKey(word)) {
+        numbers++;
+      } else if (!_arithmeticWords.contains(word) &&
+          !_calcWords.contains(word)) {
+        return false;
+      }
+    }
+    // «Куб семёрки», «квадрат пяти» — одно число со словом действия.
+    final operated = words.any(_calcWords.contains);
+    return numbers >= 2 || (numbers == 1 && operated);
+  }
+
+  /// Единица после «в»: «сколько сантиметров в дюйме», «сколько секунд
+  /// в сутках» — перевод единиц, а не товар.
+  static const Set<String> _unitsIn = <String>{
+    'дюйме',
+    'футе',
+    'миле',
+    'ярде',
+    'метре',
+    'сантиметре',
+    'километре',
+    'литре',
+    'галлоне',
+    'килограмме',
+    'кило',
+    'грамме',
+    'фунте',
+    'унции',
+    'тонне',
+    'часе',
+    'минуте',
+    'сутках',
+    'неделе',
+    'месяце',
+    'году',
+    'веке',
+  };
+
   static const List<String> _currencyStems = <String>[
     'доллар',
     'евро',
@@ -263,9 +368,20 @@ final class ManifestConnector
     'будет',
     'умножить',
     'умножь',
+    'умноженное',
+    'помноженное',
     'разделить',
     'раздели',
     'подели',
+    'поделить',
+    'деленное',
+    'разделенное',
+    'поделенное',
+    'прибавить',
+    'отнять',
+    'вычесть',
+    'куб',
+    'квадрат',
     'корень',
     'плюс',
     'минус',
@@ -402,6 +518,24 @@ final class ManifestConnector
   static final RegExp _code = RegExp(r'^\d{5,6}$');
   static final RegExp _spacedDash = RegExp(r'\s-|-\s');
 
+  /// Команда по подсказке запасного слоя (ADR-045): рецепт — из фраз
+  /// описания ([ManifestIntent]).
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      ManifestIntent.recipe(slot.id, commandId, _description, _builtIn)
+          ?.match(this, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) {
+    final recipe =
+        ManifestIntent.recipe(slot.id, commandId, _description, _builtIn);
+    return recipe?.example ?? recipe?.ask;
+  }
+
   @override
   ConnectorMatch? match(Utterance utterance) {
     final text = askText(SocialPrefix.rest(utterance) ?? utterance.original);
@@ -414,7 +548,22 @@ final class ManifestConnector
     final lead = _withoutLead(text);
     // «покажи мне, где лежит …»: запятая после связок мешает их снять.
     final plain = text.replaceAll(RegExp(r'\s*,\s*'), ' ');
-    final candidates = <String>{text, if (lead != null) lead, plain};
+    final priced = ManifestQuery.priceForm(lead ?? text);
+    final arrivals = ManifestQuery.arrivalsForm(lead ?? text);
+    // «Скока стоят …», «чо не проведено ещё», «приходы без фоток покажь».
+    final spoken = ManifestQuery.colloquial(lead ?? text);
+    final spokenPrice = spoken == null ? null : ManifestQuery.priceForm(spoken);
+    final remain = ManifestQuery.remainForm(lead ?? text);
+    final candidates = <String>{
+      if (remain != null) remain,
+      if (priced != null) priced,
+      if (arrivals != null) arrivals,
+      text,
+      if (lead != null) lead,
+      plain,
+      if (spokenPrice != null) spokenPrice,
+      if (spoken != null) spoken,
+    };
     // «Где лежит» без артикула (кнопка «Где лежит…» и сразу «Отправить»):
     // иначе правило «где {q}» искало бы на складе слово «лежит». Смотрим
     // во всех вариантах текста раньше обычных правил: «подскажи, где
@@ -470,10 +619,21 @@ final class ManifestConnector
     final words = text.split(_wordSplit);
     if (words.any((String w) => _foreignStems.any(w.startsWith))) return false;
     return utterance.codes.isNotEmpty ||
-        words.any((String w) => w.startsWith('склад')) ||
+        words.any((String w) => _aliasWords.any(w.startsWith)) ||
         utterance.recentConnectorId == slot.id ||
         _hint('bareWords');
   }
+
+  /// Слова обращений слота без предлогов: у склада — «складе» и «склад»
+  /// (по началу слова — «склада», «складу»), у автосервиса —
+  /// «автосервисе», «автосервис».
+  late final List<String> _aliasWords = <String>{
+    for (final alias in slot.aliases)
+      for (final word in askText(alias).split(_wordSplit))
+        if (word.isNotEmpty && !_prepositions.contains(word)) word,
+  }.toList();
+
+  static const Set<String> _prepositions = <String>{'в', 'во', 'на', 'у'};
 
   /// Слова других навыков и обычной речи в вопросе о наличии.
   static const List<String> _foreignStems = <String>[
@@ -963,6 +1123,7 @@ final class ManifestConnector
           confidence: aliased
               ? (confidence + 0.05).clamp(0.0, 0.95).toDouble()
               : confidence,
+          aliased: aliased,
           payload: ManifestPayload(
             command: command,
             slots: slots,
@@ -1032,9 +1193,32 @@ final class ManifestConnector
     if (words.first == 'до' ||
         words.any(
           (String w) =>
-              _notGoods.contains(w) || _currencyStems.any(w.startsWith),
+              _notGoods.contains(w) ||
+              _currencyStems.any(w.startsWith) ||
+              _deviceStems.any(w.startsWith),
         )) {
       return false;
+    }
+    // «Сколько стульев нужно для гостей» — расчёт, а не остаток; «сколько
+    // сантиметров в дюйме» — перевод единиц.
+    if (words.any(_needWords.contains)) return false;
+    // «48 на 25 скока» — пример: одни числа и слова действия между ними.
+    if (_arithmetic(words)) return false;
+    // «Сколько можно повторять», «сколько ещё терпеть» — глагол, а не
+    // товар; «скока там градусов за окном» — мера, а не позиция склада.
+    if (words.any(
+      (String w) =>
+          _modalWords.contains(w) ||
+          VerbForms.isInfinitive(w) ||
+          _measureStems.any(w.startsWith),
+    )) {
+      return false;
+    }
+    for (var i = 0; i + 1 < words.length; i++) {
+      if ((words[i] == 'в' || words[i] == 'во') &&
+          _unitsIn.contains(words[i + 1])) {
+        return false;
+      }
     }
     for (final word in words) {
       if (_taskWord(word) ||
@@ -1105,7 +1289,7 @@ final class ManifestConnector
     }
     if (payload.how == 'total') {
       return say('total', AssistantStatus.noAction, <String, String>{
-        'example': command.examples.firstOrNull ?? 'сколько 64115',
+        'example': command.examples.firstOrNull ?? slot.totalExample,
       });
     }
     if (command.reply case final String text) {
@@ -1127,7 +1311,7 @@ final class ManifestConnector
       final field = command.slots.values.firstOrNull;
       return say('ask', AssistantStatus.needsClarification, <String, String>{
         'label': field == null || field.label.isEmpty
-            ? 'артикул или название'
+            ? slot.queryLabel
             : field.label,
         'example': command.examples.firstOrNull ?? '',
       });

@@ -9,7 +9,7 @@ import 'calculator.dart';
 /// рациональная арифметика, никакого выполнения кода. Без сети и без
 /// изменения данных.
 final class CalculatorConnector
-    implements Connector, ConnectorHealth, CommandSpanSource {
+    implements Connector, ConnectorHealth, CommandSpanSource, IntentTarget {
   const CalculatorConnector();
 
   static const String id = 'calc';
@@ -84,6 +84,26 @@ final class CalculatorConnector
   /// Пример в последней части сообщения ([CalcRecognition.clause]):
   /// ниже задач, чтобы явная команда в начале выигрывала.
   static const double clauseConfidence = 0.6;
+
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'calc.evaluate': IntentRecipe(
+      carriers: <String>['посчитай', 'сколько будет'],
+      example: 'посчитай 15% от 2400',
+    ),
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
 
   @override
   ConnectorMatch? match(Utterance utterance) {

@@ -7,11 +7,8 @@ import '../../core/settings/app_settings.dart';
 import '../assistant_theme.dart';
 import '../layout.dart';
 import 'grouped.dart';
-import 'whole_word_text.dart';
-
-// Знак и точка помощника — без настроек (dart:io): их берут шапка, панель
-// и веб-помощник.
 import 'persona_mark.dart';
+import 'whole_word_text.dart';
 
 export 'persona_mark.dart';
 

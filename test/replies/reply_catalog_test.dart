@@ -14,6 +14,7 @@ const Map<String, String> facts = <String, String>{
   'text': 'напомни завтра в 10 позвонить маме',
   'due': 'завтра в 10:00',
   'project': 'работа',
+  'description': 'создать задачу или напоминание',
   'query': 'отчёт',
   'name': 'звонок',
   'candidates': '«Позвонить маме» или «Позвонить клиенту»',

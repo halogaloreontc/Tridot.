@@ -29,3 +29,20 @@
 {"id":"typo-029","text":"напомни пить таблетки по утрам","intent":"createTask","title":"Пить таблетки по утрам","source":"review","note":"«по утрам» — не опечатка «утром»"}
 {"id":"typo-030","text":"запиши гулять с собакой по вечерам","intent":"createTask","title":"Гулять с собакой по вечерам","source":"review"}
 {"id":"typo-031","text":"добавь задачу «проверить заввтра склад»","intent":"createTask","title":"проверить заввтра склад","source":"review","note":"внутри кавычек опечатки не исправляются"}
+{"id":"typo-032","text":"приходы без фоток покажь","connector":"warehouse","intent":"warehouse.nophoto","connected":true,"source":"review","note":"«фоток» — «фото»; «покажь» в конце снимается"}
+{"id":"typo-033","text":"напомни завтрав 9 оплатить интернет","intent":"createTask","title":"Оплатить интернет","due":"2026-11-03T09:00","precision":"dateTime","source":"review","note":"слитно «завтра в»: срок с предлогом расклеивается"}
+{"id":"typo-034","text":"напомнизавтра купить фильтры для воды","intent":"createTask","title":"Купить фильтры для воды","due":"2026-11-03","precision":"date","source":"review","note":"глагол команды слитно со сроком — спасательный проход с вопросом «Да?»"}
+{"id":"typo-035","text":"напомни в7 вечера зайти в аптеку","intent":"createTask","title":"Зайти в аптеку","due":"2026-11-02T19:00","precision":"dateTime","source":"review","note":"предлог вплотную к числу"}
+{"id":"typo-036","text":"напомнь завтро в 9 утра зайти на почту","intent":"createTask","title":"Зайти на почту","due":"2026-11-03T09:00","precision":"dateTime","source":"review","note":"«ь» вместо «и» у глагола команды, последняя буква «завтра»"}
+{"id":"typo-037","text":"напомни послезватра в двенадцть забрать справку","intent":"createTask","title":"Забрать справку","due":"2026-11-04T12:00","precision":"dateTime","source":"review","note":"длинное число словами с опечаткой"}
+{"id":"typo-038","text":"покажь списк дел плиз","intent":"listTasks","source":"review"}
+{"id":"typo-039","text":"будильникна 7","connector":"alarm","intent":"alarm.set","form":{"hour":"7","minute":"0"},"source":"review","note":"«будильник на» слитно"}
+{"id":"typo-040","text":"отмеьт отчёт выполненным","intent":"completeTask","targetQuery":"Отчёт","source":"review","note":"«ьт» после гласной не бывает — перестановка двух последних букв в глаголе команды"}
+{"id":"typo-041","text":"сколько будет 125 умножитть на 4","connector":"calc","intent":"calc.evaluate","answer":"500","source":"review","note":"калькулятор как есть только переспрашивал — исправленная фраза понята явно"}
+{"id":"typo-042","text":"напомнi завтра позвонить тёте","intent":"createTask","title":"Позвонить тёте","due":"2026-11-03","precision":"date","source":"review","note":"латинская «i» внутри русского слова"}
+{"id":"typo-043","text":"нагадай завтра купить хлеб","intent":"createTask","title":"Купить хлеб","due":"2026-11-03","precision":"date","source":"review","note":"«нагадай» — «напомни» (закрытый список), с вопросом «Да?»"}
+{"id":"typo-044","text":"напомни завтра зранку забрать документы","intent":"createTask","title":"Забрать документы","due":"2026-11-03T09:00","precision":"partOfDay","source":"review","note":"«зранку» — «утром» (закрытый список)"}
+{"id":"typo-045","text":"купить завтрак на завтра","intent":"createTask","title":"Купить завтрак","due":"2026-11-03","precision":"date","source":"review","note":"«завтрак» — слово, а не «завтра к»"}
+{"id":"typo-046","text":"напомин завтар оплатить квартплату","intent":"unknown","route":"none","source":"review","note":"«напомин» — обрывок (rev-091), а не опечатка: перестановка в конце глагола не правится"}
+{"id":"typo-b5-01","text":"напомни чрез 2 часа выпить таблетку","intent":"createTask","title":"Выпить таблетку","due":"2026-11-02T18:30","precision":"dateTime","note":"«чрез» — «через»","source":"probe"}
+{"id":"typo-b5-02","text":"напомни завтра с утреца позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T09:00","precision":"partOfDay","source":"probe"}

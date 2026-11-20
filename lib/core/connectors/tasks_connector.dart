@@ -6,6 +6,7 @@ import '../scenario/command_spans.dart';
 import '../scenario/scenario_parser.dart';
 import '../services/task_service.dart';
 import '../skills/data/data_phrases.dart';
+import '../skills/files/files_connector.dart';
 import '../skills/talk/talk_phrases.dart';
 import 'connector.dart';
 import 'reminder_choices.dart';
@@ -29,7 +30,8 @@ final class TasksConnector
         Connector,
         ConnectorHealth,
         ConfirmationFollowUp,
-        CommandSpanSource {
+        CommandSpanSource,
+        IntentTarget {
   TasksConnector({
     required TaskService taskService,
     required ScenarioParser parser,
@@ -138,6 +140,68 @@ final class TasksConnector
     }
   }
 
+  /// Как выполнить команду по подсказке запасного слоя (ADR-045): срок,
+  /// название и задачу находит тот же разбор ([ScenarioParser]).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'task.create': IntentRecipe(
+      carriers: <String>['напомни', 'добавь задачу'],
+      example: exampleCommand,
+    ),
+    'task.list': IntentRecipe(
+      carriers: <String>['покажи задачи'],
+      ask: 'покажи задачи',
+      example: 'покажи задачи на завтра',
+    ),
+    'task.complete': IntentRecipe(
+      carriers: <String>['отметь выполненной задачу', 'выполнил'],
+      example: 'отметь выполненной задачу купить хлеб',
+    ),
+    'task.reschedule': IntentRecipe(
+      carriers: <String>['перенеси задачу', 'перенеси'],
+      example: 'перенеси задачу купить хлеб на завтра',
+      rewrites: _moveWords,
+    ),
+    'task.rescheduleMany': IntentRecipe(
+      carriers: <String>['перенеси все задачи', 'перенеси задачи'],
+      example: 'перенеси все задачи на завтра',
+      rewrites: _moveWords,
+    ),
+    'task.completeMany': IntentRecipe(
+      carriers: <String>['отметь выполненными все задачи'],
+      example: 'отметь выполненными все задачи на сегодня',
+    ),
+    'task.edit': IntentRecipe(
+      carriers: <String>['измени задачу'],
+      example: 'добавь в задачу заметку',
+    ),
+    undoCommand: IntentRecipe(ask: 'отмени', example: 'отмени'),
+  };
+
+  /// Синонимы «перенеси» для подсказки запасного слоя.
+  static const Map<String, String> _moveWords = <String, String>{
+    'отложи': 'перенеси',
+    'перекинь': 'перенеси',
+    'перебрось': 'перенеси',
+    'сдвинь': 'перенеси',
+    'передвинь': 'перенеси',
+    'переставь': 'перенеси',
+    'раскидай': 'перенеси',
+    'сдвигай': 'перенеси',
+    'откладывай': 'перенеси',
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
+
   @override
   ConnectorMatch? match(Utterance utterance) {
     if (_isUndo(utterance)) {
@@ -165,8 +229,25 @@ final class TasksConnector
     }
     // Правка текущей или названной задачи (ADR-033): срок, заметка,
     // пункты, новое название.
-    final edit = TaskEditPhrases.parse(utterance, tasksId: id);
-    if (edit != null && _claims(edit, command)) {
+    // «Не завтра, а в среду», «ой, не в 10, а в 11»: срок — последний.
+    final edit = TaskEditPhrases.parse(
+      _parser.correctedDue(utterance) ?? utterance,
+      tasksId: id,
+    );
+    // «Запиши, что код от сейфа CANARY» — секрет не становится заметкой.
+    if (edit != null &&
+        ScenarioParser.secretObject(edit.rawText ?? edit.text)) {
+      return null;
+    }
+    final inTaskTalk =
+        utterance.chatTaskId != null || utterance.recentConnectorId == id;
+    if (edit != null &&
+        _claims(
+          edit,
+          command,
+          inTaskTalk: inTaskTalk,
+          utterance: utterance,
+        )) {
       return ConnectorMatch(
         connectorId: id,
         commandId: editCommand,
@@ -195,6 +276,11 @@ final class TasksConnector
     };
     if (command.intent == CommandIntent.unknown) return null;
     if (_isTalk(utterance, command)) return null;
+    // «Убери только что сделанную картинку» — файл сессии, не задача.
+    if (command.intent == CommandIntent.completeTask &&
+        FilesPhrases.parse(utterance) != null) {
+      return null;
+    }
     // Угадано слишком много: лучше «не до конца понял» с подсказками
     // команд, чем задача наугад.
     if (command.intent == CommandIntent.createTask &&
@@ -223,11 +309,38 @@ final class TasksConnector
   static const String editCommand = 'task.edit';
 
   /// Берёт ли коннектор правку [edit] вместо обычного разбора [command].
-  static bool _claims(TaskEdit edit, ParsedCommand command) {
+  /// Срок — внутри текста заметки: «запиши, что в четверг стрижка в 11»
+  /// (а не «в среду запиши, что придёт машина»).
+  static bool _dueInNote(TaskEdit edit, Utterance utterance) {
+    final raw = edit.rawText;
+    if (raw == null) return false;
+    final start = utterance.original.lastIndexOf(raw);
+    if (start < 0) return false;
+    return utterance.due.spans.any(
+      (CharSpan span) => span.length > 0 && span.start >= start,
+    );
+  }
+
+  static bool _claims(
+    TaskEdit edit,
+    ParsedCommand command, {
+    required bool inTaskTalk,
+    required Utterance utterance,
+  }) {
     switch (edit.kind) {
       case TaskEditKind.note:
       case TaskEditKind.items:
       case TaskEditKind.rename:
+        // «Запиши, что в четверг стрижка в 11» вне разговора о задаче —
+        // новое дело со сроком, а не заметка к давней задаче.
+        if (edit.kind == TaskEditKind.note &&
+            edit.target == null &&
+            !inTaskTalk &&
+            command.intent == CommandIntent.createTask &&
+            command.title != null &&
+            _dueInNote(edit, utterance)) {
+          return false;
+        }
         // «Отметь, что сдал отчёт» — сообщение о сделанном, его понимает
         // обычный разбор.
         return command.intent == CommandIntent.unknown ||
@@ -711,15 +824,59 @@ final class TasksConnector
     if (dueQuestion != null) {
       return _ask(session, 'task.reschedule', dueQuestion);
     }
-    final dueAt = command.dueAt;
+    var dueAt = command.dueAt;
+    var precision = command.duePrecision ?? DuePrecision.dateTime;
+    final shift = command.shift;
+    if (shift != null) {
+      // «Перенеси звонок на час позже»: сдвиг от срока самой задачи. Без
+      // срока (или часы у задачи на день) сдвигать не от чего — спросим,
+      // на когда, а не угадаем от «сейчас».
+      final current = await _tasks.find(target.id!);
+      final currentDue = current?.dueAt;
+      if (current != null &&
+          currentDue != null &&
+          shift.fits(current.duePrecision)) {
+        final moved = shift.apply(currentDue);
+        // «На 5 дней раньше» в прошлое — не молча: как срок в прошлом.
+        final now = session.clock.now();
+        final cutoff = current.duePrecision == DuePrecision.dateTime
+            ? now
+            : DateTime(now.year, now.month, now.day);
+        if (moved.isBefore(cutoff)) {
+          return _ask(
+            session,
+            'task.reschedule',
+            _dueClarification(DueIssue.inPast)!,
+          );
+        }
+        dueAt = moved;
+        precision = current.duePrecision;
+      }
+    }
+    if (dueAt != null && command.sameTime) {
+      // «На завтра на то же время»: день новый, время — задачи. Задача без
+      // точного времени — только день.
+      final current = await _tasks.find(target.id!);
+      final currentDue = current?.dueAt;
+      if (current != null &&
+          currentDue != null &&
+          current.duePrecision == DuePrecision.dateTime) {
+        dueAt = DateTime(
+          dueAt.year,
+          dueAt.month,
+          dueAt.day,
+          currentDue.hour,
+          currentDue.minute,
+        );
+      } else {
+        dueAt = DateTime(dueAt.year, dueAt.month, dueAt.day);
+        precision = DuePrecision.date;
+      }
+    }
     if (dueAt == null) {
       return _ask(session, 'task.reschedule', 'task.ask.rescheduleWhen');
     }
-    final task = await _tasks.reschedule(
-      target.id!,
-      dueAt,
-      command.duePrecision ?? DuePrecision.dateTime,
-    );
+    final task = await _tasks.reschedule(target.id!, dueAt, precision);
     session.select(id, task.id);
     return session.reply(
       'task.rescheduled',

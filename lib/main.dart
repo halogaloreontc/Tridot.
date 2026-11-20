@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -24,15 +25,20 @@ import 'app/passwords/device_keys.dart';
 import 'app/passwords/passwords_kit.dart';
 import 'app/security/app_lock.dart';
 import 'app/security/device_auth.dart';
+import 'app/intent/intent_kit.dart';
+import 'app/intent/intent_setup.dart';
 import 'app/voice/device_voice_recognizer.dart';
 import 'app/voice/voice_kit.dart';
 import 'app/voice/vosk_voice_recognizer.dart';
+import 'app/widgets/keyboard_safe.dart';
 import 'core/app_info.dart';
 import 'core/build_flags.dart';
 import 'core/chats/chat_store.dart';
 import 'core/connectors/connector.dart';
 import 'core/connectors/manifest/warehouse_signals.dart';
 import 'core/connectors/io_http_transport.dart';
+import 'core/connectors/manifest/app_connections.dart';
+import 'core/connectors/manifest/connection_directory_io.dart';
 import 'core/connectors/manifest/connection_store_io.dart';
 import 'core/connectors/manifest/connection_service.dart';
 import 'core/connectors/manifest/connection_slots.dart';
@@ -46,6 +52,7 @@ import 'core/passwords/vault.dart';
 import 'core/passwords/vault_crypto.dart';
 import 'core/passwords/vault_store.dart';
 import 'core/scenario/assistant_controller.dart';
+import 'core/scenario/connector_assembly.dart';
 import 'core/scenario/scenario_parser.dart';
 import 'core/services/clock.dart';
 import 'core/services/task_service.dart';
@@ -168,7 +175,13 @@ Future<void> main() async {
     onUnreachable: network.lost,
   );
   final connectionStore = JsonConnectionStore(p.join(folder, 'connections'));
-  final connections = <ConnectionService>[
+  final device = switch (currentJobPlatform()) {
+    JobPlatform.android => 'Связной · Android',
+    JobPlatform.macos => 'Связной · Mac',
+    JobPlatform.windows => 'Связной · Windows',
+    _ => 'Связной · Linux',
+  };
+  final knownConnections = <ConnectionService>[
     for (final slot in ConnectionSlots.all)
       await ConnectionService.restore(
         slot: slot,
@@ -179,18 +192,33 @@ Future<void> main() async {
         store: connectionStore,
         builtIn: await _builtInManifest(slot.builtInAsset),
         clock: clock,
-        device: switch (currentJobPlatform()) {
-          JobPlatform.android => 'Связной · Android',
-          JobPlatform.macos => 'Связной · Mac',
-          JobPlatform.windows => 'Связной · Windows',
-          _ => 'Связной · Linux',
-        },
+        device: device,
       ),
   ];
+  // Приложения из каталога подключений (ADR-043): connections/_directory.json,
+  // закреплённые описания рядом. Склад в каталоге не хранится.
+  ExtensionRegistry? registry;
+  final appConnections = AppConnections(
+    transport: transport,
+    secrets: secrets,
+    store: connectionStore,
+    directory: JsonConnectionDirectory(p.join(folder, 'connections')),
+    known: knownConnections,
+    clock: clock,
+    device: device,
+    reservedIds: () => <String>{
+      for (final connector in registry?.connectors ?? const <Connector>[])
+        connector.info.id,
+      for (final installed in registry?.packs.packs ?? const <InstalledPack>[])
+        installed.pack.id,
+    },
+  );
+  await appConnections.load();
+  final connections = appConnections.services;
   // Сигналы склада (ADR-031): только пока приложение открыто — паузу и
   // продолжение даёт HomePage по жизненному циклу.
   final signals = <WarehouseSignals>[
-    for (final connection in connections)
+    for (final connection in knownConnections)
       if (connection.slot.id == ConnectionSlots.warehouse.id)
         WarehouseSignals(
           service: connection,
@@ -301,10 +329,14 @@ Future<void> main() async {
     links: LinkOpener(platform: currentJobPlatform()),
   );
   await weather.load();
-  final extensions = ExtensionRegistry(
-    connectors: <Connector>[
+  // Один путь сборки коннекторов — при запуске и после «Подключить» /
+  // «Удалить» приложение (ADR-043): реестр пересобирается между ходами.
+  final assembly = ConnectorAssembly(
+    connections: appConnections,
+    before: <Connector>[
       TasksConnector(taskService: tasks, parser: ScenarioParser(clock: clock)),
-      for (final connection in connections) connection.connector,
+    ],
+    after: <Connector>[
       const CalculatorConnector(),
       TalkConnector(taskService: tasks),
       // Включаемый навык вне ролей, по умолчанию выключен (D1).
@@ -342,8 +374,12 @@ Future<void> main() async {
           YtdlUnavailableReason.of(currentJobPlatform(), play: kPlayBuild),
         ),
     ],
+  );
+  final extensions = ExtensionRegistry(
+    connectors: assembly.build(),
     packs: packs,
   );
+  registry = extensions;
   await packs.load();
   // Голосовой ввод (ADR-023): пока только Android — libvosk приходит из
   // AAR только для arm64-v8a. Модель скачивается по требованию в
@@ -379,6 +415,28 @@ Future<void> main() async {
     clock: clock,
     knownSecret: passwords?.facade.knownSecret,
   );
+  assembly.attach(extensions, assistant);
+  // Запасной слой понимания (ADR-045): на «не понял» — «Похоже, вы хотите
+  // …?». Память (личные примеры, журнал непонятых) — в
+  // <поддержка>/assistant/intent, только на устройстве. Модель — уровень
+  // из «Настройки → Понимание фраз» (IntentKit): скачивается только по
+  // кнопке, грузится в фоне после чтения настроек, не задерживая запуск.
+  // Без модели ответы правил те же.
+  final intentSetup = await IntentSetup.open(
+    support.path,
+    knownSecret: passwords?.facade.knownSecret,
+    clock: clock,
+  );
+  assistant.intent = intentSetup.fallback;
+  final intent = IntentKit(
+    host: intentSetup,
+    transport: transport,
+    downloader: IoFileDownloader(
+      allowedRedirectHosts: IntentRelease.redirectHosts,
+    ),
+    root: intentSetup.root,
+  );
+  await intent.refresh();
   // Вход в приложение по отпечатку / Face ID (ADR-025): включён — экран
   // закрыт с первого кадра, до загрузки остального интерфейса.
   final settingsStore = JsonSettingsStore(p.join(folder, 'settings.json'));
@@ -398,8 +456,10 @@ Future<void> main() async {
       appLock: appLock,
       chatStore: JsonChatStore(chatsPath),
       connections: connections,
+      appConnections: appConnections,
       passwords: passwords,
       voice: voice,
+      intent: intent,
       fileOpener: opener,
       ffmpeg: ffmpeg,
       nativeMedia: nativeMedia,
@@ -520,8 +580,10 @@ final class AssistantApp extends StatefulWidget {
     this.chatStore,
     this.connections = const <ConnectionService>[],
     this.network,
+    this.appConnections,
     this.passwords,
     this.voice,
+    this.intent,
     this.fileOpener,
     this.ffmpeg,
     this.nativeMedia,
@@ -553,11 +615,17 @@ final class AssistantApp extends StatefulWidget {
   /// Подключения к приложениям: экран «Настройки → Подключения».
   final List<ConnectionService> connections;
 
+  /// Каталог подключений (ADR-043): «Подключить приложение».
+  final AppConnections? appConnections;
+
   /// Навык «Пароли»; `null` — libsodium не загрузилась.
   final PasswordsKit? passwords;
 
   /// Голосовой ввод; `null` — платформа без движка распознавания.
   final VoiceKit? voice;
+
+  /// Модель понимания (ADR-045); `null` — раздела «Понимание фраз» нет.
+  final IntentKit? intent;
 
   /// «Открыть» у результата карточки расширения; `null` — по умолчанию.
   final FileOpener? fileOpener;
@@ -630,8 +698,10 @@ final class _AssistantAppState extends State<AssistantApp> {
       settingsStore: widget.settingsStore,
       chatStore: widget.chatStore,
       connections: widget.connections,
+      appConnections: widget.appConnections,
       passwords: widget.passwords,
       voice: widget.voice,
+      intent: widget.intent,
       fileOpener: widget.fileOpener,
       ffmpeg: widget.ffmpeg,
       nativeMedia: widget.nativeMedia,
@@ -652,11 +722,14 @@ final class _AssistantAppState extends State<AssistantApp> {
       builder: (BuildContext context, Widget? _) => MaterialApp(
         builder: (BuildContext context, Widget? child) {
           final content = child ?? const SizedBox.shrink();
-          return _overlay(
-            context,
-            lock == null
-                ? content
-                : AppLockGate(controller: lock, child: content),
+          // Поле в фокусе — целиком над клавиатурой (ADR-044).
+          return KeyboardSafeScope(
+            child: _overlay(
+              context,
+              lock == null
+                  ? content
+                  : AppLockGate(controller: lock, child: content),
+            ),
           );
         },
         title: AppInfo.name,

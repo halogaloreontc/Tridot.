@@ -117,6 +117,41 @@ void main() {
     });
   });
 
+  group('две команды в одном сообщении (CommandSplit)', () {
+    test('выполняется первая, вторая — кнопкой, без записи', () async {
+      final first = await assistant
+          .handle('добавь задачу купить хлеб и напомни позвонить маме завтра');
+      expect(first.status, AssistantStatus.completed);
+      expect(first.task?.title, 'Купить хлеб');
+      expect(first.message, contains('«Напомни позвонить маме завтра»'));
+      final button = first.suggestions!.commands.single;
+      expect(button.template, 'Напомни позвонить маме завтра');
+      expect(
+        (await service.listActive()).map((Task t) => t.title),
+        <String>['Купить хлеб'],
+        reason: 'вторая задача сама не создаётся',
+      );
+    });
+
+    test('первая ждёт ответа — вторая уже в поле ввода', () async {
+      final first =
+          await assistant.handle('напомни купить молоко и покажи задачи');
+      expect(first.status, AssistantStatus.needsClarification);
+      expect(first.draft, 'Покажи задачи');
+    });
+  });
+
+  group('поправка срока текущей задачи', () {
+    test('«не завтра, а в среду», «нет, в 11»', () async {
+      await assistant.handle('Добавь задачу «Отчёт» на завтра в 10:00');
+      final moved = await assistant.handle('не завтра, а в среду');
+      expect(moved.status, AssistantStatus.completed);
+      expect(moved.task?.dueAt?.day, 4);
+      final again = await assistant.handle('нет, в 11');
+      expect(again.task?.dueAt?.hour, 11);
+    });
+  });
+
   group('не та раскладка (LayoutFix)', () {
     test('чтение — сразу, с пояснением', () async {
       await assistant.handle('Добавь задачу «Отчёт»');
@@ -288,6 +323,70 @@ void main() {
 
     expect(response.status, AssistantStatus.needsClarification);
     expect(await repository.list(), isEmpty);
+  });
+
+  group('сдвиг одной задачи «на час позже»', () {
+    test('сдвигает от срока самой задачи', () async {
+      await assistant.handle('Добавь задачу «Звонок маме» на завтра в 10:00');
+
+      final moved =
+          await assistant.handle('перенеси звонок маме на час попозже');
+
+      expect(moved.status, AssistantStatus.completed);
+      expect(moved.task?.dueAt, DateTime(2026, 11, 3, 11));
+      expect(moved.task?.duePrecision, DuePrecision.dateTime);
+    });
+
+    test('«на полчаса раньше» выбранной задачи', () async {
+      await assistant.handle('Добавь задачу «Визит» на завтра в 10:00');
+
+      final moved = await assistant.handle('сдвинь её на полчаса раньше');
+
+      expect(moved.task?.dueAt, DateTime(2026, 11, 3, 9, 30));
+    });
+
+    test('у задачи без срока — вопрос, на когда', () async {
+      await assistant.handle('Добавь задачу «Звонок маме»');
+
+      final moved = await assistant.handle('перенеси на час позже');
+
+      expect(moved.status, AssistantStatus.needsClarification);
+      expect((await repository.list()).single.dueAt, isNull);
+    });
+
+    test('часы у задачи на день — вопрос, дни — сдвиг', () async {
+      await assistant.handle('Добавь задачу «Отчёт» на пятницу');
+
+      final hours = await assistant.handle('перенеси на 2 часа позже');
+      expect(hours.status, AssistantStatus.needsClarification);
+
+      final days = await assistant.handle('перенеси отчёт на 2 дня позже');
+      expect(days.status, AssistantStatus.completed);
+      expect(days.task?.dueAt, DateTime(2026, 11, 8));
+      expect(days.task?.duePrecision, DuePrecision.date);
+    });
+
+    test('сдвиг в прошлое — не молча', () async {
+      await assistant.handle('Добавь задачу «Отчёт» на завтра в 10:00');
+
+      final moved = await assistant.handle('перенеси отчёт на 2 дня раньше');
+
+      expect(moved.status, AssistantStatus.needsClarification);
+      expect(
+        (await repository.list()).single.dueAt,
+        DateTime(2026, 11, 3, 10),
+      );
+    });
+  });
+
+  test('«на завтра на то же время» берёт время задачи', () async {
+    await assistant.handle('Добавь задачу «Звонок юристу» на сегодня в 18:00');
+
+    final moved = await assistant
+        .handle('перенеси звонок юристу на завтра на то же время');
+
+    expect(moved.status, AssistantStatus.completed);
+    expect(moved.task?.dueAt, DateTime(2026, 11, 3, 18));
   });
 
   test('после завершения «её» больше не указывает на задачу', () async {

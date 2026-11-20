@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../../connectors/number_words.dart';
 import '../../replies/reply_library.dart';
 import 'rational.dart';
 
@@ -288,10 +289,18 @@ abstract final class Calculator {
     // (список, текст с рядом точек) не должна тормозить разбор каждого
     // сообщения. Смотрим только на начало: есть ли маркер.
     if (message.length > maxLength) return _tooLong(message);
-    var text = message.toLowerCase().replaceAll('ё', 'е').trim();
+    var text = message
+        .toLowerCase()
+        .replaceAll('ё', 'е')
+        // «Скока будет …» — разговорное «сколько».
+        .replaceAll(_skoka, 'сколько')
+        .trim();
     if (text.isEmpty) return null;
     var explicit = false;
     var weakMarker = false;
+    // «48 на 25 скока»: «сколько» в конце — вопрос о примере, «на» между
+    // числами — умножение, как с маркером впереди.
+    var askedTail = false;
 
     // Частица впереди: «а 4.5 умножить на 3.2?», «ну 2+2». Не маркер:
     // «а 5» по-прежнему не пример.
@@ -329,6 +338,7 @@ abstract final class Calculator {
       final weakTail = _weakTail.firstMatch(text);
       if (weakTail != null) {
         weakMarker = true;
+        askedTail = true;
         text = text.substring(0, weakTail.start).trimRight();
         continue;
       }
@@ -337,18 +347,67 @@ abstract final class Calculator {
       if (match.group(0)!.contains(_tailMarker)) explicit = true;
       text = text.substring(0, match.start).trimRight();
     }
-    final head = _head.firstMatch(text);
+    // «Сколько процентов составляет 30 от 120» — доля в процентах.
+    final share = _share.firstMatch(text);
+    if (share != null) {
+      explicit = true;
+      text = '(${share.group(1)}) / (${share.group(2)}) * 100';
+    }
+    final head = share == null ? _head.firstMatch(text) : null;
     if (head != null) {
       explicit = true;
       text = text.substring(head.end).trim();
-    } else {
+      // «Сколько будет, если 1200 разделить на троих», «посчитай мне
+      // двадцать пять процентов от восьмисот».
+      text = text.replaceFirst(_ifLead, '').replaceFirst(_forMe, '');
+    } else if (share == null) {
       final weak = _weakHead.firstMatch(text);
       if (weak != null) {
         weakMarker = true;
         text = text.substring(weak.end).trim();
+        // «Сколько это 60 на 24» — вопрос о примере, как «сколько» в
+        // конце: «на» между числами — умножение.
+        final it = _itLead.firstMatch(text);
+        if (it != null) {
+          askedTail = true;
+          text = text.substring(it.end);
+        }
       }
     }
+    // «Половина от 3700», «треть от 900» — доля числа, только с маркером.
+    final part = _partOf.firstMatch(text);
+    if (part != null && (explicit || weakMarker || askedTail)) {
+      text = '(${part.group(2)}) / ${_parts[part.group(1)]}';
+    }
     if (text.isEmpty) return null;
+    // «НДС 12% от 50000», «50000 плюс НДС 20%» — налог в процентах:
+    // слово «НДС» ничего не меняет в примере.
+    if (text.contains('%') || text.contains('процент')) {
+      text = text.replaceAll(_vat, ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    }
+    // «Скидка 30% на 4500», «4500 со скидкой 30%» — цена минус процент.
+    final discount = _discount.firstMatch(text);
+    final discounted = discount == null ? _discounted.firstMatch(text) : null;
+    // «Наценка 30 процентов на 850» — цена плюс процент.
+    final markup = discount == null && discounted == null
+        ? _markup.firstMatch(text)
+        : null;
+    if (markup != null) {
+      weakMarker = true;
+      text = '(${markup.group(2)}) + ${markup.group(1)}';
+    } else if (discount != null) {
+      weakMarker = true;
+      text = '(${discount.group(2)}) - ${discount.group(1)}';
+    } else if (discounted != null) {
+      weakMarker = true;
+      text = '(${discounted.group(1)}) - ${discounted.group(2)}';
+    }
+    // «Три в четвёртой степени», «2 в десятой» — степень порядковым
+    // числом.
+    text = text.replaceAllMapped(
+      _ordinalPower,
+      (Match m) => ' ^ ${_ordinalPowers[m.group(1)]}',
+    );
     // «Умножить 3 на 4», «раздели 10 на 4»: действие впереди; «тысячу на
     // четыре разделить» — в конце.
     final prefix = _prefixOperation.firstMatch(text);
@@ -359,6 +418,11 @@ abstract final class Calculator {
     } else if (suffix != null) {
       final sign = suffix.group(3)!.contains('множ') ? '*' : '/';
       text = '(${suffix.group(1)}) $sign (${suffix.group(2)})';
+    } else if (explicit || askedTail) {
+      // «Сколько будет двести на три» — с маркером «на» между числами —
+      // умножение, как в «2 на 3». Без маркера «доска 2 на 3» — размер.
+      final by = _byTimes.firstMatch(text);
+      if (by != null) text = '(${by.group(1)}) * (${by.group(2)})';
     }
     // «Пять плюс семь, умножить на два»: действие после запятой — над
     // результатом всего, что до неё.
@@ -486,6 +550,79 @@ abstract final class Calculator {
 
   // ------------------------------------------------------------ распознавание
 
+  static final RegExp _skoka = RegExp(r'(?<![а-я])ско(?:ка|ко|лька)(?![а-я])');
+
+  /// «Сколько процентов составляет 30 от 120», «какой процент составляет
+  /// 30 от 120», «сколько процентов 45 от 180» (без глагола — число сразу).
+  static final RegExp _share = RegExp(
+    r'^(?:а\s+)?(?:сколько\s+процентов|какой\s+процент|какую\s+долю)\s+'
+    r'(?:(?:составляет|составят|будет|это|занимает)\s+|(?=\d))'
+    r'(.+?)\s+от\s+(.+)$',
+  );
+
+  /// «Если» сразу после маркера: «сколько будет, если …».
+  static final RegExp _ifLead = RegExp(r'^если(?:[,\s]+|$)');
+
+  static final RegExp _vat = RegExp(r'(?<![а-я])ндс(?![а-я])');
+
+  /// «Скидка 30% на 4500», «скидка 15 процентов от 2000».
+  static final RegExp _discount = RegExp(
+    r'^скидк[аиу]\s+(.+?(?:%|процент(?:а|ов)?))\s+(?:на|от|с)\s+(.+)$',
+  );
+
+  /// «Наценка 30% на 850», «наценка 15 процентов к 2000».
+  static final RegExp _markup = RegExp(
+    r'^наценк[аиу]\s+(?:в\s+)?(.+?(?:%|процент(?:а|ов)?))\s+(?:на|к)\s+(.+)$',
+  );
+
+  /// «Мне» сразу после маркера: «посчитай мне …».
+  static final RegExp _forMe = RegExp(r'^мне(?:[,\s]+|$)');
+
+  /// «Это» после «сколько»: «сколько это 60 на 24».
+  static final RegExp _itLead = RegExp(r'^это\s+(?=[\d(-]|[а-я]+\s)');
+
+  /// «Половина от 3700», «треть 900», «четверть от тысячи».
+  static final RegExp _partOf = RegExp(
+    r'^(половина|половину|треть|четверть)\s+(?:от\s+)?(.+)$',
+  );
+
+  static const Map<String, int> _parts = <String, int>{
+    'половина': 2,
+    'половину': 2,
+    'треть': 3,
+    'четверть': 4,
+  };
+
+  /// «4500 со скидкой 30%».
+  static final RegExp _discounted = RegExp(
+    r'^(.+?)\s+со\s+скидкой\s+(?:в\s+)?(.+?(?:%|процент(?:а|ов)?))$',
+  );
+
+  /// Порядковое число после «в» — показатель степени: «в четвертой
+  /// (степени)», «в десятой».
+  static final RegExp _ordinalPower = RegExp(
+    r'\s+в\s+(второй|третьей|четвертой|пятой|шестой|седьмой|восьмой|'
+    r'девятой|десятой)(?:\s+степени)?(?![а-я])',
+  );
+
+  static const Map<String, int> _ordinalPowers = <String, int>{
+    'второй': 2,
+    'третьей': 3,
+    'четвертой': 4,
+    'пятой': 5,
+    'шестой': 6,
+    'седьмой': 7,
+    'восьмой': 8,
+    'девятой': 9,
+    'десятой': 10,
+  };
+
+  /// «X на Y» без других действий: только с маркером.
+  static final RegExp _byTimes = RegExp(
+    r'^(?!.*(?:множ|дел|плюс|минус|процент|корен|степен|скидк|[+*/×÷:^%-]))'
+    r'(.+?)\s+на\s+(.+)$',
+  );
+
   static final RegExp _tail = RegExp(
     r'(?:[\s?!.,]+|\s*=|(?<![а-я])(?:равно|равняется|будет|пожалуйста))$',
   );
@@ -493,7 +630,8 @@ abstract final class Calculator {
 
   static final RegExp _head = RegExp(
     r'^(?:а\s+)?(?:пожалуйста[,\s]+)?'
-    r'(?:сколько\s+будет|посчитай(?:те)?|подсчитай(?:те)?|сосчитай(?:те)?|'
+    r'(?:сколько\s+будет|сколько\s+получится|что\s+получится|'
+    r'посчитай(?:те)?|подсчитай(?:те)?|сосчитай(?:те)?|'
     r'вычисли(?:те)?|реши(?:те)?|рассчитай(?:те)?|'
     // «Извлеки», «найди» — маркер только перед корнем: «извлеки два
     // урока», «извлеки данные из 5 файлов», «найди 64115» — не примеры.
@@ -506,7 +644,7 @@ abstract final class Calculator {
     r'(?:(?:квадратный|кубический)\s+)?корень'
     r'(?:\s+(?:квадратный|кубический|третьей|степени|из))*\s*'
     '(?:[\\d(]|$_rootNumberWords(?![а-я]))))'
-    r'(?:[,\s]+пожалуйста)?(?:[,:\s]+|$)',
+    r'(?:[,\s]+(?:пожалуйста|плиз|плз|пж))?(?:[,:\s]+|$)',
   );
 
   /// Числа словами после «найди корень из»: «из девяти», «из ста».
@@ -529,7 +667,7 @@ abstract final class Calculator {
 
   /// Действие после запятой: «…, умножить на два», «…, плюс 3».
   static final RegExp _continuation = RegExp(
-    r'^(.+?),\s*(умножить|умножь|помножить|разделить|раздели|поделить|'
+    r'^(.+?)(?:,\s*|\s+и\s+)(умножить|умножь|помножить|разделить|раздели|поделить|'
     r'подели|плюс|прибавить|прибавь|минус|отнять|отними|вычесть|вычти)'
     r'\s+(?:на\s+)?(.+)$',
   );
@@ -561,7 +699,9 @@ abstract final class Calculator {
   static final RegExp _askTail = RegExp(
     r'(?:^|[,\s]+)(?:(?:дай|дайте|скажи|скажите|напиши|назови)\s+ответ|'
     r'(?:какой|каков)\s+(?:будет\s+)?(?:ответ|результат|остаток)|'
-    r'сколько\s+получится|что\s+получится)$',
+    r'сколько\s+получится|что\s+получится|'
+    // «Скидка 30% на 4500, сколько платить».
+    r'сколько\s+(?:платить|заплатить|выйдет|к\s+оплате|будет\s+стоить))$',
   );
 
   /// Частица в начале примера без маркера: «а», «ну», «и».
@@ -1085,6 +1225,7 @@ final class _Lexer {
       ('помножить на', _Kind.times),
       ('помножь на', _Kind.times),
       ('умноженное на', _Kind.times),
+      ('помноженное на', _Kind.times),
       ('умножить', _Kind.times),
       ('разделить на', _Kind.divide),
       ('раздели на', _Kind.divide),
@@ -1093,6 +1234,7 @@ final class _Lexer {
       ('делить на', _Kind.divide),
       ('деленное на', _Kind.divide),
       ('разделенное на', _Kind.divide),
+      ('поделенное на', _Kind.divide),
       ('плюс', _Kind.plus),
       ('минус', _Kind.minus),
       ('процентов', _Kind.percent),
@@ -1103,118 +1245,27 @@ final class _Lexer {
       (RegExp('${pattern.replaceAll(' ', r'\s+')}(?![а-я])'), kind),
   ];
 
-  static const Map<String, (int, int)> _numberWords = <String, (int, int)>{
-    // значение, ранг: единицы и 10–19 — 0, десятки — 1, сотни — 2.
-    'ноль': (0, -1),
-    'нуль': (0, -1),
-    'один': (1, 0),
-    'одна': (1, 0),
-    'одно': (1, 0),
-    'два': (2, 0),
-    // Числа-существительные: «восьмёрку в кубе». Без действия они не
-    // пример («получил пятёрку»).
-    'единица': (1, 0),
-    'единицу': (1, 0),
-    'двойка': (2, 0),
-    'двойку': (2, 0),
-    'тройка': (3, 0),
-    'тройку': (3, 0),
-    'четверка': (4, 0),
-    'четверку': (4, 0),
-    'пятерка': (5, 0),
-    'пятерку': (5, 0),
-    'шестерка': (6, 0),
-    'шестерку': (6, 0),
-    'семерка': (7, 0),
-    'семерку': (7, 0),
-    'восьмерка': (8, 0),
-    'восьмерку': (8, 0),
-    'девятка': (9, 0),
-    'девятку': (9, 0),
-    'десятка': (10, 0),
-    'десятку': (10, 0),
-    'две': (2, 0),
-    'три': (3, 0),
-    'четыре': (4, 0),
-    'пять': (5, 0),
-    'шесть': (6, 0),
-    'семь': (7, 0),
-    'восемь': (8, 0),
-    'девять': (9, 0),
-    'десять': (10, 0),
-    'одиннадцать': (11, 0),
-    'двенадцать': (12, 0),
-    'тринадцать': (13, 0),
-    'четырнадцать': (14, 0),
-    'пятнадцать': (15, 0),
-    'шестнадцать': (16, 0),
-    'семнадцать': (17, 0),
-    'восемнадцать': (18, 0),
-    'девятнадцать': (19, 0),
-    'двадцать': (20, 1),
-    'тридцать': (30, 1),
-    'сорок': (40, 1),
-    'пятьдесят': (50, 1),
-    'шестьдесят': (60, 1),
-    'семьдесят': (70, 1),
-    'восемьдесят': (80, 1),
-    'девяносто': (90, 1),
-    'сто': (100, 2),
-    'двести': (200, 2),
-    'триста': (300, 2),
-    'четыреста': (400, 2),
-    'пятьсот': (500, 2),
-    'шестьсот': (600, 2),
-    'семьсот': (700, 2),
-    'восемьсот': (800, 2),
-    'девятьсот': (900, 2),
-    // Родительный падеж: «15% от двухсот», «корень из шестнадцати».
-    'нуля': (0, -1),
-    'одного': (1, 0),
-    'одной': (1, 0),
-    'двух': (2, 0),
-    'трех': (3, 0),
-    'четырех': (4, 0),
-    'пяти': (5, 0),
-    'шести': (6, 0),
-    'семи': (7, 0),
-    'восьми': (8, 0),
-    'девяти': (9, 0),
-    'десяти': (10, 0),
-    'одиннадцати': (11, 0),
-    'двенадцати': (12, 0),
-    'тринадцати': (13, 0),
-    'четырнадцати': (14, 0),
-    'пятнадцати': (15, 0),
-    'шестнадцати': (16, 0),
-    'семнадцати': (17, 0),
-    'восемнадцати': (18, 0),
-    'девятнадцати': (19, 0),
-    'двадцати': (20, 1),
-    'тридцати': (30, 1),
-    'сорока': (40, 1),
-    'пятидесяти': (50, 1),
-    'шестидесяти': (60, 1),
-    'семидесяти': (70, 1),
-    'восьмидесяти': (80, 1),
-    'девяноста': (90, 1),
-    'ста': (100, 2),
-    'двухсот': (200, 2),
-    'трехсот': (300, 2),
-    'четырехсот': (400, 2),
-    'пятисот': (500, 2),
-    'шестисот': (600, 2),
-    'семисот': (700, 2),
-    'восьмисот': (800, 2),
-    'девятисот': (900, 2),
+  static final Map<String, (int, int)> _numberWords = <String, (int, int)>{
+    // значение, ранг: единицы и 10–19 — 0, десятки — 1, сотни — 2. Общий
+    // словарь чисел — [NumberWords.ranked].
+    ...NumberWords.ranked,
+    // Числа-существительные: «восьмёрку в кубе», «куб семёрки». Без
+    // действия они не пример («получил пятёрку»).
+    for (final MapEntry(:key, :value) in NumberWords.nouns.entries)
+      key: (value, 0),
+    // Собирательные: «разделить на троих».
+    'двоих': (2, 0),
+    'троих': (3, 0),
+    'четверых': (4, 0),
+    'пятерых': (5, 0),
+    'шестерых': (6, 0),
+    'семерых': (7, 0),
+    'восьмерых': (8, 0),
+    'девятерых': (9, 0),
+    'десятерых': (10, 0),
   };
 
-  static const Set<String> _thousands = <String>{
-    'тысяча',
-    'тысячи',
-    'тысяч',
-    'тысячу',
-  };
+  static const Set<String> _thousands = NumberWords.thousands;
 
   /// Множитель словом, как в таблице умножения: «дважды два», «трижды
   /// три», «пятью пять» — число и знак умножения.
@@ -1277,6 +1328,7 @@ final class _Lexer {
         if (value == null) throw const _CalcError(CalcFailure.malformed);
         _tokens.add(_Token(_Kind.number, value: value, literal: literal));
         _pos = number.end;
+        _addHalf();
         continue;
       }
       if (_tokens.isNotEmpty && _tokens.last.kind == _Kind.number) {
@@ -1308,8 +1360,13 @@ final class _Lexer {
         '∛' => _Kind.cbrt,
         '²' => _Kind.square,
         '³' => _Kind.cube,
-        // «3 х 4»: буква «х» — умножение, только с пробелами вокруг.
-        'x' || 'х' when _spaceAround(_pos) => _Kind.times,
+        // «3 х 4», «4x8», «2,5х4»: буква «х» (латинская или русская) —
+        // умножение с пробелами вокруг или вплотную между цифрами.
+        'x' ||
+        'х'
+            when _spaceAround(_pos) ||
+                (_digitBefore(_pos) && _digitAfter(_pos)) =>
+          _Kind.times,
         _ => null,
       };
       if (symbol != null) {
@@ -1318,12 +1375,15 @@ final class _Lexer {
           _pos += 2;
           continue;
         }
-        final tight = _digitBefore(_pos) && _digitAfter(_pos);
+        // «÷» датой или кодом не бывает: «4÷8» — пример и вплотную.
+        final tight = char != '÷' && _digitBefore(_pos) && _digitAfter(_pos);
         _tokens.add(_Token(symbol, tight: tight));
         _pos++;
         continue;
       }
-      if (_readTimesWord() || _readWordOperator() || _readNumberWords()) {
+      if (_readTimesWord() || _readWordOperator()) continue;
+      if (_readNumberWords()) {
+        _addHalf();
         continue;
       }
       throw const _CalcError(CalcFailure.malformed);
@@ -1353,6 +1413,22 @@ final class _Lexer {
       return true;
     }
     return false;
+  }
+
+  static final RegExp _andHalf = RegExp(r'\s+с\s+половиной(?![а-я])');
+
+  /// «Два с половиной», «3 с половиной»: к числу — ½.
+  void _addHalf() {
+    final match = _andHalf.matchAsPrefix(text, _pos);
+    if (match == null) return;
+    final last = _tokens.removeLast();
+    _tokens.add(
+      _Token(
+        _Kind.number,
+        value: last.value! + Rational(BigInt.one, BigInt.two),
+      ),
+    );
+    _pos = match.end;
   }
 
   static final RegExp _oneAndHalf = RegExp(

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../../connectors/due_parser.dart';
+import '../../connectors/verb_forms.dart';
 import '../../personas/persona.dart';
 import '../../replies/reply_catalog.dart';
 
@@ -195,6 +196,21 @@ abstract final class TalkPhrases {
     'вот',
     'а',
     'вообще',
+    // Обращение по-свойски: «спс бро», «как дела, дружище».
+    'бро',
+    'братан',
+    'братишка',
+    'дружище',
+    // «Вечер добрый, дорогой помощник», «как настроение, железяка»,
+    // «развесели старика».
+    'дорогой',
+    'дорогая',
+    'дорогуша',
+    'помощник',
+    'железяка',
+    'старина',
+    'старика',
+    'во',
   };
 
   /// Имена для обращения → id: «привет, Нода», «пусть отвечает Лио»
@@ -305,15 +321,32 @@ abstract final class TalkPhrases {
     'мне',
     'же',
     'честно',
+    // «Ты дурак что ли», «ты тупой, что ль».
+    'что',
+    'ли',
+    'ль',
+    'чтоли',
   };
 
   static const Map<String, TalkRequest> _phrases = <String, TalkRequest>{
     // Приветствия.
     'привет': TalkRequest(TalkTopic.greet),
     'приветик': TalkRequest(TalkTopic.greet),
+    // Разговорные: «прив», «дарова», «здарова» («здорово!» без имени —
+    // отклик, а не приветствие).
+    'прив': TalkRequest(TalkTopic.greet),
+    'приветы': TalkRequest(TalkTopic.greet),
+    'дарова': TalkRequest(TalkTopic.greet),
+    'здарова': TalkRequest(TalkTopic.greet),
+    'здаров': TalkRequest(TalkTopic.greet),
+    'хаюшки': TalkRequest(TalkTopic.greet),
     'привет привет': TalkRequest(TalkTopic.greet),
     'всем привет': TalkRequest(TalkTopic.greet),
     'приветствую': TalkRequest(TalkTopic.greet),
+    'здравия желаю': TalkRequest(TalkTopic.greet),
+    'давно не болтали': TalkRequest(TalkTopic.greet),
+    'давно не виделись': TalkRequest(TalkTopic.greet),
+    'сколько лет сколько зим': TalkRequest(TalkTopic.greet),
     'здравствуй': TalkRequest(TalkTopic.greet),
     'здравствуйте': TalkRequest(TalkTopic.greet),
     'здрасте': TalkRequest(TalkTopic.greet),
@@ -330,6 +363,17 @@ abstract final class TalkPhrases {
     'доброго дня': TalkRequest(TalkTopic.greet, saidPart: DayPart.day),
     'добрый вечер': TalkRequest(TalkTopic.greet, saidPart: DayPart.evening),
     'доброго вечера': TalkRequest(TalkTopic.greet, saidPart: DayPart.evening),
+    // Обратный порядок: «вечер добрый», «утро доброе», «день добрый».
+    'вечер добрый': TalkRequest(TalkTopic.greet, saidPart: DayPart.evening),
+    'утро доброе': TalkRequest(TalkTopic.greet, saidPart: DayPart.morning),
+    'день добрый': TalkRequest(TalkTopic.greet, saidPart: DayPart.day),
+    // Ласкательные: «доброго утречка», «доброго вечерочка».
+    'доброе утречко': TalkRequest(TalkTopic.greet, saidPart: DayPart.morning),
+    'доброго утречка': TalkRequest(TalkTopic.greet, saidPart: DayPart.morning),
+    'доброго денечка': TalkRequest(TalkTopic.greet, saidPart: DayPart.day),
+    'добрый вечерочек': TalkRequest(TalkTopic.greet, saidPart: DayPart.evening),
+    'доброго вечерочка':
+        TalkRequest(TalkTopic.greet, saidPart: DayPart.evening),
 
     // Прощания.
     'пока': TalkRequest(TalkTopic.bye),
@@ -349,11 +393,20 @@ abstract final class TalkPhrases {
     'до связи': TalkRequest(TalkTopic.bye),
     'увидимся': TalkRequest(TalkTopic.bye),
     'бывай': TalkRequest(TalkTopic.bye),
+    'спишемся': TalkRequest(TalkTopic.bye),
+    'завтра спишемся': TalkRequest(TalkTopic.bye),
+    'созвонимся': TalkRequest(TalkTopic.bye),
+    'ну все бывай': TalkRequest(TalkTopic.bye),
+    'все бывай': TalkRequest(TalkTopic.bye),
     'прощай': TalkRequest(TalkTopic.bye),
     'всего доброго': TalkRequest(TalkTopic.bye),
     'всего хорошего': TalkRequest(TalkTopic.bye),
     'пора': TalkRequest(TalkTopic.bye),
     'все пока': TalkRequest(TalkTopic.bye),
+    'давай пока': TalkRequest(TalkTopic.bye),
+    'все давай пока': TalkRequest(TalkTopic.bye),
+    'пока давай': TalkRequest(TalkTopic.bye),
+    'ну все давай': TalkRequest(TalkTopic.bye),
     'чао': TalkRequest(TalkTopic.bye),
     'bye': TalkRequest(TalkTopic.bye),
     'спокойной ночи': TalkRequest(TalkTopic.bye, night: true),
@@ -364,6 +417,17 @@ abstract final class TalkPhrases {
     'спс': TalkRequest(TalkTopic.thanks),
     'спасибочки': TalkRequest(TalkTopic.thanks),
     'спасибки': TalkRequest(TalkTopic.thanks),
+    'благодарочка': TalkRequest(TalkTopic.thanks),
+    'благодарствую': TalkRequest(TalkTopic.thanks),
+    'премного благодарен': TalkRequest(TalkTopic.thanks),
+    'премного благодарна': TalkRequest(TalkTopic.thanks),
+    'от души': TalkRequest(TalkTopic.thanks),
+    'выручил': TalkRequest(TalkTopic.thanks),
+    'выручила': TalkRequest(TalkTopic.thanks),
+    'то что надо': TalkRequest(TalkTopic.thanks),
+    'пасиб': TalkRequest(TalkTopic.thanks),
+    'пасиба': TalkRequest(TalkTopic.thanks),
+    'сенкс': TalkRequest(TalkTopic.thanks),
     'благодарю': TalkRequest(TalkTopic.thanks),
     'благодарю тебя': TalkRequest(TalkTopic.thanks),
     'благодарю вас': TalkRequest(TalkTopic.thanks),
@@ -395,10 +459,16 @@ abstract final class TalkPhrases {
     'как вы': TalkRequest(TalkTopic.howAreYou),
     'как жизнь': TalkRequest(TalkTopic.howAreYou),
     'как поживаешь': TalkRequest(TalkTopic.howAreYou),
+    'как ты поживаешь': TalkRequest(TalkTopic.howAreYou),
+    'как ты там поживаешь': TalkRequest(TalkTopic.howAreYou),
+    'как вы поживаете': TalkRequest(TalkTopic.howAreYou),
     'как поживаете': TalkRequest(TalkTopic.howAreYou),
     'как сам': TalkRequest(TalkTopic.howAreYou),
     'как сама': TalkRequest(TalkTopic.howAreYou),
     'как настроение': TalkRequest(TalkTopic.howAreYou),
+    'как настроение у тебя': TalkRequest(TalkTopic.howAreYou),
+    'как у тебя настроение': TalkRequest(TalkTopic.howAreYou),
+    'как твое настроение': TalkRequest(TalkTopic.howAreYou),
     'как оно': TalkRequest(TalkTopic.howAreYou),
     'все в порядке': TalkRequest(TalkTopic.howAreYou),
     'все ли в порядке': TalkRequest(TalkTopic.howAreYou),
@@ -420,6 +490,10 @@ abstract final class TalkPhrases {
     'представься': TalkRequest(TalkTopic.whoAreYou),
     'представьтесь': TalkRequest(TalkTopic.whoAreYou),
     'с кем я говорю': TalkRequest(TalkTopic.whoAreYou),
+    'как тебя звать': TalkRequest(TalkTopic.whoAreYou),
+    'звать то тебя как': TalkRequest(TalkTopic.whoAreYou),
+    'звать тебя как': TalkRequest(TalkTopic.whoAreYou),
+    'кто ты вообще': TalkRequest(TalkTopic.whoAreYou),
     'что за бот': TalkRequest(TalkTopic.whoAreYou),
     'ты что за бот': TalkRequest(TalkTopic.whoAreYou),
     'что ты за бот': TalkRequest(TalkTopic.whoAreYou),
@@ -457,6 +531,11 @@ abstract final class TalkPhrases {
     'чем ты можешь помочь': TalkRequest(TalkTopic.capabilities),
     'чем можешь помочь': TalkRequest(TalkTopic.capabilities),
     'чем можете помочь': TalkRequest(TalkTopic.capabilities),
+    'чем ты можешь быть полезен': TalkRequest(TalkTopic.capabilities),
+    'чем ты можешь быть полезна': TalkRequest(TalkTopic.capabilities),
+    'чем ты полезен': TalkRequest(TalkTopic.capabilities),
+    'чем ты полезна': TalkRequest(TalkTopic.capabilities),
+    'чем вы можете быть полезны': TalkRequest(TalkTopic.capabilities),
     'помощь': TalkRequest(TalkTopic.capabilities),
     'помоги': TalkRequest(TalkTopic.capabilities),
     'справка': TalkRequest(TalkTopic.capabilities),
@@ -483,6 +562,10 @@ abstract final class TalkPhrases {
     'еще анекдот': TalkRequest(TalkTopic.joke),
     'рассмеши': TalkRequest(TalkTopic.joke),
     'рассмеши меня': TalkRequest(TalkTopic.joke),
+    'развесели': TalkRequest(TalkTopic.joke),
+    'развесели меня': TalkRequest(TalkTopic.joke),
+    'развесели анекдотом': TalkRequest(TalkTopic.joke),
+    'развесели меня анекдотом': TalkRequest(TalkTopic.joke),
     'расскажи что нибудь смешное': TalkRequest(TalkTopic.joke),
     'каламбур': TalkRequest(TalkTopic.joke, pun: true),
     'скажи каламбур': TalkRequest(TalkTopic.joke, pun: true),
@@ -753,6 +836,13 @@ abstract final class TalkPhrases {
   /// «привет, как дела?», «добрый вечер, что ты умеешь», «спасибо, пока»,
   /// «привет, говори короче», «спасибо, дурак». Длинные — первыми.
   static const List<String> _prefixes = <String>[
+    // «Привет-привет, давно не болтали», «ну всё, бывай, завтра
+    // спишемся», «звать-то тебя как и кто ты вообще».
+    'привет привет',
+    'ну все бывай',
+    'бывай',
+    'звать то тебя как',
+    'как тебя зовут',
     'спасибо большое',
     'большое спасибо',
     'доброе утро',
@@ -783,6 +873,9 @@ abstract final class TalkPhrases {
     'отлично',
     'супер',
     'класс',
+    // «О, Связной, привет».
+    'о',
+    'ого',
   };
 
   /// Связка между вступлением и репликой: «спасибо и пока».
@@ -1098,6 +1191,15 @@ abstract final class TalkPhrases {
           ? TalkRequest(TalkTopic.joke, pun: thanksFor.contains('каламбур'))
           : _recognizeWords(restWords);
       if (rest == null) continue;
+      // «Спс, понятно», «спасибо, ясно»: отклик после благодарности —
+      // всё ещё благодарность.
+      if (rest.topic == TalkTopic.reaction &&
+          _thanksWords.contains(prefixWords.last)) {
+        final thanks = named.isEmpty
+            ? const TalkRequest(TalkTopic.thanks)
+            : const TalkRequest(TalkTopic.thanks).withPersona(named.first);
+        return named.length > 1 ? null : thanks;
+      }
       if (named.length > 1 ||
           (named.isNotEmpty &&
               rest.persona != null &&
@@ -1187,6 +1289,7 @@ abstract final class TalkPhrases {
         _settingRequest(plain) ??
         _jokeRequest(plain) ??
         _capabilitiesRequest(plain) ??
+        _skillAbilityRequest(plain) ??
         (loose ? _thanksRequest(plain) : null);
     return request?.withPersona(persona);
   }
@@ -2283,6 +2386,40 @@ abstract final class TalkPhrases {
     return const TalkRequest(TalkTopic.capabilities);
   }
 
+  /// «Умеешь ставить будильник?», «умеешь считать проценты?», «как
+  /// пользоваться калькулятором» — вопрос о том, что умеет помощник:
+  /// «умеешь» и инфинитив, дальше не больше двух слов без чисел. «Можешь
+  /// поставить будильник?» — вежливая просьба, а не вопрос: её здесь нет.
+  static TalkRequest? _skillAbilityRequest(List<String> words) {
+    var at = 0;
+    while (at < words.length && (words[at] == 'ты' || words[at] == 'вы')) {
+      at++;
+    }
+    final rest = words.sublist(at);
+    if (rest.isEmpty || rest.any((String w) => RegExp(r'\d').hasMatch(w))) {
+      return null;
+    }
+    if ((rest.first == 'умеешь' || rest.first == 'умеете') &&
+        rest.length >= 2 &&
+        rest.length <= 4 &&
+        VerbForms.isInfinitive(rest[1])) {
+      return const TalkRequest(TalkTopic.capabilities);
+    }
+    if (rest.length == 3 &&
+        rest[0] == 'как' &&
+        rest[1] == 'пользоваться' &&
+        (_appTopics.any(rest[2].startsWith) ||
+            _skillTopics.any(rest[2].startsWith))) {
+      return const TalkRequest(TalkTopic.capabilities);
+    }
+    return null;
+  }
+
+  /// Основы названий навыков: «как пользоваться будильником».
+  static const List<String> _skillTopics = <String>[
+    'будильник', 'таймер', 'погод', 'конвертер', 'архиватор', 'склад', //
+  ];
+
   /// Слова благодарности: «спасибо», «спс», «благодарю».
   static const Set<String> _thanksWords = <String>{
     'спасибо',
@@ -2316,6 +2453,8 @@ abstract final class TalkPhrases {
     'ясно',
     'понятно',
     'все',
+    'верно',
+    'правильно',
     'и',
     'так',
     'ты',

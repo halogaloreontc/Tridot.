@@ -25,6 +25,30 @@ enum VoiceEngineChoice {
       };
 }
 
+/// Уровень модели понимания (ADR-045): «Выключено» (по умолчанию),
+/// «Лёгкая» или «Точная». Модель скачивается по выбору пользователя.
+enum IntentTier {
+  off('off', 'Выключено'),
+  light('light', 'Лёгкая'),
+  accurate('accurate', 'Точная');
+
+  const IntentTier(this.id, this.title);
+
+  /// Значение `intent.tier` в settings.json и уровень в `latest.json`.
+  final String id;
+
+  /// Подпись в настройках.
+  final String title;
+
+  /// Неизвестное или битое значение — [off].
+  static IntentTier parse(Object? value) {
+    for (final tier in values) {
+      if (tier.id == value) return tier;
+    }
+    return off;
+  }
+}
+
 /// Оформление (ADR-027): как в системе, светлое или тёмное.
 enum AppAppearance {
   system('system', 'Как в системе'),
@@ -79,6 +103,10 @@ final class AppSettings {
     this.appLockAfter = 60,
     this.formDefaults = const <String, String>{},
     this.homeScreenShowText = true,
+    this.intentTier = IntentTier.off,
+    this.intentLearning = true,
+    this.intentLogging = true,
+    this.intentOffered = false,
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -126,6 +154,12 @@ final class AppSettings {
       appLockAfter: _lockAfter(json['security.app_lock_after']),
       formDefaults: cleanFormDefaults(json['form_defaults']),
       homeScreenShowText: json['widgets.show_text'] != false,
+      // Понимание фраз (ADR-045): прежние настройки без этих ключей —
+      // модель выключена, учёба и журнал включены.
+      intentTier: IntentTier.parse(json['intent.tier']),
+      intentLearning: json['intent.learning'] != false,
+      intentLogging: json['intent.logging'] != false,
+      intentOffered: json['intent.offered'] == true,
     );
   }
 
@@ -356,6 +390,20 @@ final class AppSettings {
   /// в любом случае.
   final bool homeScreenShowText;
 
+  /// Уровень модели понимания (ADR-045): выбран в «Понимание фраз».
+  /// Выбранный, но ещё не скачанный уровень заработает после загрузки.
+  final IntentTier intentTier;
+
+  /// «Учиться на моих ответах»: «Да» и «Нет» на догадку — личные примеры
+  /// на устройстве. По умолчанию включено.
+  final bool intentLearning;
+
+  /// «Собирать непонятые фразы»: локальный журнал. По умолчанию включено.
+  final bool intentLogging;
+
+  /// Предложение скачать «Лёгкую» уже показано: больше само не появляется.
+  final bool intentOffered;
+
   /// Текст задач уходит на виджет: включён показ и нет входа по отпечатку.
   bool get homeScreenText => homeScreenShowText && !appLock;
 
@@ -388,6 +436,10 @@ final class AppSettings {
     int? appLockAfter,
     Map<String, String>? formDefaults,
     bool? homeScreenShowText,
+    IntentTier? intentTier,
+    bool? intentLearning,
+    bool? intentLogging,
+    bool? intentOffered,
   }) =>
       AppSettings(
         appearance: appearance ?? this.appearance,
@@ -419,6 +471,10 @@ final class AppSettings {
         appLockAfter: appLockAfter ?? this.appLockAfter,
         formDefaults: formDefaults ?? this.formDefaults,
         homeScreenShowText: homeScreenShowText ?? this.homeScreenShowText,
+        intentTier: intentTier ?? this.intentTier,
+        intentLearning: intentLearning ?? this.intentLearning,
+        intentLogging: intentLogging ?? this.intentLogging,
+        intentOffered: intentOffered ?? this.intentOffered,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -474,6 +530,10 @@ final class AppSettings {
               key: formDefaults[key]!,
           },
         if (!homeScreenShowText) 'widgets.show_text': false,
+        if (intentTier != IntentTier.off) 'intent.tier': intentTier.id,
+        if (!intentLearning) 'intent.learning': false,
+        if (!intentLogging) 'intent.logging': false,
+        if (intentOffered) 'intent.offered': true,
       };
 }
 

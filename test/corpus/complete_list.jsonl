@@ -49,3 +49,14 @@
 {"id":"done-032","text":"отправь список задач маме","intent":"unknown","route":"none"}
 {"id":"done-033","text":"распечатай список задач на завтра","intent":"unknown","route":"none"}
 {"id":"done-034","text":"покажи список задач на завтра","intent":"listTasks","note":"просьба показать — список, как и раньше"}
+{"id":"done-035","text":"готово с отчётом","intent":"completeTask","targetQuery":"Отчётом","note":"«с» после слова о готовности — не цель; творительный не приводится (как «С врачом всё, сделано»)","source":"probe"}
+{"id":"done-036","text":"отметь звонок маме как сделанный","intent":"completeTask","targetQuery":"Звонок маме","source":"probe"}
+{"id":"done-037","text":"оплатила коммуналку, вычеркни","intent":"completeTask","targetQuery":"Оплатила коммуналку","note":"просьба отметить в конце — не цель","source":"probe"}
+{"id":"b6-068","text":"счёт за свет оплатил, вычеркни","intent":"completeTask","targetQuery":"Счёт за свет","source":"probe"}
+{"id":"b6-069","text":"встреча с клиентом сорвалась, убери её","intent":"completeTask","targetQuery":"Встреча с клиентом","source":"probe"}
+{"id":"b6-070","text":"лекарства купила, поставь галочку","intent":"completeTask","targetQuery":"Лекарства","source":"probe"}
+{"id":"b6-075","text":"зачитай, что у меня на завтра","intent":"listTasks","source":"probe"}
+{"id":"b6-076","text":"много ли у меня дел на субботу?","intent":"listTasks","source":"probe"}
+{"id":"b6-077","text":"что я пропустил из задач","intent":"listTasks","source":"probe"}
+{"id":"b6-085","text":"покажи что у меня на двадцать пятое","intent":"listTasks","source":"probe"}
+{"id":"b6-113","text":"занятие с репетитором отменилось, вычеркни его","intent":"completeTask","targetQuery":"Занятие с репетитором","source":"probe","note":"отменилось — убрать из списка"}

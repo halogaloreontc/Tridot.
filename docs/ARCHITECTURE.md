@@ -51,10 +51,56 @@ HomePage → AssistantController.handle(text, chatTaskId: …) / enterChat(taskI
 - **Вложения** (ADR-019): `ChatMessage.attachments` (`ChatAttachment`: вид, имя без секретов, путь `files/<папка чата>/<id сообщения>-<номер>.<расширение>`, размер, MIME) в JSON чата; копии — `chats/files/` через `ChatStore.attachments` (`AttachmentStore`: `IoAttachmentStore` на диске, `InMemoryAttachmentStore` в тестах). `ChatBook.attach` копирует файлы до записи сообщения, `erase` и `clearAll` стирают файлы, архив чата задачи — нет; обрезка и чтение чата убирают файлы без сообщения. Выбор файлов — `AttachmentPicker` (`file_selector`), меню облачных дисков — `CloudDiskMenu` (`lib/core/cloud/cloud_disk.dart`), дисков пока нет. `chats/files/` не уходит в облачную копию Android. «Файлы сессии» справа (ADR-028) — `SessionFiles.of(thread)` (`lib/core/chats/session_files.dart`): проекция сообщений чата (результаты готовых карточек расширений и вложения), своего хранения нет; показывает `SessionFilesPanel` (телефон — `endDrawer`, компьютер — колонка вместо «Сегодня» в сессии).
 - **Каталог команд** (ADR-020): `lib/core/commands/command_catalog.dart` — `CommandCatalog.build` из включённых навыков (`AssistantController.connectors`), постоянные id команд, разделы, поиск, `top(usage)` для «+» → «Шаблоны команд»; «Найти команду» — `lib/app/widgets/command_finder_sheet.dart`. Счётчики выбора — `AppSettings.commandUsage` (`command_usage` в `settings.json`, только id → число, не больше 50).
 - **Подсказка команд вместо «не понял»** (ADR-022): `lib/core/commands/command_suggest.dart` — `CommandSuggester.suggest(text, catalog, usage:)` (нечёткое совпадение слов с ключевыми словами команд каталога: та же основа или опечатка по расстоянию Дамерау — Левенштейна; счётчики выбора — только при равенстве) и `CommandSuggester.isPrivate`. Вызывается только в `AssistantController._unknownFor`, там, где раньше был `common.unknown`; ответ — `common.unknown.suggest` и `AssistantResponse.suggestions` (`CommandSuggestions`), в ленте — кнопки `suggest-<id>` и `suggest-find` под последним ответом. Только в памяти: в JSON чата не пишется.
+- **Запасной слой понимания** (ADR-045): когда правила ответили «не понял», дообученный кодировщик фраз на устройстве (ONNX int8, kNN по примерам корпуса) может спросить «Похоже, вы хотите …?» — до двух вариантов; «Да» выполняет команду обычными правилами и разборщиками, запись — с подтверждением. Приватные фразы до модели не доходят. Устройство — раздел «Запасной слой понимания» ниже; сборка, пороги и формат пакета — `tools/intent_model/README.md`, выпуск — `.github/workflows/intent-model-release.yml`.
 - **Шрифты и подсветка команды** (ADR-021): Golos Text — весь текст, метаданные — `metaTextStyle` (Golos Text 13; табличные цифры — `metaNumTextStyle`); JetBrains Mono — только пароли (`monoTextStyle`) и распознанные части команды; Cormorant Unicase SemiBold — «Tridot» и названия проектов (`displayTextStyle`, `projectNameStyle`); «Мой Связной» — обычным текстом. Подсветка: `AssistantController.highlight(text)` → `CommandSpan` (`lib/core/scenario/command_spans.dart`) по тому же выбору навыка, что при отправке, и разбору навыка (`CommandSpanSource`: задачи — `ScenarioParser.spansOf`, калькулятор — пример). Поле ввода — `CommandInputController` (разбор через 180 мс после правки), лента — разбор при отрисовке с кэшем, в JSON чата ничего не пишется. Фразы о паролях, пароли и коды входа не подсвечиваются совсем.
 - **Шапка сессии** (`SessionHeader`): название сессии ▾ и под ним знак и имя того, кто в ней отвечает (`lastPersonaId`, иначе по составу); нажатие — меню сессии (`showSessionHoldMenu`, как долгое нажатие в панели); при задаче в фокусе — кнопкой рядом с «Задачи › «её»» (`sessionMenuBeside`). В настройки помощников шапка не ведёт.
 - **Шапка чата задачи** выбирает раскладку по ширине, которая ей досталась (рядом поиск и кнопка панели), а не по ширине окна: одна строка (название, срок, статус, «Выполнено»/«Вернуть в работу», значки), если названию остаётся не меньше 180 px — тексты меряются тем же шрифтом; иначе срок и статус под названием, действия значками; уже 320 px или крупный шрифт — название и меню. Так же строка «Задачи › «её»» в сессии. В свёрнутом боковом меню (700–1099 px) чаты задач — значки с подсказкой и точкой «не прочитано».
 - **Проактивное.** Помощник сам в сессии не пишет: о просроченных — строка в пустой сессии («Просрочена N задач ›» → «Мой Связной» → «Сводка», от ведущего оповещений), о тренировке паролей — строка, вопрос по нажатию. Хроника команд — поверх ленты сверху по центру (`HistoryRailPill`), лента и документ сверху отступают на её высоту.
+
+- **Поле над клавиатурой** (ADR-044): `KeyboardSafeScope` (`lib/app/widgets/keyboard_safe.dart`) в `MaterialApp.builder` приложения и веб-помощника долистывает поле в фокусе целиком над экранной клавиатурой; экраны с полями — прокручиваемые, `resizeToAvoidBottomInset` не выключается, шторки с полем отступают на `viewInsets`. Проверка — `expectFieldAboveKeyboard` (`test/support/keyboard.dart`) по списку всех экранов с полями.
+
+## Запасной слой понимания
+
+ADR-045 (решение, шаги 2 и 3 — «Дополнения»). Ядро — `lib/core/intent/`, чистый Dart без Flutter и без `dart:io` (кроме `intent_io.dart`): тот же код — в приложении и в веб-помощнике.
+
+```text
+AssistantController._route → RecognitionLayers.route (слои 1–5) → RoutePolicy
+  └─ никто не взял (RecognitionLayers.gaveUp) или «справочника нет» беседы
+     → подсказка ADR-022 (опечатка в команде)? — она, модель не спрашиваем
+     → RecognitionLayers.privateForModel(фраза)? — обычное «не понял»
+     → IntentFallback.suggest(фраза, включённые навыки с IntentTarget)
+          IntentEncoder.embed — фраза → вектор (приложение: OnnxIntentEncoder,
+                                изолят + onnxruntime_v2; тесты: поддельный)
+          IntentIndex.vote — kNN по index.bin пакета + личные «Да»
+          IntentMemory — «Нет» снимает метку, «Да» побеждает, журнал
+     → Clarification «Похоже, вы хотите …?» [Да] [второй вариант] [Нет]
+«Да» → IntentTarget.matchAs(команда, фраза) у навыка → обычный run
+«Нет» → отрицательный пример, журнал → common.unknown
+```
+
+- **Пакет** (`intent_pack.dart`): `IntentManifest` (`tridot-intent/1`: порог, k, размер вектора, входы, подсказка `prefix`, файлы с размером и sha256), `IntentPackSource` — откуда читать (`DirectoryPackSource` в `intent_io.dart`; в вебе — свой). Файлы до 16 МБ сверяются по sha256 при каждой загрузке, модель — по размеру (sha256 — при установке).
+- **Токенизаторы** (`intent_tokenizer.dart`): `WordPieceTokenizer` («Лёгкая», `web`; классы знаков BertNormalizer и BertPreTokenizer — `bert_chars.g.dart`, сняты с самой библиотеки tokenizers) и `ByteBpeTokenizer` («Точная», byte-level BPE RoBERTa). Номера совпадают с HuggingFace tokenizers на 227 синтетических фразах (`test/fixtures/intent/`, генератор — `tools/intent_model/dart_fixtures.py`). `TokenBatch` — `Int32List` (в вебе нет 64-битных списков).
+- **Кодировщик** (`intent_encoder.dart`): `IntentEncoder` — `embed(фразы) → векторы`; `TokenizedEncoder` = токенизатор пакета + `IntentRuntime` (среда выполнения: ONNX Runtime в приложении, onnxruntime-web в помощнике), по одной фразе — динамическое int8 считает масштаб по всему пакету.
+- **Решение** (`intent_fallback.dart`): `IntentFallback.decide` — правило подсказки (ADR-045, п. 5 и «Дополнение»), `IntentSuggestion` (первый вариант, второй, вектор фразы — «Да»/«Нет» запоминают его без нового прогона).
+- **Память** (`intent_memory.dart`): «Учиться на моих ответах» и «Собирать непонятые фразы» (оба включены), личные примеры (фраза, метка, вектор и ключ модели — пример другой модели пересчитывается), журнал непонятых (≤ 200, старше 90 дней удаляются). Хранилище — `IntentMemoryStore`: `JsonIntentMemoryStore` (`<поддержка>/assistant/intent/memory.json`), в памяти — тесты.
+- **Команда по подсказке** (`lib/core/connectors/intent_target.dart`): `IntentTarget.matchAs` — разбор послабее обычного тем же разборщиком навыка по рецепту `IntentRecipe` (обычный `match` → носитель + фраза → синонимы → фраза без слотов, на которую навык спрашивает недостающее); `intentExample` — пример, если не вышло. Подключения `assistant/1` — рецепт из фраз описания (`manifest_intent.dart`).
+- **Приложение** (`lib/app/intent/`): `IntentSetup` (память, загрузка пакета: `TRIDOT_INTENT_PACK` — при любом уровне, для разработки), `OnnxIntentEncoder` (свой изолят: токенизатор, сессия ONNX Runtime, ответы `TransferableTypedData`). Веб-помощник этих файлов не тянет (`test/web_widget/web_graph_test.dart`).
+- **Скачивание и уровни** (шаг 3, `intent_kit.dart`): `IntentKit` — уровень из настроек (`AppSettings.intentTier`: «Выключено» / «Лёгкая» / «Точная»), установка, обновление, удаление; переключатели `intentLearning` и `intentLogging` передаёт в `IntentMemory` (`apply` — при чтении и каждой смене настроек в `HomePage`). Сеть — только по нажатию «Скачать», «Обновить», «Проверить обновление»:
+
+  ```text
+  latest.json (intent-latest, IntentRelease: формат, адреса только выпусков Tridot)
+    → <уровень>-<версия>.zip.part (IoFileDownloader: продолжение, отмена,
+      переадресация только на файлы выпусков GitHub)
+    → размер и sha256 архива из latest.json → .zip
+    → extractZipSafely в tmp-… → verifyPackDirectory: манифест, sha256 каждого
+      файла целиком, лишних нет, уровень и версия те же
+    → <поддержка>/assistant/intent/<уровень>-<версия>/
+    → active.json (указатель, через временный файл) → IntentSetup.load
+    → удалить прежние версии и уровни
+  ```
+
+  Пока скачивается другой уровень, работает прежний; «Выключено» выгружает модель, файлы остаются до «Удалить модель». Папка `assistant/intent/` не уходит в резервную копию Android.
+- **Настройки** (`intent_section.dart`): раздел «Понимание фраз» под «Голосом» — уровни строками с галочкой, ход загрузки, «Доступна новая версия модели понимания — N МБ», «Удалить модель»; «Учиться на моих ответах» и «Забыть выученное», «Собирать непонятые фразы» и экран «Непонятые фразы» (`unclear_phrases_screen.dart`). «Поделиться для улучшения» — экран просмотра (`unclear_export_screen.dart`): ровно строки файла JSONL (`UnclearExport`, `lib/core/intent/unclear_export.dart`; приватное отсеивается второй раз), любую можно убрать; затем системное «Поделиться» (Android, `tridot/files` → `share`) или «Сохранить файл» (компьютер) — `unclear_share.dart`. Однократное предложение «Лёгкой» — после первого «не понял» (`intent_views.dart`, `AppSettings.intentOffered`).
 
 ## Правила
 

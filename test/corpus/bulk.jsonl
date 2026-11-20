@@ -64,3 +64,14 @@
 {"id":"bulk-neg-016","text":"закрой все три задачи про отчёт","intent":"unknown","route":"none","source":"manual","note":"не одна задача «Три про отчёт»"}
 {"id":"bulk-neg-017","text":"перенеси всё про отчёт на пятницу","intent":"unknown","route":"none","source":"manual","note":"не одна задача «Всё про отчёт»"}
 {"id":"bulk-neg-018","text":"я закрыл все задачи по отчёту","intent":"completeTask","targetQuery":"По отчёту","source":"manual","note":"сообщение о сделанном (прошедшее время) — с подтверждением, «все» после него не запрещает"}
+{"id":"bulk-046","text":"перенеси всё сегодняшнее на завтра на то же время","intent":"rescheduleMany","scope":"date:2026-11-02","shift":"+1d","due":null,"note":"«на то же время» с исходным днём — сдвиг на сутки","source":"probe"}
+{"id":"bulk-047","text":"перенеси всё на завтра на то же время","intent":"rescheduleMany","scope":"all","due":null,"note":"без исходного дня сдвиг не посчитать — спросим","source":"probe"}
+{"id":"bulk-048","text":"подвинь все просроченные на пятницу","intent":"rescheduleMany","scope":"overdue","due":"2026-11-06T00:00","precision":"date","source":"probe"}
+{"id":"bulk-049","text":"всё, что просрочено, подвинь на завтра","intent":"rescheduleMany","scope":"overdue","due":"2026-11-03T00:00","precision":"date","source":"probe"}
+{"id":"bulk-050","text":"все вчерашние дела перекинь на завтра","intent":"rescheduleMany","scope":"date:2026-11-01","due":"2026-11-03T00:00","precision":"date","source":"probe"}
+{"id":"b6-071","text":"всё, что висит на четверг, раскидай на пятницу","intent":"rescheduleMany","scope":"date:2026-11-05","due":"2026-11-06T00:00","precision":"date","source":"probe"}
+{"id":"b6-072","text":"закрывай все просроченные","intent":"completeMany","scope":"overdue","source":"probe"}
+{"id":"b6-073","text":"перенеси всё, что было на сегодня, на завтра","intent":"rescheduleMany","scope":"date:2026-11-02","due":"2026-11-03T00:00","precision":"date","source":"probe"}
+{"id":"b6-074","text":"закрой все задачи за сегодняшний день, мы закончили","intent":"completeMany","scope":"date:2026-11-02","source":"probe"}
+{"id":"b6-111","text":"всё, что висит на пятницу, раскидай на понедельник","intent":"rescheduleMany","scope":"date:2026-11-06","due":"2026-11-09T00:00","precision":"date","source":"probe"}
+{"id":"b6-112","text":"перенеси всё, что было на завтра, на послезавтра","intent":"rescheduleMany","scope":"date:2026-11-03","due":"2026-11-04T00:00","precision":"date","source":"probe","note":"придаточное «что было на завтра» — исходный день"}

@@ -1,0 +1,9 @@
+{
+  "name": "tridot-intent-webcheck",
+  "private": true,
+  "description": "Проверка: модель понимания открывается onnxruntime-web (WASM) и считает то же, что onnxruntime на CPU",
+  "type": "module",
+  "dependencies": {
+    "onnxruntime-web": "1.30.0"
+  }
+}
