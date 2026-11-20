@@ -12,6 +12,7 @@ import '../app/shell/session_hero.dart';
 import '../app/widgets/action_card_view.dart';
 import '../app/widgets/command_composer.dart';
 import '../app/widgets/message_row.dart';
+import '../app/widgets/network_capsule.dart';
 import '../app/widgets/status_cube.dart';
 import '../app/widgets/warehouse_card_view.dart';
 import '../core/chats/chat_book.dart';
@@ -654,27 +655,34 @@ final class _WidgetChatState extends State<WidgetChat> {
       child: Padding(
         padding:
             const EdgeInsets.fromLTRB(AppSpace.pageH, 4, AppSpace.pageH, 12),
-        child: CommandComposer(
-          controller: _input,
-          focusNode: _focus,
-          sending: session.busy,
-          mode: AssistantViewMode.dialogue,
-          onModeChanged: (_) {},
-          modes: false,
-          plus: false,
-          hint: 'Спросите склад…',
-          inputKey: const ValueKey<String>('widget-input'),
-          sendKey: const ValueKey<String>('widget-send'),
-          maxLength: 500,
-          onSend: _submit,
-          onCommand: (_) {},
-          previousCommand: _previous,
-          nextCommand: _next,
-          voiceMode: mode,
-          voicePartial: session.listening ? session.partial : null,
-          voiceNotice: session.listening ? null : session.voiceNote,
-          onVoiceTap: session.startVoice,
-          onVoiceCancel: session.cancelVoice,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            // Нет сети — капсула над полем (ADR-040).
+            NetworkCapsule(status: session.network),
+            CommandComposer(
+              controller: _input,
+              focusNode: _focus,
+              sending: session.busy,
+              mode: AssistantViewMode.dialogue,
+              onModeChanged: (_) {},
+              modes: false,
+              plus: false,
+              hint: 'Спросите склад…',
+              inputKey: const ValueKey<String>('widget-input'),
+              sendKey: const ValueKey<String>('widget-send'),
+              maxLength: 500,
+              onSend: _submit,
+              onCommand: (_) {},
+              previousCommand: _previous,
+              nextCommand: _next,
+              voiceMode: mode,
+              voicePartial: session.listening ? session.partial : null,
+              voiceNotice: session.listening ? null : session.voiceNote,
+              onVoiceTap: session.startVoice,
+              onVoiceCancel: session.cancelVoice,
+            ),
+          ],
         ),
       ),
     );

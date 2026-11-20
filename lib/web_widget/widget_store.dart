@@ -76,6 +76,15 @@ final class WidgetStore {
   /// Склад сказал, что хранилище есть (`ask_me.store.on`) и оно не
   /// выключилось в этом сеансе.
   bool get remote => _call != null && !_off;
+
+  /// Сколько правок ждут отправки на склад: удаления, проекты, задачи и
+  /// разговоры (ADR-040: «Сеть есть · отправлено N»). Без хранилища — 0.
+  int get pending => !remote
+      ? 0
+      : _state.deletes.length +
+          _state.dirtyProjects.length +
+          _state.dirtyTasks.length +
+          _state.dirtyChats.length;
   bool _off = false;
 
   /// Напоминания склада включены (`ask_me.store.signals`).

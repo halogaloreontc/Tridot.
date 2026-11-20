@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../app/network_status.dart';
+
 import '../core/chats/chat_book.dart';
 import '../core/chats/chat_models.dart';
 import '../core/chats/chat_projects.dart';
@@ -14,6 +16,7 @@ import '../core/connectors/manifest/connection_slots.dart';
 import '../core/connectors/manifest/manifest_connector.dart';
 import '../core/connectors/secret_store.dart';
 import '../core/connectors/tasks_connector.dart';
+import '../core/connectors/watched_transport.dart';
 import '../core/extensions/extension_registry.dart';
 import '../core/models/action_card.dart';
 import '../core/models/task.dart';
@@ -101,8 +104,27 @@ final class WidgetSession extends ChangeNotifier {
     Clock clock = const SystemClock(),
     this.updateEvery = const Duration(minutes: 10),
     this.keyWait = const Duration(seconds: 15),
-  })  : _transport = transport,
-        _clock = clock;
+    Stream<bool>? connectivity,
+    bool online = true,
+    NetworkStatus? network,
+  })  : network = network ?? NetworkStatus(),
+        _clock = clock {
+    // Связь со складом (ADR-040): каждый запрос помощника — через
+    // [WatchedTransport]; браузер ещё и сам говорит «online» / «offline».
+    _transport = WatchedTransport(
+      transport,
+      onReachable: _reachable,
+      onUnreachable: _unreachable,
+    );
+    if (!online) this.network.lost();
+    _connectivity = connectivity?.listen((bool up) {
+      if (up) {
+        unawaited(_recover());
+      } else {
+        _unreachable();
+      }
+    });
+  }
 
   final HostChannel host;
   final KeyValueStorage storage;
@@ -118,8 +140,17 @@ final class WidgetSession extends ChangeNotifier {
   /// Сколько ждать новый ключ от страницы склада.
   final Duration keyWait;
 
-  final HttpTransport _transport;
+  late final HttpTransport _transport;
   final Clock _clock;
+
+  /// Есть ли связь со складом — капсула над полем ввода (ADR-040).
+  final NetworkStatus network;
+  StreamSubscription<bool>? _connectivity;
+
+  /// Сколько раз запрос не дошёл: [_recover] видит, что связь опять
+  /// пропала, пока уходило отложенное.
+  int _losses = 0;
+  bool _recovering = false;
 
   /// Как устройство называется в списке подключённых Связных на складе.
   static const String deviceName = 'Веб-помощник';
@@ -300,7 +331,38 @@ final class WidgetSession extends ChangeNotifier {
   void dispose() {
     _events?.cancel();
     _updates?.cancel();
+    _connectivity?.cancel();
+    network.dispose();
     super.dispose();
+  }
+
+  // --------------------------------------------------------------- сеть
+
+  void _unreachable() {
+    _losses++;
+    network.lost();
+  }
+
+  void _reachable() {
+    if (network.offline) unawaited(_recover());
+  }
+
+  /// Связь вернулась (браузер сказал «online» или запрос дошёл): отложенные
+  /// правки `my_*` — на склад, потом «Сеть есть · отправлено N». Пока они
+  /// уходили, связь опять пропала — капсула остаётся «Нет сети».
+  Future<void> _recover() async {
+    if (_recovering || !network.offline) return;
+    _recovering = true;
+    try {
+      final losses = _losses;
+      final records = store;
+      final before = records?.pending ?? 0;
+      if (records != null && phase == WidgetPhase.ready) await records.flush();
+      if (_losses != losses) return;
+      network.restored(sent: before - (records?.pending ?? 0));
+    } finally {
+      _recovering = false;
+    }
   }
 
   Future<void> _onEvent(HostEvent event) async {

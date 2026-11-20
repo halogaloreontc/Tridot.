@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/core/chats/chat_models.dart';
 import 'package:local_assistant/core/connectors/manifest/connection.dart';
@@ -13,7 +15,12 @@ void main() {
   late MemoryStorage storage;
   late WidgetSession session;
 
-  WidgetSession make({String version = '1.0.0', bool embedded = true}) {
+  WidgetSession make({
+    String version = '1.0.0',
+    bool embedded = true,
+    Stream<bool>? connectivity,
+    bool online = true,
+  }) {
     host = FakeHost(embedded: embedded);
     return session = WidgetSession(
       host: host,
@@ -23,6 +30,8 @@ void main() {
       version: version,
       updateEvery: const Duration(hours: 1),
       keyWait: const Duration(seconds: 2),
+      connectivity: connectivity,
+      online: online,
     );
   }
 
@@ -817,6 +826,83 @@ void main() {
       session.describeProject(b.id, 'Лютик и Ко', 'Поставщик');
       expect(session.book!.project(b.id)!.name, 'Лютик и Ко');
       expect(session.book!.project(b.id)!.description, 'Поставщик');
+    });
+  });
+
+  group('сеть (ADR-040)', () {
+    test('нет сети: правки ждут, связь вернулась — отправлено N', () async {
+      final net = StreamController<bool>.broadcast();
+      addTearDown(net.close);
+      server.withStore();
+      make(connectivity: net.stream);
+      await open();
+      await session.send('добавь задачу проверить акт 12-26 завтра');
+      await settle();
+      final task = session.taskList.single;
+      expect(session.network.offline, isFalse);
+      expect(session.store!.pending, 0);
+
+      server.offline = true;
+      net.add(false);
+      await settle();
+      expect(session.network.offline, isTrue);
+      expect(session.network.visible, isTrue);
+      await session.completeTask(task.id);
+      await settle();
+      final queued = session.store!.pending;
+      expect(queued, greaterThan(0));
+      expect(session.network.offline, isTrue);
+
+      server.offline = false;
+      net.add(true);
+      await settle();
+      expect(session.network.offline, isFalse);
+      expect(session.store!.pending, 0);
+      expect(session.network.sent, queued);
+      final patch = server
+          .bodies('my_patch')
+          .where((b) => b['type'] == 'task' && b['id'] == task.id)
+          .last;
+      expect((patch['set']! as Map)['status'], 'done');
+    });
+
+    test('браузер говорит «online», а склад не отвечает — «Нет сети»',
+        () async {
+      final net = StreamController<bool>.broadcast();
+      addTearDown(net.close);
+      server.withStore();
+      make(connectivity: net.stream, online: false);
+      expect(session.network.offline, isTrue);
+      await open();
+      await session.send('добавь задачу сверить остатки');
+      await settle();
+      // Вход прошёл — значит, связь есть.
+      expect(session.network.offline, isFalse);
+
+      server.offline = true;
+      await session.completeTask(session.taskList.single.id);
+      await settle();
+      expect(session.network.offline, isTrue, reason: 'запрос не дошёл');
+      net.add(true);
+      await settle();
+      expect(session.network.offline, isTrue);
+      expect(session.store!.pending, greaterThan(0));
+    });
+
+    test('без событий браузера: запрос не дошёл, потом дошёл', () async {
+      make();
+      await open();
+      expect(session.network.offline, isFalse);
+      server.offline = true;
+      await session.send('где лежит артикул 1001');
+      await settle();
+      expect(session.network.offline, isTrue);
+      server.offline = false;
+      await session.send('где лежит артикул 1001');
+      await settle();
+      expect(session.network.offline, isFalse);
+      // Без хранилища отложенного нет — просто «Сеть есть».
+      expect(session.network.sent, 0);
     });
   });
 }

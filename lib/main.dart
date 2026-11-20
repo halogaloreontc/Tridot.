@@ -17,6 +17,7 @@ import 'app/files/file_opener.dart';
 import 'app/jobs/job_picker.dart';
 import 'app/jobs/media_channel_bridge.dart';
 import 'app/home_page.dart';
+import 'app/network_status.dart';
 import 'app/homescreen/home_screen_channel.dart';
 import 'app/notify/notify_channel.dart';
 import 'app/passwords/device_keys.dart';
@@ -36,6 +37,7 @@ import 'core/connectors/manifest/connection_store_io.dart';
 import 'core/connectors/manifest/connection_service.dart';
 import 'core/connectors/manifest/connection_slots.dart';
 import 'core/connectors/tasks_connector.dart';
+import 'core/connectors/watched_transport.dart';
 import 'core/downloads/verified_download.dart';
 import 'core/extensions/extension_registry.dart';
 import 'core/extensions/tools/tool_spec.dart';
@@ -157,12 +159,22 @@ Future<void> main() async {
   );
   final secrets = secretsChoice.store;
   final transport = IoHttpTransport();
+  // Связь со складом (ADR-040): запросы склада и его сигналов — через
+  // [WatchedTransport]; капсула «Нет сети» над полем ввода.
+  final network = NetworkStatus();
+  final warehouseTransport = WatchedTransport(
+    transport,
+    onReachable: network.restored,
+    onUnreachable: network.lost,
+  );
   final connectionStore = JsonConnectionStore(p.join(folder, 'connections'));
   final connections = <ConnectionService>[
     for (final slot in ConnectionSlots.all)
       await ConnectionService.restore(
         slot: slot,
-        transport: transport,
+        transport: slot.id == ConnectionSlots.warehouse.id
+            ? warehouseTransport
+            : transport,
         secrets: secrets,
         store: connectionStore,
         builtIn: await _builtInManifest(slot.builtInAsset),
@@ -182,7 +194,7 @@ Future<void> main() async {
       if (connection.slot.id == ConnectionSlots.warehouse.id)
         WarehouseSignals(
           service: connection,
-          transport: transport,
+          transport: warehouseTransport,
           secrets: secrets,
           clock: clock,
         ),
@@ -397,6 +409,7 @@ Future<void> main() async {
       homeScreen: homeScreen,
       incoming: incoming,
       signals: signals,
+      network: network,
       initialAppearance: early.appearance,
       initialReduceMotion: early.reduceMotion,
     ),
@@ -506,6 +519,7 @@ final class AssistantApp extends StatefulWidget {
     this.settingsStore,
     this.chatStore,
     this.connections = const <ConnectionService>[],
+    this.network,
     this.passwords,
     this.voice,
     this.fileOpener,
@@ -575,6 +589,9 @@ final class AssistantApp extends StatefulWidget {
   /// Сигналы склада, пока приложение открыто (ADR-031).
   final List<WarehouseSignals> signals;
 
+  /// Связь со складом — капсула над полем ввода (ADR-040).
+  final NetworkStatus? network;
+
   @override
   State<AssistantApp> createState() => _AssistantAppState();
 }
@@ -622,6 +639,7 @@ final class _AssistantAppState extends State<AssistantApp> {
       weather: widget.weather,
       incoming: widget.incoming,
       signals: widget.signals,
+      network: widget.network,
       notify: widget.notify,
       homeScreen: widget.homeScreen,
       appLock: widget.appLock,

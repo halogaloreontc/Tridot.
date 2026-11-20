@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_assistant/app/network_status.dart';
 import 'package:local_assistant/app/widgets/message_row.dart';
+import 'package:local_assistant/app/widgets/network_capsule.dart';
 import 'package:local_assistant/web_widget/widget_app.dart';
 import 'package:local_assistant/web_widget/widget_session.dart';
 import 'package:local_assistant/web_widget/widget_storage.dart';
@@ -12,10 +16,12 @@ void main() {
   late FakeWarehouse server;
   late FakeHost host;
   late WidgetSession session;
+  late StreamController<bool> net;
 
   setUp(() {
     server = FakeWarehouse();
     host = FakeHost();
+    net = StreamController<bool>.broadcast();
     session = WidgetSession(
       host: host,
       transport: server,
@@ -23,10 +29,16 @@ void main() {
       builtInManifest: builtInSource(),
       version: '1.0.0',
       updateEvery: const Duration(hours: 1),
+      connectivity: net.stream,
+      // «Сеть есть» — коротко: таймер идёт в настоящем времени runAsync.
+      network: NetworkStatus(backFor: const Duration(milliseconds: 60)),
     );
   });
 
-  tearDown(() => session.dispose());
+  tearDown(() {
+    session.dispose();
+    unawaited(net.close());
+  });
 
   Future<void> openPanel(
     WidgetTester tester, {
@@ -348,6 +360,85 @@ void main() {
       await tester.pump();
       expect(host.sent.last['type'], 'layout');
       expect(host.sent.last['wide'], isTrue);
+    });
+  });
+
+  group('капсула сети (ADR-040)', () {
+    Future<void> size(WidgetTester tester, double width) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
+
+    Finder capsule() => find.byKey(const Key('network-capsule'));
+
+    testWidgets('панель 420: нет сети — над полем, сеть есть — отправлено N',
+        (WidgetTester tester) async {
+      await size(tester, 420);
+      server.withStore();
+      await openPanel(tester);
+      expect(capsule(), findsNothing);
+      await tester.runAsync(() async {
+        await session.send('добавь задачу проверить акт 12-26 завтра');
+        await settle();
+      });
+      await tester.pump();
+
+      await tester.runAsync(() async {
+        server.offline = true;
+        net.add(false);
+        await settle();
+        await session.completeTask(session.taskList.single.id);
+        await settle();
+      });
+      await tester.pumpAndSettle();
+      expect(capsule(), findsOneWidget);
+      // Узко — короткая фраза; капсула над полем ввода.
+      expect(find.text(NetworkCapsule.offlineShort), findsOneWidget);
+      final input = find.byKey(const ValueKey<String>('widget-input'));
+      expect(
+        tester.getBottomLeft(capsule()).dy,
+        lessThanOrEqualTo(tester.getTopLeft(input).dy),
+      );
+      final queued = session.store!.pending;
+      expect(queued, greaterThan(0));
+
+      await tester.runAsync(() async {
+        server.offline = false;
+        net.add(true);
+        await settle();
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Сеть есть · отправлено $queued'), findsOneWidget);
+      expect(find.text(NetworkCapsule.offlineShort), findsNothing);
+
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 120)),
+      );
+      await tester.pumpAndSettle();
+      expect(capsule(), findsNothing);
+    });
+
+    testWidgets('телефон 390: короткая фраза, поле на месте',
+        (WidgetTester tester) async {
+      await size(tester, 390);
+      await openPanel(tester);
+      final input = find.byKey(const ValueKey<String>('widget-input'));
+      final before = tester.getTopLeft(input).dy;
+      await tester.runAsync(() async {
+        net.add(false);
+        await settle();
+      });
+      await tester.pumpAndSettle();
+      expect(find.text(NetworkCapsule.offlineShort), findsOneWidget);
+      // Поле ввода внизу не сдвинулось: капсула растёт вверх.
+      expect(tester.getTopLeft(input).dy, closeTo(before, 0.1));
+      await tester.runAsync(() async {
+        net.add(true);
+        await settle();
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Сеть есть'), findsOneWidget);
     });
   });
 }
