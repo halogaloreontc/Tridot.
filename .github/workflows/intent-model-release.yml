@@ -1,0 +1,290 @@
+# Выпуск модели понимания «Связного» (ADR-041): запасной слой, который
+# подсказывает команду, когда правила ответили «не понял».
+#
+# Actions → «Выпуск модели понимания» → Run workflow → версия.
+# Для каждого уровня («Лёгкая» — rubert-tiny2, «Точная» — USER-base) три
+# честные пробы (модель на корпусе до разбора каждой пробы, порог — на int8)
+# и модель на всём корпусе, параллельно. Потом порог, индекс, проверка
+# бюджета ошибок (не уложились — выпуска нет), архивы light, accurate и web
+# (веб-помощник склада: модель «Лёгкой», только навыки склада, калькулятора и
+# беседы; проверяется в onnxruntime-web). Выпуск intent-v<версия> и
+# постоянный предвыпуск intent-latest: сначала архивы, потом latest.json —
+# приложение не увидит версию без архива. Подробно: tools/intent_model/README.md.
+#
+# Секретов нет: только GITHUB_TOKEN. В обучении — только синтетический
+# корпус test/corpus и пробы tools/intent_model/eval; фразы пользователей
+# сюда не попадают. Действия закреплены по коммиту, токен checkout не
+# остаётся в .git/config.
+name: Выпуск модели понимания
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия — три числа, больше прежней: 1.0.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: intent-model-release
+  cancel-in-progress: false
+
+env:
+  VERSION: ${{ inputs.version }}
+  TAG: intent-v${{ inputs.version }}
+  PYTHONUNBUFFERED: '1'
+  HF_HUB_DISABLE_TELEMETRY: '1'
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Проверка версии
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          fail() {
+            echo "::error title=$1::$2"
+            printf '### %s\n\n%s\n' "$1" "$2" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          if ! [[ "$VERSION" =~ ^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$ ]]; then
+            fail 'Версия' 'Версия — три числа через точку, например 1.0.0.'
+          fi
+          if ! refs="$(gh api "repos/$GH_REPO/git/matching-refs/tags/intent-v" --paginate --jq '.[].ref')"; then
+            fail 'Не прочитать выпуски' 'GitHub не ответил, какие выпуски уже есть. Запустите ещё раз.'
+          fi
+          if grep -qxF "refs/tags/$TAG" <<< "$refs"; then
+            fail 'Такой выпуск уже есть' "Тег $TAG уже есть, выпуск не перезаписывается. Укажите версию больше."
+          fi
+          last="$(sed -n 's#^refs/tags/intent-v##p' <<< "$refs" \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          if [[ -n "$last" && "$(printf '%s\n%s\n' "$last" "$VERSION" | sort -V | tail -n 1)" != "$VERSION" ]]; then
+            fail 'Версия меньше прежней' "Последний выпуск — $last. Новая версия должна быть больше: приложение ставит только более новую."
+          fi
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      # Быстрые тесты без моделей: разметка корпуса, описания меток, архив.
+      - name: Тесты сборки
+        run: |
+          set -euo pipefail
+          pip install numpy==2.5.5 pyyaml==6.0.3 pytest==8.4.2
+          python -m pytest -q tools/intent_model/tests
+          python -m tools.intent_model check-labels
+
+  holdout:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: true
+      matrix:
+        tier: [light, accurate]
+        set: [fresh, held2, held3]
+    steps:
+      # Пробы проверяются на корпусе до своего разбора — нужна вся история.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/intent_model/requirements.txt
+
+      - name: Кэш исходных моделей
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: ~/.cache/huggingface/hub
+          key: hf-${{ matrix.tier }}-${{ hashFiles('tools/intent_model/config.py') }}
+
+      - run: pip install -r tools/intent_model/requirements.txt
+
+      - name: Проба ${{ matrix.set }}
+        run: python -m tools.intent_model holdout --tier ${{ matrix.tier }} --set ${{ matrix.set }}
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: calib-${{ matrix.tier }}-${{ matrix.set }}
+          path: tools/intent_model/out/${{ matrix.tier }}/calib/${{ matrix.set }}.npz
+          retention-days: 3
+          if-no-files-found: error
+
+  model:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: true
+      matrix:
+        tier: [light, accurate]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/intent_model/requirements.txt
+
+      - name: Кэш исходных моделей
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: ~/.cache/huggingface/hub
+          key: hf-${{ matrix.tier }}-${{ hashFiles('tools/intent_model/config.py') }}
+
+      - run: pip install -r tools/intent_model/requirements.txt
+
+      - name: Дообучение и ONNX int8
+        run: python -m tools.intent_model model --tier ${{ matrix.tier }}
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: model-${{ matrix.tier }}
+          path: tools/intent_model/out/${{ matrix.tier }}/model/
+          retention-days: 3
+          if-no-files-found: error
+
+  release:
+    needs: [holdout, model]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      OUT: tools/intent_model/out
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/intent_model/requirements.txt
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - run: pip install -r tools/intent_model/requirements.txt
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/dl
+
+      - name: Пробы и модели на место
+        env:
+          DL: ${{ runner.temp }}/dl
+        run: |
+          set -euo pipefail
+          for tier in light accurate; do
+            mkdir -p "$OUT/$tier/calib" "$OUT/$tier/model"
+            for set in fresh held2 held3; do
+              cp "$DL/calib-$tier-$set/$set.npz" "$OUT/$tier/calib/"
+            done
+            cp -r "$DL/model-$tier/." "$OUT/$tier/model/"
+          done
+
+      # Порог, индекс, проверка бюджета ошибок, архив. Не уложились —
+      # шаг падает и выпуска нет (metrics.json — в итогах ниже).
+      - name: Порог, проверка, архивы
+        run: |
+          set -euo pipefail
+          for tier in light accurate web; do
+            python -m tools.intent_model finish --tier "$tier" --version "$VERSION"
+          done
+
+      - name: Модель в onnxruntime-web
+        run: |
+          set -euo pipefail
+          (cd tools/intent_model/webcheck && npm ci --no-audit --no-fund)
+          python -m tools.intent_model webcheck --tier web
+
+      - name: Итоги
+        if: always()
+        run: |
+          set -euo pipefail
+          for tier in light accurate web; do
+            f="$OUT/$tier/metrics.json"
+            [[ -f "$f" ]] || continue
+            jq -r --arg t "$tier" '"### \($t)\n\n- порог \(.threshold), в бюджете: \(.ok)\n- честно (все пробы): верных подсказок \(.honest.all.catch) %, неверных \(.honest.all.wrong) % (из подсказок \(.honest.all.wrong_of_suggested) %), ложные тревоги \(.honest.all.false_alarm) %\n- задержка: \(.latency_ms["1_thread"].median) мс\n"' "$f" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Выпуск в GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GH_REPO/git/matching-refs/tags/intent-v" --paginate --jq '.[].ref' | grep -qxF "refs/tags/$TAG"; then
+            echo "::error title=Такой выпуск уже есть::Тег $TAG появился во время сборки, выпуск не перезаписывается."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/v" "$RUNNER_TEMP/latest"
+          zips=("$OUT"/light/tridot-intent-light-"$VERSION".zip "$OUT"/accurate/tridot-intent-accurate-"$VERSION".zip "$OUT"/web/tridot-intent-web-"$VERSION".zip)
+          dl="$GITHUB_SERVER_URL/$GH_REPO/releases/download"
+          python -m tools.intent_model latest --version "$VERSION" --base-url "$dl/$TAG" --out "$RUNNER_TEMP/v/latest.json" "${zips[@]}" > /dev/null
+          python -m tools.intent_model latest --version "$VERSION" --base-url "$dl/intent-latest" --out "$RUNNER_TEMP/latest/latest.json" "${zips[@]}" > /dev/null
+          {
+            echo "Модель понимания $VERSION: запасной слой «Связного» (ADR-041)."
+            echo
+            echo 'Уровни: light — «Лёгкая» (cointegrated/rubert-tiny2, MIT), accurate — «Точная» (deepvk/USER-base, Apache-2.0), web — веб-помощник склада (модель «Лёгкой», навыки склада, калькулятора и беседы).'
+            echo
+            echo 'Приложение берёт обновления из intent-latest само; архив проверяется по sha256 из latest.json и manifest.json.'
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" "${zips[@]}" "$RUNNER_TEMP/v/latest.json" \
+            --title "Модель понимания $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --target "$GITHUB_SHA"
+          {
+            echo
+            echo "## Выпуск $VERSION"
+            echo
+            for z in "${zips[@]}"; do
+              echo "- $(basename "$z"): $(( ($(stat -c %s "$z") + 524288) / 1048576 )) МБ"
+            done
+            echo "- Releases → [$TAG]($GITHUB_SERVER_URL/$GH_REPO/releases/tag/$TAG)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Постоянный предвыпуск intent-latest: один адрес latest.json для
+          # приложения. Сначала архивы, потом latest.json.
+          if ! gh release view intent-latest >/dev/null 2>&1; then
+            gh release create intent-latest --prerelease --target "$GITHUB_SHA" \
+              --title 'Модель понимания: последний выпуск' \
+              --notes 'Отсюда приложение берёт модель понимания и её обновления. Выпуски по версиям — intent-v<версия>.'
+          fi
+          for z in "${zips[@]}"; do
+            gh release upload intent-latest "$z" --clobber
+          done
+          gh release upload intent-latest "$RUNNER_TEMP/latest/latest.json" --clobber
+          keep=" latest.json $(for z in "${zips[@]}"; do printf '%s ' "$(basename "$z")"; done)"
+          gh release view intent-latest --json assets --jq '.assets[].name' | while read -r name; do
+            if [[ "$keep" != *" $name "* ]]; then
+              gh release delete-asset intent-latest "$name" --yes
+            fi
+          done
+          url="$dl/intent-latest/latest.json"
+          got="$(curl -fsSL --max-time 30 "$url" | jq -r .version || true)"
+          if [[ "$got" == "$VERSION" ]]; then
+            echo "- Приложение увидит $VERSION: $url" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning title=intent-latest не отдаёт latest.json::Без входа latest.json не читается — репозиторий публичный?"
+          fi

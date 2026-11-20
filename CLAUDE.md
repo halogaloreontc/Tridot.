@@ -47,6 +47,9 @@ lib/web_widget  веб-помощник склада (flutter build web -t lib/w
   зелёным.
 - Приватные фразы (пароль, PIN, код, логин) не исправляются, не уходят в
   сеть и в коннекторы.
+- Запасной слой понимания (ADR-041) — только подсказка при «не понял»,
+  модель на устройстве; правила его не заменяют. Новая команда в корпусе —
+  строка в `tools/intent_model/labels.yaml`.
 
 ## Проверки перед коммитом
 
@@ -57,6 +60,7 @@ flutter analyze                    # info и warning тоже валят CI
 flutter test --no-pub              # ~8,5 тыс. тестов, ~7 минут
 dart run tool/gen_lexicon.dart     # если менялся корпус
 tools/corpus_gen/.venv/bin/python -m pytest -q   # если менялся corpus_gen
+python -m pytest -q tools/intent_model/tests     # если менялся intent_model
 ```
 
 Полный прогон на занятой машине лучше гонять в отдельной копии

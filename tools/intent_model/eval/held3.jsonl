@@ -1,0 +1,240 @@
+{"id":"h3-001","text":"напомни двадцать пятого оплатить кружок по рисованию","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"slot","rule_label":"tasks:task.create"}
+{"id":"h3-002","text":"в полседьмого вечера забрать внука с секции","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-003","text":"напомни в полседьмого позвонить сменщику","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-004","text":"к вечеру пятницы сдать путевой лист в диспетчерскую","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-005","text":"запиши: в среду в восемь утра забрать фуру на базе в Подольске","label":"tasks:task.create","alt":[],"family":"create-job","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-006","text":"напомни в четверг к восьми утра сдать график дежурств старшей сестре","label":"tasks:task.create","alt":[],"family":"create-job","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-007","text":"в среду в 7:40 распечатать контрольную для девятого класса, напомни","label":"tasks:task.create","alt":[],"family":"create-job","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-008","text":"напомни-ка мне, старой, в пятницу в одиннадцать утра сходить в собес за справкой","label":"tasks:task.create","alt":[],"family":"create-live","rule_outcome":"slot","rule_label":"tasks:task.create"}
+{"id":"h3-009","text":"напомни завтра в 9 вечера скинуть Лёхе домашку по алгебре","label":"tasks:task.create","alt":[],"family":"create-job","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-010","text":"напомни в субботу утром принять товар у поставщика овощей","label":"tasks:task.create","alt":[],"family":"create-job","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-011","text":"через час сорок проверить, остыл ли холодец","label":"tasks:task.create","alt":[],"family":"create-clause","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-012","text":"напомни через сорок пять минут поменять капельницу в третьей палате","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-013","text":"в следующую среду к двум часам дня отвезти маму к окулисту","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-014","text":"напомни третьего декабря продлить страховку на машину","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-015","text":"надо бы в четверг вечером позвонить тёте Гале, а то она обидится","label":"tasks:task.create","alt":[],"family":"create-clause","rule_outcome":"slot","rule_label":"tasks:task.create"}
+{"id":"h3-016","text":"если не трудно, напомни послезавтра в десять утра записать сына к логопеду","label":"tasks:task.create","alt":[],"family":"create-clause","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-017","text":"завтра, как вернусь с рейса, в девять вечера отписаться диспетчеру","label":"tasks:task.create","alt":[],"family":"create-clause","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-018","text":"напомни мне в пять перезвонить в автосервис","label":"tasks:task.create","alt":[],"family":"create-hour","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-019","text":"в шесть тридцать заправить машину","label":"tasks:task.create","alt":[],"family":"create-hour","rule_outcome":"slot","rule_label":"tasks:task.create"}
+{"id":"h3-020","text":"к трём часам отвезти образцы в лабораторию","label":"tasks:task.create","alt":[],"family":"create-hour","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-021","text":"запиши на двадцать девятое: поздравить Ирину Петровну с юбилеем","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"slot","rule_label":"tasks:task.create"}
+{"id":"h3-022","text":"к первому числу заплатить за аренду павильона","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-023","text":"в эту субботу в полдень встреча родительского комитета","label":"tasks:task.create","alt":[],"family":"create-time","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-024","text":"напомни, чтоб я в воскресенье вечером собрал сумку на сборы","label":"tasks:task.create","alt":[],"family":"create-clause","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-025","text":"добавь задачу: купить корм коту и наполнитель, лучше в среду","label":"tasks:task.create","alt":[],"family":"create-clause","rule_outcome":"slot","rule_label":"tasks:task.create"}
+{"id":"h3-026","text":"у меня в четверг в девять утра приём у терапевта, запиши","label":"tasks:task.create","alt":[],"family":"create-time","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-027","text":"напомни шестого числа в восемнадцать ноль-ноль родительское собрание","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"slot","rule_label":"tasks:task.create"}
+{"id":"h3-028","text":"часиков в десять утра завтра надо внести выручку в банк","label":"tasks:task.create","alt":[],"family":"create-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-029","text":"напомни в пятницу в обед получить посылку на почте","label":"tasks:task.create","alt":[],"family":"create-time","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-030","text":"слушай, запиши себе: в понедельник утром техосмотр газели","label":"tasks:task.create","alt":[],"family":"create-live","rule_outcome":"slot","rule_label":"tasks:task.create"}
+{"id":"h3-031","text":"через три дня забрать костюм из химчистки, напомни","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-032","text":"напомни в половине девятого утра выпить таблетки от давления","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-033","text":"ну это, завтра там в одиннадцать сорок созвон с бухгалтером короче","label":"tasks:task.create","alt":[],"family":"create-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-034","text":"напомни эээ в среду ну часов в десять утра отвезти машину на мойку","label":"tasks:task.create","alt":[],"family":"create-live","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-035","text":"поставь напоминалку на завтра на без пятнадцати девять вечера, позвонить в аптеку","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-036","text":"напомни в двадцать два тридцать вынести мусор","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-037","text":"запиши мне двадцать пятого декабря в семь вечера ёлка у Светы","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-038","text":"напомни в выходные помыть окна на кухне","label":"tasks:task.create","alt":[],"family":"create-time","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-039","text":"до конца недели оформить отпуск, не дай забыть","label":"tasks:task.create","alt":[],"family":"create-time","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-040","text":"напомни через неделю проверить, пришёл ли перевод от арендатора","label":"tasks:task.create","alt":[],"family":"create-clause","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-041","text":"запиши, что в среду к девяти пятнадцати надо быть в гороно","label":"tasks:task.create","alt":[],"family":"create-clause","rule_outcome":"slot","rule_label":"tasks:task.create"}
+{"id":"h3-042","text":"напомни завтра утречком позвонить внучке, поздравить с днём рождения","label":"tasks:task.create","alt":[],"family":"create-live","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-043","text":"в пятницу после обеда отвезти накладные на склад в Химки","label":"tasks:task.create","alt":[],"family":"create-time","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-044","text":"напомни завтра в 13:00 забрать справку из поликлиники для бассейна","label":"tasks:task.create","alt":[],"family":"create-time","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-045","text":"напомни сегодня в девять вечера поставить телефон на зарядку","label":"tasks:task.create","alt":[],"family":"create-time","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-046","text":"напомни в полдесятого вечера закрыть смену в кассе","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-047","text":"через двадцать минут вытащить бельё из машинки, напомни плиз","label":"tasks:task.create","alt":[],"family":"create-live","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-048","text":"напомни мне пожалуйста в четверг вечером в восемь отвезти Барсика к ветеринару","label":"tasks:task.create","alt":[],"family":"create-time","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-049","text":"добавь поздравить Валентину Ивановну пятнадцатого","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"slot","rule_label":"tasks:task.create"}
+{"id":"h3-050","text":"напомни в среду в 10 утра купить подгузнеки и влажные салфетки","label":"tasks:task.create","alt":[],"family":"create-typo","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-051","text":"напоминалку на завтра: заплатить за интернет, а то отключат","label":"tasks:task.create","alt":[],"family":"create-clause","rule_outcome":"slot","rule_label":"tasks:task.create"}
+{"id":"h3-052","text":"надо бы в субботу утром съездить на рынок за мясом, запиши","label":"tasks:task.create","alt":[],"family":"create-live","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-053","text":"напомни в среду в шесть вечера тренировку у младшей","label":"tasks:task.create","alt":[],"family":"create-time","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-054","text":"напомни завтра в четыре дня забрать заказ из пункта выдачи","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-055","text":"в субботу в 3 часа ночи выехать на рыбалку","label":"tasks:task.create","alt":[],"family":"create-words","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-056","text":"перенеси приём у терапевта на двадцать шестое","label":"tasks:task.reschedule","alt":[],"family":"reschedule","rule_outcome":"slot","rule_label":"tasks:task.reschedule"}
+{"id":"h3-057","text":"сдвинь техосмотр газели на час раньше","label":"tasks:task.reschedule","alt":[],"family":"reschedule","rule_outcome":"ok","rule_label":"tasks:task.reschedule"}
+{"id":"h3-058","text":"перекинь родительское собрание на следующий вторник","label":"tasks:task.reschedule","alt":[],"family":"reschedule","rule_outcome":"ok","rule_label":"tasks:task.reschedule"}
+{"id":"h3-059","text":"отложи звонок сменщику на полчасика","label":"tasks:task.reschedule","alt":[],"family":"reschedule-live","rule_outcome":"slot","rule_label":"tasks:task.reschedule"}
+{"id":"h3-060","text":"давай собес перенесём на понедельник, в пятницу я не успеваю","label":"tasks:task.reschedule","alt":[],"family":"reschedule-live","rule_outcome":"slot","rule_label":"tasks:task.reschedule"}
+{"id":"h3-061","text":"поменяй время у мойки машины на половину двенадцатого","label":"tasks:task.reschedule","alt":["tasks:task.edit"],"family":"reschedule","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-062","text":"перенеси логопеда на четверг в полпятого","label":"tasks:task.reschedule","alt":[],"family":"reschedule","rule_outcome":"ok","rule_label":"tasks:task.reschedule"}
+{"id":"h3-063","text":"ветеринара для Барсика передвинь на субботу на десять утра","label":"tasks:task.reschedule","alt":[],"family":"reschedule","rule_outcome":"ok","rule_label":"tasks:task.reschedule"}
+{"id":"h3-064","text":"сдвинь оплату аренды на двадцатое","label":"tasks:task.reschedule","alt":[],"family":"reschedule","rule_outcome":"slot","rule_label":"tasks:task.reschedule"}
+{"id":"h3-065","text":"можно ли перенести поздравление Ирины Петровны на завтра?","label":"tasks:task.reschedule","alt":[],"family":"reschedule-q","rule_outcome":"slot","rule_label":"tasks:task.reschedule"}
+{"id":"h3-066","text":"перенеси, пожалуйста, встречу с поставщиком с четверга на пятницу на то же время","label":"tasks:task.reschedule","alt":[],"family":"reschedule-clause","rule_outcome":"ok","rule_label":"tasks:task.reschedule"}
+{"id":"h3-067","text":"забор костюма из чистки отодвинь на послезавтра","label":"tasks:task.reschedule","alt":[],"family":"reschedule","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-068","text":"планёрку с водителями на завтра на восемь утра переставь","label":"tasks:task.reschedule","alt":[],"family":"reschedule","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-069","text":"перенеси мусор на попозже, на одиннадцать вечера","label":"tasks:task.reschedule","alt":[],"family":"reschedule-live","rule_outcome":"ok","rule_label":"tasks:task.reschedule"}
+{"id":"h3-070","text":"занятие с репетитором отменилось, вычеркни его","label":"tasks:task.complete","alt":[],"family":"complete-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-071","text":"капельницу в третьей палате поменяла, отметь","label":"tasks:task.complete","alt":[],"family":"complete-live","rule_outcome":"ok","rule_label":"tasks:task.complete"}
+{"id":"h3-072","text":"всё, сдал путевой лист, закрывай задачу","label":"tasks:task.complete","alt":[],"family":"complete-live","rule_outcome":"ok","rule_label":"tasks:task.complete"}
+{"id":"h3-073","text":"отметь выполненным пункт про выручку","label":"tasks:task.complete","alt":[],"family":"complete","rule_outcome":"ok","rule_label":"tasks:task.complete"}
+{"id":"h3-074","text":"корм коту купил, галочку поставь","label":"tasks:task.complete","alt":[],"family":"complete-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-075","text":"пометь сделанной задачу про страховку на машину","label":"tasks:task.complete","alt":[],"family":"complete","rule_outcome":"ok","rule_label":"tasks:task.complete"}
+{"id":"h3-076","text":"закрой напоминалку про собес","label":"tasks:task.complete","alt":[],"family":"complete-live","rule_outcome":"slot","rule_label":"tasks:task.complete"}
+{"id":"h3-077","text":"тетради проверила, можно убирать из списка","label":"tasks:task.complete","alt":[],"family":"complete-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-078","text":"выполнено: позвонить тёте Гале","label":"tasks:task.complete","alt":[],"family":"complete","rule_outcome":"ok","rule_label":"tasks:task.complete"}
+{"id":"h3-079","text":"что у меня на двадцать пятое запланировано","label":"tasks:task.list","alt":[],"family":"list","rule_outcome":"ok","rule_label":"tasks:task.list"}
+{"id":"h3-080","text":"есть ли у меня дела на эти выходные?","label":"tasks:task.list","alt":[],"family":"list-q","rule_outcome":"ok","rule_label":"tasks:task.list"}
+{"id":"h3-081","text":"покажи список на завтрашний день","label":"tasks:task.list","alt":[],"family":"list","rule_outcome":"ok","rule_label":"tasks:task.list"}
+{"id":"h3-082","text":"чё там по делам до конца недели","label":"tasks:task.list","alt":[],"family":"list-live","rule_outcome":"ok","rule_label":"tasks:task.list"}
+{"id":"h3-083","text":"скажи, не забыл ли я чего на сегодня","label":"tasks:task.list","alt":["none"],"family":"list-q","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-084","text":"что я прошляпил из дел, сроки которых вышли","label":"tasks:task.list","alt":[],"family":"list","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-085","text":"много ли у меня всего на пятницу?","label":"tasks:task.list","alt":[],"family":"list-q","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-086","text":"зачитай мне что на утро завтра","label":"tasks:task.list","alt":[],"family":"list-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-087","text":"а что у меня в следующем месяце намечено","label":"tasks:task.list","alt":[],"family":"list","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-088","text":"всё, что висит на пятницу, раскидай на понедельник","label":"tasks:task.rescheduleMany","alt":[],"family":"bulk","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-089","text":"всё просроченное сдвинь на вечер","label":"tasks:task.rescheduleMany","alt":[],"family":"bulk","rule_outcome":"ok","rule_label":"tasks:task.rescheduleMany"}
+{"id":"h3-090","text":"закрой все дела за вчерашний день","label":"tasks:task.completeMany","alt":[],"family":"bulk","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-091","text":"все что без срока поставь на субботу","label":"tasks:task.rescheduleMany","alt":[],"family":"bulk-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-092","text":"отметь всё на сегодня как сделанное, я молодец","label":"tasks:task.completeMany","alt":[],"family":"bulk-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-093","text":"перенеси всё, что было на завтра, на послезавтра","label":"tasks:task.rescheduleMany","alt":[],"family":"bulk-clause","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-094","text":"все сегодняшние сдвинь на день вперёд","label":"tasks:task.rescheduleMany","alt":[],"family":"bulk","rule_outcome":"ok","rule_label":"tasks:task.rescheduleMany"}
+{"id":"h3-095","text":"закрывай всё просроченное разом","label":"tasks:task.completeMany","alt":[],"family":"bulk-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-096","text":"нет, на полвосьмого вечера","label":"tasks:task.edit","alt":["tasks:task.reschedule"],"after":"tasks","family":"followup","rule_outcome":"ok","rule_label":"tasks:task.edit"}
+{"id":"h3-097","text":"ой, не в пятницу, а в субботу","label":"tasks:task.edit","alt":["tasks:task.reschedule"],"after":"tasks","family":"followup-live","rule_outcome":"ok","rule_label":"tasks:task.edit"}
+{"id":"h3-098","text":"а давай двадцать седьмого","label":"tasks:task.edit","alt":["tasks:task.reschedule"],"after":"tasks","family":"followup","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-099","text":"точнее в девять пятнадцать утра","label":"tasks:task.edit","alt":["tasks:task.reschedule"],"after":"tasks","family":"followup","rule_outcome":"ok","rule_label":"tasks:task.edit"}
+{"id":"h3-100","text":"поставь её на завтрашний вечер","label":"tasks:task.edit","alt":["tasks:task.reschedule"],"after":"tasks","family":"followup","rule_outcome":"ok","rule_label":"tasks:task.edit"}
+{"id":"h3-101","text":"пусть будет к вечеру пятницы, так удобнее","label":"tasks:task.edit","alt":["tasks:task.reschedule"],"after":"tasks","family":"followup","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-102","text":"сдвинь-ка это часика на два позже","label":"tasks:task.reschedule","alt":["tasks:task.edit"],"after":"tasks","family":"followup","rule_outcome":"slot","rule_label":"tasks:task.reschedule"}
+{"id":"h3-103","text":"выполнил уже, закрывай","label":"tasks:task.complete","alt":[],"after":"tasks","family":"followup-live","rule_outcome":"ok","rule_label":"tasks:task.complete"}
+{"id":"h3-104","text":"и ещё одно: в среду в 11 утра забрать очки из оптики","label":"tasks:task.create","alt":[],"after":"tasks","family":"followup","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-105","text":"а помимо этого что завтра намечено?","label":"tasks:task.list","alt":[],"after":"tasks","family":"followup","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-106","text":"нет, в четыре","label":"tasks:task.edit","alt":["tasks:task.reschedule"],"after":"tasks","family":"followup","rule_outcome":"ok","rule_label":"tasks:task.edit"}
+{"id":"h3-107","text":"во, благодарствую, то что надо","label":"talk:talk.thanks","alt":[],"after":"tasks","family":"followup-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-108","text":"блин, зря я всё раскидал, откатывай назад","label":"tasks:task.bulk.undo","alt":["none"],"after":"tasks","family":"followup-live","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-109","text":"слушай, а сделай лучше полвосьмого","label":"alarm:alarm.set","alt":[],"after":"alarm","family":"followup","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-110","text":"и на выходные тоже на девять","label":"alarm:alarm.set","alt":["alarm:alarm.date"],"after":"alarm","family":"followup","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-111","text":"ещё десяточку минут","label":"alarm:alarm.timer","alt":["none"],"after":"alarm","family":"followup-live","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-112","text":"нет, без четверти семь","label":"alarm:alarm.set","alt":[],"after":"alarm","family":"followup","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-113","text":"а у сестры в Казани там как?","label":"weather:weather.now","alt":["weather:weather.day"],"after":"weather","family":"followup","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-114","text":"а двадцать пятого какая будет?","label":"weather:weather.day","alt":["none"],"after":"weather","family":"followup","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-115","text":"а снегопада ли к субботе ждать?","label":"weather:weather.rain","alt":["weather:weather.week"],"after":"weather","family":"followup-q","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-116","text":"ну и в какой куртке сына тогда отправлять?","label":"weather:weather.wear","alt":[],"after":"weather","family":"followup","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-117","text":"ну а послезавтра к ночи что обещают?","label":"weather:weather.day","alt":[],"after":"weather","family":"followup","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-118","text":"а если ещё на три умножить","label":"calc:calc.evaluate","alt":["none"],"after":"calc","family":"followup","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-119","text":"минус двадцать процентов от этого","label":"calc:calc.evaluate","alt":["none"],"after":"calc","family":"followup","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-120","text":"а корень из этого?","label":"calc:calc.evaluate","alt":["none"],"after":"calc","family":"followup","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-121","text":"а табуреток сколько?","label":"warehouse:warehouse.count","alt":[],"after":"warehouse","family":"followup","rule_outcome":"ok","rule_label":"warehouse:warehouse.count"}
+{"id":"h3-122","text":"ну а за вчерашний день поступления какие?","label":"warehouse:warehouse.yesterday","alt":[],"after":"warehouse","family":"followup","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-123","text":"и где они лежат?","label":"warehouse:warehouse.where","alt":["none"],"after":"warehouse","family":"followup","rule_outcome":"alt","rule_label":"talk:talk.question"}
+{"id":"h3-124","text":"да не, это я так, не надо ничего","label":"none","alt":[],"after":"tasks","family":"followup-live","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-125","text":"ок, а напомни завтра в восемь утра зонт взять","label":"tasks:task.create","alt":[],"after":"weather","family":"followup","rule_outcome":"ok","rule_label":"tasks:task.create"}
+{"id":"h3-126","text":"мне в полшестого утра подниматься, разбуди","label":"alarm:alarm.set","alt":[],"family":"alarm","rule_outcome":"misroute","rule_label":"tasks:task.create"}
+{"id":"h3-127","text":"будильник на шесть сорок, мне в первую смену","label":"alarm:alarm.set","alt":[],"family":"alarm","rule_outcome":"ok","rule_label":"alarm:alarm.set"}
+{"id":"h3-128","text":"поставь будильник на без десяти семь по будням","label":"alarm:alarm.set","alt":[],"family":"alarm","rule_outcome":"ok","rule_label":"alarm:alarm.set"}
+{"id":"h3-129","text":"завтра к поезду встать в четыре двадцать, поставь будильник","label":"alarm:alarm.set","alt":["alarm:alarm.date"],"family":"alarm-clause","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-130","text":"двадцать пятого мне вставать в семь утра, заведи будильник","label":"alarm:alarm.date","alt":[],"family":"alarm","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-131","text":"разбуди в пятницу в восемь","label":"alarm:alarm.date","alt":[],"family":"alarm","rule_outcome":"ok","rule_label":"alarm:alarm.date"}
+{"id":"h3-132","text":"подними меня в девять ноль-ноль","label":"alarm:alarm.set","alt":[],"family":"alarm","rule_outcome":"misroute","rule_label":"alarm:alarm.clarify"}
+{"id":"h3-133","text":"врубай будильник на полвосьмого с подписью «школа»","label":"alarm:alarm.set","alt":[],"family":"alarm-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-134","text":"таймер на сорок минут, пирожки в духовке","label":"alarm:alarm.timer","alt":[],"family":"timer","rule_outcome":"ok","rule_label":"alarm:alarm.timer"}
+{"id":"h3-135","text":"на девяносто секунд засекай, лапша варится","label":"alarm:alarm.timer","alt":[],"family":"timer-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-136","text":"яйца всмятку, засеки три с половиной","label":"alarm:alarm.timer","alt":["none"],"family":"timer","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-137","text":"запусти отсчёт на четверть часика","label":"alarm:alarm.timer","alt":[],"family":"timer","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-138","text":"отсчитай мне сорок пять секунд","label":"alarm:alarm.timer","alt":[],"family":"timer","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-139","text":"таймер на час пятнадцать, тесто подходит","label":"alarm:alarm.timer","alt":[],"family":"timer","rule_outcome":"ok","rule_label":"alarm:alarm.timer"}
+{"id":"h3-140","text":"поставь таймер на 25 минут «стирка»","label":"alarm:alarm.timer","alt":[],"family":"timer","rule_outcome":"ok","rule_label":"alarm:alarm.timer"}
+{"id":"h3-141","text":"разбуди-ка меня в половине седьмого, на работу","label":"alarm:alarm.set","alt":[],"family":"alarm-live","rule_outcome":"ok","rule_label":"alarm:alarm.set"}
+{"id":"h3-142","text":"по субботам и воскресеньям будильник на семь","label":"alarm:alarm.set","alt":["alarm:alarm.date"],"family":"alarm","rule_outcome":"ok","rule_label":"alarm:alarm.set"}
+{"id":"h3-143","text":"таймерок секунд на тридцать замути","label":"alarm:alarm.timer","alt":[],"family":"timer-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-144","text":"подъём в пять сорок пять","label":"alarm:alarm.set","alt":["none"],"family":"alarm-live","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-145","text":"у меня рейс ранний, в шесть утра чтоб звенело","label":"alarm:alarm.set","alt":["alarm:alarm.date"],"family":"alarm","rule_outcome":"misroute","rule_label":"tasks:task.create"}
+{"id":"h3-146","text":"сколько будет триста двадцать на пятнадцать","label":"calc:calc.evaluate","alt":[],"family":"calc-words","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-147","text":"посчитай-ка тысячу двести минус триста сорок","label":"calc:calc.evaluate","alt":[],"family":"calc-words","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-148","text":"восемнадцать процентов от сорока пяти тысяч сколько","label":"calc:calc.evaluate","alt":[],"family":"calc-words","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-149","text":"куб семёрки сколько","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"h3-150","text":"раздели девять тысяч на двенадцать","label":"calc:calc.evaluate","alt":[],"family":"calc-words","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-151","text":"сто сорок четыре поделённое на шестнадцать это сколько","label":"calc:calc.evaluate","alt":[],"family":"calc-words","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"h3-152","text":"корень из ста шестидесяти девяти","label":"calc:calc.evaluate","alt":[],"family":"calc-words","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-153","text":"сколько будет 1750 плюс 2380 плюс 960","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-154","text":"посчитай 37 умножить на 23","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-155","text":"наценка 30 процентов на 850 сколько выйдет","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-156","text":"сколько получится, если 4500 разделить на 6","label":"calc:calc.evaluate","alt":[],"family":"calc-clause","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"h3-157","text":"две тысячи пятьсот минус пятнадцать процентов","label":"calc:calc.evaluate","alt":[],"family":"calc-words","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-158","text":"сколько будет (12 + 8) * 5","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-159","text":"сколько будет половина от 3700","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"slot","rule_label":"calc:calc.evaluate"}
+{"id":"h3-160","text":"тыщу двести на три подели","label":"calc:calc.evaluate","alt":[],"family":"calc-live","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-161","text":"сколько будет 0,5 умножить на 64","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-162","text":"6400 разделить на 8 и прибавить 200","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-163","text":"сколько будет пять в квадрате плюс двенадцать","label":"calc:calc.evaluate","alt":[],"family":"calc-words","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"h3-164","text":"сколько это 60 на 24","label":"calc:calc.evaluate","alt":[],"family":"calc-live","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"h3-165","text":"посчитай мне двадцать пять процентов от восьмисот","label":"calc:calc.evaluate","alt":[],"family":"calc-words","rule_outcome":"slot","rule_label":"calc:calc.evaluate"}
+{"id":"h3-166","text":"какая сейчас погода на улице в Твери","label":"weather:weather.now","alt":[],"family":"weather","rule_outcome":"ok","rule_label":"weather:weather.now"}
+{"id":"h3-167","text":"имеет ли смысл тащить с собой зонтик утром завтра?","label":"weather:weather.rain","alt":["weather:weather.day","weather:weather.wear"],"family":"weather-q","rule_outcome":"ok","rule_label":"weather:weather.rain"}
+{"id":"h3-168","text":"будет ли в субботу дождь в Самаре","label":"weather:weather.rain","alt":[],"family":"weather-q","rule_outcome":"slot","rule_label":"weather:weather.rain"}
+{"id":"h3-169","text":"погода на двадцать пятое","label":"weather:weather.day","alt":["none","weather:weather.range"],"family":"weather-words","rule_outcome":"misroute","rule_label":"weather:weather.now"}
+{"id":"h3-170","text":"скока щас градусов","label":"weather:weather.now","alt":[],"family":"weather-live","rule_outcome":"ok","rule_label":"weather:weather.now"}
+{"id":"h3-171","text":"дует сегодня сильно, не сдует меня на остановке?","label":"weather:weather.now","alt":["weather:weather.day"],"family":"weather","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-172","text":"в чём завтра на рыбалку ехать по погоде","label":"weather:weather.wear","alt":[],"family":"weather","rule_outcome":"misroute","rule_label":"weather:weather.day"}
+{"id":"h3-173","text":"прогноз на неделю для Нижнего Новгорода","label":"weather:weather.week","alt":[],"family":"weather","rule_outcome":"slot","rule_label":"weather:weather.week"}
+{"id":"h3-174","text":"подморозит ли ночью?","label":"weather:weather.day","alt":["weather:weather.now"],"family":"weather-q","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-175","text":"какая погода будет в среду в Питере","label":"weather:weather.day","alt":[],"family":"weather","rule_outcome":"ok","rule_label":"weather:weather.day"}
+{"id":"h3-176","text":"дождь сейчас идёт или нет","label":"weather:weather.rain","alt":["weather:weather.now"],"family":"weather-live","rule_outcome":"ok","rule_label":"weather:weather.rain"}
+{"id":"h3-177","text":"потеплеет ли к субботе с воскресеньем","label":"weather:weather.week","alt":["weather:weather.day"],"family":"weather","rule_outcome":"alt","rule_label":"weather:weather.day"}
+{"id":"h3-178","text":"а вчера на улице сколько было, не помнишь?","label":"weather:weather.past","alt":[],"family":"weather","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-179","text":"к вечеру пятницы распогодится?","label":"weather:weather.day","alt":["weather:weather.rain"],"family":"weather-words","rule_outcome":"misroute","rule_label":"weather:weather.now"}
+{"id":"h3-180","text":"скажи погоду на послезавтра в Краснодаре","label":"weather:weather.day","alt":[],"family":"weather","rule_outcome":"ok","rule_label":"weather:weather.day"}
+{"id":"h3-181","text":"гололёд завтра обещают?","label":"weather:weather.rain","alt":["weather:weather.day"],"family":"weather","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-182","text":"мне на смену в шесть утра, одеваться тепло?","label":"weather:weather.wear","alt":["weather:weather.now","weather:weather.day"],"family":"weather-clause","rule_outcome":"ok","rule_label":"weather:weather.wear"}
+{"id":"h3-183","text":"ну чё там за окном, сильно метёт?","label":"weather:weather.now","alt":["weather:weather.rain"],"family":"weather-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-184","text":"сколько градусов будет в четверг днём","label":"weather:weather.day","alt":[],"family":"weather","rule_outcome":"ok","rule_label":"weather:weather.day"}
+{"id":"h3-185","text":"будет ли солнце на этой неделе","label":"weather:weather.week","alt":["weather:weather.day"],"family":"weather-q","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-186","text":"о, Связной, привет-привет, давно не болтали","label":"talk:talk.greet","alt":[],"family":"talk-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-187","text":"здравия желаю","label":"talk:talk.greet","alt":[],"family":"talk-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-188","text":"вечер добрый, дорогой помощник","label":"talk:talk.greet","alt":[],"family":"talk","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-189","text":"а ты что можешь, кроме напоминаний?","label":"talk:talk.capabilities","alt":["none"],"family":"talk","rule_outcome":"ok","rule_label":"talk:talk.capabilities"}
+{"id":"h3-190","text":"подскажи, как с тобой работать, я первый раз","label":"talk:talk.capabilities","alt":["none"],"family":"talk-clause","rule_outcome":"alt","rule_label":"talk:talk.question"}
+{"id":"h3-191","text":"а звать-то тебя как и кто ты вообще","label":"talk:talk.whoAreYou","alt":[],"family":"talk-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-192","text":"ты там не скучаешь без меня?","label":"talk:talk.howAreYou","alt":["none"],"family":"talk-live","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-193","text":"развесели старика анекдотом","label":"talk:talk.joke","alt":[],"family":"talk","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-194","text":"премного благодарен, выручил старика","label":"talk:talk.thanks","alt":[],"family":"talk","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-195","text":"ну всё, бывай, завтра спишемся","label":"talk:talk.bye","alt":[],"family":"talk","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-196","text":"ладненько, побегу я","label":"talk:talk.bye","alt":["none"],"family":"talk-live","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-197","text":"ты бестолковый совсем","label":"talk:talk.rude","alt":[],"family":"talk-live","rule_outcome":"ok","rule_label":"talk:talk.rude"}
+{"id":"h3-198","text":"как настроение у тебя, железяка","label":"talk:talk.howAreYou","alt":[],"family":"talk","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"h3-199","text":"от души, братан","label":"talk:talk.thanks","alt":[],"family":"talk-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-200","text":"умеешь ли ты ставить будильники?","label":"talk:talk.capabilities","alt":["talk:talk.question","none"],"family":"talk-q","rule_outcome":"alt","rule_label":"none"}
+{"id":"h3-201","text":"пуфиков штук сколько числится в остатках","label":"warehouse:warehouse.count","alt":[],"family":"warehouse","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-202","text":"барных табуретов на остатках хватает ли?","label":"warehouse:warehouse.count","alt":["warehouse:warehouse.where"],"family":"warehouse-q","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-203","text":"в какой ячейке лежат пуфы","label":"warehouse:warehouse.where","alt":[],"family":"warehouse","rule_outcome":"ok","rule_label":"warehouse:warehouse.where"}
+{"id":"h3-204","text":"почём продаём табуретки барные","label":"warehouse:warehouse.price","alt":[],"family":"warehouse-live","rule_outcome":"ok","rule_label":"warehouse:warehouse.price"}
+{"id":"h3-205","text":"глянь содержимое места 102-1-1","label":"warehouse:warehouse.cell","alt":[],"family":"warehouse","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-206","text":"с утра много ли товара привезли?","label":"warehouse:warehouse.today","alt":[],"family":"warehouse","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-207","text":"выведи мне поступления от вчерашнего числа","label":"warehouse:warehouse.yesterday","alt":[],"family":"warehouse","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-208","text":"какие поступления были за неделю","label":"warehouse:warehouse.week","alt":[],"family":"warehouse","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"h3-209","text":"остались ли приёмки, которые никто не провёл?","label":"warehouse:warehouse.unposted","alt":[],"family":"warehouse-q","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"h3-210","text":"кто из кладовщиков не сфоткал приёмку","label":"warehouse:warehouse.nophoto","alt":[],"family":"warehouse","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"h3-211","text":"переложи два пуфа из 101-2-3 в 101-1-1","label":"warehouse:warehouse.act.move","alt":[],"family":"warehouse","rule_outcome":"ok","rule_label":"warehouse:warehouse.act.move"}
+{"id":"h3-212","text":"под какими правами я зашёл в складскую систему","label":"warehouse:warehouse.me","alt":[],"family":"warehouse","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-213","text":"что умеет складской помощник","label":"warehouse:warehouse.help","alt":["talk:talk.capabilities"],"family":"warehouse","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-214","text":"на каком стеллаже искать 64117","label":"warehouse:warehouse.where","alt":[],"family":"warehouse-live","rule_outcome":"none","rule_label":"none"}
+{"id":"h3-215","text":"скока стоит 64116","label":"warehouse:warehouse.price","alt":[],"family":"warehouse-live","rule_outcome":"ok","rule_label":"warehouse:warehouse.price"}
+{"id":"h3-216","text":"у меня шеф опять всё перенёс на пятницу, задолбал","label":"none","alt":[],"family":"none-story","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-217","text":"жена говорит: «напомни мне купить хлеб», а я забыл","label":"none","alt":[],"family":"none-story","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-218","text":"водитель автобуса сегодня проехал мою остановку","label":"none","alt":[],"family":"none-story","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-219","text":"я бы поставил будильник, да толку нет, всё равно просплю","label":"none","alt":[],"family":"none-live","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-220","text":"я ж просила не дёргать меня сегодня никакими уведомлениями","label":"none","alt":[],"family":"none-refusal","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-221","text":"время — деньги, как говорится","label":"none","alt":[],"family":"none-idiom","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-222","text":"у внучки завтра контрольная по математике, переживает","label":"none","alt":[],"family":"none-story","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-223","text":"закрыть бы этот год поскорее","label":"none","alt":[],"family":"none-idiom","rule_outcome":"misroute","rule_label":"tasks:task.complete"}
+{"id":"h3-224","text":"таймер в моей голове уже тикает","label":"none","alt":[],"family":"none-idiom","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-225","text":"соседка перенесла свадьбу на весну","label":"none","alt":[],"family":"none-story","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-226","text":"посчитаться бы с ним за всё","label":"none","alt":[],"family":"none-idiom","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-227","text":"главное, чтобы в семье была хорошая погода","label":"none","alt":[],"family":"none-idiom","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-228","text":"удалось ли тебе вчера выспаться?","label":"none","alt":[],"family":"none-q","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-229","text":"нет, ничего не записывай, я просто думаю вслух","label":"none","alt":[],"family":"none-refusal","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-230","text":"мне учительница в школе всегда говорила, что я всё откладываю на потом","label":"none","alt":[],"family":"none-story","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-231","text":"вот бы на выходных отоспаться","label":"none","alt":[],"family":"none-live","rule_outcome":"misroute","rule_label":"tasks:task.create"}
+{"id":"h3-232","text":"напоминаю себе, что жизнь прекрасна","label":"none","alt":[],"family":"none-idiom","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-233","text":"а помнишь, как мы в детстве на речку ходили","label":"none","alt":[],"family":"none-story","rule_outcome":"misroute","rule_label":"tasks:task.complete"}
+{"id":"h3-234","text":"у меня в магазине кассир вечно путает сдачу","label":"none","alt":[],"family":"none-story","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-235","text":"будильник у соседей с пяти утра орёт, кошмар","label":"none","alt":[],"family":"none-story","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-236","text":"сколько можно уже, честное слово","label":"none","alt":[],"family":"none-idiom","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"h3-237","text":"давай без этих твоих напоминалок сегодня","label":"none","alt":[],"family":"none-refusal","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-238","text":"дочка просила её завтра в семь разбудить, но она передумала","label":"none","alt":[],"family":"none-story","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-239","text":"да я перенёс уже сам всё, не трогай","label":"none","alt":[],"family":"none-refusal","rule_outcome":"ok","rule_label":"none"}
+{"id":"h3-240","text":"холодно мне что-то, пойду чаю попью","label":"none","alt":[],"family":"none-live","rule_outcome":"ok","rule_label":"none"}
