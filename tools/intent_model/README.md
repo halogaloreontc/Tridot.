@@ -137,6 +137,23 @@ GitHub → Actions → «Выпуск модели понимания» → Run 
            "accurate": {…}, "web": {…}}}
 ```
 
+## Эталоны для Dart
+
+Токенизаторы на устройстве (`lib/core/intent/intent_tokenizer.dart`, шаг 2)
+сверяются с HuggingFace tokenizers:
+
+```bash
+.venv-intent/bin/python -m tools.intent_model.dart_fixtures --packs <папка с распакованными light/ и accurate/>
+```
+
+пишет `test/fixtures/intent/` (номера токенов для синтетических фраз
+`phrases.txt` и урезанные `tokenizer.json` — только нужные этим фразам
+токены и слияния) и `lib/core/intent/bert_chars.g.dart` (классы знаков
+BertNormalizer и BertPreTokenizer по всем кодовым точкам).
+`test/fixtures/intent/light_expect.json` — векторы и подсказки «Лёгкой»
+0.1.0 для `test/intent/onnx_real_model_test.dart` (тот пропускается без
+распакованного пакета).
+
 ## Приватность
 
 - В обучении — только синтетический корпус `test/corpus` и синтетические

@@ -14,7 +14,7 @@ import 'ytdl_formats.dart';
 
 export 'ytdl_formats.dart';
 
-final class YtdlConnector implements Connector, FormConnector {
+final class YtdlConnector implements Connector, FormConnector, IntentTarget {
   YtdlConnector();
 
   static const String id = ExtensionForms.ytdl;
@@ -44,6 +44,27 @@ final class YtdlConnector implements Connector, FormConnector {
         defaultEnabled: false,
         offHint: true,
       );
+
+  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'ytdl.download': IntentRecipe(
+      carriers: <String>['скачай видео'],
+      ask: 'скачай видео',
+      example: 'скачай видео по ссылке',
+    ),
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
 
   @override
   ConnectorMatch? match(Utterance utterance) {

@@ -4,6 +4,7 @@ import '../connectors/connector.dart';
 import '../connectors/login_link.dart';
 import '../connectors/tasks_connector.dart';
 import '../extensions/extension_registry.dart';
+import '../intent/intent_fallback.dart';
 import '../jobs/extension_card.dart';
 import '../models/action_card.dart';
 import '../models/bulk.dart';
@@ -99,6 +100,31 @@ final class AssistantController {
 
   /// Пример из подсказок интерфейса. Тест проверяет, что парсер его понимает.
   static const String exampleCommand = TasksConnector.exampleCommand;
+
+  /// Запасной слой понимания (ADR-041): на «не понял» правил — вопрос
+  /// «Похоже, вы хотите …?», журнал непонятых фраз и личные примеры.
+  /// `null` — слоя нет: ответы правил те же, что без него. Модель внутри
+  /// может быть не загружена ([IntentFallback.model]) — тогда только
+  /// журнал.
+  IntentFallback? intent;
+
+  /// Ожидание вопроса запасного слоя ([PendingConfirmation.commandId]).
+  static const String intentSuggestCommand = 'intent.suggest';
+
+  /// Вопрос «Похоже, вы хотите …?» с одним вариантом и с двумя.
+  static const String intentSuggestReply = 'intent.suggest';
+  static const String intentSuggestTwoReply = 'intent.suggest.two';
+
+  /// «Да», а команду из фразы не разобрать: пример команды.
+  static const String intentHowReply = 'intent.how';
+
+  /// Метки, которые запасной слой не предлагает: справочный вопрос беседы
+  /// честно говорит «не подскажу» — предлагать его незачем.
+  static const Set<String> intentNever = <String>{'talk:talk.question'};
+
+  /// Ответ беседы на справочный вопрос без справочника: тоже «не понял»
+  /// для запасного слоя.
+  static const String _offlineQuestionReply = 'talk.question.offline';
 
   /// Совпадения ниже этой уверенности не участвуют в споре коннекторов
   /// ([RoutePolicy.ambiguityFloor]).
@@ -1035,6 +1061,34 @@ final class AssistantController {
         }
       }
     }
+    // Ответ на «Похоже, вы хотите …?» запасного слоя (ADR-041).
+    final intentQuestion = pending?.commandId == intentSuggestCommand &&
+            pending?.payload is Clarification
+        ? pending!.payload! as Clarification
+        : null;
+    if (intentQuestion?.context case final IntentOffer offer) {
+      final question = intentQuestion!;
+      final option = question.choose(answerUtterance);
+      final typed = ConfirmationReply.of(answerUtterance);
+      final refused = option?.answer == false ||
+          (option == null && typed == ConfirmationReply.no);
+      final chosen = switch (option?.answer) {
+        true => offer.suggestion.first,
+        null when option != null => offer.suggestion.second,
+        null when typed == ConfirmationReply.yes => offer.suggestion.first,
+        _ => null,
+      };
+      if (refused || chosen != null) {
+        _answered = pending;
+        _speakAsAsker(asker, addressed: addressed, trailing: named);
+        return _markTrailing(
+          refused
+              ? await _rejectIntent(offer)
+              : await _acceptIntent(offer, chosen!),
+          named,
+        );
+      }
+    }
     // Уточняющий вопрос с вариантами (Clarification): выбранный вариант
     // разбирается заново как его каноническая команда — со всеми
     // правилами, в том числе «фраза о паролях не уходит в сеть»; «нет» —
@@ -1310,7 +1364,10 @@ final class AssistantController {
     if (best == null || bestConnector == null) {
       session.lastConnectorId = null;
       _recent = null;
-      return _unknownFor(message, private: hideFromNetwork);
+      final plain = _unknownFor(message, private: hideFromNetwork);
+      return depth == 0 && layers && RecognitionLayers.gaveUp(decision)
+          ? _notUnderstood(message, plain, private: hideFromNetwork)
+          : plain;
     }
     // Фраза понята по контексту сессии как фраза другого навыка: её
     // разбирают заново как каноническую команду (один раз).
@@ -1355,7 +1412,173 @@ final class AssistantController {
     }
 
     _leadByDuty(bestConnector);
-    return _offerRest(await _run(bestConnector, best), rest);
+    final response = await _run(bestConnector, best);
+    // «Такое не подскажу: справочника нет» — правила тоже сдались: спросить
+    // запасной слой, кроме самого справочного вопроса.
+    if (response.replyId == _offlineQuestionReply &&
+        depth == 0 &&
+        layers &&
+        rest == null &&
+        best.fallback) {
+      return _notUnderstood(
+        message,
+        response,
+        private: hideFromNetwork,
+        exclude: <String>{'${best.connectorId}:${best.commandId}'},
+      );
+    }
+    return _offerRest(response, rest);
+  }
+
+  /// «Не понял» правил ([plain]) и запасной слой (ADR-041): подсказка
+  /// команды вопросом или [plain] с записью в журнал непонятых. Подсказка
+  /// команд ADR-022 (опечатка в слове команды) — правила, она важнее.
+  /// Приватная фраза — [plain], модель её не видит и журнал не пишет.
+  Future<AssistantResponse> _notUnderstood(
+    String message,
+    AssistantResponse plain, {
+    required bool private,
+    Set<String> exclude = const <String>{},
+  }) async {
+    final fallback = intent;
+    if (fallback == null || private || _privateForModel(message)) return plain;
+    if (plain.replyId == unknownSuggestReply) {
+      await fallback.unclear(message);
+      return plain;
+    }
+    final offer = await _intentOffer(fallback, message, exclude: exclude);
+    if (offer != null) {
+      session.lastConnectorId = null;
+      _recent = null;
+      return offer;
+    }
+    await fallback.unclear(message);
+    return plain;
+  }
+
+  bool _privateForModel(String text) => RecognitionLayers.privateForModel(
+        text,
+        analyze: (String t) => Utterance.analyze(t, now: session.clock.now()),
+        knownSecret: knownSecret,
+      );
+
+  /// Вопрос «Похоже, вы хотите …?» с кнопками «Да», вторым вариантом и
+  /// «Нет» или `null`, если модели нечего предложить. Сбой модели — тоже
+  /// `null`: ответ правил остаётся.
+  Future<AssistantResponse?> _intentOffer(
+    IntentFallback fallback,
+    String message, {
+    Set<String> exclude = const <String>{},
+  }) async {
+    final IntentSuggestion? suggestion;
+    try {
+      suggestion = await fallback.suggest(
+        message,
+        connectors: <String>{
+          for (final connector in _connectors)
+            if (connector is IntentTarget) connector.info.id,
+        },
+        exclude: <String>{...intentNever, ...exclude},
+      );
+    } on Object {
+      return null;
+    }
+    if (suggestion == null) return null;
+    final first = suggestion.first;
+    final second = suggestion.second;
+    final clarification = Clarification(
+      questionId: second == null ? intentSuggestReply : intentSuggestTwoReply,
+      options: <ClarifyOption>[
+        ClarifyOption(
+          label: 'Да',
+          text: '',
+          answers: const <String>{'давай', 'ага', 'верно', 'конечно', 'lf'},
+          connectorId: first.connectorId,
+          answer: true,
+        ),
+        if (second != null)
+          ClarifyOption(
+            label: Utterance.capitalize(second.description),
+            text: '',
+            connectorId: second.connectorId,
+          ),
+        const ClarifyOption(label: 'Нет', text: 'нет', answer: false),
+      ],
+      context: IntentOffer(suggestion),
+    );
+    session.requestConfirmation(
+      PendingConfirmation(
+        connectorId: first.connectorId,
+        commandId: intentSuggestCommand,
+        payload: clarification,
+      ),
+    );
+    return session.reply(
+      clarification.questionId,
+      values: <String, String>{
+        'description': first.description,
+        if (second != null) 'second': second.description,
+      },
+      intent: intentSuggestCommand,
+      status: AssistantStatus.needsClarification,
+      clarification: clarification,
+    );
+  }
+
+  /// «Да» на подсказку: личный пример (если учиться разрешено), запись
+  /// «исправлено» в журнале и команда — через правила навыка
+  /// ([IntentTarget.matchAs]): слоты из фразы, недостающее навык спросит
+  /// сам, запись — со своим подтверждением. Не разобрать — пример команды.
+  Future<AssistantResponse> _acceptIntent(
+    IntentOffer offer,
+    IntentChoice choice,
+  ) async {
+    final suggestion = offer.suggestion;
+    final connector = _connectors
+        .where((Connector c) => c.info.id == choice.connectorId)
+        .firstOrNull;
+    session.lastConnectorId = null;
+    _recent = null;
+    if (connector == null ||
+        connector is! IntentTarget ||
+        _privateForModel(suggestion.text)) {
+      return _unknown();
+    }
+    await intent?.accepted(suggestion, choice);
+    final target = connector as IntentTarget;
+    final recent = _recentConnectorId;
+    Utterance analyze(String text) => _analyze(text, recent, awaiting: false);
+    final match = target.matchAs(
+      choice.commandId,
+      analyze(suggestion.text),
+      analyze,
+    );
+    if (match == null) {
+      final example = target.intentExample(choice.commandId);
+      if (example == null) return _unknown();
+      return session.reply(
+        intentHowReply,
+        values: <String, String>{
+          'description': choice.description,
+          'example': example,
+        },
+        intent: choice.commandId,
+        status: AssistantStatus.noAction,
+      );
+    }
+    _leadByDuty(connector);
+    return _run(connector, match);
+  }
+
+  /// «Нет» на подсказку: отрицательные примеры (если учиться разрешено),
+  /// запись в журнале и обычное «не понял».
+  Future<AssistantResponse> _rejectIntent(IntentOffer offer) async {
+    session.lastConnectorId = null;
+    _recent = null;
+    if (!_privateForModel(offer.suggestion.text)) {
+      await intent?.rejected(offer.suggestion);
+    }
+    return _unknown();
   }
 
   /// Вторая команда сообщения ([Layered.rest]) — кнопкой под ответом на

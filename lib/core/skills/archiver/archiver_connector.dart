@@ -10,7 +10,8 @@ import '../../jobs/extension_card.dart';
 
 export 'zip_ops.dart';
 
-final class ArchiverConnector implements Connector, FormConnector {
+final class ArchiverConnector
+    implements Connector, FormConnector, IntentTarget {
   ArchiverConnector();
 
   static const String id = ExtensionForms.archiver;
@@ -40,6 +41,30 @@ final class ArchiverConnector implements Connector, FormConnector {
         defaultEnabled: false,
         offHint: true,
       );
+
+  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'archiver.zip':
+        IntentRecipe(ask: 'сожми файлы в zip', example: 'сожми файлы в zip'),
+    'archiver.extract':
+        IntentRecipe(ask: 'распакуй архив', example: 'распакуй архив'),
+    'archiver.list': IntentRecipe(
+      ask: 'покажи что в архиве',
+      example: 'покажи, что в архиве',
+    ),
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
 
   @override
   ConnectorMatch? match(Utterance utterance) {

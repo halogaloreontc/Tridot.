@@ -18,6 +18,7 @@ import 'utterance.dart';
 export '../extensions/extension_kind.dart';
 export '../models/assistant_types.dart' show AssistantResponse, AssistantStatus;
 export '../models/clarification.dart';
+export 'intent_target.dart';
 export 'utterance.dart';
 
 /// Что коннектору разрешено делать с данными своего приложения.

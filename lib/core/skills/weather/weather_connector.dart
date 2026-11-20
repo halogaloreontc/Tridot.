@@ -17,7 +17,8 @@ export 'weather_service.dart';
 /// [WeatherBackend], который без разрешения в сеть не ходит. Адрес своей
 /// ссылки в текст ответа не попадает: его открывает интерфейс
 /// ([LaunchRequest]), только у живого ответа. Ведёт Связной.
-final class WeatherConnector implements Connector, ConnectorHealth {
+final class WeatherConnector
+    implements Connector, ConnectorHealth, IntentTarget {
   WeatherConnector({
     required this.backend,
     this.clock = const SystemClock(),
@@ -86,6 +87,62 @@ final class WeatherConnector implements Connector, ConnectorHealth {
     }
     return const HealthReport.ok();
   }
+
+  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'weather.now': IntentRecipe(
+      carriers: <String>['какая погода'],
+      ask: 'какая погода',
+      accepts: <String>{'weather.day', 'weather.week', 'weather.range'},
+      example: 'какая погода сейчас',
+    ),
+    'weather.day': IntentRecipe(
+      carriers: <String>['какая погода'],
+      ask: 'какая погода завтра',
+      accepts: <String>{'weather.now', 'weather.week', 'weather.range'},
+      example: 'какая погода завтра',
+    ),
+    'weather.week': IntentRecipe(
+      carriers: <String>['прогноз погоды'],
+      ask: 'прогноз на неделю',
+      accepts: <String>{'weather.day', 'weather.range'},
+      example: 'прогноз на неделю',
+    ),
+    'weather.rain': IntentRecipe(
+      carriers: <String>['будет ли дождь'],
+      ask: 'будет дождь?',
+      example: 'будет ли дождь завтра',
+    ),
+    'weather.wear': IntentRecipe(
+      carriers: <String>['что надеть'],
+      ask: 'что надеть',
+      example: 'что надеть завтра',
+    ),
+    'weather.past': IntentRecipe(
+      carriers: <String>['какая была погода'],
+      ask: 'какая была погода вчера',
+      example: 'какая была погода в субботу',
+    ),
+    'weather.range': IntentRecipe(
+      carriers: <String>['какая погода'],
+      ask: 'погода через две недели',
+      accepts: <String>{'weather.week', 'weather.day'},
+      example: 'погода через две недели',
+    ),
+    'weather.open': IntentRecipe(ask: 'открой погоду'),
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
 
   @override
   ConnectorMatch? match(Utterance utterance) {

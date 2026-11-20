@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -23,6 +24,7 @@ import 'app/passwords/device_keys.dart';
 import 'app/passwords/passwords_kit.dart';
 import 'app/security/app_lock.dart';
 import 'app/security/device_auth.dart';
+import 'app/intent/intent_setup.dart';
 import 'app/voice/device_voice_recognizer.dart';
 import 'app/voice/voice_kit.dart';
 import 'app/voice/vosk_voice_recognizer.dart';
@@ -401,6 +403,18 @@ Future<void> main() async {
     knownSecret: passwords?.facade.knownSecret,
   );
   assembly.attach(extensions, assistant);
+  // Запасной слой понимания (ADR-041): на «не понял» — «Похоже, вы хотите
+  // …?». Память (личные примеры, журнал непонятых) — в
+  // <поддержка>/assistant/intent, только на устройстве. Модель — из
+  // распакованного пакета, если он есть; грузится в фоне, не задерживая
+  // запуск. Без модели ответы правил те же.
+  final intent = await IntentSetup.open(
+    support.path,
+    knownSecret: passwords?.facade.knownSecret,
+    clock: clock,
+  );
+  assistant.intent = intent.fallback;
+  unawaited(intent.loadModel());
   // Вход в приложение по отпечатку / Face ID (ADR-025): включён — экран
   // закрыт с первого кадра, до загрузки остального интерфейса.
   final settingsStore = JsonSettingsStore(p.join(folder, 'settings.json'));

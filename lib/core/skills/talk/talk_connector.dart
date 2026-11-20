@@ -21,7 +21,7 @@ export 'talk_phrases.dart';
 /// ответов голосом главного, Лиорио или Ноды. Совпадения беседы — на
 /// крайний случай ([ConnectorMatch.fallback]): любая команда задач,
 /// калькулятора или подключения важнее.
-final class TalkConnector implements Connector, ConnectorHealth {
+final class TalkConnector implements Connector, ConnectorHealth, IntentTarget {
   TalkConnector({TaskService? taskService}) : _tasks = taskService;
 
   static const String id = 'talk';
@@ -125,6 +125,34 @@ final class TalkConnector implements Connector, ConnectorHealth {
 
   @override
   Future<HealthReport> health() async => const HealthReport.ok();
+
+  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'talk.greet': IntentRecipe(ask: 'привет'),
+    'talk.bye': IntentRecipe(ask: 'пока'),
+    'talk.thanks': IntentRecipe(ask: 'спасибо'),
+    'talk.joke': IntentRecipe(ask: 'расскажи шутку'),
+    'talk.howAreYou': IntentRecipe(ask: 'как дела?'),
+    'talk.whoAreYou': IntentRecipe(ask: 'кто ты?'),
+    'talk.capabilities': IntentRecipe(ask: 'что ты умеешь?'),
+    'talk.reaction': IntentRecipe(ask: 'понял'),
+    'talk.rude': IntentRecipe(ask: 'отстань'),
+    'talk.setting':
+        IntentRecipe(carriers: <String>['говори'], example: 'говори короче'),
+    'talk.openHub': IntentRecipe(ask: 'открой мой связной'),
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
 
   @override
   ConnectorMatch? match(Utterance utterance) {

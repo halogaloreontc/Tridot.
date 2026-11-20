@@ -12,6 +12,8 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
   "protected": [
     "router.repaired.confirm",
     "router.typo.confirm",
+    "intent.suggest",
+    "intent.suggest.two",
     "weather.network.off",
     "weather.offline.cached",
     "weather.offline.none",
@@ -132,6 +134,9 @@ const Map<String, String> builtInReplyCatalogs = <String, String>{
     "router.failed": "Не удалось выполнить действие: {error}",
     "router.repaired": "Набрано в английской раскладке — {м:понял|ж:поняла} как «{text}».",
     "router.repaired.confirm": "Набрано в английской раскладке — {м:понял|ж:поняла} как «{text}». Выполнить?",
+    "intent.suggest": "Похоже, {вы:вы хотите|ты:ты хочешь} {description}?",
+    "intent.suggest.two": "Похоже, {вы:вы хотите|ты:ты хочешь} {description}? Или {second}?",
+    "intent.how": "Чтобы {description}, {вы:скажите|ты:скажи}, например: «{example}».",
     "router.typo": "Похоже на опечатку — {м:понял|ж:поняла} как «{text}».",
     "router.typo.confirm": "Похоже на опечатку — {м:понял|ж:поняла} как «{text}». Выполнить?",
     "router.failed.quiet": "Не получилось выполнить действие.",

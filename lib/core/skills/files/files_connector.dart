@@ -313,7 +313,7 @@ abstract final class FilesPhrases {
 }
 
 /// «Удали этот файл»: вопрос «Удалить «…»?» и удаление по «Удалить».
-final class FilesConnector implements Connector, ConnectorHealth {
+final class FilesConnector implements Connector, ConnectorHealth, IntentTarget {
   FilesConnector();
 
   static const String id = 'files';
@@ -342,6 +342,24 @@ final class FilesConnector implements Connector, ConnectorHealth {
   /// Навык локальный: проверять нечего, файлы сессии всегда под рукой.
   @override
   Future<HealthReport> health() async => const HealthReport.ok();
+
+  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'files.delete':
+        IntentRecipe(ask: 'удали этот файл', example: 'удали этот файл'),
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
 
   @override
   ConnectorMatch? match(Utterance utterance) {

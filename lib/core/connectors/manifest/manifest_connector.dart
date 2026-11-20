@@ -13,6 +13,7 @@ import '../social_prefix.dart';
 import '../verb_forms.dart';
 import 'connection.dart';
 import 'manifest_format.dart';
+import 'manifest_intent.dart';
 import 'manifest_matcher.dart';
 import 'manifest_query.dart';
 import 'manifest_text.dart';
@@ -60,7 +61,8 @@ final class ManifestConnector
         ConnectorHealth,
         RoleHints,
         RoleActions,
-        ConfirmationFollowUp {
+        ConfirmationFollowUp,
+        IntentTarget {
   ManifestConnector({
     required this.slot,
     required HttpTransport transport,
@@ -515,6 +517,24 @@ final class ManifestConnector
   static final RegExp _wordSplit = RegExp('[^a-zа-я0-9]+');
   static final RegExp _code = RegExp(r'^\d{5,6}$');
   static final RegExp _spacedDash = RegExp(r'\s-|-\s');
+
+  /// Команда по подсказке запасного слоя (ADR-041): рецепт — из фраз
+  /// описания ([ManifestIntent]).
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      ManifestIntent.recipe(slot.id, commandId, _description, _builtIn)
+          ?.match(this, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) {
+    final recipe =
+        ManifestIntent.recipe(slot.id, commandId, _description, _builtIn);
+    return recipe?.example ?? recipe?.ask;
+  }
 
   @override
   ConnectorMatch? match(Utterance utterance) {

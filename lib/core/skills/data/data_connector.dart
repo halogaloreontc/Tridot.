@@ -20,7 +20,7 @@ export 'data_phrases.dart';
 /// совпадения — без маркера ([ConnectorMatch.implicit]) и ниже порога
 /// спора: уступают любой явной фразе других навыков («нужно сделать бэкап»
 /// — задача).
-final class DataConnector implements Connector, ConnectorHealth {
+final class DataConnector implements Connector, ConnectorHealth, IntentTarget {
   const DataConnector();
 
   static const String id = 'data';
@@ -65,6 +65,27 @@ final class DataConnector implements Connector, ConnectorHealth {
 
   @override
   Future<HealthReport> health() async => const HealthReport.ok();
+
+  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'data.backup': IntentRecipe(ask: 'сделай резервную копию всех данных'),
+    'data.restore': IntentRecipe(ask: 'восстанови все данные из копии'),
+    'data.clarify': IntentRecipe(ask: 'сделай бэкап'),
+    'data.open': IntentRecipe(ask: 'открой данные приложения'),
+    'data.lock': IntentRecipe(ask: 'запри данные приложения'),
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
 
   @override
   ConnectorMatch? match(Utterance utterance) {

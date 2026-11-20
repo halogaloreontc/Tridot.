@@ -1,5 +1,6 @@
 import '../commands/command_suggest.dart';
 import '../connectors/connector.dart';
+import '../connectors/login_link.dart';
 import '../passwords/secret_guard.dart';
 import '../personas/persona_address.dart';
 import '../skills/passwords/passwords_phrases.dart';
@@ -61,8 +62,34 @@ final class Layered<T> {
 ///    раскладка ([LayoutFix]), опечатка ([TypoFix.repair]); исправленный
 ///    текст проходит те же шаги 2–3, поэтому проверяется ровно та команда,
 ///    которая выполнится. Фразы о паролях, ПИН, кодах не исправляются:
-///    исправленный текст повторяется в чате.
+///    исправленный текст повторяется в чате;
+/// 6. если и после них никто не понял ([gaveUp]) — запасной слой понимания
+///    (ADR-041, `IntentFallback`): модель только предлагает команду
+///    вопросом. Он асинхронный и живёт в маршрутизаторе, но решает, можно
+///    ли показывать фразу модели, здесь ([privateForModel]).
 abstract final class RecognitionLayers {
+  /// Правила сдались: никто не взял фразу и спора нет. Только тогда
+  /// маршрутизатор спрашивает запасной слой (ADR-041).
+  static bool gaveUp(RouteDecision decision) =>
+      decision.winner == null && !decision.isAmbiguous;
+
+  /// Фразу нельзя показывать модели понимания, запоминать и писать в
+  /// журнал непонятых (ADR-041, п. 2): о паролях (и с опечаткой), с ПИН,
+  /// кодом, логином или похожим на пароль словом ([CommandSuggester.isPrivate]),
+  /// с паролем по отпечатку ([SecretGuard]), со скрытым `•••` или со
+  /// ссылкой входа.
+  static bool privateForModel(
+    String text, {
+    required Utterance Function(String text) analyze,
+    FingerprintMatcher? knownSecret,
+  }) {
+    if (text.trim().isEmpty) return true;
+    if (text.contains('•') || LoginLinks.contains(text)) return true;
+    if (CommandSuggester.isPrivate(text)) return true;
+    if (SecretGuard.redact(text, known: knownSecret).guarded) return true;
+    return hidesFromNetwork(analyze(text), analyze);
+  }
+
   /// Фразу о паролях не получает ни один сетевой коннектор (раздел 5.9) —
   /// и с опечаткой: «где лежит парль от почты» — тоже о паролях.
   static bool hidesFromNetwork(

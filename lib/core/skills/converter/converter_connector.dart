@@ -38,7 +38,8 @@ typedef ConvertRequest = ({
   String? unoffered,
 });
 
-final class ConverterConnector implements Connector, FormConnector {
+final class ConverterConnector
+    implements Connector, FormConnector, IntentTarget {
   ConverterConnector({this.environment});
 
   static const String id = ExtensionForms.converter;
@@ -85,6 +86,27 @@ final class ConverterConnector implements Connector, FormConnector {
           'битрейтом, размером и качеством.$keep',
     };
   }
+
+  /// Как выполнить команду по подсказке запасного слоя (ADR-041).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'converter.convert': IntentRecipe(
+      carriers: <String>['сконвертируй'],
+      ask: 'сконвертируй файл',
+      example: 'сконвертируй видео в mp3',
+    ),
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
 
   @override
   ConnectorMatch? match(Utterance utterance) {

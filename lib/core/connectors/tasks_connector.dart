@@ -30,7 +30,8 @@ final class TasksConnector
         Connector,
         ConnectorHealth,
         ConfirmationFollowUp,
-        CommandSpanSource {
+        CommandSpanSource,
+        IntentTarget {
   TasksConnector({
     required TaskService taskService,
     required ScenarioParser parser,
@@ -138,6 +139,68 @@ final class TasksConnector
       );
     }
   }
+
+  /// Как выполнить команду по подсказке запасного слоя (ADR-041): срок,
+  /// название и задачу находит тот же разбор ([ScenarioParser]).
+  static const Map<String, IntentRecipe> intentRecipes = <String, IntentRecipe>{
+    'task.create': IntentRecipe(
+      carriers: <String>['напомни', 'добавь задачу'],
+      example: exampleCommand,
+    ),
+    'task.list': IntentRecipe(
+      carriers: <String>['покажи задачи'],
+      ask: 'покажи задачи',
+      example: 'покажи задачи на завтра',
+    ),
+    'task.complete': IntentRecipe(
+      carriers: <String>['отметь выполненной задачу', 'выполнил'],
+      example: 'отметь выполненной задачу купить хлеб',
+    ),
+    'task.reschedule': IntentRecipe(
+      carriers: <String>['перенеси задачу', 'перенеси'],
+      example: 'перенеси задачу купить хлеб на завтра',
+      rewrites: _moveWords,
+    ),
+    'task.rescheduleMany': IntentRecipe(
+      carriers: <String>['перенеси все задачи', 'перенеси задачи'],
+      example: 'перенеси все задачи на завтра',
+      rewrites: _moveWords,
+    ),
+    'task.completeMany': IntentRecipe(
+      carriers: <String>['отметь выполненными все задачи'],
+      example: 'отметь выполненными все задачи на сегодня',
+    ),
+    'task.edit': IntentRecipe(
+      carriers: <String>['измени задачу'],
+      example: 'добавь в задачу заметку',
+    ),
+    undoCommand: IntentRecipe(ask: 'отмени', example: 'отмени'),
+  };
+
+  /// Синонимы «перенеси» для подсказки запасного слоя.
+  static const Map<String, String> _moveWords = <String, String>{
+    'отложи': 'перенеси',
+    'перекинь': 'перенеси',
+    'перебрось': 'перенеси',
+    'сдвинь': 'перенеси',
+    'передвинь': 'перенеси',
+    'переставь': 'перенеси',
+    'раскидай': 'перенеси',
+    'сдвигай': 'перенеси',
+    'откладывай': 'перенеси',
+  };
+
+  @override
+  ConnectorMatch? matchAs(
+    String commandId,
+    Utterance utterance,
+    UtteranceAnalyzer analyze,
+  ) =>
+      matchByRecipe(this, intentRecipes, commandId, utterance, analyze);
+
+  @override
+  String? intentExample(String commandId) =>
+      intentRecipes[commandId]?.example ?? intentRecipes[commandId]?.ask;
 
   @override
   ConnectorMatch? match(Utterance utterance) {
