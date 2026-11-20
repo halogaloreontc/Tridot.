@@ -90,6 +90,7 @@ final class CommandComposer extends StatefulWidget {
     this.hint = 'Сообщение',
     this.modes = true,
     this.plus = true,
+    this.leading,
     this.inputKey = const Key('assistant-input'),
     this.sendKey = const Key('assistant-send'),
     this.maxLength,
@@ -104,6 +105,11 @@ final class CommandComposer extends StatefulWidget {
 
   /// «+» — файлы, диски, шаблоны; в веб-помощнике их нет.
   final bool plus;
+
+  /// Своя кнопка на месте «+», когда его нет (`plus: false`): у веб-помощника
+  /// склада — «Закрыть помощника». Того же вида — [ComposerRoundButton].
+  /// Пока идёт голос, на этом месте — крестик отмены, как и вместо «+».
+  final Widget? leading;
 
   /// Ключи поля и отправки: у веб-помощника — свои (`widget-input`,
   /// `widget-send`), их ждут проверки склада.
@@ -348,14 +354,11 @@ final class _CommandComposerState extends State<CommandComposer>
           VoiceButtonMode.loading => 'Готовлю распознавание…',
           _ => widget.hint,
         };
-        final plus = Tooltip(
-          message: 'Файлы, диски и шаблоны команд',
-          child: InkResponse(
-            key: const Key('templates-button'),
-            onTap: _openPlus,
-            radius: 24,
-            child: const _RoundIcon(icon: Icons.add),
-          ),
+        final plus = ComposerRoundButton(
+          key: const Key('templates-button'),
+          icon: Icons.add,
+          tooltip: 'Файлы, диски и шаблоны команд',
+          onTap: _openPlus,
         );
         // Пока слушает или готовится, на месте «+» — крестик: прервать без
         // итога.
@@ -601,7 +604,8 @@ final class _CommandComposerState extends State<CommandComposer>
                           alignment: Alignment.centerLeft,
                           child: widget.plus || voiceActive
                               ? left
-                              : const SizedBox(height: AppSize.sendButton),
+                              : widget.leading ??
+                                  const SizedBox(height: AppSize.sendButton),
                         ),
                       ),
                       if (widget.modes)
@@ -714,6 +718,47 @@ final class _VoiceButton extends StatelessWidget {
           child: circle,
         ),
       ),
+    );
+  }
+}
+
+/// Круглая кнопка слева в поле — того же вида и размера, что «+»: у
+/// веб-помощника на его месте «Закрыть помощника» ([CommandComposer.leading]).
+final class ComposerRoundButton extends StatelessWidget {
+  const ComposerRoundButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.semanticsLabel,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  /// Подпись для экранного диктора: с ней кнопка читается как кнопка с этим
+  /// именем; без неё — как раньше у «+» (подсказка).
+  final String? semanticsLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget button = Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 24,
+        child: _RoundIcon(icon: icon),
+      ),
+    );
+    final label = semanticsLabel;
+    if (label == null) return button;
+    return Semantics(
+      button: true,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: button,
     );
   }
 }

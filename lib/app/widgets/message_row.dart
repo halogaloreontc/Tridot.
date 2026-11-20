@@ -156,9 +156,17 @@ final class MessageRow extends StatelessWidget {
     this.onOpenLink,
     this.attachmentsView,
     this.commandSpans = const <CommandSpan>[],
+    this.selectable = true,
   });
 
   final ChatMessage message;
+
+  /// Свой `SelectableText` у каждого сообщения (приложение). `false` — простой
+  /// текст: выделяет общий `SelectionArea` ленты. Так у веб-помощника: в
+  /// браузере с включённой семантикой `SelectableText` — это поле ввода
+  /// (`<textarea>`) поверх сообщения; щелчок в ленту забирал фокус у поля
+  /// ввода (буквы терялись), а двойной щелчок копировал «.» вместо слова.
+  final bool selectable;
 
   /// Распознанные части команды пользователя (ADR-021); в ленте они —
   /// обычный текст (ADR-027).
@@ -225,6 +233,25 @@ final class MessageRow extends StatelessWidget {
             .bodyMedium!
             .copyWith(color: context.colors.muted),
       );
+    }
+    if (!selectable) {
+      if (fromUser && commandSpans.isNotEmpty) {
+        return Text.rich(
+          highlightedCommand(
+            text,
+            CommandSpans.normalize(commandSpans, text.length),
+            body.copyWith(color: context.colors.textStrong),
+            colors: context.colors,
+            mode: CommandSpanMode.plain,
+          ),
+        );
+      }
+      final plain = body.copyWith(
+        color: fromUser ? context.colors.textStrong : context.colors.text,
+      );
+      return !fromUser && text.contains('\n\n')
+          ? Text.rich(_paragraphs(text, plain))
+          : Text(text, style: plain);
     }
     if (fromUser && commandSpans.isNotEmpty) {
       return SelectableText.rich(
