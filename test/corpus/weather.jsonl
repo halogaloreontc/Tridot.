@@ -78,3 +78,13 @@
 {"id":"wth-091","text":"а как?","intent":"talk.question","after":"weather","note":"нет ни срока, ни города","source":"probe","connector":"talk"}
 {"id":"wth-092","text":"какая погода в Ярославле завтра","connector":"weather","intent":"weather.day","form":{"place":"Ярославль","day":"2026-11-03"},"source":"probe"}
 {"id":"wth-093","text":"в Нижнем завтра дождь будет?","connector":"weather","intent":"weather.rain","form":{"place":"Нижний Новгород","day":"2026-11-03"},"source":"probe"}
+{"id":"b6-048","text":"к утру субботы похолодает?","connector":"weather","intent":"weather.day","form":{"day":"2026-11-07"},"source":"probe"}
+{"id":"b6-049","text":"в чём завтра идти по погоде","connector":"weather","intent":"weather.wear","form":{"day":"2026-11-03"},"source":"probe"}
+{"id":"b6-050","text":"погода для Казани на завтра","connector":"weather","intent":"weather.day","form":{"day":"2026-11-03","place":"Казань"},"source":"probe"}
+{"id":"b6-051","text":"прогноз на неделю для Москвы","connector":"weather","intent":"weather.week","form":{"range":"week","place":"Москва"},"source":"probe"}
+{"id":"b6-052","text":"подморозит завтра?","connector":"weather","intent":"weather.day","form":{"day":"2026-11-03"},"source":"probe"}
+{"id":"b6-053","text":"гололедица сегодня будет?","connector":"weather","intent":"weather.rain","source":"probe"}
+{"id":"b6-054","text":"а у мамы в Сочи как?","connector":"weather","intent":"weather.now","form":{"place":"Сочи"},"after":"weather","source":"probe"}
+{"id":"b6-092","text":"погода к вечеру понедельника в Твери","connector":"weather","intent":"weather.now","form":{"day":"2026-11-02","place":"Тверь"},"source":"probe","note":"сегодня понедельник — вечер сегодня"}
+{"id":"b6-108","text":"в чём завтра на рыбалку ехать по погоде","connector":"weather","intent":"weather.wear","form":{"day":"2026-11-03"},"source":"probe"}
+{"id":"b6-109","text":"к вечеру пятницы распогодится?","connector":"weather","intent":"weather.day","form":{"day":"2026-11-06"},"source":"probe"}

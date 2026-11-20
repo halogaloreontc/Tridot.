@@ -126,6 +126,15 @@ abstract final class WeatherPhrases {
     'вьюга',
     'снежок',
     'ливни',
+    'снегопада',
+    'снегопады',
+    'гололед',
+    'гололедица',
+    'гололеда',
+    // «Сильно метёт?», «льёт ещё?» — осадки глаголом.
+    'метет',
+    'льет',
+    'моросит',
   };
 
   /// Перемена погоды — вопрос о погоде и без других слов: «к выходным
@@ -136,6 +145,9 @@ abstract final class WeatherPhrases {
     'потепление',
     'похолодание',
     'распогодится',
+    'подморозит',
+    'подмораживает',
+    'заморозки',
   };
 
   /// Небо и ветер — только вопросом: «ветрено сегодня?», «солнечно
@@ -148,7 +160,54 @@ abstract final class WeatherPhrases {
     'солнечно',
     'пасмурно',
     'облачно',
+    'солнце',
+    'солнца',
+    // «Дует сегодня сильно?», «не сдует меня?».
+    'дует',
+    'сдует',
+    'задувает',
   };
+
+  /// «В чём ехать», «в какой куртке отправлять» — как одеться в дорогу.
+  static const Set<String> _goVerbs = <String>{
+    'идти',
+    'пойти',
+    'ехать',
+    'поехать',
+    'выходить',
+    'гулять',
+    'отправлять',
+    'отправить',
+    'вести',
+  };
+
+  /// Одежда в вопросе «в какой …»: «в какой куртке», «в какой обуви».
+  static const List<String> _clothesStems = <String>[
+    'куртк',
+    'одежд',
+    'обув',
+    'шапк',
+    'пальто',
+    'сапог',
+    'пуховик',
+  ];
+
+  /// «В чём ехать на рыбалку по погоде», «в какой куртке сына
+  /// отправлять?».
+  static bool _wearGo(List<String> words) {
+    if (!words.any(_goVerbs.contains)) return false;
+    for (var i = 0; i + 1 < words.length; i++) {
+      if (words[i] != 'в' && words[i] != 'во') continue;
+      final next = words[i + 1];
+      if (next == 'чем' || next == 'чём') return true;
+      if (const <String>{'какой', 'каком', 'какую', 'каких'}.contains(next) &&
+          i + 2 < words.length &&
+          _clothesStems.any(words[i + 2].startsWith)) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   /// «Куртку брать?», «шапку надевать?» — одежда и глагол вопросом.
   static const Set<String> _clothes = <String>{
@@ -177,6 +236,9 @@ abstract final class WeatherPhrases {
     'нужен',
     'нужны',
   };
+
+  static bool _clothesStemWord(String word) =>
+      _clothesStems.any(word.startsWith);
 
   /// Мороз — не осадки: «завтра мороз?» — погода на день.
   static const Set<String> _cold = <String>{'мороз', 'морозы'};
@@ -389,14 +451,25 @@ abstract final class WeatherPhrases {
         (utterance.isQuestion &&
             words.length <= 6 &&
             words.any(_clothes.contains) &&
-            words.any(_clothesVerbs.contains));
+            words.any(_clothesVerbs.contains)) ||
+        // «В чём ехать по погоде» — с погодой; «в какой куртке
+        // отправлять?» — одежда названа, вопросом.
+        (_wearGo(words) &&
+            (words.any(_weather.contains) ||
+                (utterance.isQuestion && words.any(_clothesStemWord))));
     final place = _place(utterance, weather || forecast);
     if (place == _homeMarker) return null;
     final temperature = (words.any(_temperature.contains) &&
             (words.any(_temperatureContext.contains) || place != null) &&
             !words.any(_body.contains)) ||
         (words.any(_change.contains) && words.length <= 6) ||
-        (words.any(_sky.contains) && utterance.isQuestion && words.length <= 6);
+        (words.any(_sky.contains) &&
+            (utterance.isQuestion || words.contains('ли')) &&
+            words.length <= 9) ||
+        // «А вчера на улице сколько было?» — температура.
+        (words.contains('сколько') &&
+            words.contains('улице') &&
+            words.length <= 8);
     final strong = weather || forecast;
     if (!strong && !rain && !cold && !wear && !temperature) return null;
     // «Купить зонт», «написать статью о погоде», «сдать отчёт о погоде» —
@@ -717,7 +790,16 @@ abstract final class WeatherPhrases {
     for (var i = 0; i < tokens.length; i++) {
       final token = tokens[i];
       int? start;
-      if ((token.text == 'в' || token.text == 'во') && i + 1 < tokens.length) {
+      // «Прогноз для Нижнего Новгорода», «погода из Казани» — родительный
+      // падеж, только с заглавной: «для рыбалки» — не город.
+      final genitive = (token.text == 'для' || token.text == 'из') &&
+          i + 1 < tokens.length &&
+          _capital(tokens[i + 1]) &&
+          usable(tokens[i + 1]);
+      if (genitive) {
+        start = i + 1;
+      } else if ((token.text == 'в' || token.text == 'во') &&
+          i + 1 < tokens.length) {
         final next = tokens[i + 1];
         if (_home.contains(next.text)) return _homeMarker;
         if (usable(next)) start = i + 1;
@@ -750,10 +832,11 @@ abstract final class WeatherPhrases {
         }
         break;
       }
-      return utterance.original.substring(
+      final place = utterance.original.substring(
         tokens[start].span.start,
         tokens[end].span.end,
       );
+      return genitive ? PlaceNames.fromGenitive(place) : place;
     }
     return null;
   }

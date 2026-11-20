@@ -126,3 +126,15 @@
 {"id":"calc-128","text":"36 на 15 скока","connector":"calc","intent":"calc.evaluate","answer":"540","note":"«сколько» в конце — «на» между числами умножение","source":"probe"}
 {"id":"calc-129","text":"12 на 12 сколько","connector":"calc","intent":"calc.evaluate","answer":"144","source":"probe"}
 {"id":"calc-130","text":"сколько процентов 30 от 120","connector":"calc","intent":"calc.evaluate","answer":"25","note":"доля без «составляет»","source":"probe"}
+{"id":"b6-018","text":"квадрат девятки сколько","connector":"calc","intent":"calc.evaluate","answer":"81","source":"probe"}
+{"id":"b6-019","text":"двести сорок умноженное на три это сколько","connector":"calc","intent":"calc.evaluate","answer":"720","source":"probe"}
+{"id":"b6-020","text":"сколько это 15 на 12","connector":"calc","intent":"calc.evaluate","answer":"180","source":"probe"}
+{"id":"b6-021","text":"посчитай мне треть от девятисот","connector":"calc","intent":"calc.evaluate","answer":"300","source":"probe"}
+{"id":"b6-022","text":"наценка 20 процентов на 1500 сколько будет","connector":"calc","intent":"calc.evaluate","answer":"1 800","source":"probe"}
+{"id":"b6-023","text":"900 разделить на 3 и прибавить 50","connector":"calc","intent":"calc.evaluate","answer":"350","source":"probe"}
+{"id":"b6-024","text":"что получится, если 120 умножить на 5","connector":"calc","intent":"calc.evaluate","answer":"600","source":"probe"}
+{"id":"b6-025","text":"куб пятёрки сколько на складе","intent":"unknown","route":"none","connected":true,"source":"probe","note":"арифметика словами — не товар склада; калькулятор «на складе» не понимает"}
+{"id":"b6-086","text":"сколько будет сто двадцать пять умножить на четыре","connector":"calc","intent":"calc.evaluate","answer":"500","source":"probe"}
+{"id":"b6-087","text":"пятьсот поделённое на двадцать пять","connector":"calc","intent":"calc.evaluate","answer":"20","source":"probe"}
+{"id":"b6-102","text":"куб семёрки сколько","connector":"calc","intent":"calc.evaluate","answer":"343","source":"probe"}
+{"id":"b6-103","text":"сто сорок четыре поделённое на шестнадцать это сколько","connector":"calc","intent":"calc.evaluate","answer":"9","source":"probe"}

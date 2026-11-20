@@ -198,7 +198,7 @@
 {"id": "gen-2a8b92085890", "text": "\"Как дела у тебя сегодня?\"", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-35d4705e8fc2", "text": "На улице дождь?", "connector": "weather", "intent": "weather.rain", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-4665f515eec7", "text": "Какая сейчас температура в городе?", "connector": "weather", "intent": "weather.now", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-8bd108088561", "text": "Завтра будет солнце?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-8bd108088561", "text": "Завтра будет солнце?", "intent": "weather.day", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"], "connector": "weather", "form": {"day": "2026-11-03"}, "note": "вопрос о солнце завтра — погода (b6); была метка разбора"}
 {"id": "gen-77af52589c1d", "text": "Что там по погоде на выходные?", "connector": "weather", "intent": "weather.week", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-c15a53249e1b", "text": "\"Кто тебя создал?\"", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-75d1168936bf", "text": "Чем ты занимаешься?", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
@@ -612,7 +612,7 @@
 {"id": "gen-912d5edace1a", "text": "Посмотри список «важное»", "intent": "listTasks", "source": "gemma", "tags": ["topic:list", "labels:ollama,manual"], "note": "бывший known_gap: «посмотри» — просьба показать"}
 {"id": "gen-783a026d06ea", "text": "Здравствуй!", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-c841a45db1e2", "text": "Что там на улице, дождь пойдет?", "connector": "weather", "intent": "weather.rain", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
-{"id": "gen-e74626894397", "text": "Приветствую, помощник", "intent": "unknown", "route": "none", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
+{"id": "gen-e74626894397", "text": "Приветствую, помощник", "intent": "talk.greet", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"], "connector": "talk", "note": "приветствие с обращением «помощник» (b6); была метка разбора"}
 {"id": "gen-10124e31c7f5", "text": "Расскажи какой-нибудь анекдот", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-f4be9921daa7", "text": "Сколько сейчас градусов?", "intent": "unknown", "route": "weather", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
 {"id": "gen-ac7f1a2d1df7", "text": "\"Ты кто вообще такой?\"", "intent": "unknown", "route": "talk", "source": "gemma", "tags": ["topic:unknown", "labels:ollama,parser"]}
@@ -849,7 +849,7 @@
 {"id": "gen-b69d88dd46df", "text": "запиши вынести мусор ночью", "intent": "createTask", "title": "Вынести мусор ночью", "due": null, "source": "gemma", "tags": ["topic:gaps", "labels:ollama,parser"]}
 {"id": "gen-b6cf00d70231", "text": "напомни о Москве через 2-3 дня", "intent": "createTask", "title": "О Москве", "due": null, "issue": "conflictingDays", "source": "gemma", "tags": ["topic:gaps", "labels:ollama,parser"]}
 {"id": "gen-b9daeecc3b74", "text": "добавь \"Оплатить ЖКХ\" в начале месяца", "intent": "createTask", "title": "Оплатить ЖКХ", "due": "2026-12-01", "precision": "date", "source": "gemma", "tags": ["topic:gaps", "labels:ollama,parser"]}
-{"id": "gen-28f8a75eae84", "text": "напомни сдать проект к вечеру четверга", "intent": "createTask", "title": "Сдать проект", "due": "2026-11-05T19:00", "precision": "partOfDay", "source": "gemma", "tags": ["topic:gaps", "labels:ollama,manual"], "status": "known_gap", "note": "парсер сейчас: title='Сдать проект к вечеру четверга', due=None, precision=None"}
+{"id": "gen-28f8a75eae84", "text": "напомни сдать проект к вечеру четверга", "intent": "createTask", "title": "Сдать проект", "due": "2026-11-05T19:00", "precision": "partOfDay", "source": "gemma", "tags": ["topic:gaps", "labels:ollama,manual"]}
 {"id": "gen-e3024a4243b0", "text": "запиши забрать посылку через полтора часа", "intent": "createTask", "title": "Забрать посылку", "due": "2026-11-02T18:00", "precision": "dateTime", "source": "gemma", "tags": ["topic:gaps", "labels:ollama,parser"]}
 {"id": "gen-7fbf9b215c4b", "text": "поставь задачу проверить воду по пятницам", "intent": "createTask", "title": "Проверить воду", "due": "2026-11-06", "precision": "date", "source": "gemma", "tags": ["topic:gaps", "labels:ollama,parser"]}
 {"id": "gen-6f54023939ad", "text": "напомни мне про клиента 15 ноября", "intent": "createTask", "title": "Клиент", "due": "2026-11-15", "precision": "date", "source": "gemma", "tags": ["topic:gaps", "labels:ollama,manual"], "status": "known_gap", "note": "парсер сейчас: title='Про клиента'"}
@@ -867,7 +867,7 @@
 {"id": "gen-d32d9f7a453b", "text": "напомни о новом проекте на этой неделе", "intent": "createTask", "title": "Новый проект", "due": "2026-11-06", "precision": "date", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"], "status": "known_gap", "note": "парсер сейчас: title='О новом проекте'"}
 {"id": "gen-d61f95384218", "text": "к вечеру \"сдать отчёт\" #работа", "intent": "unknown", "route": "none", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
 {"id": "gen-c96229184030", "text": "перенеси на ночь надо доехать", "intent": "rescheduleTask", "title": "На ночь доехать", "due": null, "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"], "status": "known_gap", "note": "парсер сейчас: title='На ночь надо доехать'"}
-{"id": "gen-76478b21f502", "text": "заверши в начале месяца оплату подписки", "intent": "completeTask", "title": "Оплата подписки", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"], "status": "known_gap", "note": "парсер сейчас: title='Оплату подписки'"}
+{"id": "gen-76478b21f502", "text": "заверши в начале месяца оплату подписки", "intent": "completeTask", "title": "Оплата подписки", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,manual"]}
 {"id": "gen-9ec5b7027faa", "text": "через 2-3 дня позвонить в школу", "intent": "createTask", "title": "Позвонить в школу", "due": null, "issue": "conflictingDays", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
 {"id": "gen-85b21019bf9b", "text": "напомни в обед забрать посылку", "intent": "createTask", "title": "Забрать посылку", "due": "2026-11-03T13:00", "precision": "partOfDay", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}
 {"id": "gen-e2bccf849272", "text": "запиши \"встреча с Москвой\" на 15 ноября", "intent": "createTask", "title": "встреча с Москвой", "due": "2026-11-15", "precision": "date", "source": "ollama", "tags": ["topic:gaps", "labels:gemma,parser"]}

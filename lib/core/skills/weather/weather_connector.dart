@@ -109,10 +109,16 @@ final class WeatherConnector implements Connector, ConnectorHealth {
     final match = _fragment.firstMatch(utterance.original.trim());
     if (match == null) return null;
     // «А к вечеру как?» — часть суток: «вечером».
-    final rest = match.group(1)!.trim().replaceAllMapped(
+    // «А у сестры в Казани там как?» — «у кого» перед городом не меняет
+    // вопроса.
+    final rest = match
+        .group(1)!
+        .trim()
+        .replaceAllMapped(
           _towardDaypart,
           (Match m) => _dayparts[m.group(1)!.toLowerCase()]!,
-        );
+        )
+        .replaceFirst(_whoseLead, '');
     final now = clock.now();
     final fragment = Utterance.analyze(rest, now: now);
     final words = fragment.words;
@@ -152,7 +158,18 @@ final class WeatherConnector implements Connector, ConnectorHealth {
     'как',
     'неделю',
     'вперед',
+    // «Ну а послезавтра к ночи что обещают?»: ночь — не срок задачи.
+    'ночью',
+    'что',
+    'обещают',
+    'обещает',
+    'будет',
   };
+
+  /// «У сестры», «у мамы», «у нас» перед городом.
+  static final RegExp _whoseLead = RegExp(
+    r'^у\s+[а-яё]+\s+(?=(?:в|во)\s+[А-ЯЁ])',
+  );
 
   static final RegExp _towardDaypart = RegExp(
     r'(?<![а-яё])к\s+(вечеру|утру|ночи)(?![а-яё])',
@@ -166,13 +183,14 @@ final class WeatherConnector implements Connector, ConnectorHealth {
   };
 
   static final RegExp _fragment = RegExp(
-    r'^(?:а|и)\s+(?:как\s+|что\s+)?(?:насчет\s+|насчёт\s+)?'
+    r'^(?:ну\s+)?(?:а|и)\s+(?:как\s+|что\s+)?(?:насчет\s+|насчёт\s+)?'
     r'([^?!.]+?)\s*[?!.]*$',
     caseSensitive: false,
   );
 
   static final RegExp _placeFragment = RegExp(
-    r'^(?:в|во)\s+[А-ЯЁ][а-яё-]+(?:\s+[А-ЯЁ][а-яё-]+)?$',
+    r'^(?:в|во)\s+[А-ЯЁ][а-яё-]+(?:\s+[А-ЯЁ][а-яё-]+)?'
+    r'(?:\s+(?:там|сейчас))?(?:\s+как)?$',
   );
 
   static final RegExp _weekend = RegExp(r'^на\s+выходных$');

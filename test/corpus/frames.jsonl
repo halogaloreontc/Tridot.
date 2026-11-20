@@ -55,3 +55,15 @@
 {"id":"frm-055","text":"не мог бы ты завтра утром напомнить про анализы?","intent":"createTask","title":"Анализы","due":"2026-11-03T09:00","precision":"partOfDay","source":"probe"}
 {"id":"frm-056","text":"хочется не забыть этот вечер","intent":"unknown","route":"none","note":"без срока и дела — не задача","source":"probe"}
 {"id":"frm-057","text":"хочу спать","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-040","text":"будильник не прозвенел в семь","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-041","text":"вот бы в отпуск поскорее","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-042","text":"съездить бы на море этим летом","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-043","text":"эх, выспаться бы в субботу","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-044","text":"помнишь, как мы на дачу ездили","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-045","text":"а помню, когда я в школе учился","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-062","text":"можно ли перенести все задачи сразу?","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-067","text":"переставь шкаф на кухню","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-091","text":"закрыть бы все хвосты до пятницы","intent":"unknown","route":"none","source":"probe"}
+{"id":"b6-105","text":"закрыть бы этот год поскорее","intent":"unknown","route":"none","source":"probe","note":"образное «закрыть»"}
+{"id":"b6-106","text":"вот бы на выходных отоспаться","intent":"unknown","route":"none","source":"probe","note":"мечта, не дело"}
+{"id":"b6-107","text":"а помнишь, как мы в детстве на речку ходили","intent":"unknown","route":"none","source":"probe","note":"воспоминание"}

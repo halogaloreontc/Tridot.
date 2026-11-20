@@ -682,7 +682,9 @@ abstract final class NounForms {
         head.endsWith('цию') ||
         head.endsWith('сию') ||
         head.endsWith('ачу') ||
-        head.endsWith('ечу');
+        head.endsWith('ечу') ||
+        // «Оплату аренды», «предоплату за мебель», «зарплату сотрудникам».
+        head.endsWith('плату');
     if (next.endsWith('ы') || next.endsWith('и')) return surelyFeminine;
     // «Покупку шин», «доставку штор» — родительный множественного без
     // окончания: только при точно женском главном слове.

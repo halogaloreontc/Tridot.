@@ -215,3 +215,8 @@
 {"id":"talk-v05","text":"как ты поживаешь","connector":"talk","intent":"talk.howAreYou","source":"probe"}
 {"id":"talk-v06","text":"чем ты полезен","connector":"talk","intent":"talk.capabilities","source":"probe"}
 {"id":"talk-v07","text":"ты тупой что ли","connector":"talk","intent":"talk.rude","source":"probe"}
+{"id":"b6-078","text":"день добрый","connector":"talk","intent":"talk.greet","source":"probe"}
+{"id":"b6-079","text":"от души спасибо","connector":"talk","intent":"talk.thanks","source":"probe"}
+{"id":"b6-080","text":"развесели меня","connector":"talk","intent":"talk.joke","source":"probe"}
+{"id":"b6-081","text":"ну всё, бывай","connector":"talk","intent":"talk.bye","source":"probe"}
+{"id":"b6-082","text":"как у тебя настроение","connector":"talk","intent":"talk.howAreYou","source":"probe"}

@@ -32,3 +32,11 @@
 {"id":"move-032","text":"отложи доставку штор до пятницы","intent":"rescheduleTask","targetQuery":"Доставка штор","due":"2026-11-06T00:00","precision":"date","note":"родительный множественного без окончания после женского рода","source":"probe"}
 {"id":"move-033","text":"перекинь встречу на четверг","intent":"rescheduleTask","targetQuery":"Встреча","due":"2026-11-05T00:00","precision":"date","source":"probe"}
 {"id":"move-034","text":"подвинь стул к окну","intent":"unknown","route":"none","note":"без срока «подвинь» — о вещах","source":"probe"}
+{"id":"b6-003","text":"перенеси стрижку на двадцать второе","intent":"rescheduleTask","targetQuery":"Стрижка","due":"2026-11-22T00:00","precision":"date","source":"probe"}
+{"id":"b6-060","text":"можно ли перенести стрижку на завтра?","intent":"rescheduleTask","targetQuery":"Стрижка","due":"2026-11-03T00:00","precision":"date","source":"probe"}
+{"id":"b6-063","text":"созвон с юристом отодвинь на четверг","intent":"rescheduleTask","targetQuery":"Созвон с юристом","due":"2026-11-05T00:00","precision":"date","source":"probe"}
+{"id":"b6-064","text":"поменяй время у встречи на завтра","intent":"rescheduleTask","targetQuery":"Встречи","due":"2026-11-03T00:00","precision":"date","source":"probe"}
+{"id":"b6-065","text":"перенеси стрижку на среду, в четверг у меня смена","intent":"rescheduleTask","targetQuery":"Стрижка","due":"2026-11-04T00:00","precision":"date","source":"probe"}
+{"id":"b6-066","text":"сдвинь созвон минут на двадцать позже","intent":"rescheduleTask","targetQuery":"Созвон","shift":"+20m","source":"probe"}
+{"id":"b6-093","text":"с двадцатого перенеси созвон на двадцать пятое","intent":"rescheduleTask","targetQuery":"Созвон","due":"2026-11-25T00:00","precision":"date","source":"probe"}
+{"id":"b6-110","text":"давай собес перенесём на понедельник, в пятницу я не успеваю","intent":"rescheduleTask","targetQuery":"Собес","due":"2026-11-09T00:00","precision":"date","source":"probe","note":"1-е лицо мн. ч. «перенесём», придаточное-причина с другим днём"}

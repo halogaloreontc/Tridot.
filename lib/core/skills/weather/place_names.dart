@@ -135,6 +135,41 @@ abstract final class PlaceNames {
     return <String>[word];
   }
 
+  /// Родительный падеж после «для», «из» — в именительный: «Нижнего
+  /// Новгорода» → «Нижний Новгород», «Москвы» → «Москва», «Казани» →
+  /// «Казань», «Ярославля» → «Ярославль», «Омска» → «Омск».
+  static String fromGenitive(String query) {
+    final words = query.trim().split(RegExp(r'\s+'));
+    String noun(String word) {
+      final lower = word.toLowerCase();
+      if (word.length < 4 || _indeclinable.contains(lower)) return word;
+      final stem = word.substring(0, word.length - 1);
+      if (lower.endsWith('ля')) return '$stemь';
+      if (lower.endsWith('ы')) return '$stemа';
+      if (lower.endsWith('и')) return '$stemь';
+      if (lower.endsWith('а')) return stem;
+      return word;
+    }
+
+    String adjective(String word) {
+      final lower = word.toLowerCase();
+      if (word.length < 5) return word;
+      final stem = word.substring(0, word.length - 3);
+      if (lower.endsWith('его')) return '$stemий';
+      if (lower.endsWith('ого')) {
+        return 'кгхжшчщ'.contains(lower[lower.length - 4])
+            ? '$stemий'
+            : '$stemый';
+      }
+      return word;
+    }
+
+    return <String>[
+      for (var i = 0; i < words.length; i++)
+        i == words.length - 1 ? noun(words[i]) : adjective(words[i]),
+    ].join(' ');
+  }
+
   /// «Нижнем» → «Нижний», «Великом» → «Великий», «Новом» → «Новый».
   static String _adjective(String word) {
     final lower = word.toLowerCase();

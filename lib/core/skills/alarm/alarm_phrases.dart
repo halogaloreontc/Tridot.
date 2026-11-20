@@ -1,3 +1,4 @@
+import '../../connectors/number_words.dart';
 import '../../connectors/social_prefix.dart';
 import '../../connectors/utterance.dart';
 import '../../connectors/verb_forms.dart';
@@ -145,6 +146,8 @@ abstract final class AlarmPhrases {
     'таймера',
     'таймеру',
     'таймером',
+    // «Запусти отсчёт на четверть часа».
+    'отсчет',
   };
 
   static const Set<String> _wakeVerbs = <String>{
@@ -168,6 +171,9 @@ abstract final class AlarmPhrases {
     'засеки',
     'засекай',
     'засеките',
+    // «Отсчитай мне сорок пять секунд».
+    'отсчитай',
+    'отсчитайте',
   };
 
   /// «Поставь», «заведи», «установи», «сделай», «включи», «запусти».
@@ -190,6 +196,13 @@ abstract final class AlarmPhrases {
     'запусти',
     'запустите',
     'запустить',
+    // Разговорное: «врубай будильник», «замути таймерок», «ставь на 7».
+    'вруби',
+    'врубай',
+    'включай',
+    'замути',
+    'заводи',
+    'ставь',
   };
 
   /// Слова перед будильником, которые не меняют смысла.
@@ -336,9 +349,15 @@ abstract final class AlarmPhrases {
         if (match.start >= from) match.group(0)!,
     ];
     if (tokens.isEmpty) return null;
+    tokens = _compactNumbers(tokens);
     // «Таймер на 4 минуты, яйца варю»: пояснение после запятой без чисел
     // и слов срока — не часть просьбы.
     tokens = _withoutRemark(text, from, tokens);
+    // «…в шесть утра чтоб звенело» — то же, что «разбуди».
+    final ring = _ringClause(tokens);
+    if (ring != null) tokens = ring;
+    // «У меня рейс ранний, в шесть утра …»: причина впереди.
+    tokens = _withoutLeadRemark(text, from, tokens);
     // «Мне бы не проспать завтра в 6:15» — просьба разбудить.
     final oversleep = _oversleep(tokens);
     if (oversleep != null) tokens = oversleep;
@@ -405,16 +424,20 @@ abstract final class AlarmPhrases {
         return null;
       }
     }
+    // «Таймерок секунд на тридцать замути», «будильник на 7 поставь» —
+    // глагол в конце.
+    var after = tokens.sublist(anchor + 1);
+    if (after.length > 1 && _setVerbs.contains(after.last)) {
+      after = after.sublist(0, after.length - 1);
+      setVerb = true;
+    }
     if (utterance.isQuestion && !setVerb) return null;
-    var reader = _Reader(
-      tokens.sublist(anchor + 1),
-      timer: kind == AlarmKind.timer,
-    );
+    var reader = _Reader(after, timer: kind == AlarmKind.timer);
     reader.read();
     // «Таймер на 7 минут чай заварить»: зачем таймер — в конце, без
     // запятой.
     if (kind == AlarmKind.timer && reader.leftover) {
-      final purpose = _withoutPurpose(tokens.sublist(anchor + 1));
+      final purpose = _withoutPurpose(after);
       if (purpose != null) reader = purpose;
     }
     // Число, которое не вошло ни во время, ни в длительность («на 5 и 6»,
@@ -554,6 +577,92 @@ abstract final class AlarmPhrases {
     return head;
   }
 
+  /// «…, чтоб звенело», «чтобы будильник прозвенел» в конце — просьба
+  /// разбудить: заменяется на «разбуди». `null` — такого нет.
+  static List<String>? _ringClause(List<String> tokens) {
+    for (var i = tokens.length - 1; i >= 1; i--) {
+      if (tokens[i] != 'чтоб' && tokens[i] != 'чтобы') continue;
+      final rest = tokens.sublist(i + 1);
+      if (rest.isEmpty || rest.length > 3) return null;
+      if (!rest.any(_ringVerbs.contains)) return null;
+      if (!rest.every(
+        (String w) =>
+            _ringVerbs.contains(w) ||
+            _alarmNouns.contains(w) ||
+            w == 'он' ||
+            w == 'меня' ||
+            w == 'мне',
+      )) {
+        return null;
+      }
+      return <String>[...tokens.take(i), 'разбуди'];
+    }
+    return null;
+  }
+
+  static const Set<String> _ringVerbs = <String>{
+    'звенел',
+    'звенело',
+    'зазвенел',
+    'зазвенело',
+    'прозвенел',
+    'прозвенело',
+    'звонил',
+    'звонило',
+    'зазвонил',
+    'зазвонило',
+    'разбудил',
+    'разбудило',
+  };
+
+  /// Причина до первой запятой — «у меня рейс ранний, в шесть утра …» —
+  /// снимается, если в ней нет ни числа, ни дня, ни слов будильника и
+  /// подъёма, ни отказа, а после неё есть якорь будильника.
+  static List<String> _withoutLeadRemark(
+    String text,
+    int from,
+    List<String> tokens,
+  ) {
+    final comma = text.indexOf(',', from);
+    if (comma < 0) return tokens;
+    final lead = <String>[
+      for (final match in _token.allMatches(text.substring(from, comma)))
+        match.group(0)!,
+    ];
+    if (lead.isEmpty || lead.length > 6 || lead.length >= tokens.length) {
+      return tokens;
+    }
+    if (lead.any(
+      (String w) =>
+          number(w) != null ||
+          RegExp(r'\d').hasMatch(w) ||
+          _remarkStops.contains(w) ||
+          w == 'не' ||
+          _alarmNouns.contains(w) ||
+          _timerNouns.contains(w) ||
+          _wakeVerbs.contains(w) ||
+          _objectWakeVerbs.contains(w) ||
+          _stopwatchVerbs.contains(w) ||
+          _setVerbs.contains(w) ||
+          _wakeClause.contains(w) ||
+          const <String>{'сегодня', 'завтра', 'послезавтра', 'по'}
+              .contains(w) ||
+          _weekdayAccusative.containsKey(w),
+    )) {
+      return tokens;
+    }
+    final rest = tokens.sublist(lead.length);
+    if (!rest.any(
+      (String w) =>
+          _alarmNouns.contains(w) ||
+          _timerNouns.contains(w) ||
+          _wakeVerbs.contains(w),
+    )) {
+      return tokens;
+    }
+    return rest;
+  }
+
   /// День или повтор до якоря будильника — «по субботам буди меня в 9»,
   /// «мне завтра рано вставать, разбуди в 5:20» — переносится сразу за
   /// якорь. До якоря, кроме дня, — только глагол «поставь», вежливые слова
@@ -564,7 +673,7 @@ abstract final class AlarmPhrases {
     int anchor,
     AlarmKind kind,
   ) {
-    if (anchor < 1 || kind != AlarmKind.alarm) return null;
+    if (anchor < 1) return null;
     final keep = <String>[];
     final days = <String>[];
     for (final word in tokens.take(anchor)) {
@@ -575,6 +684,17 @@ abstract final class AlarmPhrases {
       }
     }
     if (days.isEmpty) return null;
+    // «На девяносто секунд засекай»: длительность до якоря таймера.
+    if (kind == AlarmKind.timer) {
+      final duration = _Reader(days, timer: true)..read();
+      if (duration.leftover || duration.strayNumber || !duration.hasDuration) {
+        return null;
+      }
+      return (
+        <String>[...keep, tokens[anchor], ...days, ...tokens.skip(anchor + 1)],
+        keep.length,
+      );
+    }
     final reader = _Reader(days, timer: false)..read();
     if (reader.leftover ||
         reader.strayNumber ||
@@ -613,18 +733,18 @@ abstract final class AlarmPhrases {
     ];
     if (rest.isEmpty || rest.length > 4) return null;
     // Голое число («15») — не время: только «7:30», «на 9», «в 7 утра».
+    // «Полвосьмого», «без четверти семь» — время и без предлога.
     final marked = rest.any(
       (String w) =>
           _Reader._clock.hasMatch(w) ||
           _Reader._timePrepositions.contains(w) ||
-          _Reader._dayparts.contains(w),
+          _Reader._dayparts.contains(w) ||
+          w == 'без' ||
+          (w.startsWith('пол') && _ordinalHours.containsKey(w.substring(3))),
     );
     final clock = _Reader(rest, timer: false)..read();
-    if (marked &&
-        clock.hasTime &&
-        !clock.leftover &&
-        !clock.strayNumber &&
-        clock.days.isEmpty) {
+    // «И на выходные тоже на девять» — день с временем вместе.
+    if (marked && clock.hasTime && !clock.leftover && !clock.strayNumber) {
       return _alarm(clock, now, null);
     }
     final timer = _Reader(rest, timer: true)..read();
@@ -644,6 +764,11 @@ abstract final class AlarmPhrases {
   /// Слова продолжения вокруг времени: «а», «нет», «можно», «лучше».
   static const Set<String> _continuationWords = <String>{
     'а',
+    'слушай',
+    'сделай',
+    'поставь',
+    'тоже',
+    'также',
     'и',
     'нет',
     'неа',
@@ -727,10 +852,17 @@ abstract final class AlarmPhrases {
     Utterance utterance,
     DateTime now,
   ) {
-    if (anchor < 2 || !_setVerbs.contains(tokens[anchor - 1])) return null;
+    // «…, разбуди» в конце — просьба сама по себе; «…, поставь будильник»
+    // — только после слов о подъёме.
+    final wakeAnchor = _wakeVerbs.contains(tokens[anchor]);
+    final setAnchor = anchor >= 2 && _setVerbs.contains(tokens[anchor - 1]);
+    if (anchor < 1 || (!wakeAnchor && !setAnchor)) return null;
     if (!tokens.skip(anchor + 1).every(_tailFillers.contains)) return null;
-    final head = tokens.take(anchor - 1).toList(growable: false);
-    if (!head.any(_wakeClause.contains)) return null;
+    final head = tokens
+        .take(wakeAnchor || !setAnchor ? anchor : anchor - 1)
+        .toList(growable: false);
+    final wakeWords = head.any(_wakeClause.contains);
+    if (!wakeAnchor && !wakeWords) return null;
     final reader = _Reader(
       <String>[
         for (final word in head)
@@ -739,7 +871,10 @@ abstract final class AlarmPhrases {
       timer: false,
     );
     reader.read();
-    if (reader.leftover || reader.strayNumber || !reader.hasTime) return null;
+    if (reader.strayNumber || !reader.hasTime) return null;
+    // «Завтра к поезду встать в 4:20, поставь будильник»: лишние слова о
+    // подъёме не мешают явной просьбе с будильником.
+    if (reader.leftover && !(setAnchor && wakeWords)) return null;
     final label = utterance.quotedTitles.isEmpty
         ? null
         : _label(utterance.quotedTitles.first.text);
@@ -795,7 +930,16 @@ abstract final class AlarmPhrases {
     var issue = AlarmIssue.none;
     final weekday = reader.weekday;
     final offset = reader.dayOffset;
-    if (days.isNotEmpty) {
+    final monthDay = reader.monthDay;
+    if (monthDay != null && days.isEmpty && weekday == null && offset == null) {
+      // Ближайшее такое число: в этом месяце или в следующем.
+      at = DateTime(now.year, now.month, monthDay, hour, minute);
+      for (var ahead = 1;
+          ahead <= 2 && (!at.isAfter(now) || at.day != monthDay);
+          ahead++) {
+        at = DateTime(now.year, now.month + ahead, monthDay, hour, minute);
+      }
+    } else if (days.isNotEmpty) {
       at = today.isAfter(now) ? today : _addDays(today, 1);
     } else if (weekday != null) {
       var ahead = (weekday - now.weekday) % 7;
@@ -891,8 +1035,56 @@ abstract final class AlarmPhrases {
         'и ${names.last}';
   }
 
-  /// Числа «7», «семь», «двадцать пять».
-  static int? number(String word) => int.tryParse(word) ?? _numberWords[word];
+  /// Числа «7», «семь», «девяносто» ([NumberWords]).
+  static int? number(String word) =>
+      int.tryParse(word) ?? _numberWords[word] ?? NumberWords.value(word);
+
+  /// Составные числа словами — одним числом: «сто двадцать секунд» →
+  /// «120 секунд», «сорок пять» → «45». Одиночные слова остаются: их
+  /// читает [_Reader] («семь тридцать» — час и минуты). «Секунд на
+  /// тридцать» — единица впереди, как «на тридцать секунд».
+  static List<String> _compactNumbers(List<String> tokens) {
+    final joined = tokens.join(' ');
+    final found = NumberWords.find(joined);
+    final result = <String>[];
+    if (found.isEmpty) {
+      result.addAll(tokens);
+    } else {
+      var position = 0;
+      var index = 0;
+      for (final token in tokens) {
+        final start = position;
+        position += token.length + 1;
+        while (index < found.length && found[index].end <= start) {
+          index++;
+        }
+        final match = index < found.length ? found[index] : null;
+        if (match == null || start < match.start || start >= match.end) {
+          result.add(token);
+          continue;
+        }
+        final words = joined.substring(match.start, match.end).split(' ');
+        if (words.length < 2) {
+          result.add(token);
+        } else if (start == match.start) {
+          result.add('${match.value}');
+        }
+      }
+    }
+    // «Секунд на тридцать», «минут на пять»: единица перед «на N».
+    for (var i = 0; i + 2 < result.length; i++) {
+      if (_Reader._unitSeconds.containsKey(result[i]) &&
+          result[i + 1] == 'на' &&
+          number(result[i + 2]) != null) {
+        final unit = result[i];
+        result
+          ..[i] = 'на'
+          ..[i + 1] = result[i + 2]
+          ..[i + 2] = unit;
+      }
+    }
+    return result;
+  }
 }
 
 /// Читает слова после якоря: время, день, повтор, длительность.
@@ -914,6 +1106,9 @@ final class _Reader {
 
   int? dayOffset;
   int? weekday;
+
+  /// Число месяца словом: «двадцать пятого» — 25.
+  int? monthDay;
   final Set<int> days = <int>{};
   Duration? relative;
   Duration? duration;
@@ -1040,6 +1235,18 @@ final class _Reader {
       return true;
     }
     if (_halfPast()) return true;
+    // «Двадцать пятого мне вставать в семь» — число месяца словом.
+    if (!timer && monthDay == null) {
+      final ordinal = NumberWords.dayOrdinalAt(words, _i);
+      if (ordinal != null &&
+          ordinal.$2 == 'ого' &&
+          ordinal.$1 >= 1 &&
+          ordinal.$1 <= 31) {
+        monthDay = ordinal.$1;
+        _i = ordinal.$3 + 1;
+        return true;
+      }
+    }
     if (_timePrepositions.contains(word)) {
       final next = _peek(1);
       if (next != null) {
@@ -1049,6 +1256,12 @@ final class _Reader {
           _i += 2;
           return true;
         }
+      }
+      // «На выходные на девять» — суббота и воскресенье.
+      if (word == 'на' && next == 'выходные') {
+        days.addAll(<int>[6, 7]);
+        _i += 2;
+        return true;
       }
       // «на завтра в 7», «на сегодня»: день разберёт следующий шаг.
       if (const <String>{'сегодня', 'завтра', 'послезавтра'}.contains(next)) {
@@ -1165,6 +1378,10 @@ final class _Reader {
     if (m == 0 && _word == 'ноль' && next != null && next > 0 && next < 10) {
       minute = next;
       _i += 2;
+    } else if (_word == 'ноль' && _peek(1) == 'ноль') {
+      // «Девять ноль-ноль», «восемнадцать ноль ноль».
+      minute = 0;
+      _i += 2;
     } else if (m != null &&
         m < 60 &&
         m >= 0 &&
@@ -1259,6 +1476,9 @@ final class _Reader {
     'часа': 3600,
     'часов': 3600,
     'ч': 3600,
+    'часик': 3600,
+    'часика': 3600,
+    'часиков': 3600,
   };
 
   /// «5 минут», «полчаса», «полтора часа», «час», «1:30» (часы и
@@ -1274,8 +1494,8 @@ final class _Reader {
         any = true;
         continue;
       }
-      // «Четверть часа».
-      if (word == 'четверть' && _peek(1) == 'часа') {
+      // «Четверть часа», «четверть часика».
+      if (word == 'четверть' && (_peek(1) == 'часа' || _peek(1) == 'часика')) {
         total += 900;
         _i += 2;
         any = true;

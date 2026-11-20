@@ -179,3 +179,12 @@
 {"id":"wh-181","text":"у которых приходов нет фото","connector":"warehouse","intent":"warehouse.nophoto","connected":true,"source":"probe"}
 {"id":"wh-182","text":"кем я записан на складе","connector":"warehouse","intent":"warehouse.me","connected":true,"source":"probe"}
 {"id":"wh-183","text":"чем мне склад может помочь","connector":"warehouse","intent":"warehouse.help","connected":true,"source":"probe"}
+{"id":"b6-026","text":"есть ли приходы, которые не провели?","connector":"warehouse","intent":"warehouse.unposted","connected":true,"source":"probe"}
+{"id":"b6-027","text":"какие поступления никто не провёл","connector":"warehouse","intent":"warehouse.unposted","connected":true,"source":"probe"}
+{"id":"b6-028","text":"кто не сфотографировал приход","connector":"warehouse","intent":"warehouse.nophoto","connected":true,"source":"probe"}
+{"id":"b6-029","text":"за вчерашний день какие поступления","connector":"warehouse","intent":"warehouse.yesterday","connected":true,"source":"probe"}
+{"id":"b6-030","text":"сегодня много ли товара завезли?","connector":"warehouse","intent":"warehouse.today","connected":true,"source":"probe"}
+{"id":"b6-031","text":"под какими правами я работаю","connector":"warehouse","intent":"warehouse.me","connected":true,"source":"probe"}
+{"id":"b6-032","text":"на какой полке искать 64115","connector":"warehouse","intent":"warehouse.where","connected":true,"source":"probe"}
+{"id":"b6-088","text":"сколько осталось венских стульев","connector":"warehouse","intent":"warehouse.count","connected":true,"source":"probe"}
+{"id":"b6-104","text":"остались ли приёмки, которые никто не провёл?","connector":"warehouse","intent":"warehouse.unposted","connected":true,"source":"probe"}

@@ -7,6 +7,7 @@ import '../../models/action_card.dart';
 import '../../models/warehouse_card.dart';
 import '../connector.dart';
 import '../http_transport.dart';
+import '../number_words.dart';
 import '../secret_store.dart';
 import '../social_prefix.dart';
 import '../verb_forms.dart';
@@ -290,20 +291,38 @@ final class ManifestConnector
     'х',
     'x',
     'по',
+    'это',
   };
 
   /// В поле только числа (не меньше двух, ни одного кода артикула) и слова
   /// действия между ними: «48 на 25» — пример, а не товар.
+  ///
+  /// Числа словами — тоже числа ([NumberWords]): «сто сорок четыре
+  /// поделённое на шестнадцать» — пример, «куб семёрки» — тоже.
   static bool _arithmetic(List<String> words) {
-    var numbers = 0;
+    final joined = words.join(' ');
+    final spelled = NumberWords.find(joined);
+    var numbers = spelled.length;
+    var position = 0;
     for (final word in words) {
-      if (RegExp(r'^\d{1,4}(?:[.,]\d+)?$').hasMatch(word)) {
+      final start = position;
+      position += word.length + 1;
+      if (spelled.any(
+        (NumberWordMatch m) => start >= m.start && start < m.end,
+      )) {
+        continue;
+      }
+      if (RegExp(r'^\d{1,4}(?:[.,]\d+)?$').hasMatch(word) ||
+          NumberWords.nouns.containsKey(word)) {
         numbers++;
-      } else if (!_arithmeticWords.contains(word)) {
+      } else if (!_arithmeticWords.contains(word) &&
+          !_calcWords.contains(word)) {
         return false;
       }
     }
-    return numbers >= 2;
+    // «Куб семёрки», «квадрат пяти» — одно число со словом действия.
+    final operated = words.any(_calcWords.contains);
+    return numbers >= 2 || (numbers == 1 && operated);
   }
 
   /// Единица после «в»: «сколько сантиметров в дюйме», «сколько секунд
@@ -347,9 +366,20 @@ final class ManifestConnector
     'будет',
     'умножить',
     'умножь',
+    'умноженное',
+    'помноженное',
     'разделить',
     'раздели',
     'подели',
+    'поделить',
+    'деленное',
+    'разделенное',
+    'поделенное',
+    'прибавить',
+    'отнять',
+    'вычесть',
+    'куб',
+    'квадрат',
     'корень',
     'плюс',
     'минус',

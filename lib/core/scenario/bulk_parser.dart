@@ -1,4 +1,5 @@
 import '../connectors/due_parser.dart';
+import '../connectors/number_words.dart';
 import '../connectors/speech_noise.dart';
 import '../connectors/utterance.dart';
 import '../models/bulk.dart';
@@ -73,6 +74,14 @@ final class BulkParser {
     'подвинь',
     'подвиньте',
     'подвинуть',
+    // «Всё, что висит на пятницу, раскидай на понедельник», «все без
+    // срока поставь на субботу»: массовая команда всё равно требует
+    // выбора многих задач и срока.
+    'раскидай',
+    'раскидайте',
+    'раскидать',
+    'поставь',
+    'поставьте',
   };
 
   /// Глаголы, после которых «на N часов» — сдвиг и без «позже».
@@ -101,6 +110,8 @@ final class BulkParser {
     'отметь',
     'отметьте',
     'отметить',
+    'закрывай',
+    'закрывайте',
   };
 
   /// Глаголы, которым нужно «выполненными»: «отметь всё» — ещё не
@@ -174,6 +185,14 @@ final class BulkParser {
     'висит',
     'висят',
     'висящие',
+    // «Перенеси всё, что было на завтра, …», «закрой все дела за
+    // вчерашний день».
+    'было',
+    'были',
+    'стоит',
+    'стоят',
+    'за',
+    'день',
   };
 
   static const Set<String> _overdueWords = <String>{
@@ -196,6 +215,9 @@ final class BulkParser {
     'вчерашние': -1,
     'вчерашнее': -1,
     'вчерашних': -1,
+    'сегодняшний': 0,
+    'завтрашний': 1,
+    'вчерашний': -1,
   };
 
   static const Set<String> _noDueNouns = <String>{
@@ -300,10 +322,17 @@ final class BulkParser {
     'минуту': (ShiftUnit.minutes, 1),
     'минуты': (ShiftUnit.minutes, 1),
     'минут': (ShiftUnit.minutes, 1),
+    'минутку': (ShiftUnit.minutes, 1),
+    'минутки': (ShiftUnit.minutes, 1),
+    'минуток': (ShiftUnit.minutes, 1),
     'полчаса': (ShiftUnit.minutes, 30),
+    'полчасика': (ShiftUnit.minutes, 30),
     'час': (ShiftUnit.hours, 1),
     'часа': (ShiftUnit.hours, 1),
     'часов': (ShiftUnit.hours, 1),
+    'часик': (ShiftUnit.hours, 1),
+    'часика': (ShiftUnit.hours, 1),
+    'часиков': (ShiftUnit.hours, 1),
     'день': (ShiftUnit.days, 1),
     'дня': (ShiftUnit.days, 1),
     'дней': (ShiftUnit.days, 1),
@@ -335,17 +364,32 @@ final class BulkParser {
   /// спрашивается, на когда. `null` — сдвига во фразе нет.
   static ShiftFound? shiftAfter(List<UtteranceToken> tokens, int verbIndex) {
     final verb = tokens[verbIndex].text;
+    int? number(UtteranceToken token) => token.isNumber
+        ? int.tryParse(token.text)
+        : _numberWords[token.text] ?? NumberWords.value(token.text);
     for (var i = verbIndex + 1; i < tokens.length; i++) {
       if (tokens[i].text != 'на') continue;
       var j = i + 1;
+      var from = i;
       int? amount;
-      if (j < tokens.length) {
-        final word = tokens[j].text;
-        amount = tokens[j].isNumber ? int.tryParse(word) : _numberWords[word];
-        if (amount != null) j++;
+      // «Часика на два позже», «минут на десять» — единица перед «на».
+      final inverted = i - 1 > verbIndex &&
+          j < tokens.length &&
+          _units.containsKey(tokens[i - 1].text) &&
+          number(tokens[j]) != null;
+      (ShiftUnit, int)? unit;
+      if (inverted) {
+        amount = number(tokens[j]);
+        unit = _units[tokens[i - 1].text];
+        from = i - 1;
+      } else {
+        if (j < tokens.length) {
+          amount = number(tokens[j]);
+          if (amount != null) j++;
+        }
+        if (j >= tokens.length) continue;
+        unit = _units[tokens[j].text];
       }
-      if (j >= tokens.length) continue;
-      final unit = _units[tokens[j].text];
       if (unit == null) continue;
       final (shiftUnit, factor) = unit;
       final value = (amount ?? 1) * factor;
@@ -360,14 +404,48 @@ final class BulkParser {
       if (sign == 0 && _shiftVerbs.contains(verb)) sign = 1;
       if (value <= 0 || value > 9999) continue;
       return ShiftFound(
-        from: i,
+        from: from,
         to: end,
-        span: CharSpan(tokens[i].span.start, tokens[end].span.end),
+        span: CharSpan(tokens[from].span.start, tokens[end].span.end),
         shift: sign == 0 ? null : DueShift(sign * value, shiftUnit),
         directed: end > j,
       );
     }
     return null;
+  }
+
+  /// Перед [index] — «все что (было/висит/стоит)»: срок уточняет выбор.
+  static bool _afterAllThat(List<UtteranceToken> tokens, int index) {
+    var k = index - 1;
+    while (k >= 0 &&
+        const <String>{'было', 'были', 'висит', 'висят', 'стоит', 'стоят'}
+            .contains(tokens[k].text)) {
+      k--;
+    }
+    return k >= 1 &&
+        _thatWords.contains(tokens[k].text) &&
+        _quantifiers.contains(tokens[k - 1].text);
+  }
+
+  /// Номер первого слова реплики о себе после последней запятой («…, я
+  /// молодец») или длина фразы, если её нет. В реплике — «я/мы» первым
+  /// словом, не больше трёх слов, без чисел и сроков.
+  static int _selfRemark(Utterance utterance) {
+    final tokens = utterance.tokens;
+    final comma = utterance.original.lastIndexOf(',');
+    if (comma < 0) return tokens.length;
+    final start = tokens.indexWhere((UtteranceToken t) => t.span.start > comma);
+    if (start <= 0) return tokens.length;
+    final tail = tokens.sublist(start);
+    if (tail.length > 3 ||
+        (tail.first.text != 'я' && tail.first.text != 'мы') ||
+        tail.any((UtteranceToken t) => t.isNumber) ||
+        tail.any(
+          (UtteranceToken t) => Utterance.isCovered(t, utterance.due.spans),
+        )) {
+      return tokens.length;
+    }
+    return start;
   }
 
   /// Массовая команда или `null`, если фраза о другом.
@@ -430,8 +508,12 @@ final class BulkParser {
         continue;
       }
       final first = covered.isEmpty ? '' : tokens[covered.first].text;
+      // «Перенеси всё, что (было) на завтра, на послезавтра» — срок в
+      // «что …» после «всё» — исходный день.
+      final inThat = covered.isNotEmpty && _afterAllThat(tokens, covered.first);
       final isSource = action == BulkAction.complete ||
           span.end <= verbStart ||
+          inThat ||
           _sourcePrepositions.contains(first);
       (isSource ? sourceSpans : targetSpans).add(span);
     }
@@ -445,12 +527,19 @@ final class BulkParser {
     ];
     // «Всё, закрой»: «всё» перед глаголом с запятой или тире — завершение
     // реплики, а не выбор всех задач.
+    // «Всё, что висит на пятницу, …» — выбор, а не «всё».
     if (verbIndex > 0 &&
         !used[0] &&
         tokens[0].text == 'все' &&
+        !(tokens.length > 1 && _thatWords.contains(tokens[1].text)) &&
         _discourseMark
             .hasMatch(utterance.original.substring(tokens[0].span.end))) {
       used[0] = true;
+    }
+    // «…, я молодец», «…, мы закончили» — реплика о себе после запятой.
+    final remark = _selfRemark(utterance);
+    for (var i = remark; i < tokens.length; i++) {
+      used[i] = true;
     }
     var overdue = false;
     var noDue = false;

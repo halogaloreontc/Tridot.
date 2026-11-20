@@ -25,3 +25,36 @@
 {"id":"cr-b5-05","text":"напомни в 19 00 лекарство","intent":"createTask","title":"Лекарство","due":"2026-11-02T19:00","precision":"dateTime","note":"минуты с нулём — время при любом слове дальше","source":"probe"}
 {"id":"cr-b5-06","text":"ну это завтра в 10 забежать в аптеку","intent":"createTask","title":"Забежать в аптеку","due":"2026-11-03T10:00","precision":"dateTime","source":"probe"}
 {"id":"cr-b5-07","text":"сестре позвонить в субботу напомни","intent":"createTask","title":"Сестре позвонить","due":"2026-11-07T00:00","precision":"date","note":"порядок слов пользователя","source":"probe"}
+{"id":"b6-001","text":"напомни тридцатого заплатить за квартиру","intent":"createTask","title":"Заплатить за квартиру","due":"2026-11-30T00:00","precision":"date","source":"probe"}
+{"id":"b6-002","text":"двадцать первого забрать документы из МФЦ","intent":"createTask","title":"Забрать документы из МФЦ","due":"2026-11-21T00:00","precision":"date","source":"probe"}
+{"id":"b6-004","text":"добавь сдать анализы девятнадцатого","intent":"createTask","title":"Сдать анализы","due":"2026-11-19T00:00","precision":"date","source":"probe"}
+{"id":"b6-005","text":"к двадцать восьмому числу подготовить отчёт","intent":"createTask","title":"Подготовить отчёт","due":"2026-11-28T00:00","precision":"date","source":"probe"}
+{"id":"b6-006","text":"напомни купить подарок второго числа","intent":"createTask","title":"Купить подарок","due":"2026-11-02T00:00","precision":"date","source":"probe","note":"сегодня 2-е — срок сегодня"}
+{"id":"b6-007","text":"купить двадцать пять шариков","intent":"createTask","title":"Купить двадцать пять шариков","due":null,"source":"probe"}
+{"id":"b6-008","text":"напомни отнести коробку на второй этаж","intent":"createTask","title":"Отнести коробку на второй этаж","due":null,"source":"probe"}
+{"id":"b6-009","text":"добавь задачу встретить гостей второго подъезда","intent":"createTask","title":"Встретить гостей второго подъезда","due":null,"source":"probe"}
+{"id":"b6-010","text":"напомни занять третье место в очереди","intent":"createTask","title":"Занять третье место в очереди","due":null,"source":"probe"}
+{"id":"b6-011","text":"напомни зайти к двум соседям","intent":"createTask","title":"Зайти к двум соседям","due":null,"source":"probe"}
+{"id":"b6-012","text":"напомни в двадцать ноль-ноль выключить духовку","intent":"createTask","title":"Выключить духовку","due":"2026-11-02T20:00","precision":"dateTime","source":"probe"}
+{"id":"b6-013","text":"завтра к восьми тридцати отвезти сына в школу","intent":"createTask","title":"Отвезти сына в школу","due":"2026-11-03T08:30","precision":"dateTime","source":"probe"}
+{"id":"b6-014","text":"напомни к четырём часам дня забрать посылку","intent":"createTask","title":"Забрать посылку","due":"2026-11-03T16:00","precision":"dateTime","source":"probe"}
+{"id":"b6-015","text":"через два часа двадцать выключить мультиварку","intent":"createTask","title":"Выключить мультиварку","due":"2026-11-02T18:50","precision":"dateTime","source":"probe"}
+{"id":"b6-016","text":"напомни часика в три дня позвонить в банк","intent":"createTask","title":"Позвонить в банк","due":"2026-11-03T15:00","precision":"dateTime","source":"probe"}
+{"id":"b6-017","text":"напомни в 5 часов полить цветы","intent":"createTask","title":"Полить цветы","due":null,"issue":"ambiguousHour","source":"probe"}
+{"id":"b6-046","text":"хорошо бы в субботу помыть машину","intent":"createTask","title":"Помыть машину","due":"2026-11-07T00:00","precision":"date","source":"probe"}
+{"id":"b6-047","text":"надо бы завтра позвонить маме","intent":"createTask","title":"Позвонить маме","due":"2026-11-03T00:00","precision":"date","source":"probe"}
+{"id":"b6-055","text":"купить куртку для рыбалки","intent":"createTask","title":"Купить куртку для рыбалки","due":null,"source":"probe"}
+{"id":"b6-056","text":"надо бы в пятницу забрать посылку, а то вернут отправителю","intent":"createTask","title":"Забрать посылку","due":"2026-11-06T00:00","precision":"date","source":"probe"}
+{"id":"b6-057","text":"запиши себе: в среду заплатить за свет","intent":"createTask","title":"Заплатить за свет","due":"2026-11-04T00:00","precision":"date","source":"probe"}
+{"id":"b6-058","text":"напомни мне, старому, завтра выпить таблетки","intent":"createTask","title":"Выпить таблетки","due":"2026-11-03T00:00","precision":"date","source":"probe"}
+{"id":"b6-059","text":"поставь напоминалку на пятницу: забрать справку","intent":"createTask","title":"Забрать справку","due":"2026-11-06T00:00","precision":"date","source":"probe"}
+{"id":"b6-061","text":"добавь купить лампочки, лучше в субботу","intent":"createTask","title":"Купить лампочки","due":"2026-11-07T00:00","precision":"date","source":"probe"}
+{"id":"b6-083","text":"в пятнадцать ноль-ноль созвон с поставщиком","intent":"createTask","title":"Созвон с поставщиком","due":"2026-11-03T15:00","precision":"dateTime","source":"probe"}
+{"id":"b6-084","text":"напомни на тридцать первое оплатить налог","intent":"createTask","title":"Оплатить налог","due":"2026-12-31T00:00","precision":"date","source":"probe"}
+{"id":"b6-094","text":"завтра вечером вынести мусор, а то соседи ругаются","intent":"createTask","title":"Вынести мусор","due":"2026-11-03T19:00","precision":"partOfDay","source":"probe"}
+{"id":"b6-095","text":"напомни двадцать пятого оплатить кружок по рисованию","intent":"createTask","title":"Оплатить кружок по рисованию","due":"2026-11-25T00:00","precision":"date","source":"probe","note":"число словами в род. п. без месяца"}
+{"id":"b6-096","text":"запиши на двадцать девятое: поздравить Ирину Петровну с юбилеем","intent":"createTask","title":"Поздравить Ирину Петровну с юбилеем","due":"2026-11-29T00:00","precision":"date","source":"probe","note":"«на двадцать девятое» — число среднего рода словами"}
+{"id":"b6-097","text":"напомни шестого числа в восемнадцать ноль-ноль родительское собрание","intent":"createTask","title":"Родительское собрание","due":"2026-11-06T18:00","precision":"dateTime","source":"probe","note":"«шестого числа», «восемнадцать ноль-ноль»"}
+{"id":"b6-098","text":"запиши, что в среду к девяти пятнадцати надо быть в гороно","intent":"createTask","title":"Быть в гороно","due":"2026-11-04T09:15","precision":"dateTime","source":"probe","note":"учитель; «запиши, что … надо»"}
+{"id":"b6-099","text":"в следующую среду к двум часам дня отвезти маму к окулисту","intent":"createTask","title":"Отвезти маму к окулисту","due":"2026-11-11T14:00","precision":"dateTime","source":"probe","note":"«к двум часам дня» = 14:00"}
+{"id":"b6-114","text":"к вечеру пятницы сдать путевой лист в диспетчерскую","intent":"createTask","title":"Сдать путевой лист в диспетчерскую","due":"2026-11-06T19:00","precision":"partOfDay","source":"probe","note":"«к вечеру пятницы»: CORPUS.md пока не считает «к вечеру» сроком — разумно вечер пятницы; водитель"}
