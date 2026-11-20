@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../app/assistant_theme.dart';
@@ -60,8 +61,15 @@ final class WidgetApp extends StatelessWidget {
             },
             // Фокус внутри дерева с первого кадра: Escape работает сразу
             // после открытия панели, ещё до щелчка в поле.
+            //
+            // Без своей семантики: иначе при включённой семантике (main.dart)
+            // этот узел — фокусируемый элемент страницы, и браузер отдавал
+            // ему фокус, когда поле ввода его теряло. Фокус уходил из ленты
+            // (Ctrl+C после выделения не копировал) и из поля (буквы
+            // терялись).
             child: Focus(
               autofocus: true,
+              includeSemantics: false,
               child: WidgetChat(session: session),
             ),
           ),
@@ -99,6 +107,11 @@ final class _WidgetChatState extends State<WidgetChat> {
   final FocusNode _focus = FocusNode();
   final GlobalKey<ScaffoldState> _scaffold = GlobalKey<ScaffoldState>();
 
+  /// Выделение строк ленты: сообщения при копировании — с новой строки.
+  final Map<Key, _LineSelectionDelegate> _lines =
+      <Key, _LineSelectionDelegate>{};
+  Set<Key?> _liveLines = <Key?>{};
+
   /// Колонка меню на широкой панели; свернуть — кнопкой в её шапке.
   bool _sidebarOpen = true;
   bool _todayOpen = true;
@@ -122,6 +135,9 @@ final class _WidgetChatState extends State<WidgetChat> {
     _input.dispose();
     _scroll.dispose();
     _focus.dispose();
+    for (final d in _lines.values) {
+      d.dispose();
+    }
     super.dispose();
   }
 
@@ -550,6 +566,7 @@ final class _WidgetChatState extends State<WidgetChat> {
           checklist: card,
           onOpenTask: (Task task) => unawaited(session.openTask(task.id)),
           onToggleDone: (Task task) => toggleDone(session, task),
+          selectable: false,
         ),
       );
       previous = message;
@@ -583,30 +600,67 @@ final class _WidgetChatState extends State<WidgetChat> {
           showAuthor: lastReplyAt == null,
           topGap: previous == null ? 0 : AppSpace.toReply,
           thinking: true,
+          selectable: false,
           onOpenTask: (_) {},
           onToggleDone: (_) {},
         ),
       );
     }
+    _pruneLines(<Key?>{for (final row in rows) row.key});
     return _column(
       alignment: Alignment.topCenter,
-      child: ScrollConfiguration(
-        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-        child: ListView(
-          key: const Key('chat-list'),
-          controller: _scroll,
-          reverse: true,
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.pageH,
-            AppSpace.m,
-            AppSpace.pageH,
-            AppSpace.m,
+      // Одно выделение на всю ленту: через сообщения и абзацы, копирование —
+      // само Flutter (Ctrl+C, меню), а не поле `<textarea>` браузера на
+      // каждом сообщении (см. [MessageRow.selectable]).
+      child: SelectionArea(
+        key: const Key('chat-selection'),
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: ListView(
+            key: const Key('chat-list'),
+            controller: _scroll,
+            reverse: true,
+            padding: const EdgeInsets.fromLTRB(
+              AppSpace.pageH,
+              AppSpace.m,
+              AppSpace.pageH,
+              AppSpace.m,
+            ),
+            children: <Widget>[
+              for (final Widget row in rows.reversed)
+                SelectionContainer(
+                  delegate: _lineFor(row.key),
+                  child: row,
+                ),
+            ],
           ),
-          children: rows.reversed.toList(),
         ),
       ),
     );
   }
+
+  /// Строки ушли из ленты (другая сессия) — их выделение освобождается
+  /// после кадра, когда старые строки уже сняты.
+  void _pruneLines(Set<Key?> live) {
+    _liveLines = live;
+    if (_lines.keys.every(live.contains)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Ключи последней постройки: за кадр лента могла собраться не раз.
+      final now = _liveLines;
+      final gone = <Key>[
+        for (final key in _lines.keys)
+          if (!now.contains(key)) key,
+      ];
+      for (final key in gone) {
+        _lines.remove(key)?.dispose();
+      }
+    });
+  }
+
+  /// Выделение строки ленты — своё на каждую (по ключу строки), чтобы не
+  /// терять его при перестройке.
+  _LineSelectionDelegate _lineFor(Key? key) =>
+      _lines.putIfAbsent(key ?? const Key('row'), _LineSelectionDelegate.new);
 
   /// Карточка под ответом: склад (строки, «Открыть в складе») или действие
   /// (подтвердить, отменить, проверить).
@@ -856,5 +910,67 @@ final class _Reminders extends StatelessWidget {
       if (date == null) return;
     }
     await session.runReminder(signal, action, date: date);
+  }
+}
+
+/// Строка ленты (сообщение, метка времени) при выделении: её тексты — имя
+/// помощника и сообщение — с новой строки, и если выделение идёт дальше
+/// вниз по ленте — перевод строки в конце. Обычный `SelectionArea` склеивал
+/// сообщения: «лежит 64115СвязнойСклад пока…».
+final class _LineSelectionDelegate extends StaticSelectionContainerDelegate {
+  @override
+  SelectedContent? getSelectedContent() {
+    final parts = <String>[
+      for (final Selectable selectable in selectables)
+        if (selectable.getSelectedContent()?.plainText case final String text
+            when text.isNotEmpty)
+          text,
+    ];
+    if (parts.isEmpty) return null;
+    final text = parts.join('\n');
+    return SelectedContent(plainText: goesOn ? '$text\n' : text);
+  }
+
+  /// Где сейчас края выделения (в координатах экрана); `null` — край
+  /// задан не мышью (слово, всё, сброс).
+  Offset? _start;
+  Offset? _end;
+
+  /// Выделено всё (Ctrl+A): каждая строка — с новой.
+  bool _all = false;
+
+  @override
+  SelectionResult dispatchSelectionEvent(SelectionEvent event) {
+    switch (event) {
+      case SelectionEdgeUpdateEvent(:final type, :final globalPosition):
+        if (type == SelectionEventType.startEdgeUpdate) {
+          _start = globalPosition;
+        } else {
+          _end = globalPosition;
+        }
+        _all = false;
+      case SelectAllSelectionEvent():
+        _all = true;
+        _start = _end = null;
+      default:
+        _all = false;
+        _start = _end = null;
+    }
+    return super.dispatchSelectionEvent(event);
+  }
+
+  /// Выделение продолжается ниже этой строки: дальний край — под ней.
+  bool get goesOn {
+    if (value.status != SelectionStatus.uncollapsed) return false;
+    if (_all) return true;
+    final start = _start;
+    final end = _end;
+    if (start == null || end == null) return false;
+    final far = end.dy >= start.dy ? end : start;
+    final local = MatrixUtils.transformPoint(
+      Matrix4.inverted(getTransformTo(null)),
+      far,
+    );
+    return local.dy > containerSize.height;
   }
 }

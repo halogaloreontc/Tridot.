@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:ui' show Tristate;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_assistant/app/network_status.dart';
 import 'package:local_assistant/app/widgets/message_row.dart';
+import 'package:local_assistant/app/widgets/whole_word_text.dart';
 import 'package:local_assistant/app/widgets/network_capsule.dart';
 import 'package:local_assistant/web_widget/widget_app.dart';
 import 'package:local_assistant/web_widget/widget_session.dart';
@@ -128,6 +132,167 @@ void main() {
     await tester.pump();
     expect(host.sent.last['op'], 'start');
     expect(find.text('Говорите…'), findsOneWidget);
+  });
+
+  group('копирование из ленты и ввод', () {
+    Future<void> ask(WidgetTester tester, String text) async {
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('widget-input')),
+        text,
+      );
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const ValueKey<String>('widget-send')));
+        await settle();
+      });
+      await tester.pump();
+    }
+
+    /// Текст ответа в ленте (тире в нём — неразрывные, `bindDashes`).
+    Finder replyText() => find.byWidgetPredicate(
+          (Widget w) => w is Text && (w.data ?? '').startsWith('Склад пока'),
+        );
+
+    testWidgets('сообщения — простой текст, поле ввода в семантике одно',
+        (WidgetTester tester) async {
+      final semantics = tester.ensureSemantics();
+      tester.view.physicalSize = const Size(420, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await openPanel(tester);
+      await ask(tester, 'где лежит 64115');
+      expect(session.messages, hasLength(2));
+      // В браузере `SelectableText` — `<textarea>` поверх сообщения:
+      // щелчок в ленту уводил фокус из поля ввода.
+      expect(find.byType(SelectableText), findsNothing);
+      expect(find.byType(SelectionArea), findsOneWidget);
+      final fields = <SemanticsNode>[];
+      final wide = <SemanticsNode>[];
+      final screen = tester.getRect(find.byType(WidgetChat));
+      bool visit(SemanticsNode node) {
+        final data = node.getSemanticsData();
+        if (data.flagsCollection.isTextField) fields.add(node);
+        // Фокусируемый узел во весь экран (Focus(autofocus) приложения):
+        // браузер отдавал ему фокус, когда поле ввода его теряло.
+        final rect = node.transform == null
+            ? node.rect
+            : MatrixUtils.transformRect(node.transform!, node.rect);
+        if (data.flagsCollection.isFocused != Tristate.none &&
+            rect.width >= screen.width &&
+            rect.height >= screen.height * .9) {
+          wide.add(node);
+        }
+        node.visitChildren(visit);
+        return true;
+      }
+
+      visit(
+        tester.binding.renderViews.first.owner!.semanticsOwner!
+            .rootSemanticsNode!,
+      );
+      expect(fields, hasLength(1));
+      expect(wide, isEmpty);
+      semantics.dispose();
+    });
+
+    testWidgets('выделение через два сообщения копируется с переводом строки',
+        (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(420, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      await openPanel(tester);
+      await ask(tester, 'где лежит 64115');
+      final reply = session.messages.last.text;
+      final question = find.text('где лежит 64115').last;
+      final answer = replyText();
+      expect(answer, findsOneWidget);
+      // Мышью: от начала вопроса до конца ответа.
+      final gesture = await tester.startGesture(
+        tester.getTopLeft(question) + const Offset(1, 4),
+        kind: PointerDeviceKind.mouse,
+      );
+      addTearDown(gesture.removePointer);
+      await tester.pump();
+      await gesture.moveTo(tester.getBottomRight(answer) - const Offset(1, 4));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(copied, isNotNull);
+      // Вопрос, имя помощника и ответ — каждый с новой строки, без склейки.
+      expect(copied, 'где лежит 64115\nСвязной\n${bindDashes(reply)}');
+    });
+
+    testWidgets('двойной щелчок по слову ответа копирует слово',
+        (WidgetTester tester) async {
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      await openPanel(tester);
+      await ask(tester, 'где лежит 64115');
+      final answer = replyText();
+      final at = tester.getTopLeft(answer) + const Offset(3, 8);
+      final gesture = await tester.startGesture(
+        at,
+        kind: PointerDeviceKind.mouse,
+      );
+      addTearDown(gesture.removePointer);
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 50));
+      await gesture.down(at);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(copied, session.messages.last.text.split(' ').first);
+    });
+
+    testWidgets('после щелчка в ленту поле снова принимает буквы',
+        (WidgetTester tester) async {
+      await openPanel(tester);
+      await ask(tester, 'где лежит 64115');
+      await tester.tap(replyText());
+      await tester.pump();
+      final input = find.byKey(const ValueKey<String>('widget-input'));
+      await tester.tap(input);
+      await tester.pump();
+      await tester.enterText(input, 'привет мир');
+      await tester.pump();
+      expect(tester.widget<TextField>(input).controller!.text, 'привет мир');
+      expect(
+        tester.widget<TextField>(input).focusNode!.hasFocus,
+        isTrue,
+      );
+    });
   });
 
   testWidgets('«Закрыть помощника» — на месте «+», сообщение странице',
