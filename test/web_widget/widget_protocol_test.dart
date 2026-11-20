@@ -244,6 +244,34 @@ void main() {
       );
     });
 
+    test('open-project: задача без проекта — пустой id и task', () {
+      final event = HostEvent.parse(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': '',
+        'task': 'task_1_0001',
+      })! as HostOpenProject;
+      expect(event.id, isNull);
+      expect(event.task, 'task_1_0001');
+      final none = HostEvent.parse(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': '',
+        'task': '',
+      })! as HostOpenProject;
+      expect(none.id, isNull);
+      expect(none.task, isNull);
+      expect(
+        HostEvent.parse(<String, Object?>{
+          'svz': 1,
+          'type': 'open-project',
+          'id': '',
+          'task': '../x',
+        }),
+        isNull,
+      );
+    });
+
     test('open-chat: только id хранилища', () {
       expect(
         (HostEvent.parse(<String, Object?>{

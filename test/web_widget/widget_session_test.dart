@@ -664,6 +664,149 @@ void main() {
       expect(host.types.last, 'close');
     });
 
+    /// Склад с проектом из «В проект»: без метки, задача — по project_id.
+    void serverProject({String status = 'active'}) {
+      server
+        ..withStore()
+        ..on('my_sync', 200, <String, Object?>{
+          'ok': true,
+          'epoch': 'e9',
+          'rev': 2,
+          'mark': 'm2',
+          'full': true,
+          'items': <Object?>[
+            <String, Object?>{
+              'type': 'project',
+              'obj': <String, Object?>{
+                'id': 'project:2_cc',
+                'name': 'Отгрузка 12-26',
+                'created_at': '2026-11-01T10:00:00Z',
+                'updated_at': '2026-11-01T10:00:00Z',
+                'status': status,
+                'rev': 1,
+              },
+            },
+            <String, Object?>{
+              'type': 'task',
+              'obj': <String, Object?>{
+                'id': 'task_2_0002',
+                'title': 'Проверить отгрузку 12-26',
+                'description': '',
+                'status': 'planned',
+                'priority': 'normal',
+                'tags': <String>[],
+                'project_id': 'project:2_cc',
+                'created_at': '2026-11-01T10:00:00Z',
+                'updated_at': '2026-11-01T10:00:00Z',
+                'completed_at': null,
+                'rev': 2,
+              },
+            },
+          ],
+          'gone': <Object?>[],
+          'next': 2,
+          'more': false,
+        });
+    }
+
+    test('проект без метки: задачи по project_id склада', () async {
+      serverProject();
+      make();
+      await open();
+      final task = session.taskList.single;
+      expect(task.tags, isEmpty);
+      expect(session.projectOfTask(task), 'project:2_cc');
+    });
+
+    test('open-project сразу за init при медленной связи — не теряется',
+        () async {
+      serverProject();
+      server.delay = const Duration(milliseconds: 5);
+      make();
+      session.start();
+      host
+        ..emit(initMessage())
+        ..emit(<String, Object?>{
+          'svz': 1,
+          'type': 'open-project',
+          'id': 'project:2_cc',
+          'task': '',
+        });
+      for (var i = 0; i < 100 && session.view != WidgetView.project; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(session.phase, WidgetPhase.ready);
+      expect(session.view, WidgetView.project);
+      expect(session.projectId, 'project:2_cc');
+      // Экран проекта ещё синхронизируется — дождаться до конца теста.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await settle();
+    });
+
+    test('open-project без проекта: задача — её разговор, нет — «Проекты»',
+        () async {
+      serverProject();
+      make();
+      await open();
+      host.emit(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': '',
+        'task': 'task_2_0002',
+      });
+      await settle();
+      expect(session.view, WidgetView.chat);
+      expect(session.book!.current.taskId, 'task_2_0002');
+      host.emit(<String, Object?>{
+        'svz': 1,
+        'type': 'open-project',
+        'id': '',
+        'task': '',
+      });
+      await settle();
+      expect(session.view, WidgetView.projects);
+    });
+
+    test('правка задачи архивного проекта не выносит её из проекта', () async {
+      serverProject(status: 'archived');
+      make();
+      await open();
+      expect(session.book!.projects(), isEmpty);
+      final task = session.taskList.single;
+      await session.completeTask(task.id);
+      await settle();
+      final sent = <Map<String, Object?>>[
+        ...server.bodies('my_patch'),
+        ...server.bodies('my_put'),
+      ].where((b) => b['id'] == task.id).toList();
+      expect(sent, isNotEmpty);
+      for (final b in sent) {
+        final fields = (b['set'] ?? b['obj'])! as Map;
+        expect(fields['project_id'], 'project:2_cc');
+      }
+    });
+
+    test('удалить сессию — «Отменить» возвращает её из корзины склада',
+        () async {
+      server.withStore();
+      make();
+      await open();
+      await session.send('где лежит стул');
+      await settle();
+      final id = session.book!.currentId;
+      await session.deleteChat(id);
+      await settle();
+      expect(await session.undoDelete('chat', id), isTrue);
+      final undel = server.bodies('my_undel').single;
+      expect(undel['type'], 'chat');
+      expect(undel['id'], id);
+      expect(
+        server.actions.indexOf('my_del'),
+        lessThan(server.actions.indexOf('my_undel')),
+        reason: 'сначала удаление дошло до склада',
+      );
+    });
+
     test('метка задач проекта: занятая другим проектом — отказ', () async {
       make();
       await open();

@@ -245,7 +245,11 @@ Future<void> sessionAction(
         title: title,
         task: thread.kind == ChatKind.task,
       );
-      if (ok) await session.deleteChat(chatId);
+      if (!ok) return;
+      await session.deleteChat(chatId);
+      if (context.mounted) {
+        offerUndo(context, session, 'Сессия удалена', 'chat', chatId);
+      }
   }
 }
 
@@ -329,11 +333,58 @@ Future<void> projectAction(
         sessions: book.projectSessionCount(projectId),
       );
       if (choice == null) return;
+      final removed = <String>{};
       await session.deleteProject(
         projectId,
         deleteSessions: choice == ProjectDeleteChoice.deleteSessions,
+        removed: removed,
       );
+      if (context.mounted) {
+        offerUndo(
+          context,
+          session,
+          'Проект удалён',
+          'project',
+          projectId,
+          chats: removed,
+        );
+      }
   }
+}
+
+/// «Отменить» после удаления: удалённое лежит в корзине склада
+/// (`my_undel`). Без хранилища склада возвращать неоткуда — без кнопки.
+void offerUndo(
+  BuildContext context,
+  WidgetSession session,
+  String text,
+  String type,
+  String id, {
+  Iterable<String> chats = const <String>[],
+}) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(text),
+      action: session.synced
+          ? SnackBarAction(
+              label: 'Отменить',
+              onPressed: () => unawaited(
+                session
+                    .undoDelete(type, id, chats: chats.toList())
+                    .then((bool ok) {
+                  if (!ok) {
+                    messenger.showSnackBar(
+                      const SnackBar(content: Text('Вернуть не вышло')),
+                    );
+                  }
+                }),
+              ),
+            )
+          : null,
+    ),
+  );
 }
 
 /// Срок задачи — выбор дня.
@@ -385,7 +436,11 @@ Widget widgetScreen(BuildContext context, WidgetSession session) {
       );
     case WidgetView.projects:
       return ProjectsScreen(
-        tasks: active,
+        // Задачи папок — на экранах папок, в «Метках задач» не повторяются.
+        tasks: <Task>[
+          for (final task in active)
+            if (session.projectOfTask(task) == null) task,
+        ],
         now: now,
         selectedId: null,
         onOpenTask: open,
@@ -433,12 +488,14 @@ Widget widgetScreen(BuildContext context, WidgetSession session) {
                 case final SessionEntry e)
               e,
         ],
-        tasks: tag == null
-            ? const <Task>[]
-            : <Task>[
-                for (final task in active)
-                  if (task.tags.contains(tag)) task,
-              ],
+        // Задачи проекта — по метке или по проекту склада («В проект»
+        // создаёт проект без метки).
+        tasks: <Task>[
+          for (final task in active)
+            if ((tag != null && task.tags.contains(tag)) ||
+                session.projectOfTask(task) == project.id)
+              task,
+        ],
         onOpenTask: open,
         onToggleDone: toggle,
         onNewSession: () => unawaited(session.newChat(projectId: project.id)),

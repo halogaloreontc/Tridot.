@@ -144,9 +144,17 @@ sealed class HostEvent {
         if (!RegExp(r'^[a-z0-9][a-z0-9:_\-.]{2,79}$').hasMatch(id)) return null;
         return HostOpenChat(id);
       case 'open-project':
+        final pattern = RegExp(r'^[a-z0-9][a-z0-9:_\-.]{2,79}$');
         final id = text('id', 80);
-        if (!RegExp(r'^[a-z0-9][a-z0-9:_\-.]{2,79}$').hasMatch(id)) return null;
-        return HostOpenProject(id);
+        final task = text('task', 80);
+        // Задача без проекта (`#/task/<id>`) — пустой id: экран «Проекты»
+        // и сама задача.
+        if (id.isNotEmpty && !pattern.hasMatch(id)) return null;
+        if (task.isNotEmpty && !pattern.hasMatch(task)) return null;
+        return HostOpenProject(
+          id.isEmpty ? null : id,
+          task: task.isEmpty ? null : task,
+        );
       case 'voice-ev':
         final id = data['id'];
         final ev = data['ev'];
@@ -223,10 +231,12 @@ final class HostOpenChat extends HostEvent {
 }
 
 /// Открыть проект [id] из личного хранилища склада: экран проекта с его
-/// разговорами и задачами.
+/// разговорами и задачами. `null` — задача без проекта: экран «Проекты».
+/// [task] — задача, ради которой открыли (`#/task/<id>`).
 final class HostOpenProject extends HostEvent {
-  const HostOpenProject(this.id);
-  final String id;
+  const HostOpenProject(this.id, {this.task});
+  final String? id;
+  final String? task;
 }
 
 /// Действие напоминания: ровно одно из [ask], [open], [ack], [my], [call],
