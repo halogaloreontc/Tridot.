@@ -20,6 +20,7 @@ import '../core/formatting/due_format.dart';
 import '../core/models/action_card.dart';
 import '../core/models/task.dart';
 import '../core/personas/persona.dart';
+import 'widget_intent_screen.dart';
 import 'widget_session.dart';
 
 // Меню и экраны веб-помощника — те же виджеты, что в приложении (ADR-038):
@@ -118,6 +119,15 @@ Widget widgetDrawer(
         dot: true,
         onTap: () => picked(session.openWarehouse),
       ),
+      // Запасной слой понимания (ADR-045): модель склада, учёба, журнал.
+      if (session.intent case final intent?)
+        ExtensionEntry(
+          id: 'intent',
+          title: 'Понимание фраз',
+          icon: Icons.psychology_outlined,
+          status: intentStatus(intent),
+          onTap: () => picked(() => session.show(WidgetView.intent)),
+        ),
     ],
     onOpenMyRelay: () => picked(() => session.show(WidgetView.today)),
     onTasks: () => picked(() => session.show(WidgetView.tasks)),
@@ -424,6 +434,8 @@ Widget widgetScreen(BuildContext context, WidgetSession session) {
       return const SizedBox.shrink();
     case WidgetView.today:
       return todayPanel(context, session);
+    case WidgetView.intent:
+      return WidgetIntentScreen(session: session);
     case WidgetView.tasks:
       return WidgetTasksScreen(session: session, now: now);
     case WidgetView.planning:

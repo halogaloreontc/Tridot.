@@ -27,6 +27,7 @@ import '../core/services/clock.dart';
 import '../core/services/task_service.dart';
 import '../core/skills/calculator/calculator_connector.dart';
 import '../core/skills/talk/talk_connector.dart';
+import 'widget_intent.dart';
 import 'widget_protocol.dart';
 import 'widget_storage.dart';
 import 'widget_store.dart';
@@ -85,6 +86,9 @@ enum WidgetView {
 
   /// Планирование: задачи по дням.
   planning,
+
+  /// «Понимание фраз»: модель склада, учёба, непонятые фразы (ADR-045).
+  intent,
 }
 
 /// Веб-помощник склада без интерфейса (ADR-032, ADR-038): вход по ключу
@@ -107,6 +111,12 @@ final class WidgetSession extends ChangeNotifier {
     Stream<bool>? connectivity,
     bool online = true,
     NetworkStatus? network,
+    this.intentFetcher,
+    this.intentRuntime,
+    this.intentPrepare,
+    this.intentHasher = dartSha256,
+    this.intentDelay = const Duration(seconds: 3),
+    this.saveFile,
   })  : network = network ?? NetworkStatus(),
         _clock = clock {
     // Связь со складом (ADR-040): каждый запрос помощника — через
@@ -139,6 +149,29 @@ final class WidgetSession extends ChangeNotifier {
 
   /// Сколько ждать новый ключ от страницы склада.
   final Duration keyWait;
+
+  /// Файлы пакета модели понимания со склада (ADR-045, шаг 4); `null` —
+  /// без модели (тесты, сборка без onnxruntime-web).
+  final BytesFetcher? intentFetcher;
+
+  /// onnxruntime-web (`intent_web.dart`); `null` — без модели.
+  final IntentRuntimeFactory? intentRuntime;
+
+  /// Загрузить среду до модели (`OrtWebRuntime.prepare`).
+  final Future<void> Function()? intentPrepare;
+  final Sha256Hasher intentHasher;
+
+  /// Через сколько после входа загружать модель.
+  final Duration intentDelay;
+
+  /// Сохранить текст файлом (скачивание браузера); `null` — только
+  /// «Скопировать».
+  final void Function(String name, String text)? saveFile;
+
+  /// Запасной слой понимания этого входа: модель склада и память в
+  /// браузере.
+  WidgetIntent? get intent => _intent;
+  WidgetIntent? _intent;
 
   late final HttpTransport _transport;
   final Clock _clock;
@@ -366,6 +399,7 @@ final class WidgetSession extends ChangeNotifier {
     _events?.cancel();
     _updates?.cancel();
     _connectivity?.cancel();
+    _intent?.dispose();
     network.dispose();
     super.dispose();
   }
@@ -575,9 +609,42 @@ final class WidgetSession extends ChangeNotifier {
       // а за чужими шрифтами он не ходит.
       personas: const PersonaSettings(teamMode: TeamMode.solo, emoji: false),
     );
+    _startIntent(login);
     await _loadBook();
     await _openRecent();
     await _remind();
+  }
+
+  /// Запасной слой понимания (ADR-045, шаг 4) — как в приложении: тот же
+  /// [IntentFallback] у [AssistantController]; модель — уровня `web` со
+  /// склада, память — в хранилище браузера под логином.
+  void _startIntent(String login) {
+    _intent?.dispose();
+    _intent = null;
+    final start = init;
+    final assistant = controller;
+    if (start == null || assistant == null) return;
+    final Uri base;
+    try {
+      base = ConnectionService.baseOf(start.base);
+    } on Object {
+      return;
+    }
+    final next = WidgetIntent(
+      storage: storage,
+      login: login,
+      base: base,
+      transport: _transport,
+      fetcher: intentFetcher,
+      runtime: intentRuntime,
+      prepare: intentPrepare,
+      hasher: intentHasher,
+      delay: intentDelay,
+      clock: _clock,
+    )..addListener(notifyListeners);
+    _intent = next;
+    assistant.intent = next.fallback;
+    unawaited(next.start());
   }
 
   /// Разговоры заново из кэша (после синхронизации со складом).
@@ -1086,7 +1153,10 @@ final class WidgetSession extends ChangeNotifier {
     view = WidgetView.chat;
     projectId = null;
     controller?.clearConversation();
+    controller?.intent = null;
     controller = null;
+    _intent?.dispose();
+    _intent = null;
     taskList = const <Task>[];
     reminders = const <WidgetSignal>[];
     phase = WidgetPhase.loggedOut;
@@ -1113,6 +1183,9 @@ final class WidgetSession extends ChangeNotifier {
         personaId: response.personaId,
         card: response.card,
         warehouse: response.warehouse,
+        // Кнопки вопроса («Да» / «Нет» подсказки модели и другие
+        // уточнения) — пока он ждёт ответа; в историю не пишутся.
+        clarification: response.clarification,
       );
 
   /// Сообщение сотрудника. Ключ устарел — один раз просит у страницы
@@ -1181,6 +1254,13 @@ final class WidgetSession extends ChangeNotifier {
       unawaited(_openPending());
     }
   }
+
+  /// Вопрос помощника, который ждёт ответа: его кнопки под сообщением.
+  Clarification? get pendingClarification => controller?.pendingClarification;
+
+  /// Кнопка варианта вопроса — подпись обычным сообщением, как набранный
+  /// текст (тот же путь, что в приложении).
+  Future<void> choose(ClarifyOption option) => send(option.label);
 
   /// «Подтвердить» и «Отмена» на карточке действия.
   Future<void> answerCard(ActionCard card, {required bool apply}) =>

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../core/connectors/manifest/connection_slots.dart';
 import 'browser_host.dart';
 import 'fetch_transport.dart';
+import 'intent_web.dart';
 import 'widget_app.dart';
 import 'widget_session.dart';
 
@@ -32,14 +33,22 @@ Future<void> main() async {
     builtIn = null;
   }
   final network = BrowserNetwork();
+  final fetch = FetchTransport();
   final session = WidgetSession(
     host: BrowserHost(),
-    transport: FetchTransport(),
+    transport: fetch,
     storage: BrowserStorage(),
     builtInManifest: builtIn,
     version: widgetVersion,
     connectivity: network.changes,
     online: network.online,
+    // Модель понимания (ADR-045, шаг 4): пакет `web` со склада,
+    // onnxruntime-web из сборки помощника.
+    intentFetcher: fetch,
+    intentRuntime: OrtWebRuntime.open,
+    intentPrepare: OrtWebRuntime.prepare,
+    intentHasher: webSha256,
+    saveFile: downloadText,
   );
   runApp(WidgetApp(session: session));
   session.start();
