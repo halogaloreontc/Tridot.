@@ -36,8 +36,13 @@ typedef IntentRuntimeFactory = Future<IntentRuntime> Function(
   IntentManifest manifest,
 );
 
-/// Указатель `assistant/intent/web/current.json` на складе: какая версия
-/// пакета рабочая и в какой папке рядом она лежит.
+/// Уровни модели, которые склад может поставить веб-помощнику: `web` —
+/// «Лёгкая» (~32 МБ, телефоны), `web-accurate` — «Точная» (~131 МБ,
+/// компьютеры). На складе стоит одна из них, по одному адресу.
+const Set<String> webIntentTiers = <String>{'web', 'web-accurate'};
+
+/// Указатель `assistant/intent/web/current.json` на складе: какой уровень и
+/// какая версия пакета рабочие и в какой папке рядом они лежат.
 ///
 /// ```json
 /// {"format": "tridot-intent-current/1", "tier": "web", "version": "1.0.0",
@@ -48,12 +53,16 @@ typedef IntentRuntimeFactory = Future<IntentRuntime> Function(
 /// склад пишет через временный файл — смена версии атомарна.
 final class IntentPointer {
   const IntentPointer({
+    this.tier = 'web',
     required this.version,
     required this.dir,
     this.manifestSha256,
   });
 
   static const String format = 'tridot-intent-current/1';
+
+  /// Уровень пакета: `web` или `web-accurate`.
+  final String tier;
 
   final String version;
 
@@ -68,8 +77,11 @@ final class IntentPointer {
   static final RegExp _sha = RegExp(r'^[0-9a-f]{64}$');
 
   /// Указатель из [text] или `null`, если это не он (страница вместо
-  /// файла, чужой формат, не тот уровень, опасное имя папки).
-  static IntentPointer? parse(String text, {String tier = 'web'}) {
+  /// файла, чужой формат, уровень не из [tiers], опасное имя папки).
+  static IntentPointer? parse(
+    String text, {
+    Set<String> tiers = webIntentTiers,
+  }) {
     final Object? json;
     try {
       json = jsonDecode(text);
@@ -80,8 +92,10 @@ final class IntentPointer {
     final version = json['version'];
     final dir = json['dir'];
     final sha = json['manifest_sha256'];
+    final tier = json['tier'];
     if (json['format'] != format ||
-        json['tier'] != tier ||
+        tier is! String ||
+        !tiers.contains(tier) ||
         version is! String ||
         !_version.hasMatch(version) ||
         dir is! String ||
@@ -91,6 +105,7 @@ final class IntentPointer {
       return null;
     }
     return IntentPointer(
+      tier: tier,
       version: version,
       dir: dir,
       manifestSha256: sha as String?,
@@ -105,8 +120,9 @@ final class IntentPointer {
 /// `labels.json`, …). Нет указателя (404, старый склад) — модели нет.
 ///
 /// Каждый файл сверяется с манифестом целиком — размер и sha256 (и
-/// модель): сервер склада тоже может отдать не то. Уровень — только `web`,
-/// версия манифеста — та, что в указателе. Адрес — только тот же, что у
+/// модель): сервер склада тоже может отдать не то. Уровень — `web` или
+/// `web-accurate` (какой склад поставил), в манифесте — тот же, что в
+/// указателе; версия манифеста — та, что в указателе. Адрес — только тот же, что у
 /// склада.
 final class HttpPackSource implements IntentPackSource {
   HttpPackSource._({
@@ -120,15 +136,16 @@ final class HttpPackSource implements IntentPackSource {
         _fetcher = fetcher,
         _hasher = hasher;
 
-  /// Папка уровня `web` от адреса склада.
+  /// Папка модели веб-помощника от адреса склада (любого из [webIntentTiers]).
   static const String webPath = 'assistant/intent/web/';
   static const String pointerFile = 'current.json';
 
-  /// Сколько ждать один файл (модель — 29 МБ).
-  static const Duration fileTimeout = Duration(minutes: 3);
+  /// Сколько ждать один файл (модель — 29 МБ у `web`, ~125 МБ у
+  /// `web-accurate`).
+  static const Duration fileTimeout = Duration(minutes: 10);
 
   /// Больше этого пакет не бывает: склад отдаёт что-то не то.
-  static const int maxFileBytes = 96 * 1024 * 1024;
+  static const int maxFileBytes = 192 * 1024 * 1024;
 
   /// Адрес указателя для склада [base] (`https://sklad.example/`).
   static Uri pointerUri(Uri base) => base.resolve('$webPath$pointerFile');
@@ -149,7 +166,7 @@ final class HttpPackSource implements IntentPackSource {
     required HttpTransport transport,
     required BytesFetcher fetcher,
     Sha256Hasher hasher = dartSha256,
-    String tier = 'web',
+    Set<String> tiers = webIntentTiers,
   }) async {
     final pointerAt = pointerUri(base);
     final response = await transport.send(
@@ -163,7 +180,7 @@ final class HttpPackSource implements IntentPackSource {
       ),
     );
     if (!response.isSuccess) return null;
-    final pointer = IntentPointer.parse(response.body, tier: tier);
+    final pointer = IntentPointer.parse(response.body, tiers: tiers);
     if (pointer == null) return null;
     final dir = pointerAt.resolve('${pointer.dir}/');
     if (!_sameOrigin(dir, base)) {
@@ -180,9 +197,9 @@ final class HttpPackSource implements IntentPackSource {
     } on FormatException {
       throw const IntentPackException('manifest.json: не UTF-8');
     }
-    if (manifest.tier != tier) {
+    if (manifest.tier != pointer.tier) {
       throw IntentPackException(
-        'manifest.json: уровень ${manifest.tier}, нужен $tier',
+        'manifest.json: уровень ${manifest.tier}, в указателе ${pointer.tier}',
       );
     }
     if (manifest.version != pointer.version) {

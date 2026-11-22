@@ -87,12 +87,22 @@ def within_budget(m: dict) -> bool:
     return m["wrong_of_suggested"] <= config.MAX_WRONG_OF_SUGGESTED and m["false_alarm"] <= config.MAX_FALSE_ALARM
 
 
-def pick_threshold(evals: Sequence[dict], preds: Sequence[dict], grid: Sequence[float] = config.GRID) -> float | None:
-    """Порог с наибольшим catch в пределах бюджета; при равенстве — выше."""
+def pick_threshold(
+    evals: Sequence[dict],
+    preds: Sequence[dict],
+    grid: Sequence[float] = config.GRID,
+    each: Sequence[tuple[Sequence[dict], Sequence[dict]]] = (),
+) -> float | None:
+    """Порог с наибольшим catch в пределах бюджета; при равенстве — выше.
+
+    each — пробы, которые и по отдельности должны уложиться в бюджет (у
+    веб-уровней — половина cal складской: в общей куче её ложные тревоги
+    тонут среди ~800 фраз «не команда» общих проб).
+    """
     best = None
     for t in grid:
         m = at_threshold(evals, preds, t)
-        if m["catch"] > 0 and within_budget(m):
+        if m["catch"] > 0 and within_budget(m) and all(within_budget(at_threshold(e, p, t)) for e, p in each):
             if best is None or m["catch"] >= best[1]:
                 best = (t, m["catch"])
     return best[0] if best else None

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../core/connectors/http_transport.dart';
+import '../core/intent/bare_time.dart';
 import '../core/intent/intent_fallback.dart';
 import '../core/intent/intent_http.dart';
 import '../core/services/clock.dart';
@@ -154,7 +155,12 @@ final class WidgetIntent extends ChangeNotifier {
           clock: clock,
           blocks: intentPrivate,
         ) {
-    fallback = IntentFallback(memory: memory, blocks: intentPrivate);
+    // Голое время («7:30», «в 9») — не команда: веб-уровни путают его с
+    // калькулятором. Память и журнал — как прежде (только приватность).
+    fallback = IntentFallback(
+      memory: memory,
+      blocks: (String text) => intentPrivate(text) || bareTimePhrase(text),
+    );
   }
 
   final KeyValueStorage storage;

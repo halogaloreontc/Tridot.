@@ -46,6 +46,22 @@ _PRIVATE = re.compile(
 )
 
 
+# Голое время («7:30», «в 9», «нет, на 6:45») — веб-уровни до модели не
+# пускают (lib/core/intent/bare_time.dart, тот же разбор): без разговора о
+# будильнике это не команда, а модель путала его с калькулятором.
+_BARE_TIME = re.compile(
+    r"^(?:(?:да|нет|ну|ок|давай|лучше)[,\s]+)?"
+    r"(?P<pre>(?:часам\s+к|около|после|в|к|на|до|с)\s+)?"
+    r"(?:[01]?\d|2[0-3])(?P<min>:[0-5]\d)?"
+    r"(?:\s+(?P<suf>утра|вечера|дня|ночи|часов|часа|ч))?[.!?]?$"
+)
+
+
+def bare_time(text: str) -> bool:
+    m = _BARE_TIME.match(text.lower().strip())
+    return bool(m and (m.group("pre") or m.group("min") or m.group("suf")))
+
+
 def is_private(text: str) -> bool:
     return bool(_PRIVATE.search(text.lower().replace("ё", "е"))) or "•" in text
 

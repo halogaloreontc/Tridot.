@@ -60,7 +60,7 @@ def holdout(tier: config.Tier, name: str) -> Path:
     with tempfile.TemporaryDirectory(dir=config.OUT) as tmp:
         export(model, Path(tmp), tier.per_channel)
         del model
-        enc = Int8Encoder(Path(tmp), prefix=tier.prefix)
+        enc = Int8Encoder(Path(tmp), prefix=tier.prefix, wasm=tier.wasm_vectors)
         tr = enc.encode([r["text"] for r in rows])
         ev = enc.encode([e["text"] for e in evals])
     path = _out(tier) / "calib" / f"{name}.npz"
@@ -85,7 +85,7 @@ def build_model(tier: config.Tier) -> Path:
         shutil.rmtree(d)
     minfo = export(model, d, tier.per_channel)
     del model
-    enc = Int8Encoder(d, prefix=tier.prefix)
+    enc = Int8Encoder(d, prefix=tier.prefix, wasm=tier.wasm_vectors)
     np.save(d / "train_emb.npy", enc.encode([r["text"] for r in rows]).astype(np.float16))
     data.write_jsonl(d / "train.jsonl", rows)
     minfo["train"] = info
@@ -128,7 +128,7 @@ def _honest_preds(tier: config.Tier) -> dict[str, tuple[list[dict], list[dict]]]
         if ids != [e["id"] for e in evals]:
             raise SystemExit(f"{path}: фразы пробы {name} изменились — пересоберите holdout")
         labels = [data.restrict(str(x), tier.connectors) for x in z["labels"]]
-        preds = knn.knn(z["train"], labels, z["eval"])
+        preds = _guard(tier, evals, knn.knn(z["train"], labels, z["eval"]))
         if name in tier.extra_sets:
             by_id = {e["id"]: p for e, p in zip(evals, preds)}
             cal, test = data.split_half(evals)
@@ -137,6 +137,13 @@ def _honest_preds(tier: config.Tier) -> dict[str, tuple[list[dict], list[dict]]]
         else:
             out[name] = (evals, preds)
     return out
+
+
+def _guard(tier: config.Tier, evals: list[dict], preds: list[dict]) -> list[dict]:
+    """Фразы, которые помощник до модели не пускает (голое время), — без подсказки."""
+    if not tier.time_guard:
+        return preds
+    return [{**p, "pred": "none"} if data.bare_time(e["text"]) else p for e, p in zip(evals, preds)]
 
 
 def _merge(per_set: dict[str, tuple[list[dict], list[dict]]], names: list[str]) -> tuple[list[dict], list[dict]]:
@@ -157,11 +164,13 @@ def calibrate(tier: config.Tier) -> dict:
 
     light/accurate: выбор на fresh (наибольший catch в бюджете), проверка —
     held2+held3. web: выбор на fresh+held2+held3 и половине cal складской
-    пробы, проверка — на её половине test.
+    пробы (в бюджете — и всё вместе, и cal отдельно), проверка — на её
+    половине test.
     """
     per_set = _honest_preds(tier)
     dev = _groups(tier, list(per_set))["dev"]
-    t = knn.pick_threshold(*_merge(per_set, dev))
+    each = [per_set[f"{n}.cal"] for n in tier.extra_sets]
+    t = knn.pick_threshold(*_merge(per_set, dev), each=each)
     if t is None:
         raise SystemExit(f"[{tier.name}] на {'+'.join(dev)} нет порога в бюджете ошибок")
     grid = {}
@@ -219,11 +228,11 @@ def verify(tier: config.Tier) -> dict:
     pd = _out(tier) / "pack"
     emb, labels = pack.read_index(pd / "index.bin", pd / "labels.json")
     md = _src(tier) / "model"
-    enc = Int8Encoder(pd, prefix=tier.prefix, info_dir=md)
+    enc = Int8Encoder(pd, prefix=tier.prefix, info_dir=md, wasm=tier.wasm_vectors)
     per_set = {}
     texts = []
     for name, ev in _sets(tier, lambda n: data.load_eval(n, tier.connectors)).items():
-        per_set[name] = (ev, knn.knn(emb, labels, enc.encode([e["text"] for e in ev])))
+        per_set[name] = (ev, _guard(tier, ev, knn.knn(emb, labels, enc.encode([e["text"] for e in ev]))))
         texts += [e["text"] for e in ev]
     lat = {"1_thread": Int8Encoder(pd, threads=1, prefix=tier.prefix, info_dir=md).latency_ms(texts[:300])}
     honest = cal["honest"]["all"]
@@ -323,6 +332,15 @@ def webcheck(tier: config.Tier) -> dict:
         got = json.loads(fout.read_text())
     arr = np.array(got["data"], dtype=np.float32).reshape(got["dims"])
     cos = (arr * want).sum(1) / (np.linalg.norm(arr, axis=1) * np.linalg.norm(want, axis=1))
+    vs_cpu = round(float(cos.min()), 6)
+    if tier.wasm_vectors:
+        # Индекс посчитан в onnxruntime-web: браузер должен дать те же
+        # векторы примеров (fp16 в index.bin), CPU — только для сведения.
+        rows = data.read_jsonl(md / "train.jsonl")[:16]
+        emb, _ = pack.read_index(pd / "index.bin", pd / "labels.json")
+        idx = enc.encode_wasm([r["text"] for r in rows])
+        ref = np.asarray(emb[: len(rows)], dtype=np.float32)
+        cos = (idx * ref).sum(1) / (np.linalg.norm(idx, axis=1) * np.linalg.norm(ref, axis=1))
     version = json.loads((wc / "package.json").read_text())["dependencies"]["onnxruntime-web"]
     res = {
         "onnxruntime_web": version,
@@ -330,13 +348,20 @@ def webcheck(tier: config.Tier) -> dict:
         "opset": [{"domain": o.domain or "ai.onnx", "version": o.version} for o in g.opset_import],
         "ops": ops,
         "phrases": len(texts),
-        "min_cosine_vs_cpu": round(float(cos.min()), 6),
+        "min_cosine_vs_cpu": vs_cpu,
         "max_abs_diff": round(float(np.abs(arr - want).max()), 6),
+        # wasm_vectors: сверка с индексом, посчитанным onnxruntime-web.
+        "vectors": "wasm" if tier.wasm_vectors else "cpu",
+        "min_cosine_vs_index": round(float(cos.min()), 6) if tier.wasm_vectors else None,
         "ok": bool(cos.min() > 0.999),
+        # node, 1 поток WASM: открытие модели, мс на фразу, память процесса.
+        "perf": got.get("perf"),
     }
     (_out(tier) / "webcheck.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
     log(f"[{tier.name}] onnxruntime-web {version}: {'совпадает' if res['ok'] else 'РАСХОДИТСЯ'} "
-        f"(косинус ≥ {res['min_cosine_vs_cpu']}), операции: {', '.join(ops)}")
+        f"(косинус ≥ {round(float(cos.min()), 6)}, с CPU ≥ {vs_cpu}), операции: {', '.join(ops)}; "
+        f"открытие {res['perf']['load_ms']} мс, фраза {res['perf']['ms_per_phrase']['median']} мс, "
+        f"RSS {res['perf']['rss_mb']['after']} МБ")
     if not res["ok"]:
         raise SystemExit("onnxruntime-web считает не то же, что CPU")
     return res

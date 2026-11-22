@@ -96,6 +96,7 @@ void main() {
     expect(await open('{"version": "1.0.0"}'), isNull);
     // Чужой уровень, опасная папка, не та версия в указателе — тоже нет.
     expect(await open(webPointer(tier: 'light')), isNull);
+    expect(await open(webPointer(tier: 'accurate')), isNull);
     expect(await open(webPointer(dir: '../../data')), isNull);
     expect(await open(webPointer(dir: '.hidden')), isNull);
     expect(await open(webPointer(version: 'latest')), isNull);
@@ -125,6 +126,52 @@ void main() {
     await expectLater(
       source.read('../config.php'),
       throwsA(isA<IntentPackException>()),
+    );
+  });
+
+  test(
+      'склад поставил «Точную» (web-accurate): тот же адрес, BPE и '
+      'подсказка query: — работает', () async {
+    final accurateFiles = webPackFiles(accurate: true);
+    final accurate = webManifest(accurateFiles, tier: 'web-accurate');
+    server.serve(<String, Uint8List>{
+      ...accurateFiles,
+      'manifest.json': accurate,
+    });
+    final source = (await open(
+      webPointer(tier: 'web-accurate', manifest: accurate),
+    ))!;
+    expect(source.pointer.tier, 'web-accurate');
+    expect(source.manifest.tier, 'web-accurate');
+    expect(source.manifest.prefix, 'query: ');
+    expect(
+      source.dir.toString(),
+      'https://warehouse.example/assistant/intent/web/1.0.0-6dc650b6/',
+    );
+    final runtime = FakeWebRuntime(
+      <String, Float32List>{
+        'что пришло сегодня': webVector(<String, double>{
+          'warehouse:warehouse.today': 1,
+        }),
+      },
+      accurate: true,
+    );
+    final model = await loadIntentModel(source, source.manifest, runtime.open);
+    final suggestion =
+        await IntentFallback(model: model).suggest('что пришло сегодня');
+    expect(suggestion?.first.id, 'warehouse:warehouse.today');
+    expect(runtime.seen, contains('что пришло сегодня'));
+    // Указатель говорит одно, манифест — другое: отказ.
+    server.serve(<String, Uint8List>{
+      ...accurateFiles,
+      'manifest.json': manifest,
+    });
+    await expectLater(
+      open(webPointer(tier: 'web-accurate')),
+      throwsA(
+        isA<IntentPackException>()
+            .having((e) => e.message, 'message', contains('уровень web,')),
+      ),
     );
   });
 

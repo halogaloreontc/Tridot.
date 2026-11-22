@@ -5,11 +5,11 @@
 # Для каждого уровня («Лёгкая» — rubert-tiny2, «Точная» — USER-base) три
 # честные пробы (модель на корпусе до разбора каждой пробы, порог — на int8)
 # и модель на всём корпусе, параллельно. Потом порог, индекс, проверка
-# бюджета ошибок (не уложились — выпуска нет), архивы light, accurate и web
-# (веб-помощник склада: своя модель на основе «Лёгкой» со складскими
-# перефразами, только навыки склада, калькулятора и беседы, порог — ещё и по
-# половине складской пробы, другая половина — честная проверка;
-# проверяется в onnxruntime-web). Выпуск intent-v<версия> и
+# бюджета ошибок (не уложились — выпуска нет), архивы light, accurate, web и
+# web-accurate (веб-помощник склада: свои модели на основе «Лёгкой» и
+# «Точной» со складскими перефразами, только навыки склада, калькулятора и
+# беседы, порог — ещё и по половине складской пробы, другая половина —
+# честная проверка; обе проверяются в onnxruntime-web). Выпуск intent-v<версия> и
 # постоянный предвыпуск intent-latest: сначала архивы, потом latest.json —
 # приложение не увидит версию без архива. Подробно: tools/intent_model/README.md.
 #
@@ -102,6 +102,11 @@ jobs:
           - {tier: web, set: held2}
           - {tier: web, set: held3}
           - {tier: web, set: warehouse}
+          # web-accurate — то же на основе «Точной» (USER-base).
+          - {tier: web-accurate, set: fresh}
+          - {tier: web-accurate, set: held2}
+          - {tier: web-accurate, set: held3}
+          - {tier: web-accurate, set: warehouse}
     steps:
       # Пробы проверяются на корпусе до своего разбора — нужна вся история.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -123,6 +128,16 @@ jobs:
 
       - run: pip install -r tools/intent_model/requirements.txt
 
+      # web-accurate считает векторы в onnxruntime-web (как браузер).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: matrix.tier == 'web-accurate'
+        with:
+          node-version: '22'
+
+      - name: onnxruntime-web
+        if: matrix.tier == 'web-accurate'
+        run: cd tools/intent_model/webcheck && npm ci --no-audit --no-fund
+
       - name: Проба ${{ matrix.set }}
         run: python -m tools.intent_model holdout --tier ${{ matrix.tier }} --set ${{ matrix.set }}
 
@@ -140,7 +155,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        tier: [light, accurate, web]
+        tier: [light, accurate, web, web-accurate]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -159,6 +174,16 @@ jobs:
           key: hf-${{ matrix.tier }}-${{ hashFiles('tools/intent_model/config.py') }}
 
       - run: pip install -r tools/intent_model/requirements.txt
+
+      # web-accurate считает векторы в onnxruntime-web (как браузер).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: matrix.tier == 'web-accurate'
+        with:
+          node-version: '22'
+
+      - name: onnxruntime-web
+        if: matrix.tier == 'web-accurate'
+        run: cd tools/intent_model/webcheck && npm ci --no-audit --no-fund
 
       - name: Дообучение и ONNX int8
         run: python -m tools.intent_model model --tier ${{ matrix.tier }}
@@ -204,10 +229,10 @@ jobs:
           DL: ${{ runner.temp }}/dl
         run: |
           set -euo pipefail
-          for tier in light accurate web; do
+          for tier in light accurate web web-accurate; do
             mkdir -p "$OUT/$tier/calib" "$OUT/$tier/model"
             sets="fresh held2 held3"
-            [ "$tier" = web ] && sets="$sets warehouse"
+            [[ "$tier" == web* ]] && sets="$sets warehouse"
             for set in $sets; do
               cp "$DL/calib-$tier-$set/$set.npz" "$OUT/$tier/calib/"
             done
@@ -219,21 +244,22 @@ jobs:
       - name: Порог, проверка, архивы
         run: |
           set -euo pipefail
-          for tier in light accurate web; do
+          (cd tools/intent_model/webcheck && npm ci --no-audit --no-fund)
+          for tier in light accurate web web-accurate; do
             python -m tools.intent_model finish --tier "$tier" --version "$VERSION"
           done
 
       - name: Модель в onnxruntime-web
         run: |
           set -euo pipefail
-          (cd tools/intent_model/webcheck && npm ci --no-audit --no-fund)
           python -m tools.intent_model webcheck --tier web
+          python -m tools.intent_model webcheck --tier web-accurate
 
       - name: Итоги
         if: always()
         run: |
           set -euo pipefail
-          for tier in light accurate web; do
+          for tier in light accurate web web-accurate; do
             f="$OUT/$tier/metrics.json"
             [[ -f "$f" ]] || continue
             jq -r --arg t "$tier" '"### \($t)\n\n- порог \(.threshold), в бюджете: \(.ok)\n- честно (все пробы): верных подсказок \(.honest.all.catch) %, неверных \(.honest.all.wrong) % (из подсказок \(.honest.all.wrong_of_suggested) %), ложные тревоги \(.honest.all.false_alarm) %\n- задержка: \(.latency_ms["1_thread"].median) мс\n" + (if .honest["warehouse.test"] then "- отложенная половина складской пробы: верных \(.honest["warehouse.test"].catch) %, неверных из подсказок \(.honest["warehouse.test"].wrong_of_suggested) %, ложные тревоги \(.honest["warehouse.test"].false_alarm) %\n" else "" end)' "$f" >> "$GITHUB_STEP_SUMMARY"
@@ -250,14 +276,14 @@ jobs:
             exit 1
           fi
           mkdir -p "$RUNNER_TEMP/v" "$RUNNER_TEMP/latest"
-          zips=("$OUT"/light/tridot-intent-light-"$VERSION".zip "$OUT"/accurate/tridot-intent-accurate-"$VERSION".zip "$OUT"/web/tridot-intent-web-"$VERSION".zip)
+          zips=("$OUT"/light/tridot-intent-light-"$VERSION".zip "$OUT"/accurate/tridot-intent-accurate-"$VERSION".zip "$OUT"/web/tridot-intent-web-"$VERSION".zip "$OUT"/web-accurate/tridot-intent-web-accurate-"$VERSION".zip)
           dl="$GITHUB_SERVER_URL/$GH_REPO/releases/download"
           python -m tools.intent_model latest --version "$VERSION" --base-url "$dl/$TAG" --out "$RUNNER_TEMP/v/latest.json" "${zips[@]}" > /dev/null
           python -m tools.intent_model latest --version "$VERSION" --base-url "$dl/intent-latest" --out "$RUNNER_TEMP/latest/latest.json" "${zips[@]}" > /dev/null
           {
             echo "Модель понимания $VERSION: запасной слой «Связного» (ADR-045)."
             echo
-            echo 'Уровни: light — «Лёгкая» (cointegrated/rubert-tiny2, MIT), accurate — «Точная» (deepvk/USER-base, Apache-2.0), web — веб-помощник склада (основа «Лёгкой», дообучена со складскими перефразами; навыки склада, калькулятора и беседы).'
+            echo 'Уровни: light — «Лёгкая» (cointegrated/rubert-tiny2, MIT), accurate — «Точная» (deepvk/USER-base, Apache-2.0), web и web-accurate — веб-помощник склада (основы «Лёгкой» и «Точной», дообучены со складскими перефразами; навыки склада, калькулятора и беседы; на складе ставится одна из двух).'
             echo
             echo 'Приложение берёт обновления из intent-latest само; архив проверяется по sha256 из latest.json и manifest.json.'
           } > "$RUNNER_TEMP/notes.md"

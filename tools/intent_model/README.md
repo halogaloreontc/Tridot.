@@ -14,7 +14,8 @@
 |---|---|---|---|---|
 | `light` | «Лёгкая» | `cointegrated/rubert-tiny2` | MIT | ~33 МБ |
 | `accurate` | «Точная» | `deepvk/USER-base` | Apache-2.0 | ~133 МБ |
-| `web` | веб-помощник склада | основа `light`, своя модель | MIT | ~33 МБ |
+| `web` | веб-помощник склада, «Лёгкая (~32 МБ, телефоны)» | основа `light`, своя модель | MIT | ~33 МБ |
+| `web-accurate` | веб-помощник склада, «Точная (~131 МБ, компьютеры)» | основа `accurate`, своя модель | Apache-2.0 | ~131 МБ |
 
 `web` — та же основа и размер, что у «Лёгкой», но своя модель: дообучение
 на корпусе и синтетических перефразах команд склада (`aug/warehouse.jsonl`),
@@ -24,6 +25,22 @@
 fresh/held2/held3 и половине `cal` складской пробы `eval/warehouse.jsonl`,
 вторая половина (`test`) — только честная проверка (см. «Обучение и
 порог»). Модель проверяется в onnxruntime-web (WASM) — `webcheck`.
+
+`web-accurate` — то же, что `web`, на основе «Точной» (USER-base,
+подсказка `query: `, токенизатор byte-level BPE; Dart-токенизатор
+сверен с HuggingFace и в JS после dart2js). Склад ставит одну из двух
+(`docs/requests/intent-web-model.md`), помощник принимает указатель с
+`tier` `web` или `web-accurate`. Векторы индекса и проб `web-accurate`
+считаются в onnxruntime-web по одной фразе (`wasm_vectors`,
+`webcheck/encode.mjs`): у USER-base int8 WASM даёт косинус с CPU ~0,97, а
+пакет из 32 фраз с дополнением сдвигает вектор ещё сильнее (~0,92), так
+что порог по векторам CPU не был бы порогом браузера. Для этого шагам
+`holdout`, `model`, `verify` уровня нужен `npm ci` в `webcheck`.
+
+Голое время («7:30», «в 9», «нет, на 6:45») веб-уровни до модели не
+пускают (`time_guard`: `lib/core/intent/bare_time.dart` в помощнике,
+`data.bare_time` в пробах — один разбор), а в `aug/warehouse.jsonl` есть
+примеры времени с меткой `none`.
 
 Версия основы закреплена коммитом (`config.py`, `revision`).
 
@@ -35,8 +52,10 @@ python3.12 -m venv .venv-intent
 .venv-intent/bin/python -m tools.intent_model build --tier light       # ~4 мин на 4 ядрах
 .venv-intent/bin/python -m tools.intent_model build --tier accurate    # ~38 мин на 4 ядрах
 .venv-intent/bin/python -m tools.intent_model build --tier web         # ~5 мин на 4 ядрах
-(cd tools/intent_model/webcheck && npm ci) && \
-  .venv-intent/bin/python -m tools.intent_model webcheck --tier web
+(cd tools/intent_model/webcheck && npm ci)                              # до web-accurate
+.venv-intent/bin/python -m tools.intent_model build --tier web-accurate  # ~60 мин на 4 ядрах
+.venv-intent/bin/python -m tools.intent_model webcheck --tier web
+.venv-intent/bin/python -m tools.intent_model webcheck --tier web-accurate
 .venv-intent/bin/python -m pytest -q tools/intent_model/tests
 ```
 
@@ -52,11 +71,11 @@ python3.12 -m venv .venv-intent
 | шаг | что делает |
 |---|---|
 | `prepare` | корпус → `data/train.jsonl`: метка `<навык>:<команда>` или `none`; без `known_gap`, реплик с `after`, «не понял» с маршрутом в навык, навыка «Пароли» и приватных фраз; дубликаты — один раз |
-| `holdout --set fresh\|held2\|held3\|warehouse` | модель на снимке корпуса до разбора пробы (`eval/snapshots.json`), выгрузка в int8, векторы снимка и пробы → `calib/<проба>.npz`; `warehouse` — только у `web` |
+| `holdout --set fresh\|held2\|held3\|warehouse` | модель на снимке корпуса до разбора пробы (`eval/snapshots.json`), выгрузка в int8, векторы снимка и пробы → `calib/<проба>.npz`; `warehouse` — только у `web` и `web-accurate` |
 | `model` | дообучение на всём корпусе, ONNX (кодировщик + пулинг + нормировка), динамический int8, токенизатор, векторы примеров |
-| `calibrate` | порог на int8, честно: каждая проба — на модели своего снимка; light/accurate — выбор на fresh, проверка на held2 + held3; web — выбор на fresh + held2 + held3 + `warehouse.cal`, проверка на `warehouse.test` |
+| `calibrate` | порог на int8, честно: каждая проба — на модели своего снимка; light/accurate — выбор на fresh, проверка на held2 + held3; web, web-accurate — выбор на fresh + held2 + held3 + `warehouse.cal` (в бюджете и всё вместе, и `warehouse.cal` отдельно), проверка на `warehouse.test` |
 | `index` | `index.bin`, `labels.json`, файлы пакета |
-| `verify` | `metrics.json`: честные метрики, прогон собранного пакета, задержка, размеры; вне бюджета (у web — ещё и на `warehouse.test`) — ошибка |
+| `verify` | `metrics.json`: честные метрики, прогон собранного пакета, задержка, размеры; вне бюджета (у веб-уровней — ещё и на `warehouse.test`) — ошибка |
 | `pack --version` | `manifest.json` и архив |
 | `finish --version` | calibrate + index + verify + pack |
 | `latest` | `latest.json` выпуска из архивов |
@@ -84,7 +103,7 @@ python3.12 -m venv .venv-intent
   своей пробы (жаккар по словам ≥ 0,8), убираются. Выпускная модель учится
   на всём корпусе — её прогон на пробах (`seen` в `metrics.json`) только
   для сравнения.
-- **Складская проба** (`eval/warehouse.jsonl`, 250 фраз) — для `web`:
+- **Складская проба** (`eval/warehouse.jsonl`, 250 фраз) — для `web` и `web-accurate`:
   команды склада речью кладовщика, калькулятор и беседа на складе, «не
   команды» со словами «сколько», «остаток», «ячейка», «приход». Делится
   пополам `data.split_half` (по каждой метке через одну по id): `cal` —
@@ -119,6 +138,14 @@ python3.12 -m venv .venv-intent
 ложных тревог 1,5 %; архив 32 МБ, 0,55 мс на фразу. Проба и перефразы
 написаны по одним описаниям команд — 61 % скорее верхняя оценка.
 
+Веб-уровни после голого времени и порога «в бюджете и на `warehouse.cal`
+отдельно» (2026-11-22, подробно — дополнение ADR-045):
+
+| уровень | порог | fresh: поймано / неверных из подсказок | `warehouse.test`: поймано / неверных / ложные | архив | браузер (node, 1 поток) |
+|---|---|---|---|---|---|
+| `web` | 0,895 | 17,5 % / 5,3 % | 51,0 % / 0 % / 2,9 % | 32 МБ | 0,26 с открытие, 1,6 мс фраза, ~0,38 ГБ |
+| `web-accurate` | 0,89 | 21,4 % / 4,3 % | 49,0 % / 0 % / 5,7 % (вне бюджета) | 131 МБ | 0,5 с, ~60–85 мс, ~0,8 ГБ |
+
 ## Описания команд
 
 `labels.yaml` — что подставить в «Похоже, вы хотите …?»: глагол в
@@ -147,9 +174,9 @@ python3.12 -m venv .venv-intent
 ## Выпуск
 
 GitHub → Actions → «Выпуск модели понимания» → Run workflow → версия
-(`1.0.0`, больше прежней). Секретов не нужно. Пробы (2 уровня × 3) и
+(`1.0.0`, больше прежней). Секретов не нужно. Пробы (2 уровня × 3 и 2 веб-уровня × 4) и
 модели идут параллельно, каждая задача — 5–20 минут; затем порог,
-проверка бюджета, `webcheck`, выпуск `intent-v<версия>` (три архива и
+проверка бюджета, `webcheck`, выпуск `intent-v<версия>` (четыре архива и
 `latest.json`) и постоянный предвыпуск `intent-latest`: сначала архивы,
 потом `latest.json` — приложение берёт его по адресу
 `…/releases/download/intent-latest/latest.json`:
@@ -158,7 +185,7 @@ GitHub → Actions → «Выпуск модели понимания» → Run 
 {"format": "tridot-intent-latest/1", "version": "1.0.0",
  "tiers": {"light": {"url": "…/tridot-intent-light-1.0.0.zip", "size": 0,
                      "sha256": "…", "threshold": 0.9, "k": 5, "dims": 312, …},
-           "accurate": {…}, "web": {…}}}
+           "accurate": {…}, "web": {…}, "web-accurate": {…}}}
 ```
 
 ## Эталоны для Dart

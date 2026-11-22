@@ -161,6 +161,39 @@ void main() {
     expect((saved['positives'] as List).single['text'], arrivals);
   });
 
+  test('голое время («нет, на 6:45») — без подсказки, модель его не видит',
+      () async {
+    const time = 'нет, на 6:45';
+    runtime.table[time] = webVector(<String, double>{'calc:calc.evaluate': 1});
+    make();
+    await open();
+    await session.send(time);
+    expect(last(), isNot(contains('Похоже, вы хотите')));
+    expect(runtime.seen, isNot(contains(time)));
+    expect(session.pendingClarification, isNull);
+  });
+
+  test('склад поставил «Точную» (web-accurate) — та же подсказка', () async {
+    files = FakePackServer();
+    final pack = webPackFiles(accurate: true);
+    final manifest = webManifest(pack, tier: 'web-accurate');
+    files.serve(<String, Uint8List>{...pack, 'manifest.json': manifest});
+    server.intentPointer = webPointer(tier: 'web-accurate', manifest: manifest);
+    runtime = FakeWebRuntime(
+      <String, Float32List>{
+        arrivals: webVector(<String, double>{'warehouse:warehouse.today': 1}),
+      },
+      accurate: true,
+    );
+    make();
+    await open();
+    final intent = session.intent!;
+    expect(intent.state, WidgetIntentState.ready, reason: intent.problem);
+    await session.send(arrivals);
+    expect(last(), contains('что пришло на склад сегодня'));
+    expect(runtime.seen, contains(arrivals));
+  });
+
   test('«Нет» — отрицательный пример и обычное «не понял»', () async {
     make();
     await open();

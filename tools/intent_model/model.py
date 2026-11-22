@@ -189,7 +189,8 @@ class Int8Encoder:
     """Кодирование фраз выгруженной моделью: токенизатор только из tokenizer.json
     (как будет на устройстве), onnxruntime на CPU."""
 
-    def __init__(self, model_dir: Path, threads: int = 0, prefix: str = "", info_dir: Path | None = None):
+    def __init__(self, model_dir: Path, threads: int = 0, prefix: str = "", info_dir: Path | None = None,
+                 wasm: bool = False):
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
@@ -207,7 +208,10 @@ class Int8Encoder:
         so.intra_op_num_threads = threads or max(1, os.cpu_count() or 1)
         so.inter_op_num_threads = 1
         so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        self.sess = ort.InferenceSession(str(model_dir / "model.int8.onnx"), so, providers=["CPUExecutionProvider"])
+        self.model_path = model_dir / "model.int8.onnx"
+        self.sess = ort.InferenceSession(str(self.model_path), so, providers=["CPUExecutionProvider"])
+        # encode() — в onnxruntime-web (node, webcheck/encode.mjs), как в браузере.
+        self.wasm = wasm
 
     def feeds(self, texts: Sequence[str]) -> dict:
         enc = self.tok.encode_batch([self.prefix + t for t in texts])
@@ -219,8 +223,50 @@ class Int8Encoder:
         return {n: f[n] for n in self.names}
 
     def encode(self, texts: Sequence[str], bs: int = 32) -> np.ndarray:
+        if self.wasm:
+            return self.encode_wasm(texts)
         out = [self.sess.run(None, self.feeds(texts[i : i + bs]))[0] for i in range(0, len(texts), bs)]
         return np.concatenate(out).astype(np.float32) if out else np.zeros((0, 1), np.float32)
+
+    def encode_wasm(self, texts: Sequence[str], procs: int = 0) -> np.ndarray:
+        """Векторы onnxruntime-web (WASM) через node — по одной фразе без
+        дополнения, как в браузере: у int8 с динамическим квантованием
+        соседи по пакету и дополнение сдвигают вектор (у USER-base косинус
+        с пакетом 32 — ~0,92). Несколько процессов node параллельно."""
+        import subprocess
+        import tempfile
+
+        script = config.PKG / "webcheck" / "encode.mjs"
+        if not (config.PKG / "webcheck" / "node_modules" / "onnxruntime-web").exists():
+            raise SystemExit(f"Нет onnxruntime-web: cd {script.parent} && npm ci")
+        if not texts:
+            return np.zeros((0, 1), np.float32)
+        procs = procs or max(1, min(4, os.cpu_count() or 1))
+        parts = [list(range(len(texts)))[i::procs] for i in range(procs)]
+        parts = [p for p in parts if p]
+        out = np.zeros((len(texts), 0), np.float32)
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = []
+            for n, part in enumerate(parts):
+                batches = []
+                for i in part:
+                    f = self.feeds([texts[i]])
+                    batches.append({"inputs": {k: v.tolist() for k, v in f.items()}, "dims": list(f["input_ids"].shape)})
+                fin, fout = Path(tmp) / f"in{n}.json", Path(tmp) / f"out{n}.json"
+                fin.write_text(json.dumps(batches))
+                runs.append((part, fout, subprocess.Popen(
+                    ["node", str(script), str(self.model_path), str(fin), str(fout)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)))
+            for part, fout, proc in runs:
+                _, err = proc.communicate()
+                if proc.returncode != 0:
+                    raise SystemExit(f"onnxruntime-web не посчитал векторы:\n{err[-3000:]}")
+                got = json.loads(fout.read_text())
+                arr = np.array(got["data"], dtype=np.float32).reshape(got["dims"])
+                if out.shape[1] == 0:
+                    out = np.zeros((len(texts), arr.shape[1]), np.float32)
+                out[part] = arr
+        return out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-12)
 
     def latency_ms(self, texts: Sequence[str]) -> dict:
         for x in texts[:20]:

@@ -1,6 +1,7 @@
 """Подготовка данных и метрики — без моделей и сети."""
 
 import json
+import re
 
 import numpy as np
 import pytest
@@ -182,3 +183,43 @@ def test_web_tier_layout():
     assert g["test"] == ["warehouse.test"] and "warehouse.test" not in g["dev"] and "warehouse.cal" in g["dev"]
     g = pipeline._groups(light, list(config.EVAL_SETS))
     assert g["dev"] == ["fresh"] and g["test"] == ["held2", "held3"]
+
+
+def test_web_accurate_tier_layout():
+    wa, acc, web = config.tier("web-accurate"), config.tier("accurate"), config.tier("web")
+    assert wa.source == "web-accurate" and wa.base_model == acc.base_model and wa.revision == acc.revision
+    assert wa.prefix == "query: " and wa.per_channel and (wa.lr, wa.epochs) == (acc.lr, acc.epochs)
+    assert (wa.connectors, wa.extra_sets, wa.augment) == (web.connectors, web.extra_sets, web.augment)
+    assert config.holdout_sets("web-accurate") == (*config.EVAL_SETS, config.WEB_SET)
+    assert config.holdout_sets("accurate") == config.EVAL_SETS
+
+
+def test_warehouse_aug_teaches_bare_times_are_not_calc():
+    rows, _ = data.prepare(list(data.aug_files([config.WEB_SET])))
+    times = [r for r in rows if re.fullmatch(r"(?:в|к|на|около)?\s*\d{1,2}(?::\d{2})?", r["text"])]
+    assert len(times) >= 10 and all(r["label"] == "none" for r in times)
+
+
+# Те же случаи — test/intent/bare_time_test.dart (разбор один в Dart и здесь).
+BARE_TIME_YES = ["7:30", "в 9", "нет, на 6:45", "к 6 вечера", "часам к 5", "около 7", "18:30", "в 10."]
+BARE_TIME_NO = ["15", "7+30", "2*9", "в 9 разбуди", "12.11", "сколько будет 7:30", "в 25", "7:75", ""]
+
+
+def test_bare_time_guard():
+    assert all(data.bare_time(t) for t in BARE_TIME_YES)
+    assert not any(data.bare_time(t) for t in BARE_TIME_NO)
+    assert config.tier("web").time_guard and config.tier("web-accurate").time_guard
+    assert not config.tier("light").time_guard and not config.tier("accurate").time_guard
+
+
+def test_pick_threshold_each_set_within_budget():
+    # Общая куча: 1 ложная тревога на 40 «не команд» — в бюджете; но все они
+    # из маленькой пробы (1 из 4 — 25 %): с each порог поднимается.
+    none = [{"label": "none", "rule_outcome": "ok"} for _ in range(40)]
+    cmd = [{"label": "a", "rule_outcome": "none"} for _ in range(10)]
+    small = none[:4]
+    p_none = [{"pred": "a" if i == 0 else "none", "sim": 0.8} for i in range(40)]
+    p_cmd = [{"pred": "a", "sim": 0.8 if i < 5 else 0.9} for i in range(10)]
+    evals, preds = none + cmd, p_none + p_cmd
+    assert knn.pick_threshold(evals, preds, grid=[0.8, 0.9]) == 0.8
+    assert knn.pick_threshold(evals, preds, grid=[0.8, 0.9], each=[(small, p_none[:4])]) == 0.9

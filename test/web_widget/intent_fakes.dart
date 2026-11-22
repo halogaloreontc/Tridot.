@@ -58,8 +58,14 @@ Float32List webVector(Map<String, double> weights) {
 String webTokenizerJson() =>
     File('test/fixtures/intent/tokenizer_light_mini.json').readAsStringSync();
 
+/// Токенизатор поддельного пакета `web-accurate` — урезанный byte-level BPE
+/// «Точной» (USER-base).
+String webAccurateTokenizerJson() =>
+    File('test/fixtures/intent/tokenizer_accurate_mini.json')
+        .readAsStringSync();
+
 /// Файлы поддельного пакета `web` (без манифеста) по 5 примеров на метку.
-Map<String, Uint8List> webPackFiles() {
+Map<String, Uint8List> webPackFiles({bool accurate = false}) {
   final vectors = <List<double>>[];
   final ids = <int>[];
   for (var label = 0; label < webLabels.length; label++) {
@@ -81,8 +87,11 @@ Map<String, Uint8List> webPackFiles() {
         }),
       ),
     ),
-    'tokenizer.json': Uint8List.fromList(utf8.encode(webTokenizerJson())),
-    'vocab.txt': Uint8List.fromList(utf8.encode('[PAD]\n[UNK]\n')),
+    'tokenizer.json': Uint8List.fromList(
+      utf8.encode(accurate ? webAccurateTokenizerJson() : webTokenizerJson()),
+    ),
+    if (!accurate)
+      'vocab.txt': Uint8List.fromList(utf8.encode('[PAD]\n[UNK]\n')),
   };
 }
 
@@ -106,9 +115,13 @@ Uint8List webManifest(
           'k': 5,
           'dims': webDims,
           'max_length': 64,
-          'inputs': <String>['input_ids', 'attention_mask', 'token_type_ids'],
+          'inputs': <String>[
+            'input_ids',
+            'attention_mask',
+            if (tier != 'web-accurate') 'token_type_ids',
+          ],
           'output': 'embedding',
-          'prefix': '',
+          'prefix': tier == 'web-accurate' ? 'query: ' : '',
           'connectors': <String>['warehouse', 'calc', 'talk'],
           'files': <String, Object?>{
             for (final MapEntry(:key, :value) in files.entries)
@@ -170,11 +183,15 @@ final class FakePackServer implements BytesFetcher {
 /// фраз (токенизатор пакета считает номера так же), остальное — «не
 /// команда». Запоминает фразы, которые ей показали.
 final class FakeWebRuntime implements IntentRuntime {
-  FakeWebRuntime(this.table)
-      : _tokenizer = IntentTokenizer.parse(webTokenizerJson());
+  FakeWebRuntime(this.table, {bool accurate = false})
+      : _tokenizer = IntentTokenizer.parse(
+          accurate ? webAccurateTokenizerJson() : webTokenizerJson(),
+        ),
+        _prefix = accurate ? 'query: ' : '';
 
   /// Фраза → вектор.
   final Map<String, Float32List> table;
+  final String _prefix;
   final IntentTokenizer _tokenizer;
   final List<String> seen = <String>[];
   int opened = 0;
@@ -198,7 +215,7 @@ final class FakeWebRuntime implements IntentRuntime {
       ];
       var vector = webVector(const <String, double>{'none': 1});
       for (final MapEntry(key: text, value: v) in table.entries) {
-        if (_same(_tokenizer.encode(text), ids)) {
+        if (_same(_tokenizer.encode('$_prefix$text'), ids)) {
           vector = v;
           seen.add(text);
         }

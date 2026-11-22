@@ -76,6 +76,12 @@ class Tier:
     base_from: str = ""
     # Дополнительные синтетические фразы обучения (aug/<имя>.jsonl).
     augment: tuple[str, ...] = field(default_factory=tuple)
+    # Голое время до модели не доходит (веб-помощник, data.bare_time).
+    time_guard: bool = False
+    # Векторы индекса и проб — в onnxruntime-web (WASM), а не на CPU: у
+    # глубокой модели WASM считает int8 чуть иначе (косинус с CPU ~0,97),
+    # и порог должен быть порогом браузера (webcheck/encode.mjs).
+    wasm_vectors: bool = False
 
     @property
     def source(self) -> str:
@@ -117,6 +123,20 @@ TIERS: dict[str, Tier] = {
         connectors=WEB_CONNECTORS,
         extra_sets=(WEB_SET,),
         augment=(WEB_SET,),
+        time_guard=True,
+    ),
+    "web-accurate": Tier(
+        name="web-accurate",
+        title="Веб-помощник, точная",
+        # Своя модель на основе «Точной» (USER-base, подсказка `query: `,
+        # токенизатор BPE) и то же обучение, что у web: корпус и
+        # aug/warehouse.jsonl; индекс — только навыки веб-помощника.
+        base_from="accurate",
+        connectors=WEB_CONNECTORS,
+        extra_sets=(WEB_SET,),
+        augment=(WEB_SET,),
+        time_guard=True,
+        wasm_vectors=True,
     ),
 }
 
@@ -142,6 +162,8 @@ def tier(name: str) -> Tier:
             extra_sets=t.extra_sets,
             base_from=t.base_from,
             augment=t.augment,
+            time_guard=t.time_guard,
+            wasm_vectors=t.wasm_vectors,
         )
     return t
 
