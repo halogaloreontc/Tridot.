@@ -195,12 +195,17 @@ false)`), не `SelectableText`: в браузере с включённой с�
 | `lib/web_widget/widget_storage.dart` | `localStorage` за интерфейсом: запись подключения, кэш описания, история |
 | `lib/web_widget/widget_texts.dart` | Тексты вместо путей приложения («Обновите страницу склада») |
 | `lib/web_widget/browser_host.dart` | `postMessage` и `localStorage` браузера (`package:web`) |
-| `lib/web_widget/fetch_transport.dart` | `HttpTransport` поверх `fetch` (`package:web`) |
+| `lib/web_widget/fetch_transport.dart` | `HttpTransport` поверх `fetch` (`package:web`); файлы пакета модели — `fetchBytes` |
+| `lib/web_widget/widget_intent.dart` | Модель понимания (ADR-045): пакет со склада, память в `localStorage`, состояние (тесты на VM) |
+| `lib/web_widget/widget_intent_screen.dart`, `widget_clarify.dart` | «Понимание фраз» в меню и кнопки вопроса под сообщением |
+| `lib/web_widget/intent_web.dart` | onnxruntime-web через `dart:js_interop`, sha256 через Web Crypto, скачивание файла (`package:web`) |
+| `web/ort/` | onnxruntime-web 1.30.0: `ort.wasm.bundle.min.mjs`, `ort-wasm-simd-threaded.wasm` (раскладывает `release.dart ort`), `LICENSE.txt` |
 | `web/index.html`, `web/flutter_bootstrap.js` | Страница без `<base>`, CSP, CanvasKit из архива |
 | `tool/widget_release/` | Сборка, архив, подпись, `latest.json`, загрузка в бакет (по желанию) |
 
 Код с `package:web` — только `browser_host.dart`, `fetch_transport.dart` и
-`main.dart`; остальное проверяется на VM. Тест
+`intent_web.dart`, и импортирует их только `main.dart`; остальное
+проверяется на VM. Тест
 `test/web_widget/web_graph_test.dart` следит за графом импортов: никаких
 `dart:ffi`, `path_provider`, `file_selector`, `mobile_scanner`, `record`;
 `dart:io` — только в известных файлах, чей файловый код помощник не
@@ -306,6 +311,10 @@ JetBrains Mono (и из `FontManifest.json`), `NOTICES` → `LICENSES.txt`.
 со сжатием (main.dart.js ~0,9, chromium/canvaskit.wasm ~2,1, шрифты);
 дальше — из кэша: папки версий не меняются.
 
+С onnxruntime-web (модель понимания, ниже) архив больше на ~3,7 МБ
+(распакованный — на 14,3 МБ, `ort/`): эти файлы браузер скачивает, только
+если склад поставил модель и сотрудник не выключил подсказки.
+
 Тега `<base>` нет: папка версии заранее неизвестна, относительные пути
 считаются от адреса `index.html`. Своего service worker нет; страница
 склада исключает `/assistant/` из своего `sw.js`. CSP в `<meta>`: только
@@ -341,6 +350,77 @@ Flutter с типом `application/octet-stream` показывает пусту
   Ключ из WebCrypto (PKCS#8, 48 байт) OpenSSL читает как есть; текст из
   секрета `release.dart` сначала приводит к PEM (`normalizePrivateKeyPem`:
   `\r\n`, одна строка, буквальные `\n`).
+
+## Понимание фраз (ADR-045, шаг 4)
+
+Тот же запасной слой, что в приложении: когда правила сказали «не понял»,
+модель в браузере предлагает «Похоже, вы хотите …?» с кнопками «Да» и
+«Нет»; «Да» — команда правилами навыка (запись — со своей карточкой
+подтверждения), «Нет» — отрицательный пример. Модель уровня `web`
+(rubert-tiny2 int8, ~29 МБ) знает только навыки, которые помощник выполняет
+сам: склад, калькулятор, беседа (`connectors` манифеста). Задач в индексе
+`web` нет — их помощник не подсказывает, хотя задачи у него есть. Приватные
+фразы до модели и журнала не доходят — та же проверка, что в приложении.
+
+**Где модель.** Её ставит склад — в сборку помощника она не входит
+(Управление → Инструменты → Помощник → «Модель понимания фраз»; задача для
+складов — `docs/requests/intent-web-model.md`). Договор путей:
+
+```
+<адрес склада>/assistant/intent/web/current.json        указатель, no-cache
+<адрес склада>/assistant/intent/web/<dir>/manifest.json пакет версии
+<адрес склада>/assistant/intent/web/<dir>/model.int8.onnx, tokenizer.json,
+    index.bin, labels.json, vocab.txt, …                 файлы из манифеста
+```
+
+`current.json` — `{"format": "tridot-intent-current/1", "tier": "web",
+"version": "1.0.0", "dir": "1.0.0-6dc650b6", "manifest_sha256": "…"}`
+(`manifest_sha256` — по желанию; `dir` — `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`,
+рядом с указателем). Папки версий не меняются после распаковки, указатель
+пишется через временный файл — как `assistant/current.json` у самого
+помощника. Указателя нет (404), это не он (страница вместо файла) или
+уровень не `web` — модели нет: старые склады работают как раньше,
+договор `postMessage` не менялся.
+
+**Как загружается.** Через 3 секунды после входа помощник читает указатель
+(без кэша) и `manifest.json`; если подсказки не выключены — `import()`
+модуля `ort/ort.wasm.bundle.min.mjs` из своей сборки (нет его — модель не
+скачивается), затем файлы пакета (`fetch`, `credentials: omit`,
+`redirect: error`, кэш браузера со сверкой по ETag). Каждый файл
+сверяется с манифестом: размер и sha256 целиком (Web Crypto; без https —
+sha256 на Dart), и модель тоже; уровень — `web`, версия — та, что в
+указателе. WASM — тоже из сборки (`ort-wasm-simd-threaded.wasm`, один
+поток: COOP/COEP не нужны), сессия onnxruntime-web — из байтов модели. CSP помощника не менялась: скрипты и WASM
+— только со своего адреса (`script-src 'self' 'wasm-unsafe-eval'`), запросы
+— к складу (`connect-src 'self'`). Пока модель грузится или если она не
+загрузилась — обычное «не понял»; причина видна в «Понимание фраз».
+Проверено в Chromium (Playwright) на настоящем пакете `web` 1.0.0: подсказка
+«Похоже, вы хотите найти непроведённые приходы?» на «чо не проведено ещё»,
+«Да» — `ask_unposted` правилами склада.
+
+**Меню → Расширения → «Понимание фраз»**: версия модели склада (или «Склад
+её не поставил»), «Подсказывать команды» (`svz:intent-on:<логин>`),
+«Учиться на моих ответах», «Собирать непонятые фразы» (по умолчанию
+включены), «Забыть выученное» (с подтверждением), журнал «Непонятые фразы»
+(удалить строку, «Очистить всё», «Скопировать» — JSONL в буфер, «Скачать
+файл» — `tridot-unclear-<день>.jsonl` ссылкой `blob:`; фрейм помощника без
+`sandbox`).
+
+**Хранение.** Память — `svz:intent:<логин>` (тот же формат, что
+`memory.json` приложения): личные примеры с векторами, журнал ≤ 200 строк
+и ≤ 90 дней. Не влезает в 256 тыс. знаков — сначала без векторов (модель
+пересчитает их при первой подсказке), потом без старых примеров. Ключ с
+`svz:` — страница склада стирает его при выходе, как остальной кэш: на общем
+компьютере выученное и журнал одного сотрудника другому не достаются.
+
+**onnxruntime-web в сборке.** Версия и sha256 файлов закреплены в
+`tool/widget_release/release_core.dart` (`ortWebFiles`), архив npm
+проверяется по `integrity` (sha512) из
+`tools/intent_model/webcheck/package-lock.json`.
+`dart run tool/widget_release/release.dart ort` раскладывает файлы в
+`web/ort/` (в git — только `LICENSE.txt`); `release.dart web` и `build`
+делают это сами, а `build` не подпишет сборку без этих файлов или с
+другими суммами.
 
 ## Проверки
 

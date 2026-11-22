@@ -187,6 +187,14 @@ openssl pkey -in svyaznoy-sign.pem -pubout -outform DER | tail -c 32 | base64
    и сотрёт после подписи. Переносы `\r\n`, текст в одну строку и
    буквальные `\n` он поправит сам.
 
+   Перед сборкой инструмент раскладывает onnxruntime-web 1.30.0 (модель
+   понимания, ADR-045) в `web/ort/`: скачивает пакет npm с
+   registry.npmjs.org и проверяет его sha512 и sha256 файлов (закреплены в
+   `release_core.dart`, `ortWebFiles`). Без сети — один раз заранее:
+   `dart run tool/widget_release/release.dart ort --tgz
+   onnxruntime-web-1.30.0.tgz`. Подпись (`build`) не пойдёт, если в сборке
+   нет этих файлов или они другие.
+
    Результат — `build/widget_release/1.0.0/`:
    - `svyaznoy-web-1.0.0.zip` — архив (внутри сборка, `_release.json` со
      списком файлов и их sha256, `_release.sig` — подпись);

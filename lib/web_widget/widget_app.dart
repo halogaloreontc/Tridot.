@@ -22,8 +22,10 @@ import '../app/widgets/warehouse_card_view.dart';
 import '../core/chats/chat_book.dart';
 import '../core/chats/chat_models.dart';
 import '../core/formatting/due_format.dart';
+import '../core/models/clarification.dart';
 import '../core/models/task.dart';
 import '../core/personas/persona.dart';
+import 'widget_clarify.dart';
 import 'widget_protocol.dart';
 import 'widget_session.dart';
 import 'widget_side.dart';
@@ -545,7 +547,7 @@ final class _WidgetChatState extends State<WidgetChat> {
           ),
         );
       }
-      final card = _card(message, i, lastWithCard);
+      final card = _card(message, i, lastWithCard) ?? _clarify(message);
       rows.add(
         MessageRow(
           key: ValueKey<String>('msg-${message.id}'),
@@ -674,6 +676,23 @@ final class _WidgetChatState extends State<WidgetChat> {
       onSettle: () => unawaited(
         session.settleCard(card, personaId: message.personaId),
       ),
+    );
+  }
+
+  /// Кнопки вопроса, пока он ждёт ответа (только в памяти: после
+  /// перезагрузки остаётся текст).
+  Widget? _clarify(ChatMessage message) {
+    final session = _session;
+    final clarification = message.clarification;
+    if (clarification == null ||
+        !identical(session.pendingClarification, clarification)) {
+      return null;
+    }
+    return WidgetClarifyButtons(
+      key: ValueKey<String>('clarify-${message.id}'),
+      clarification: clarification,
+      enabled: !session.busy,
+      onChoose: (ClarifyOption option) => unawaited(session.choose(option)),
     );
   }
 

@@ -400,3 +400,74 @@ Map<String, List<int>> collectBuild(Directory root) {
   }
   return files;
 }
+
+// ------------------------------------------------- onnxruntime-web (ADR-045)
+
+/// onnxruntime-web для модели понимания в помощнике (ADR-045, шаг 4): эта
+/// версия проверена на пакете `web` (tools/intent_model/webcheck) и лежит в
+/// сборке помощника, `web/ort/` → `ort/` архива: CSP помощника пускает
+/// скрипты и WASM только со своего адреса. Только WASM, один поток.
+const String ortWebVersion = '1.30.0';
+
+/// Архив пакета npm и его `integrity` (sha512, base64) — как в
+/// `tools/intent_model/webcheck/package-lock.json`.
+const String ortWebTarball =
+    'https://registry.npmjs.org/onnxruntime-web/-/onnxruntime-web-$ortWebVersion.tgz';
+const String ortWebTarballSha512 =
+    'q0y+JrrtukXSzsBWEMccVfqX25LRmosXHF+CaRJmg8pZClzcV7svNc4rKY3jL02Vb7QmRMDs1SigqR4CXAfKYQ==';
+
+/// Файлы onnxruntime-web в сборке (путь от `web/` и от корня архива) →
+/// (путь в пакете npm, sha256). Лицензия `ort/LICENSE.txt` лежит в
+/// репозитории: в пакете npm её нет.
+const Map<String, (String, String)> ortWebFiles = <String, (String, String)>{
+  'ort/ort.wasm.bundle.min.mjs': (
+    'package/dist/ort.wasm.bundle.min.mjs',
+    '11e64bd8ffe11bd1a2a2f0d6275fdfbbba7262f0b76b99b53d228a8a22ef3d90',
+  ),
+  'ort/ort-wasm-simd-threaded.wasm': (
+    'package/dist/ort-wasm-simd-threaded.wasm',
+    '3398c10d07d229bd91b364548e130e0e51a8e5704b88c7c083ebbeb78842dee2',
+  ),
+};
+
+/// Лицензия onnxruntime-web в сборке.
+const String ortWebLicense = 'ort/LICENSE.txt';
+
+/// Чего не хватает в файлах сборки [files] для onnxruntime-web: файл
+/// отсутствует или не та версия. Пусто — всё на месте.
+List<String> checkOrtWeb(Map<String, List<int>> files) {
+  final problems = <String>[];
+  for (final MapEntry(key: path, value: (_, sha)) in ortWebFiles.entries) {
+    final bytes = files[path];
+    if (bytes == null) {
+      problems.add('$path: нет файла');
+    } else if (sha256Hex(bytes) != sha) {
+      problems.add('$path: не та версия (sha256)');
+    }
+  }
+  if (!files.containsKey(ortWebLicense)) {
+    problems.add('$ortWebLicense: нет лицензии');
+  }
+  return problems;
+}
+
+/// Файлы onnxruntime-web из архива пакета npm [tgz]: проверка `integrity`
+/// архива и sha256 каждого файла. Не то — [FormatException].
+Map<String, Uint8List> extractOrtWeb(List<int> tgz) {
+  final digest = base64.encode(sha512.convert(tgz).bytes);
+  if (digest != ortWebTarballSha512) {
+    throw const FormatException('архив onnxruntime-web: не та sha512');
+  }
+  final tar = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(tgz));
+  final out = <String, Uint8List>{};
+  for (final MapEntry(key: path, value: (source, sha)) in ortWebFiles.entries) {
+    final file = tar.findFile(source);
+    if (file == null) throw FormatException('в архиве нет $source');
+    final bytes = file.content;
+    if (sha256Hex(bytes) != sha) {
+      throw FormatException('$source: не та sha256');
+    }
+    out[path] = bytes;
+  }
+  return out;
+}

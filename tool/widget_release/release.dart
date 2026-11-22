@@ -4,6 +4,7 @@
 //       --notes "Первая версия"
 //   dart run tool/widget_release/release.dart web --version 1.0.0
 //   dart run tool/widget_release/release.dart pubkey
+//   dart run tool/widget_release/release.dart ort [--tgz архив.tgz]
 //   dart run tool/widget_release/release.dart fingerprint [<base64>]
 //   dart run tool/widget_release/release.dart verify \
 //       build/widget_release/1.0.0/latest.json --pubkey <base64>
@@ -39,6 +40,8 @@ Future<void> main(List<String> args) async {
         await _web(_options(args.skip(1)));
       case 'pubkey':
         stdout.writeln(await withSigningKey(publicKeyBase64));
+      case 'ort':
+        await ensureOrtWeb(_options(args.skip(1))['tgz']);
       case 'fingerprint':
         await _fingerprint(args.skip(1).toList());
       case 'verify':
@@ -62,6 +65,10 @@ const String _usage = '''
   web     --version 1.0.0
           только flutter build web (ключ не нужен); потом build --skip-build
   pubkey  открытый ключ (base64, 32 байта) для склада
+  ort     [--tgz onnxruntime-web-$ortWebVersion.tgz]
+          onnxruntime-web в web/ort/ (модель понимания, ADR-045): скачать
+          из npm и проверить sha512 архива и sha256 файлов; build и web
+          делают это сами
   fingerprint [<base64>]
           отпечаток открытого ключа, как на складе: «21fe 31df a154 a261»;
           без аргумента — ключа подписи
@@ -163,6 +170,13 @@ Future<void> _build(Map<String, String> options) async {
   if (!web.existsSync()) throw const _Fail('Нет build/web — соберите заново');
   if (checkBuildStamp(web, version) case final String why) throw _Fail(why);
   final files = collectBuild(web);
+  final ort = checkOrtWeb(files);
+  if (ort.isNotEmpty) {
+    throw _Fail(
+      'onnxruntime-web в сборке не тот: ${ort.join('; ')} — соберите '
+      'без --skip-build',
+    );
+  }
   final total = files.values.fold<int>(0, (int s, List<int> b) => s + b.length);
   stdout.writeln(
     'Файлов: ${files.length}, ${(total / 1048576).toStringAsFixed(1)} МБ',
@@ -228,6 +242,7 @@ Future<void> _web(Map<String, String> options) async {
 /// без ключа подписи ([buildEnvironment]): сборка запускает чужой код
 /// (хуки пакетов, плагины), ему ключ ни к чему.
 Future<void> _flutterBuild(String version) async {
+  await ensureOrtWeb();
   stdout.writeln('Сборка: flutter build web …');
   final build = await Process.start(
     'flutter',
@@ -249,6 +264,60 @@ Future<void> _flutterBuild(String version) async {
   );
   if (await build.exitCode != 0) throw const _Fail('flutter build web упал');
   writeBuildStamp(Directory('build/web'), version);
+}
+
+/// onnxruntime-web в `web/ort/` ([ortWebFiles]): уже на месте и те же
+/// sha256 — ничего не делает; иначе архив пакета npm — из [tgz] или
+/// скачивается — проверяется ([extractOrtWeb]) и раскладывается.
+Future<void> ensureOrtWeb([String? tgz]) async {
+  bool present() => ortWebFiles.entries.every((e) {
+        final file = File('web/${e.key}');
+        return file.existsSync() &&
+            sha256Hex(file.readAsBytesSync()) == e.value.$2;
+      });
+  if (tgz == null && present()) return;
+  final List<int> bytes;
+  if (tgz != null) {
+    bytes = File(tgz).readAsBytesSync();
+  } else {
+    stdout.writeln('onnxruntime-web $ortWebVersion: $ortWebTarball');
+    bytes = await _download(Uri.parse(ortWebTarball));
+  }
+  final Map<String, Uint8List> files;
+  try {
+    files = extractOrtWeb(bytes);
+  } on FormatException catch (error) {
+    throw _Fail('onnxruntime-web: ${error.message}');
+  }
+  for (final MapEntry(:key, :value) in files.entries) {
+    final file = File('web/$key');
+    file.parent.createSync(recursive: true);
+    file.writeAsBytesSync(value, flush: true);
+  }
+  stdout.writeln('onnxruntime-web $ortWebVersion — в web/ort/');
+}
+
+Future<List<int>> _download(Uri uri) async {
+  final client = HttpClient()
+    ..findProxy = HttpClient.findProxyFromEnvironment
+    ..connectionTimeout = const Duration(seconds: 30);
+  try {
+    final request = await client.getUrl(uri);
+    final response = await request.close();
+    if (response.statusCode != 200) {
+      throw _Fail('$uri: ответ ${response.statusCode}');
+    }
+    final out = BytesBuilder(copy: false);
+    await for (final chunk in response) {
+      out.add(chunk);
+      if (out.length > 64 * 1024 * 1024) throw _Fail('$uri: слишком большой');
+    }
+    return out.takeBytes();
+  } on SocketException catch (error) {
+    throw _Fail('$uri: ${error.message}');
+  } finally {
+    client.close(force: true);
+  }
 }
 
 /// Проверка выпуска открытым ключом — как это делает склад (через

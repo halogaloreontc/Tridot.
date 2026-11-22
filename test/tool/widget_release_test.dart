@@ -418,4 +418,55 @@ void main() {
     ]);
     expect(php.stdout, 'ok');
   });
+
+  group('onnxruntime-web в сборке (ADR-045)', () {
+    test('имена проходят проверку склада и не вырезаются', () {
+      for (final path in <String>[...ortWebFiles.keys, ortWebLicense]) {
+        expect(checkEntryName(path), isNull, reason: path);
+        expect(isPruned(path), isFalse, reason: path);
+      }
+    });
+
+    test('нет файла, не та версия, нет лицензии — отказ', () {
+      expect(checkOrtWeb(sample()), hasLength(ortWebFiles.length + 1));
+      final wrong = <String, List<int>>{
+        ...sample(),
+        for (final path in ortWebFiles.keys) path: utf8.encode('не тот'),
+        ortWebLicense: utf8.encode('MIT'),
+      };
+      expect(
+        checkOrtWeb(wrong),
+        everyElement(contains('не та версия')),
+      );
+    });
+
+    test('архив npm с другой sha512 не принимается', () {
+      expect(
+        () => extractOrtWeb(utf8.encode('не архив')),
+        throwsA(
+          isA<FormatException>()
+              .having((e) => e.message, 'message', contains('sha512')),
+        ),
+      );
+    });
+
+    final local = File('web/ort/ort-wasm-simd-threaded.wasm');
+    test(
+      'разложенный web/ort/ — те же sha256 и в пределах склада',
+      () {
+        final files = <String, List<int>>{
+          for (final path in <String>[...ortWebFiles.keys, ortWebLicense])
+            path: File('web/$path').readAsBytesSync(),
+        };
+        expect(checkOrtWeb(files), isEmpty);
+        final total =
+            files.values.fold<int>(0, (int s, List<int> b) => s + b.length);
+        // Сборка помощника без модели — около 25 МБ, предел склада — 80.
+        expect(total, lessThan(20 * 1024 * 1024));
+      },
+      skip: local.existsSync()
+          ? false
+          : 'web/ort/ не разложен (release.dart ort)',
+    );
+  });
 }

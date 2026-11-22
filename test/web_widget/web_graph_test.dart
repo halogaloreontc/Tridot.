@@ -44,7 +44,25 @@ const List<String> ioFree = <String>[
   'lib/core/intent/intent_memory.dart',
   'lib/core/intent/intent_pack.dart',
   'lib/core/intent/intent_tokenizer.dart',
+  'lib/core/intent/intent_http.dart',
 ];
+
+/// Только браузер (`package:web`, `dart:js_interop`): эти файлы
+/// импортирует лишь точка входа помощника `main.dart`, ни тесты на VM, ни
+/// приложение. `intent_web.dart` — onnxruntime-web модели понимания
+/// (ADR-045, шаг 4).
+const Set<String> browserOnly = <String>{
+  'lib/web_widget/browser_host.dart',
+  'lib/web_widget/fetch_transport.dart',
+  'lib/web_widget/intent_web.dart',
+};
+
+bool _browserImport(String dep) =>
+    dep == 'dart:js_interop' ||
+    dep == 'dart:js_interop_unsafe' ||
+    dep == 'dart:html' ||
+    dep == 'dart:js_util' ||
+    dep.startsWith('package:web/');
 
 final RegExp _import = RegExp(
   r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''',
@@ -117,11 +135,48 @@ void main() {
           .containsKey('lib/core/connectors/manifest/connection_store_io.dart'),
       isFalse,
     );
+    expect(files.containsKey('lib/core/intent/intent_http.dart'), isTrue);
+    expect(files.containsKey('lib/web_widget/intent_web.dart'), isTrue);
     // Модель приложения и файлы пакета — не в помощнике (ADR-045).
     expect(files.containsKey('lib/core/intent/intent_io.dart'), isFalse);
     expect(
       files.keys.where((String f) => f.startsWith('lib/app/intent/')),
       isEmpty,
     );
+  });
+
+  test('браузерные файлы — только у точки входа помощника', () {
+    final browser = <String>{
+      for (final MapEntry(:key, :value) in files.entries)
+        if (value.any(_browserImport)) key,
+    };
+    expect(browser.difference(browserOnly), isEmpty);
+    // Их импортирует только main.dart помощника.
+    for (final MapEntry(:key, :value) in files.entries) {
+      if (key == 'lib/web_widget/main.dart') continue;
+      expect(value.intersection(browserOnly), isEmpty, reason: key);
+    }
+    // Ни приложение, ни тесты на VM их не тянут.
+    final app = graph('lib/main.dart');
+    expect(app.keys.toSet().intersection(browserOnly), isEmpty);
+    expect(
+      app.keys.where((String f) => f.startsWith('lib/web_widget/')),
+      isEmpty,
+    );
+    final tests = Directory('test')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((File f) => f.path.endsWith('.dart'));
+    for (final file in tests) {
+      final text = file.readAsStringSync();
+      for (final name in browserOnly) {
+        expect(
+          text.contains(name.substring('lib/'.length)) &&
+              !file.path.endsWith('web_graph_test.dart'),
+          isFalse,
+          reason: '${file.path} → $name',
+        );
+      }
+    }
   });
 }

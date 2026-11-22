@@ -25,3 +25,9 @@ test/_scratch_*
 # Сборка модели понимания: модели и архивы не коммитятся (ADR-045)
 tools/intent_model/out/
 tools/intent_model/webcheck/node_modules/
+
+# onnxruntime-web для веб-помощника: раскладывает
+# `dart run tool/widget_release/release.dart ort` (версия и sha256 —
+# tool/widget_release/release_core.dart); в репозитории — только лицензия.
+web/ort/*.mjs
+web/ort/*.wasm

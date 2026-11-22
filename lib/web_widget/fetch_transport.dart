@@ -4,6 +4,7 @@ import 'dart:js_interop';
 import 'package:web/web.dart' as web;
 
 import '../core/connectors/http_transport.dart';
+import '../core/intent/intent_http.dart';
 
 /// [HttpTransport] веб-помощника поверх `fetch` браузера (ADR-032).
 ///
@@ -12,7 +13,43 @@ import '../core/connectors/http_transport.dart';
 /// заголовке. Тайм-аут — `AbortController`: запрос действительно
 /// обрывается, а не висит в фоне. Переадресация — ошибка: ключ не уходит
 /// на чужой адрес.
-final class FetchTransport implements HttpTransport {
+///
+/// Файлы пакета модели понимания ([fetchBytes], ADR-045) — так же с
+/// `credentials: omit` и без переадресации, но с кэшем браузера
+/// (`no-cache` — сверка по ETag): 30 МБ не скачиваются при каждом открытии.
+final class FetchTransport implements HttpTransport, BytesFetcher {
+  @override
+  Future<BytesResponse> fetchBytes(
+    Uri uri, {
+    Duration timeout = const Duration(minutes: 3),
+  }) async {
+    final abort = web.AbortController();
+    final timer = Timer(timeout, () => abort.abort());
+    try {
+      final response = await web.window
+          .fetch(
+            uri.toString().toJS,
+            web.RequestInit(
+              method: 'GET',
+              credentials: 'omit',
+              cache: 'no-cache',
+              redirect: 'error',
+              signal: abort.signal,
+            ),
+          )
+          .toDart;
+      final buffer = await response.arrayBuffer().toDart;
+      return BytesResponse(response.status, buffer.toDart.asUint8List());
+    } on Object {
+      if (abort.signal.aborted) {
+        throw TimeoutException('Склад не ответил вовремя', timeout);
+      }
+      rethrow;
+    } finally {
+      timer.cancel();
+    }
+  }
+
   @override
   Future<HttpResponseData> send(HttpRequestData request) async {
     final headers = web.Headers();

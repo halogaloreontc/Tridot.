@@ -23,6 +23,10 @@ final class FakeWarehouse implements HttpTransport {
   String manifest = builtInSource();
   String? installed;
 
+  /// `assistant/intent/web/current.json` — указатель на модель понимания
+  /// (ADR-045, шаг 4); `null` — склад модель не ставил (404).
+  String? intentPointer;
+
   /// Медленная связь: каждый ответ — через столько.
   Duration delay = Duration.zero;
 
@@ -117,6 +121,12 @@ final class FakeWarehouse implements HttpTransport {
     requests.add(request);
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     final path = request.uri.path;
+    if (path.endsWith('assistant/intent/web/current.json')) {
+      final pointer = intentPointer;
+      return pointer == null
+          ? const HttpResponseData(statusCode: 404)
+          : HttpResponseData(statusCode: 200, body: pointer);
+    }
     if (path.endsWith('assistant/current.json')) {
       final v = installed;
       return v == null
