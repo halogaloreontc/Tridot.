@@ -117,6 +117,17 @@ def corpus_files(rev: str | None = None, repo: Path = config.REPO) -> Iterator[t
         yield Path(n).name, text.splitlines()
 
 
+def aug_files(names: Iterable[str]) -> Iterator[tuple[str, list[str]]]:
+    """Синтетические фразы обучения уровня (aug/<имя>.jsonl), формат корпуса."""
+    for n in names:
+        yield f"aug/{n}.jsonl", (config.AUG_DIR / f"{n}.jsonl").read_text(encoding="utf-8").splitlines()
+
+
+def train_files(augment: Iterable[str] = (), rev: str | None = None) -> list[tuple[str, list[str]]]:
+    """Корпус (рабочая копия или ревизия) и синтетика уровня из рабочей копии."""
+    return [*corpus_files(rev), *aug_files(augment)]
+
+
 def jaccard(a: set, b: set) -> float:
     return len(a & b) / len(a | b) if a and b else 0.0
 
@@ -189,12 +200,30 @@ def load_eval(name: str, connectors: Iterable[str] = ()) -> list[dict]:
         if is_private(o["text"]) or o["label"].split(":", 1)[0] in PRIVATE_CONNECTORS:
             continue
         o["set"] = name
+        o["split_key"] = o["label"]
         if conns:
             o["label"] = restrict(o["label"], conns)
             o["alt"] = sorted({restrict(a, conns) for a in o.get("alt", [])} - {o["label"]})
             o["rule_label"] = restrict(o.get("rule_label", "none"), conns)
         out.append(o)
     return out
+
+
+def split_half(evals: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Проба пополам: `cal` (подбор порога) и `test` (честная проверка).
+
+    По каждой метке фразы по порядку id — через одну: обе половины
+    одинаково покрывают команды и «не команды». Не зависит от уровня:
+    restrict меняет метки, но делит исходный порядок.
+    """
+    by: dict[str, list[int]] = {}
+    for i, e in enumerate(evals):
+        by.setdefault(e.get("split_key", e["label"]), []).append(i)
+    cal: set[int] = set()
+    for idx in by.values():
+        idx.sort(key=lambda i: evals[i]["id"])
+        cal.update(idx[0::2])
+    return [e for i, e in enumerate(evals) if i in cal], [e for i, e in enumerate(evals) if i not in cal]
 
 
 def all_eval_texts() -> list[str]:

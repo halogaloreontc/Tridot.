@@ -1,0 +1,250 @@
+{"id":"wh-001","text":"куда положили пылесос самсунг","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-002","text":"в какой ячейке утюг филипс","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"ok","rule_label":"warehouse:warehouse.where"}
+{"id":"wh-003","text":"подскажи место хранения чайника бош","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-004","text":"где у нас стоят коробки с роутерами","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"ok","rule_label":"warehouse:warehouse.where"}
+{"id":"wh-005","text":"не могу найти кофемашину делонги, где она","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-006","text":"куда убрали возврат по телевизору lg","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-007","text":"на каком стеллаже микроволновка","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-008","text":"где искать фен дайсон","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-009","text":"местоположение товара блендер редмонд","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-010","text":"куда ставили мультиварку на прошлой неделе","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-011","text":"найди где лежит электрочайник витек","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"ok","rule_label":"warehouse:warehouse.where"}
+{"id":"wh-012","text":"в каком ряду лежат наушники сони","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-013","text":"сколько штук пылесосов осталось","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"ok","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-014","text":"какой остаток по утюгам тефаль","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"ok","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-015","text":"посчитай сколько у нас мультиварок","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-016","text":"остатки по наушникам jbl глянь","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"ok","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-017","text":"много ли осталось телевизоров самсунг","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-018","text":"есть ещё в наличии кофемолки","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"ok","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-019","text":"какое количество фенов лежит","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-020","text":"хватит ли блендеров на отгрузку, сколько их","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-021","text":"сколько в остатке роутеров кинетик","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"ok","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-022","text":"сколько всего микроволновок на хранении","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"ok","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-023","text":"что лежит в ячейке а12","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-024","text":"покажи содержимое ячейки б-3","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-025","text":"что у нас в ячейке номер сорок","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-026","text":"глянь что хранится на месте c5","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-027","text":"открой ячейку д7, что там","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-028","text":"чем занята ячейка 14","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-029","text":"что на полке а-01","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-030","text":"какой товар в ячейке к2","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-031","text":"что внутри ячейки е-15","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-032","text":"посмотри ячейку двадцать один","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-033","text":"почём пылесос дайсон","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"ok","rule_label":"warehouse:warehouse.price"}
+{"id":"wh-034","text":"какая цена у утюга браун","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"ok","rule_label":"warehouse:warehouse.price"}
+{"id":"wh-035","text":"сколько стоит чайник бош","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"ok","rule_label":"warehouse:warehouse.price"}
+{"id":"wh-036","text":"цену мультиварки подскажи","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-037","text":"стоимость телевизора lg 43 дюйма","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-038","text":"за сколько продаём фен ровента","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-039","text":"какая стоимость у кофемашины","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-040","text":"по чём нынче наушники сони","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"ok","rule_label":"warehouse:warehouse.price"}
+{"id":"wh-041","text":"сколько рублей стоит блендер","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-042","text":"узнай цену микроволновки","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-043","text":"сегодня что-нибудь привозили","label":"warehouse:warehouse.today","alt":[],"family":"today","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-044","text":"список приходов на текущий день","label":"warehouse:warehouse.today","alt":[],"family":"today","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-045","text":"что приняли за смену сегодня","label":"warehouse:warehouse.today","alt":[],"family":"today","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-046","text":"были ли сегодня поступления","label":"warehouse:warehouse.today","alt":[],"family":"today","rule_outcome":"ok","rule_label":"warehouse:warehouse.today"}
+{"id":"wh-047","text":"сколько приходов сегодня оформили","label":"warehouse:warehouse.today","alt":[],"family":"today","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-048","text":"сегодняшний приход покажи","label":"warehouse:warehouse.today","alt":[],"family":"today","rule_outcome":"ok","rule_label":"warehouse:warehouse.today"}
+{"id":"wh-049","text":"что поступило с утра","label":"warehouse:warehouse.today","alt":[],"family":"today","rule_outcome":"ok","rule_label":"warehouse:warehouse.today"}
+{"id":"wh-050","text":"вчерашние приходы покажи","label":"warehouse:warehouse.yesterday","alt":[],"family":"yesterday","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-051","text":"какие поступления были вчера","label":"warehouse:warehouse.yesterday","alt":[],"family":"yesterday","rule_outcome":"ok","rule_label":"warehouse:warehouse.yesterday"}
+{"id":"wh-052","text":"что принимали вчера днём","label":"warehouse:warehouse.yesterday","alt":[],"family":"yesterday","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-053","text":"список приходов за вчерашний день","label":"warehouse:warehouse.yesterday","alt":[],"family":"yesterday","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-054","text":"вчера что привозили на склад","label":"warehouse:warehouse.yesterday","alt":[],"family":"yesterday","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-055","text":"покажи приход за вчера","label":"warehouse:warehouse.yesterday","alt":[],"family":"yesterday","rule_outcome":"ok","rule_label":"warehouse:warehouse.yesterday"}
+{"id":"wh-056","text":"что оформили вчера по приёмке","label":"warehouse:warehouse.yesterday","alt":[],"family":"yesterday","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-057","text":"недельный отчёт по приходам","label":"warehouse:warehouse.week","alt":[],"family":"week","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-058","text":"какие приходы были на неделе","label":"warehouse:warehouse.week","alt":[],"family":"week","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-059","text":"сколько всего приняли за неделю","label":"warehouse:warehouse.week","alt":[],"family":"week","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-060","text":"список приёмок за неделю","label":"warehouse:warehouse.week","alt":[],"family":"week","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-061","text":"что привозили с понедельника","label":"warehouse:warehouse.week","alt":[],"family":"week","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-062","text":"итоги приёмки за неделю","label":"warehouse:warehouse.week","alt":[],"family":"week","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-063","text":"где не сделали снимки товара","label":"warehouse:warehouse.nophoto","alt":[],"family":"nophoto","rule_outcome":"misroute","rule_label":"warehouse:warehouse.where"}
+{"id":"wh-064","text":"покажи приёмки без фотографий","label":"warehouse:warehouse.nophoto","alt":[],"family":"nophoto","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-065","text":"что осталось не сфотографированным","label":"warehouse:warehouse.nophoto","alt":[],"family":"nophoto","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-066","text":"найди поступления без снимков","label":"warehouse:warehouse.nophoto","alt":[],"family":"nophoto","rule_outcome":"misroute","rule_label":"warehouse:warehouse.where"}
+{"id":"wh-067","text":"по каким приходам забыли фото","label":"warehouse:warehouse.nophoto","alt":[],"family":"nophoto","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-068","text":"список приходов без фото","label":"warehouse:warehouse.nophoto","alt":[],"family":"nophoto","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-069","text":"что ещё надо сфоткать","label":"warehouse:warehouse.nophoto","alt":[],"family":"nophoto","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-070","text":"какие приходы ещё не проведены","label":"warehouse:warehouse.unposted","alt":[],"family":"unposted","rule_outcome":"ok","rule_label":"warehouse:warehouse.unposted"}
+{"id":"wh-071","text":"покажи непроведённые поступления","label":"warehouse:warehouse.unposted","alt":[],"family":"unposted","rule_outcome":"ok","rule_label":"warehouse:warehouse.unposted"}
+{"id":"wh-072","text":"что висит не проведённым в 1с","label":"warehouse:warehouse.unposted","alt":[],"family":"unposted","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-073","text":"остались ли непроведённые приходы","label":"warehouse:warehouse.unposted","alt":[],"family":"unposted","rule_outcome":"ok","rule_label":"warehouse:warehouse.unposted"}
+{"id":"wh-074","text":"список приходов без проведения","label":"warehouse:warehouse.unposted","alt":[],"family":"unposted","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-075","text":"какие приёмки ждут проведения","label":"warehouse:warehouse.unposted","alt":[],"family":"unposted","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-076","text":"есть хвосты по проведению","label":"warehouse:warehouse.unposted","alt":[],"family":"unposted","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-077","text":"перемести пылесос в ячейку б4","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"misroute","rule_label":"tasks:task.create"}
+{"id":"wh-078","text":"переложи утюг из а1 в а3","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-079","text":"перенеси чайник на место c2","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"misroute","rule_label":"tasks:task.reschedule"}
+{"id":"wh-080","text":"убери фен в ячейку д10","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-081","text":"переставь коробку с роутером в к5","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-082","text":"передвинь мультиварку в ячейку двенадцать","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"misroute","rule_label":"tasks:task.reschedule"}
+{"id":"wh-083","text":"положи телевизор в ячейку е1","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-084","text":"перекинь наушники в а-07","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-085","text":"перемести блендер с полки б2 на полку б6","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"misroute","rule_label":"tasks:task.create"}
+{"id":"wh-086","text":"отправь кофемашину в ячейку 33","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-087","text":"проводи поступление номер 15","label":"warehouse:warehouse.act.post","alt":[],"family":"act.post","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-088","text":"отправь приход в 1с","label":"warehouse:warehouse.act.post","alt":[],"family":"act.post","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-089","text":"проведи приёмку по реестру 204","label":"warehouse:warehouse.act.post","alt":[],"family":"act.post","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-090","text":"надо провести вчерашний приход","label":"warehouse:warehouse.act.post","alt":[],"family":"act.post","rule_outcome":"misroute","rule_label":"tasks:task.create"}
+{"id":"wh-091","text":"закрой приход в учётке","label":"warehouse:warehouse.act.post","alt":[],"family":"act.post","rule_outcome":"misroute","rule_label":"tasks:task.complete"}
+{"id":"wh-092","text":"проведи поступление от озона","label":"warehouse:warehouse.act.post","alt":[],"family":"act.post","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-093","text":"кто я на складе","label":"warehouse:warehouse.me","alt":[],"family":"me","rule_outcome":"ok","rule_label":"warehouse:warehouse.me"}
+{"id":"wh-094","text":"мои права доступа на складе","label":"warehouse:warehouse.me","alt":[],"family":"me","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-095","text":"я кладовщик или старший","label":"warehouse:warehouse.me","alt":[],"family":"me","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-096","text":"что мне разрешено","label":"warehouse:warehouse.me","alt":[],"family":"me","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-097","text":"покажи мою должность в складе","label":"warehouse:warehouse.me","alt":[],"family":"me","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-098","text":"что можно спросить про склад","label":"warehouse:warehouse.help","alt":[],"family":"help","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-099","text":"помощь по складу","label":"warehouse:warehouse.help","alt":[],"family":"help","rule_outcome":"ok","rule_label":"warehouse:warehouse.help"}
+{"id":"wh-100","text":"какие команды есть для склада","label":"warehouse:warehouse.help","alt":[],"family":"help","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-101","text":"чем поможешь по складу","label":"warehouse:warehouse.help","alt":[],"family":"help","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-102","text":"как с тобой работать на складе","label":"warehouse:warehouse.help","alt":[],"family":"help","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-103","text":"подскажи складские команды","label":"warehouse:warehouse.help","alt":[],"family":"help","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-104","text":"сколько будет 12 умножить на 48","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-105","text":"посчитай 350 плюс 275","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-106","text":"умножь 24 на 15","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-107","text":"2400 раздели на 6","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-108","text":"сколько будет восемь коробок по двенадцать штук","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-109","text":"посчитай 15 процентов от 3200","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-110","text":"1250 минус 380","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-111","text":"сложи 45 и 67 и 120","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-112","text":"сколько это 36 на 4","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-113","text":"сто двадцать на три сколько","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-114","text":"7 палет по 40 коробок сколько всего","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-115","text":"посчитай 18 умножить на 22","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-116","text":"сколько будет 1000 минус 15 процентов","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-117","text":"500 делить на 4","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-118","text":"посчитай сумму 230 плюс 410 плюс 95","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-119","text":"сколько 3 в кубе","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-120","text":"посчитай 75 разделить на 3","label":"calc:calc.evaluate","alt":[],"family":"calc","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-121","text":"всё, ухожу со смены, пока","label":"talk:talk.bye","alt":[],"family":"talk","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-122","text":"развесели меня, смена длинная","label":"talk:talk.joke","alt":[],"family":"talk","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-123","text":"чем ты можешь помочь","label":"talk:talk.capabilities","alt":[],"family":"talk","rule_outcome":"ok","rule_label":"talk:talk.capabilities"}
+{"id":"wh-124","text":"сколько дней в високосном году","label":"talk:talk.question","alt":[],"family":"talk","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-125","text":"столица казахстана","label":"talk:talk.question","alt":[],"family":"talk","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-126","text":"молодец","label":"talk:talk.reaction","alt":[],"family":"talk","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-127","text":"отлично ответил","label":"talk:talk.reaction","alt":[],"family":"talk","rule_outcome":"misroute","rule_label":"tasks:task.complete"}
+{"id":"wh-128","text":"бесполезный помощник","label":"talk:talk.rude","alt":[],"family":"talk","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-129","text":"сколько мне ещё до конца смены","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-130","text":"сколько лет моему сменщику","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-131","text":"остаток отпуска хочу посчитать у кадров","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-132","text":"ячейка в таблице экселя съехала","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"tasks:task.complete"}
+{"id":"wh-133","text":"приход зарплаты когда будет","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-134","text":"остаток на карте маленький, грустно","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-135","text":"приход весны чувствуется","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-136","text":"ячейка памяти в компе сгорела","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"tasks:task.complete"}
+{"id":"wh-137","text":"сколько стоит обед в столовой","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.price"}
+{"id":"wh-138","text":"где лежит мой телефон","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-139","text":"где моя куртка","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-140","text":"в какой ячейке камеры хранения моя сумка на вокзале","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-141","text":"остаток торта в холодильнике мой","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-142","text":"приход гостей вечером, надо прибраться","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-143","text":"сколько у меня детей спрашивает новенький, смешно","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-144","text":"у нас на складе холодно","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-145","text":"водитель опять опоздал","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"tasks:task.complete"}
+{"id":"wh-146","text":"погрузчик сломался","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-147","text":"фото кота покажу потом","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-148","text":"проведи меня до проходной","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-149","text":"переложи ответственность на начальника","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-150","text":"перемести встречу ну это я не тебе","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-151","text":"сколько волка ни корми","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-152","text":"цена вопроса не важна","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.price"}
+{"id":"wh-153","text":"почём фунт лиха","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.price"}
+{"id":"wh-154","text":"кто я такой чтобы спорить","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-155","text":"мне можно в отпуск в июле, как думаешь","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-156","text":"что пришло в голову, забыл","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-157","text":"вчера был тяжёлый день","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-158","text":"неделя выдалась длинная","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-159","text":"ячейки на схеме красивые","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-160","text":"остаток дня проведу дома","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-161","text":"сколько ни говори, не слушают","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-162","text":"где взять силы на понедельник","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-163","text":"приходы и уходы, вся жизнь","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-164","text":"давай без фото обойдёмся на корпоративе","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-165","text":"кто последний в очереди на обед","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-166","text":"проведённое время не вернёшь","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-167","text":"надо купить скотч домой","label":"none","alt":["tasks:task.create"],"family":"none","rule_outcome":"misroute","rule_label":"tasks:task.create"}
+{"id":"wh-168","text":"куртку оставил в раздевалке","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-169","text":"сколько процентов людей любят понедельники","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-170","text":"а ты видел новый стеллаж","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-171","text":"фура стоит у ворот уже час","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-172","text":"коробки тяжёлые сегодня","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-173","text":"у меня болит спина от коробок","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-174","text":"ключ от раздевалки потерял","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-175","text":"ячейку нам выделили неудобную, жаль","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-176","text":"цены в магазине растут","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-177","text":"сколько стоит жизнь","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.price"}
+{"id":"wh-178","text":"пылесос дома сломался, жена ругается","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-179","text":"остаток зарплаты на еду","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-180","text":"кто сегодня дежурит на воротах","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-181","text":"сделай потише","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-182","text":"хм","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-183","text":"ладно","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.reaction"}
+{"id":"wh-184","text":"ну такое","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-185","text":"слушай, а пароварку куда задвинули","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-186","text":"мне бы найти где хранится обогреватель","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-187","text":"кто знает где стоит возврат от вайлдберриз по миксеру","label":"warehouse:warehouse.where","alt":[],"family":"where","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-188","text":"остаток по вентиляторам какой сейчас","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"ok","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-189","text":"сколько штук осталось обогревателей после отгрузки","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"ok","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-190","text":"чайников бош ещё много на хранении?","label":"warehouse:warehouse.count","alt":[],"family":"count","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-191","text":"ячейка м3 что в ней","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-192","text":"проверь что сейчас в ячейке а-22 лежит","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-193","text":"содержимое места хранения ж4","label":"warehouse:warehouse.cell","alt":[],"family":"cell","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-194","text":"во сколько оценён пылесос в приходе","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-195","text":"а цена на обогреватель какая стоит","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"ok","rule_label":"warehouse:warehouse.price"}
+{"id":"wh-196","text":"сколько денег стоит вентилятор поларис","label":"warehouse:warehouse.price","alt":[],"family":"price","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-197","text":"чё нам сегодня навезли","label":"warehouse:warehouse.today","alt":[],"family":"today","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-198","text":"покажи что за сегодня оформили на приёмке","label":"warehouse:warehouse.today","alt":[],"family":"today","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-199","text":"какие реестры приняли сегодня","label":"warehouse:warehouse.today","alt":[],"family":"today","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-200","text":"новенькое что-то сегодня поступало?","label":"warehouse:warehouse.today","alt":[],"family":"today","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-201","text":"а вчера что было по приёмке","label":"warehouse:warehouse.yesterday","alt":[],"family":"yesterday","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-202","text":"покажи реестры за вчера","label":"warehouse:warehouse.yesterday","alt":[],"family":"yesterday","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-203","text":"вчерашние поступления какие были","label":"warehouse:warehouse.yesterday","alt":[],"family":"yesterday","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-204","text":"что за вчера оприходовали","label":"warehouse:warehouse.yesterday","alt":[],"family":"yesterday","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-205","text":"что было по приходам за семь дней","label":"warehouse:warehouse.week","alt":[],"family":"week","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-206","text":"приёмка за неделю какая была","label":"warehouse:warehouse.week","alt":[],"family":"week","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-207","text":"покажи что поступило на этой неделе","label":"warehouse:warehouse.week","alt":[],"family":"week","rule_outcome":"misroute","rule_label":"tasks:task.complete"}
+{"id":"wh-208","text":"где снимков не хватает по приходам","label":"warehouse:warehouse.nophoto","alt":[],"family":"nophoto","rule_outcome":"misroute","rule_label":"warehouse:warehouse.where"}
+{"id":"wh-209","text":"приходы где фотки не загружены","label":"warehouse:warehouse.nophoto","alt":[],"family":"nophoto","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-210","text":"покажи что без фото висит","label":"warehouse:warehouse.nophoto","alt":[],"family":"nophoto","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-211","text":"какие поступления не ушли в 1с","label":"warehouse:warehouse.unposted","alt":[],"family":"unposted","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-212","text":"покажи что не проведено по приходам","label":"warehouse:warehouse.unposted","alt":[],"family":"unposted","rule_outcome":"ok","rule_label":"warehouse:warehouse.unposted"}
+{"id":"wh-213","text":"непроведёнка какая осталась","label":"warehouse:warehouse.unposted","alt":[],"family":"unposted","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-214","text":"закинь пароварку в ячейку м1","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-215","text":"перемести обогреватель из ж2 в ж8","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"misroute","rule_label":"tasks:task.create"}
+{"id":"wh-216","text":"переложи миксер на полку к9","label":"warehouse:warehouse.act.move","alt":[],"family":"act.move","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-217","text":"проведи в 1с поступление от вайлдберриз","label":"warehouse:warehouse.act.post","alt":[],"family":"act.post","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-218","text":"оформи проведение прихода номер 31","label":"warehouse:warehouse.act.post","alt":[],"family":"act.post","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-219","text":"давай проведём приход 18","label":"warehouse:warehouse.act.post","alt":[],"family":"act.post","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-220","text":"какие у меня полномочия на складе","label":"warehouse:warehouse.me","alt":[],"family":"me","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-221","text":"я под своей учёткой сейчас?","label":"warehouse:warehouse.me","alt":[],"family":"me","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-222","text":"что ты можешь по складу подсказать","label":"warehouse:warehouse.help","alt":[],"family":"help","rule_outcome":"none","rule_label":"talk:talk.capabilities"}
+{"id":"wh-223","text":"покажи что умеешь со складом","label":"warehouse:warehouse.help","alt":[],"family":"help","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-224","text":"какие вопросы про склад понимаешь","label":"warehouse:warehouse.help","alt":[],"family":"help","rule_outcome":"none","rule_label":"talk:talk.question"}
+{"id":"wh-225","text":"сколько будет 48 коробок по 6 штук","label":"calc:calc.evaluate","alt":[],"family":"evaluate","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-226","text":"прибавь 320 к 1480","label":"calc:calc.evaluate","alt":[],"family":"evaluate","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-227","text":"вычти из 900 сто сорок","label":"calc:calc.evaluate","alt":[],"family":"evaluate","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-228","text":"посчитай 13 на 27","label":"calc:calc.evaluate","alt":[],"family":"evaluate","rule_outcome":"ok","rule_label":"calc:calc.evaluate"}
+{"id":"wh-229","text":"приветики","label":"talk:talk.greet","alt":[],"family":"greet","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-230","text":"здравствуй, помощник","label":"talk:talk.greet","alt":[],"family":"greet","rule_outcome":"ok","rule_label":"talk:talk.greet"}
+{"id":"wh-231","text":"счастливо, до встречи","label":"talk:talk.bye","alt":[],"family":"bye","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-232","text":"спасибо, помог","label":"talk:talk.thanks","alt":[],"family":"thanks","rule_outcome":"ok","rule_label":"talk:talk.thanks"}
+{"id":"wh-233","text":"анекдот про кладовщика есть?","label":"talk:talk.joke","alt":[],"family":"joke","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-234","text":"а с кем я говорю","label":"talk:talk.whoAreYou","alt":[],"family":"whoAreYou","rule_outcome":"ok","rule_label":"talk:talk.whoAreYou"}
+{"id":"wh-235","text":"ты вообще что за программа","label":"talk:talk.whoAreYou","alt":[],"family":"whoAreYou","rule_outcome":"none","rule_label":"none"}
+{"id":"wh-236","text":"сколько у нас в бригаде человек сегодня, не знаю","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-237","text":"приход фуры задерживается, водитель звонил","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"tasks:task.complete"}
+{"id":"wh-238","text":"остаток смены проведу на погрузке","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}
+{"id":"wh-239","text":"ячейку под личные вещи дадут ли","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-240","text":"цена у бензина опять выросла","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.price"}
+{"id":"wh-241","text":"где-то тут была моя кружка","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-242","text":"вчера приход весь разгрузили руками, устал","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-243","text":"сколько можно таскать эти коробки","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-244","text":"фото с корпоратива скинь","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-245","text":"кто я без кофе утром","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"talk:talk.question"}
+{"id":"wh-246","text":"неделя пролетела незаметно","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-247","text":"проведи рукой по полке, пыльно","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-248","text":"сколько стоит такси до дома","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.price"}
+{"id":"wh-249","text":"у сменщика сегодня день рождения","label":"none","alt":[],"family":"none","rule_outcome":"ok","rule_label":"none"}
+{"id":"wh-250","text":"остаток краски на складе списали давно, забей","label":"none","alt":[],"family":"none","rule_outcome":"misroute","rule_label":"warehouse:warehouse.count"}

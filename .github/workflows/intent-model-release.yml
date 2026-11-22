@@ -6,8 +6,10 @@
 # честные пробы (модель на корпусе до разбора каждой пробы, порог — на int8)
 # и модель на всём корпусе, параллельно. Потом порог, индекс, проверка
 # бюджета ошибок (не уложились — выпуска нет), архивы light, accurate и web
-# (веб-помощник склада: модель «Лёгкой», только навыки склада, калькулятора и
-# беседы; проверяется в onnxruntime-web). Выпуск intent-v<версия> и
+# (веб-помощник склада: своя модель на основе «Лёгкой» со складскими
+# перефразами, только навыки склада, калькулятора и беседы, порог — ещё и по
+# половине складской пробы, другая половина — честная проверка;
+# проверяется в onnxruntime-web). Выпуск intent-v<версия> и
 # постоянный предвыпуск intent-latest: сначала архивы, потом latest.json —
 # приложение не увидит версию без архива. Подробно: tools/intent_model/README.md.
 #
@@ -94,6 +96,12 @@ jobs:
       matrix:
         tier: [light, accurate]
         set: [fresh, held2, held3]
+        # web — своя модель на основе «Лёгкой» и своя складская проба.
+        include:
+          - {tier: web, set: fresh}
+          - {tier: web, set: held2}
+          - {tier: web, set: held3}
+          - {tier: web, set: warehouse}
     steps:
       # Пробы проверяются на корпусе до своего разбора — нужна вся история.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -132,7 +140,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        tier: [light, accurate]
+        tier: [light, accurate, web]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -196,9 +204,11 @@ jobs:
           DL: ${{ runner.temp }}/dl
         run: |
           set -euo pipefail
-          for tier in light accurate; do
+          for tier in light accurate web; do
             mkdir -p "$OUT/$tier/calib" "$OUT/$tier/model"
-            for set in fresh held2 held3; do
+            sets="fresh held2 held3"
+            [ "$tier" = web ] && sets="$sets warehouse"
+            for set in $sets; do
               cp "$DL/calib-$tier-$set/$set.npz" "$OUT/$tier/calib/"
             done
             cp -r "$DL/model-$tier/." "$OUT/$tier/model/"
@@ -226,7 +236,7 @@ jobs:
           for tier in light accurate web; do
             f="$OUT/$tier/metrics.json"
             [[ -f "$f" ]] || continue
-            jq -r --arg t "$tier" '"### \($t)\n\n- порог \(.threshold), в бюджете: \(.ok)\n- честно (все пробы): верных подсказок \(.honest.all.catch) %, неверных \(.honest.all.wrong) % (из подсказок \(.honest.all.wrong_of_suggested) %), ложные тревоги \(.honest.all.false_alarm) %\n- задержка: \(.latency_ms["1_thread"].median) мс\n"' "$f" >> "$GITHUB_STEP_SUMMARY"
+            jq -r --arg t "$tier" '"### \($t)\n\n- порог \(.threshold), в бюджете: \(.ok)\n- честно (все пробы): верных подсказок \(.honest.all.catch) %, неверных \(.honest.all.wrong) % (из подсказок \(.honest.all.wrong_of_suggested) %), ложные тревоги \(.honest.all.false_alarm) %\n- задержка: \(.latency_ms["1_thread"].median) мс\n" + (if .honest["warehouse.test"] then "- отложенная половина складской пробы: верных \(.honest["warehouse.test"].catch) %, неверных из подсказок \(.honest["warehouse.test"].wrong_of_suggested) %, ложные тревоги \(.honest["warehouse.test"].false_alarm) %\n" else "" end)' "$f" >> "$GITHUB_STEP_SUMMARY"
           done
 
       - name: Выпуск в GitHub
@@ -247,7 +257,7 @@ jobs:
           {
             echo "Модель понимания $VERSION: запасной слой «Связного» (ADR-045)."
             echo
-            echo 'Уровни: light — «Лёгкая» (cointegrated/rubert-tiny2, MIT), accurate — «Точная» (deepvk/USER-base, Apache-2.0), web — веб-помощник склада (модель «Лёгкой», навыки склада, калькулятора и беседы).'
+            echo 'Уровни: light — «Лёгкая» (cointegrated/rubert-tiny2, MIT), accurate — «Точная» (deepvk/USER-base, Apache-2.0), web — веб-помощник склада (основа «Лёгкой», дообучена со складскими перефразами; навыки склада, калькулятора и беседы).'
             echo
             echo 'Приложение берёт обновления из intent-latest само; архив проверяется по sha256 из latest.json и manifest.json.'
           } > "$RUNNER_TEMP/notes.md"

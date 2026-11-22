@@ -12,6 +12,7 @@ from pathlib import Path
 PKG = Path(__file__).resolve().parent
 REPO = PKG.parent.parent
 EVAL_DIR = PKG / "eval"
+AUG_DIR = PKG / "aug"
 LABELS_YAML = PKG / "labels.yaml"
 OUT = Path(os.environ.get("INTENT_MODEL_OUT", PKG / "out"))
 
@@ -47,6 +48,12 @@ DEV_SET = "fresh"
 # (lib/web_widget/widget_session.dart: описание склада, калькулятор, беседа).
 WEB_CONNECTORS = ("warehouse", "calc", "talk")
 
+# Складская проба веб-помощника (eval/warehouse.jsonl): речь кладовщика по
+# командам склада, калькулятор, беседа и «не команды» со словами-приманками.
+# Делится пополам (data.split_half): половина `cal` — в подбор порога веба
+# вместе с fresh/held2/held3, половина `test` — только честная проверка.
+WEB_SET = "warehouse"
+
 
 @dataclass(frozen=True)
 class Tier:
@@ -63,6 +70,12 @@ class Tier:
     # индекс — только по своим меткам (остальные становятся «none»).
     model_from: str = ""
     connectors: tuple[str, ...] = field(default_factory=tuple)
+    # Свои пробы уровня сверх EVAL_SETS (их holdout — на модели source).
+    extra_sets: tuple[str, ...] = field(default_factory=tuple)
+    # Уровень со своей моделью на основе другого: та же основа и обучение.
+    base_from: str = ""
+    # Дополнительные синтетические фразы обучения (aug/<имя>.jsonl).
+    augment: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def source(self) -> str:
@@ -98,8 +111,12 @@ TIERS: dict[str, Tier] = {
     "web": Tier(
         name="web",
         title="Веб-помощник",
-        model_from="light",
+        # Своя модель на основе «Лёгкой» (тот же размер): корпус и
+        # синтетические перефразы команд склада (aug/warehouse.jsonl).
+        base_from="light",
         connectors=WEB_CONNECTORS,
+        extra_sets=(WEB_SET,),
+        augment=(WEB_SET,),
     ),
 }
 
@@ -108,8 +125,8 @@ def tier(name: str) -> Tier:
     if name not in TIERS:
         raise SystemExit(f"Неизвестный уровень {name!r}: {', '.join(TIERS)}")
     t = TIERS[name]
-    if t.model_from:
-        base = TIERS[t.model_from]
+    if t.model_from or t.base_from:
+        base = TIERS[t.model_from or t.base_from]
         return Tier(
             name=t.name,
             title=t.title,
@@ -122,8 +139,18 @@ def tier(name: str) -> Tier:
             per_channel=base.per_channel,
             model_from=t.model_from,
             connectors=t.connectors,
+            extra_sets=t.extra_sets,
+            base_from=t.base_from,
+            augment=t.augment,
         )
     return t
+
+
+def holdout_sets(source: str) -> tuple[str, ...]:
+    """Пробы, которые собирает holdout уровня source: общие и свои у тех,
+    кто берёт его модель (web → ещё warehouse)."""
+    extra = [s for t in TIERS.values() if (t.model_from or t.name) == source for s in t.extra_sets]
+    return EVAL_SETS + tuple(dict.fromkeys(extra))
 
 
 def tier_dir(name: str) -> Path:
