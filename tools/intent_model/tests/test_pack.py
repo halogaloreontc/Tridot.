@@ -66,8 +66,9 @@ def test_pack_manifest_and_latest(tmp_path):
     assert light["threshold"] == 0.9
 
 
-def test_web_tier_has_light_model_and_own_connectors():
+def test_web_tier_has_light_base_and_own_connectors():
     web = config.tier("web")
     assert web.base_model == config.tier("light").base_model
-    assert web.source == "light"
+    # своя модель на основе «Лёгкой»: дообучение со складской синтетикой
+    assert web.source == "web" and web.augment == (config.WEB_SET,)
     assert set(web.connectors) == {"warehouse", "calc", "talk"}

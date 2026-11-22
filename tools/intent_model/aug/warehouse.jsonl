@@ -1,0 +1,169 @@
+// Синтетические перефразы команд склада для дообучения модели веб-помощника (ADR-045).
+// Формат — как у test/corpus (connector, intent; «не команда» — intent unknown, route none). Не корпус правил и не проба: другие товары и ячейки, чем в eval/; жаккар с любой фразой проб < 0,5.
+{"id": "aug-wh-001", "text": "где смартфон ксиаоми", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-002", "text": "где холодильник", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-003", "text": "куда дели смартфон ксиаоми", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-004", "text": "куда дели ноутбук асус", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-005", "text": "где найти принтер hp", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-006", "text": "где найти колонку", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-007", "text": "на каком месте холодильник", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-008", "text": "на каком месте принтер hp", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-009", "text": "где хранится электробритву", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-010", "text": "где хранится посудомойку", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-011", "text": "подскажи где стиралку", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-012", "text": "подскажи где холодильник", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-013", "text": "не вижу тостер, где он", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-014", "text": "не вижу смартфон ксиаоми, где он", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-015", "text": "где у нас планшет лежит", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-016", "text": "где у нас кондиционер лежит", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-017", "text": "место планшет скажи", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-018", "text": "место соковыжималку скажи", "connector": "warehouse", "intent": "warehouse.where"}
+{"id": "aug-wh-019", "text": "сколько стиралок", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-020", "text": "сколько посудомоек", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-021", "text": "сколько принтеров в наличии", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-022", "text": "сколько колонок в наличии", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-023", "text": "остаток соковыжималок", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-024", "text": "остаток кондиционеров", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-025", "text": "какой остаток планшетов", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-026", "text": "какой остаток соковыжималок", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-027", "text": "количество стиралок на складе", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-028", "text": "количество кондиционеров на складе", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-029", "text": "сколько штук ноутбуков", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-030", "text": "сколько штук стиралок", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-031", "text": "много ещё колонок?", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-032", "text": "много ещё самокатов?", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-033", "text": "сколько принтеров лежит", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-034", "text": "сколько посудомоек лежит", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-035", "text": "посмотри остатки ноутбуков", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-036", "text": "посмотри остатки самокатов", "connector": "warehouse", "intent": "warehouse.count"}
+{"id": "aug-wh-037", "text": "что в р14", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-038", "text": "что в в-30", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-039", "text": "что лежит в о-5", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-040", "text": "ячейка у3", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-041", "text": "содержимое н-11", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-042", "text": "содержимое в-30", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-043", "text": "покажи ячейку ф2", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-044", "text": "покажи ячейку в-30", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-045", "text": "что на месте н-11", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-046", "text": "что на месте л6", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-047", "text": "что хранится в ячейке с18", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-048", "text": "проверь л6", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-049", "text": "проверь в-30", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-050", "text": "загляни в ячейку п9", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-051", "text": "загляни в ячейку о-5", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-052", "text": "что сейчас в о-5", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-053", "text": "что сейчас в л6", "connector": "warehouse", "intent": "warehouse.cell"}
+{"id": "aug-wh-054", "text": "цена самокат", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-055", "text": "цена увлажнитель", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-056", "text": "сколько стоит ноутбук асус", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-057", "text": "почём кондиционер", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-058", "text": "почём соковыжималку", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-059", "text": "стоимость монитор", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-060", "text": "стоимость кондиционер", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-061", "text": "по какой цене ноутбук асус", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-062", "text": "по какой цене кондиционер", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-063", "text": "какая цена на ноутбук асус", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-064", "text": "дорогой ли электробритву, сколько стоит", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-065", "text": "дорогой ли увлажнитель, сколько стоит", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-066", "text": "цену на стиралку скажи", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-067", "text": "цену на увлажнитель скажи", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-068", "text": "за сколько смартфон ксиаоми", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-069", "text": "за сколько принтер hp", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-070", "text": "оценка посудомойку какая", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-071", "text": "оценка увлажнитель какая", "connector": "warehouse", "intent": "warehouse.price"}
+{"id": "aug-wh-072", "text": "приходы сегодня", "connector": "warehouse", "intent": "warehouse.today"}
+{"id": "aug-wh-073", "text": "поступления за сегодня", "connector": "warehouse", "intent": "warehouse.today"}
+{"id": "aug-wh-074", "text": "сегодняшняя приёмка", "connector": "warehouse", "intent": "warehouse.today"}
+{"id": "aug-wh-075", "text": "покажи приёмку за сегодня", "connector": "warehouse", "intent": "warehouse.today"}
+{"id": "aug-wh-076", "text": "приходы вчера", "connector": "warehouse", "intent": "warehouse.yesterday"}
+{"id": "aug-wh-077", "text": "что привезли вчера", "connector": "warehouse", "intent": "warehouse.yesterday"}
+{"id": "aug-wh-078", "text": "поступления за вчера", "connector": "warehouse", "intent": "warehouse.yesterday"}
+{"id": "aug-wh-079", "text": "вчерашняя приёмка", "connector": "warehouse", "intent": "warehouse.yesterday"}
+{"id": "aug-wh-080", "text": "что приняли вчера", "connector": "warehouse", "intent": "warehouse.yesterday"}
+{"id": "aug-wh-081", "text": "какие реестры вчера", "connector": "warehouse", "intent": "warehouse.yesterday"}
+{"id": "aug-wh-082", "text": "приходы за 7 дней", "connector": "warehouse", "intent": "warehouse.week"}
+{"id": "aug-wh-083", "text": "что привезли за неделю", "connector": "warehouse", "intent": "warehouse.week"}
+{"id": "aug-wh-084", "text": "поступления этой недели", "connector": "warehouse", "intent": "warehouse.week"}
+{"id": "aug-wh-085", "text": "недельные поступления", "connector": "warehouse", "intent": "warehouse.week"}
+{"id": "aug-wh-086", "text": "покажи приёмку за неделю", "connector": "warehouse", "intent": "warehouse.week"}
+{"id": "aug-wh-087", "text": "что пришло за последнюю неделю", "connector": "warehouse", "intent": "warehouse.week"}
+{"id": "aug-wh-088", "text": "сводка приходов за неделю", "connector": "warehouse", "intent": "warehouse.week"}
+{"id": "aug-wh-089", "text": "где нет фото", "connector": "warehouse", "intent": "warehouse.nophoto"}
+{"id": "aug-wh-090", "text": "что без фотографий", "connector": "warehouse", "intent": "warehouse.nophoto"}
+{"id": "aug-wh-091", "text": "незафотканные приходы", "connector": "warehouse", "intent": "warehouse.nophoto"}
+{"id": "aug-wh-092", "text": "фото не сделаны где", "connector": "warehouse", "intent": "warehouse.nophoto"}
+{"id": "aug-wh-093", "text": "что не сфоткано", "connector": "warehouse", "intent": "warehouse.nophoto"}
+{"id": "aug-wh-094", "text": "где не хватает фото", "connector": "warehouse", "intent": "warehouse.nophoto"}
+{"id": "aug-wh-095", "text": "не проведённые поступления", "connector": "warehouse", "intent": "warehouse.unposted"}
+{"id": "aug-wh-096", "text": "покажи непроведёнку", "connector": "warehouse", "intent": "warehouse.unposted"}
+{"id": "aug-wh-097", "text": "какие приходы висят", "connector": "warehouse", "intent": "warehouse.unposted"}
+{"id": "aug-wh-098", "text": "что ждёт проведения", "connector": "warehouse", "intent": "warehouse.unposted"}
+{"id": "aug-wh-099", "text": "непроведённые приёмки", "connector": "warehouse", "intent": "warehouse.unposted"}
+{"id": "aug-wh-100", "text": "перемести электробритву в п9", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-101", "text": "перемести соковыжималку в н-11", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-102", "text": "переложи планшет в р14", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-103", "text": "переложи увлажнитель в л6", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-104", "text": "перенеси кондиционер в ячейку н-11", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-105", "text": "перенеси колонку в ячейку п9", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-106", "text": "поставь кондиционер в р14", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-107", "text": "поставь холодильник в р14", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-108", "text": "закинь ноутбук асус на о-5", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-109", "text": "закинь увлажнитель на с18", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-110", "text": "перекинь самокат в у3", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-111", "text": "переставь соковыжималку на место н-11", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-112", "text": "переставь ноутбук асус на место п9", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-113", "text": "убери холодильник в ячейку п9", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-114", "text": "убери тостер в ячейку л6", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-115", "text": "перемести холодильник из т-2 в у3", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-116", "text": "перемести тостер из л6 в н-11", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-117", "text": "положи планшет на полку р14", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-118", "text": "положи посудомойку на полку л6", "connector": "warehouse", "intent": "warehouse.act.move"}
+{"id": "aug-wh-119", "text": "проведи приход 282", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-120", "text": "проведи приход 160", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-121", "text": "провести поступление 2", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-122", "text": "провести поступление 245", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-123", "text": "проведи реестр 129", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-124", "text": "проведи реестр 137", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-125", "text": "проводи приёмку 45", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-126", "text": "проводи приёмку 338", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-127", "text": "провести приход в учёт", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-128", "text": "проведи поступление по реестру 24", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-129", "text": "проведи поступление по реестру 377", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-130", "text": "проведи приёмку в 1с", "connector": "warehouse", "intent": "warehouse.act.post"}
+{"id": "aug-wh-131", "text": "моя роль", "connector": "warehouse", "intent": "warehouse.me"}
+{"id": "aug-wh-132", "text": "мои права", "connector": "warehouse", "intent": "warehouse.me"}
+{"id": "aug-wh-133", "text": "кто я тут", "connector": "warehouse", "intent": "warehouse.me"}
+{"id": "aug-wh-134", "text": "какой у меня доступ", "connector": "warehouse", "intent": "warehouse.me"}
+{"id": "aug-wh-135", "text": "права мои покажи", "connector": "warehouse", "intent": "warehouse.me"}
+{"id": "aug-wh-136", "text": "моя роль на складе какая", "connector": "warehouse", "intent": "warehouse.me"}
+{"id": "aug-wh-137", "text": "складская помощь", "connector": "warehouse", "intent": "warehouse.help"}
+{"id": "aug-wh-138", "text": "возможности склада", "connector": "warehouse", "intent": "warehouse.help"}
+{"id": "aug-wh-139", "text": "команды склада", "connector": "warehouse", "intent": "warehouse.help"}
+{"id": "aug-wh-140", "text": "чем поможешь со складом", "connector": "warehouse", "intent": "warehouse.help"}
+{"id": "aug-wh-141", "text": "сколько мониторов купить домой, не знаю", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-142", "text": "стиралку дома барахлит", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-143", "text": "где мой самокат", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-144", "text": "приход электрика в среду", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-145", "text": "остаток торта", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-146", "text": "ячейка в шкафчике не закрывается", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-147", "text": "цена на хлеб выросла", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-148", "text": "сколько лет этому ноутбук асус", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-149", "text": "проведи меня к выходу", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-150", "text": "кто я вообще", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-151", "text": "мне можно отгул?", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-152", "text": "фото детей скину", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-153", "text": "вчера смотрел футбол", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-154", "text": "неделя тяжёлая", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-155", "text": "сегодня жарко на складе", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-156", "text": "в 10", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-157", "text": "в полдень", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-158", "text": "ну да", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-159", "text": "угу", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-160", "text": "не знаю", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-161", "text": "да нет", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-162", "text": "ок", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-163", "text": "хорошо", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-164", "text": "сколько можно", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-165", "text": "что-то спина болит", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-166", "text": "остаток пути пешком", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-167", "text": "приход нового начальника", "connector": "warehouse", "intent": "unknown", "route": "none"}

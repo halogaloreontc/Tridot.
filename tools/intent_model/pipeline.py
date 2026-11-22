@@ -34,7 +34,7 @@ def _src(tier: config.Tier) -> Path:
 
 
 def prepare(tier: config.Tier) -> list[dict]:
-    rows, stats = data.prepare(data.corpus_files())
+    rows, stats = data.prepare(data.train_files(tier.augment))
     data.check_descriptions([r["label"] for r in rows], data.load_descriptions())
     d = _src(tier) / "data"
     data.write_jsonl(d / "train.jsonl", rows)
@@ -49,9 +49,11 @@ def holdout(tier: config.Tier, name: str) -> Path:
 
     if tier.model_from:
         raise SystemExit(f"Уровень {tier.name} берёт пробы уровня {tier.model_from}")
+    if name not in config.holdout_sets(tier.name):
+        raise SystemExit(f"Проба {name} не нужна уровню {tier.name}: {', '.join(config.holdout_sets(tier.name))}")
     snap = data.snapshots()[name]["commit"]
     evals = data.load_eval(name)
-    rows, stats = data.prepare(data.corpus_files(snap), [e["text"] for e in evals])
+    rows, stats = data.prepare(data.train_files(tier.augment, snap), [e["text"] for e in evals])
     log(f"[{tier.name}/{name}] снимок {snap[:7]}: {stats['train_rows']} фраз, утечка убрана: {stats.get('removed_leak', 0)}")
     model, info = train(tier, rows)
     config.OUT.mkdir(parents=True, exist_ok=True)
@@ -92,9 +94,31 @@ def build_model(tier: config.Tier) -> Path:
     return d
 
 
+def _sets(tier: config.Tier, evals_of) -> dict[str, list[dict]]:
+    """Пробы уровня по группам: общие, и у своих проб — половины cal/test."""
+    out = {name: evals_of(name) for name in config.EVAL_SETS}
+    for name in tier.extra_sets:
+        cal, test = data.split_half(evals_of(name))
+        out[f"{name}.cal"], out[f"{name}.test"] = cal, test
+    return out
+
+
+def _groups(tier: config.Tier, names: list[str]) -> dict[str, list[str]]:
+    """dev — где выбирается порог, test — честная проверка, all — всё.
+
+    У light/accurate: dev = fresh, test = held2 + held3. У уровня со своими
+    пробами (web): dev = fresh + held2 + held3 + <проба>.cal, test =
+    <проба>.test — половина, которая в подбор не попадает.
+    """
+    if not tier.extra_sets:
+        return {"dev": [config.DEV_SET], "test": [n for n in names if n != config.DEV_SET], "all": names}
+    test = [f"{n}.test" for n in tier.extra_sets]
+    return {"dev": [n for n in names if n not in test], "test": test, "all": names}
+
+
 def _honest_preds(tier: config.Tier) -> dict[str, tuple[list[dict], list[dict]]]:
     out = {}
-    for name in config.EVAL_SETS:
+    for name in (*config.EVAL_SETS, *tier.extra_sets):
         path = _src(tier) / "calib" / f"{name}.npz"
         if not path.exists():
             raise SystemExit(f"Нет {path}: сначала holdout --tier {tier.source} --set {name}")
@@ -104,32 +128,51 @@ def _honest_preds(tier: config.Tier) -> dict[str, tuple[list[dict], list[dict]]]
         if ids != [e["id"] for e in evals]:
             raise SystemExit(f"{path}: фразы пробы {name} изменились — пересоберите holdout")
         labels = [data.restrict(str(x), tier.connectors) for x in z["labels"]]
-        out[name] = (evals, knn.knn(z["train"], labels, z["eval"]))
+        preds = knn.knn(z["train"], labels, z["eval"])
+        if name in tier.extra_sets:
+            by_id = {e["id"]: p for e, p in zip(evals, preds)}
+            cal, test = data.split_half(evals)
+            out[f"{name}.cal"] = (cal, [by_id[e["id"]] for e in cal])
+            out[f"{name}.test"] = (test, [by_id[e["id"]] for e in test])
+        else:
+            out[name] = (evals, preds)
     return out
 
 
-def _report(per_set: dict[str, tuple[list[dict], list[dict]]], t: float) -> dict:
+def _merge(per_set: dict[str, tuple[list[dict], list[dict]]], names: list[str]) -> tuple[list[dict], list[dict]]:
+    return [e for n in names for e in per_set[n][0]], [p for n in names for p in per_set[n][1]]
+
+
+def _report(tier: config.Tier, per_set: dict[str, tuple[list[dict], list[dict]]], t: float) -> dict:
     res = {name: knn.at_threshold(ev, pr, t) for name, (ev, pr) in per_set.items()}
-    test = [n for n in config.EVAL_SETS if n != config.DEV_SET]
-    for group, names in (("test", test), ("all", list(config.EVAL_SETS))):
-        ev = [e for n in names for e in per_set[n][0]]
-        pr = [p for n in names for p in per_set[n][1]]
-        res[group] = knn.at_threshold(ev, pr, t)
+    for group, names in _groups(tier, list(per_set)).items():
+        if group == "dev" and len(names) == 1:
+            continue
+        res[group] = knn.at_threshold(*_merge(per_set, names), t)
     return res
 
 
 def calibrate(tier: config.Tier) -> dict:
     """Порог на int8, честно: каждая проба — на модели снимка до её разбора.
 
-    Выбор — на fresh (наибольший catch в бюджете), проверка — held2+held3.
+    light/accurate: выбор на fresh (наибольший catch в бюджете), проверка —
+    held2+held3. web: выбор на fresh+held2+held3 и половине cal складской
+    пробы, проверка — на её половине test.
     """
     per_set = _honest_preds(tier)
-    ev, pr = per_set[config.DEV_SET]
-    t = knn.pick_threshold(ev, pr)
+    dev = _groups(tier, list(per_set))["dev"]
+    t = knn.pick_threshold(*_merge(per_set, dev))
     if t is None:
-        raise SystemExit(f"[{tier.name}] на {config.DEV_SET} нет порога в бюджете ошибок")
-    grid = {str(g): _report(per_set, g)["all"] for g in config.GRID if round(g * 1000) % 25 == 0}
-    res = {"threshold": t, "k": config.K, "picked_on": config.DEV_SET, "honest": _report(per_set, t), "grid_all": grid}
+        raise SystemExit(f"[{tier.name}] на {'+'.join(dev)} нет порога в бюджете ошибок")
+    grid = {}
+    for g in config.GRID:
+        if round(g * 1000) % 25 == 0 or (tier.extra_sets and round(g * 1000) % 5 == 0):
+            r = _report(tier, per_set, g)
+            grid[str(g)] = r["test"] if tier.extra_sets else r["all"]
+    res = {
+        "threshold": t, "k": config.K, "picked_on": "+".join(dev),
+        "honest": _report(tier, per_set, t), "grid_test" if tier.extra_sets else "grid_all": grid,
+    }
     (_out(tier) / "calibration.json").parent.mkdir(parents=True, exist_ok=True)
     (_out(tier) / "calibration.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
     h = res["honest"]
@@ -137,6 +180,12 @@ def calibrate(tier: config.Tier) -> dict:
         f"[{tier.name}] порог {t}: честно (все пробы) catch {h['all']['catch']} %, wrong {h['all']['wrong']} %, "
         f"неверных из подсказок {h['all']['wrong_of_suggested']} %, ложные тревоги {h['all']['false_alarm']} %"
     )
+    if tier.extra_sets:
+        x = h["test"]
+        log(
+            f"[{tier.name}] отложенная половина {'+'.join(_groups(tier, list(per_set))['test'])}: catch {x['catch']} %, "
+            f"неверных из подсказок {x['wrong_of_suggested']} %, ложные тревоги {x['false_alarm']} %"
+        )
     return res
 
 
@@ -173,8 +222,7 @@ def verify(tier: config.Tier) -> dict:
     enc = Int8Encoder(pd, prefix=tier.prefix, info_dir=md)
     per_set = {}
     texts = []
-    for name in config.EVAL_SETS:
-        ev = data.load_eval(name, tier.connectors)
+    for name, ev in _sets(tier, lambda n: data.load_eval(n, tier.connectors)).items():
         per_set[name] = (ev, knn.knn(emb, labels, enc.encode([e["text"] for e in ev])))
         texts += [e["text"] for e in ev]
     lat = {"1_thread": Int8Encoder(pd, threads=1, prefix=tier.prefix, info_dir=md).latency_ms(texts[:300])}
@@ -184,10 +232,11 @@ def verify(tier: config.Tier) -> dict:
         "k": config.K,
         "budget": {"max_wrong_of_suggested": config.MAX_WRONG_OF_SUGGESTED, "max_false_alarm": config.MAX_FALSE_ALARM},
         "honest": cal["honest"],
-        "seen": _report(per_set, t),
+        "seen": _report(tier, per_set, t),
         "latency_ms": lat,
         "sizes_mb": {p.name: round(p.stat().st_size / 1e6, 2) for p in sorted(pd.iterdir())},
-        "ok": knn.within_budget(honest),
+        # web: в бюджете и все пробы вместе, и отложенная половина складской.
+        "ok": knn.within_budget(honest) and (not tier.extra_sets or knn.within_budget(cal["honest"]["test"])),
     }
     (_out(tier) / "metrics.json").write_text(json.dumps(m, ensure_ascii=False, indent=1), encoding="utf-8")
     log(
@@ -195,6 +244,12 @@ def verify(tier: config.Tier) -> dict:
         f"ложные тревоги {honest['false_alarm']} %; на текущем корпусе catch {m['seen']['all']['catch']} %; "
         f"задержка {lat['1_thread']['median']} мс — {'в бюджете' if m['ok'] else 'ВНЕ БЮДЖЕТА'}"
     )
+    if tier.extra_sets:
+        x = cal["honest"]["test"]
+        log(
+            f"[{tier.name}] отложенная половина: catch {x['catch']} %, неверных {x['wrong']} % "
+            f"(из подсказок {x['wrong_of_suggested']} %), ложные тревоги {x['false_alarm']} %"
+        )
     return m
 
 
@@ -227,7 +282,7 @@ def finish(tier: config.Tier, version: str, strict: bool = True) -> Path:
 
 def build(tier: config.Tier, version: str, reuse: bool = False, strict: bool = True) -> Path:
     src = config.tier(tier.source)
-    for name in config.EVAL_SETS:
+    for name in config.holdout_sets(src.name):
         if not (reuse and (_src(tier) / "calib" / f"{name}.npz").exists()):
             holdout(src, name)
     if not (reuse and (_src(tier) / "model" / "model.int8.onnx").exists()):

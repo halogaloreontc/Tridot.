@@ -32,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("holdout", help="модель снимка корпуса до разбора пробы → calib/<проба>.npz")
     tier_arg(p)
-    p.add_argument("--set", choices=config.EVAL_SETS, required=True)
+    p.add_argument("--set", choices=sorted({s for t in config.TIERS for s in config.holdout_sets(t)}), required=True)
 
     p = sub.add_parser("model", help="дообучение на текущем корпусе, ONNX int8, векторы примеров")
     tier_arg(p)

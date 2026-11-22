@@ -2,5 +2,6 @@
   "note": "Каждая проба проверяется на корпусе, каким он был до её разбора: коммит, после которого пробу прогнали правилами (rule_outcome, rule_label — ответ правил на этом коммите), и до правок по её итогам.",
   "fresh": {"commit": "c9a4555c91c6b2161a18a5d3800de093ec47b1d0", "rows": 551},
   "held2": {"commit": "7cacaf341edac86aa313878e9f524e4321ca7553", "rows": 240},
-  "held3": {"commit": "5cb2c2fb705a55ee3ff2b11bdc195fecf4fe0df3", "rows": 240}
+  "held3": {"commit": "5cb2c2fb705a55ee3ff2b11bdc195fecf4fe0df3", "rows": 240},
+  "warehouse": {"commit": "bb651492762c3fed3bbd85a8889e9395c55733a0", "rows": 250}
 }
