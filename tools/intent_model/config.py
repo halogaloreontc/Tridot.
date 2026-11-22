@@ -76,6 +76,14 @@ class Tier:
     base_from: str = ""
     # Дополнительные синтетические фразы обучения (aug/<имя>.jsonl).
     augment: tuple[str, ...] = field(default_factory=tuple)
+    # Динамическое int8-квантование считает масштаб активаций по всему
+    # тензору пакета (с паддингом), поэтому вектор фразы на CPU зависит от
+    # соседей в пакете; на устройстве фраза кодируется одна. У USER-base
+    # (accurate) это сдвигает вектор заметно (косинус bs=1 vs bs=32 — от
+    # ~0,84), у rubert-tiny2 (light) — почти незаметно (от ~0,997). Включает
+    # кодирование по одной фразе (без паддинга) в holdout/model/verify, чтобы
+    # индекс и пробы совпадали с тем, что видит устройство.
+    bs1_vectors: bool = False
 
     @property
     def source(self) -> str:
@@ -107,6 +115,9 @@ TIERS: dict[str, Tier] = {
         # int8 по каналам точнее для этой модели (сходства сдвигаются
         # меньше); порог всё равно подбирается на int8.
         per_channel=True,
+        # Измерено (tools/intent_model/out/accurate/bs_compare.json):
+        # с паддингом до 32 ложные тревоги 5,4–6,2 % — уже вне бюджета.
+        bs1_vectors=True,
     ),
     "web": Tier(
         name="web",
@@ -137,6 +148,7 @@ def tier(name: str) -> Tier:
             epochs=base.epochs,
             prefix=base.prefix,
             per_channel=base.per_channel,
+            bs1_vectors=base.bs1_vectors,
             model_from=t.model_from,
             connectors=t.connectors,
             extra_sets=t.extra_sets,
