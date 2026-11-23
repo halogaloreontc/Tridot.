@@ -140,6 +140,13 @@ final class _WarehouseCardViewState extends State<WarehouseCardView> {
                       child: ReplyTableView(
                         table: table,
                         onOpenLink: widget.onOpenLink,
+                        semanticLabel: (row) {
+                          final head =
+                              row.cells.isNotEmpty && row.cells.first.isNotEmpty
+                                  ? row.cells.first
+                                  : (row.cells.length > 1 ? row.cells[1] : '');
+                          return '${widget.texts.cardOpenIn}: $head';
+                        },
                       ),
                     )
                   else

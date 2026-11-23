@@ -116,4 +116,85 @@ void main() {
     );
     // Ничего не ожидаем — тест проходит, если не было исключения.
   });
+
+  const ReplyTable fullWidthTable = ReplyTable(
+    columns: <ReplyTableColumn>[
+      ReplyTableColumn('Что'),
+      ReplyTableColumn('Где', fullWidth: true),
+      ReplyTableColumn('Кол-во', numeric: true),
+    ],
+    rows: <ReplyTableRow>[
+      ReplyTableRow(
+        cells: <String>['64115', '215-1-1-1 · годен', '1000 шт.'],
+        linkKind: 'sku',
+        linkId: '64115',
+      ),
+      ReplyTableRow(cells: <String>['70042', '', '45 шт.']),
+    ],
+  );
+
+  testWidgets('fullWidth: заголовок не показан, число — на строке заметки', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, const ReplyTableView(table: fullWidthTable));
+    expect(find.text('Что'), findsOneWidget);
+    expect(
+      find.text('Кол-во'),
+      findsNothing,
+      reason:
+          'числовой столбец теперь на строке заметки, не в полосе заголовка',
+    );
+    expect(
+      find.text('Где'),
+      findsNothing,
+      reason: 'fullWidth-столбец без заголовка в общей полосе',
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('reply-table-row-0-full-1')),
+        matching: find.text('215-1-1-1 · годен'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('reply-table-row-0-full-1')),
+        matching: find.text('1000 шт.'),
+      ),
+      findsOneWidget,
+      reason: 'число — рядом с заметкой, которую оно описывает, не с кодом',
+    );
+  });
+
+  testWidgets('fullWidth: пустая ячейка — строки заметки нет', (
+    WidgetTester tester,
+  ) async {
+    await _pump(tester, const ReplyTableView(table: fullWidthTable));
+    expect(
+      find.byKey(const ValueKey<String>('reply-table-row-1-full-1')),
+      findsNothing,
+    );
+    // Число для этой строки всё равно видно — осталось в основной строке,
+    // раз нет заметки, с которой его можно было бы объединить.
+    expect(find.text('45 шт.'), findsOneWidget);
+  });
+
+  testWidgets('строка со ссылкой — доступна читалке экрана как кнопка', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      ReplyTableView(
+        table: fullWidthTable,
+        onOpenLink: (String kind, String id) {},
+        semanticLabel: (row) => 'Открыть: ${row.cells.first}',
+      ),
+    );
+    final semantics = tester.ensureSemantics();
+    expect(
+      find.bySemanticsLabel(RegExp('^Открыть: 64115')),
+      findsOneWidget,
+    );
+    semantics.dispose();
+  });
 }
