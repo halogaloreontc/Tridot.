@@ -7,8 +7,11 @@ import 'whole_word_text.dart';
 /// Таблица в ответе помощника (общая возможность, ADR-027): заголовки
 /// столбцов на всю ширину, строки одного родителя связаны цветной полосой
 /// слева вместо пустых повторов, числовой столбец — по правому краю,
-/// жирнее, чередование фона у длинных списков. Используют и приложение,
-/// и веб-помощник — без platform-специфичных импортов.
+/// жирнее, чередование фона у длинных списков. Столбец `fullWidth` (длинная
+/// заметка/адрес) — не делит строку с остальными: отдельная строка во всю
+/// ширину под ними, без заголовка в общей полосе (слишком узкий столбец
+/// ломает слова посередине при крупном тексте — ADR-021). Используют и
+/// приложение, и веб-помощник — без platform-специфичных импортов.
 final class ReplyTableView extends StatelessWidget {
   const ReplyTableView({super.key, required this.table, this.onOpenLink});
 
@@ -21,6 +24,12 @@ final class ReplyTableView extends StatelessWidget {
   static const List<FontFeature> _tabular = <FontFeature>[
     FontFeature.tabularFigures(),
   ];
+
+  /// Номера столбцов, что делят общую строку (не `fullWidth`), по порядку.
+  List<int> get _inline => <int>[
+        for (var c = 0; c < table.columns.length; c++)
+          if (!table.columns[c].fullWidth) c,
+      ];
 
   TextStyle _style(
     BuildContext context,
@@ -44,6 +53,7 @@ final class ReplyTableView extends StatelessWidget {
     required bool last,
   }) =>
       Expanded(
+        flex: column.flex,
         child: Container(
           padding: const EdgeInsetsDirectional.only(end: 10),
           decoration: last
@@ -62,21 +72,23 @@ final class ReplyTableView extends StatelessWidget {
         ),
       );
 
-  List<Widget> _cells(
+  List<Widget> _inlineCells(
     BuildContext context,
     List<String> cells,
     TextStyle Function(ReplyTableColumn column) styleOf,
-  ) =>
-      <Widget>[
-        for (var c = 0; c < table.columns.length; c++)
-          _cell(
-            context,
-            cells[c],
-            table.columns[c],
-            style: styleOf(table.columns[c]),
-            last: c == table.columns.length - 1,
-          ),
-      ];
+  ) {
+    final inline = _inline;
+    return <Widget>[
+      for (var i = 0; i < inline.length; i++)
+        _cell(
+          context,
+          cells[inline[i]],
+          table.columns[inline[i]],
+          style: styleOf(table.columns[inline[i]]),
+          last: i == inline.length - 1,
+        ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +110,7 @@ final class ReplyTableView extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             child: Row(
-              children: _cells(
+              children: _inlineCells(
                 context,
                 <String>[for (final c in table.columns) c.label],
                 (c) => _style(
@@ -123,20 +135,37 @@ final class ReplyTableView extends StatelessWidget {
     final tappable =
         onOpenLink != null && row.linkKind.isNotEmpty && row.linkId.isNotEmpty;
 
+    final mainLine = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: _inlineCells(
+        context,
+        row.cells,
+        (c) => _style(
+          context,
+          14,
+          color: c.numeric ? colors.textStrong : null,
+          weight: c.numeric ? FontWeight.w600 : null,
+        ),
+      ),
+    );
+
+    final fullWidthLines = <Widget>[
+      for (var c = 0; c < table.columns.length; c++)
+        if (table.columns[c].fullWidth && row.cells[c].isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: WholeWordText(
+              row.cells[c],
+              style: _style(context, 13, color: colors.muted),
+            ),
+          ),
+    ];
+
     final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: _cells(
-          context,
-          row.cells,
-          (c) => _style(
-            context,
-            14,
-            color: c.numeric ? colors.textStrong : null,
-            weight: c.numeric ? FontWeight.w600 : null,
-          ),
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[mainLine, ...fullWidthLines],
       ),
     );
 

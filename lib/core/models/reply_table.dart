@@ -12,12 +12,23 @@ enum ReplyTableGroup {
   continues,
 }
 
-/// Заголовок столбца: подпись и выравнивание (числовой — по правому краю).
+/// Заголовок столбца: подпись, выравнивание (числовой — по правому краю)
+/// и доля ширины (как `Expanded.flex`, по умолчанию 1). [fullWidth] —
+/// столбец слишком длинный, чтобы делить строку с другими (заметка,
+/// адрес): его ячейка — отдельная строка на всю ширину под основными
+/// столбцами, без своего заголовка в общей полосе.
 final class ReplyTableColumn {
-  const ReplyTableColumn(this.label, {this.numeric = false});
+  const ReplyTableColumn(
+    this.label, {
+    this.numeric = false,
+    this.flex = 1,
+    this.fullWidth = false,
+  });
 
   final String label;
   final bool numeric;
+  final int flex;
+  final bool fullWidth;
 }
 
 /// Строка таблицы: по ячейке на столбец.

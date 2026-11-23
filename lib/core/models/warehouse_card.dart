@@ -121,8 +121,8 @@ final class WarehouseCard {
     if (!tableCommands.contains(command) || rows.isEmpty) return null;
     const columns = <ReplyTableColumn>[
       ReplyTableColumn('Что'),
-      ReplyTableColumn('Название'),
-      ReplyTableColumn('Где'),
+      ReplyTableColumn('Название', fullWidth: true),
+      ReplyTableColumn('Где', fullWidth: true),
       ReplyTableColumn('Кол-во', numeric: true),
     ];
     final zebra = rows.length >= ReplyTable.zebraFrom;
