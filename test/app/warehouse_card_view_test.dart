@@ -26,9 +26,17 @@ const WarehouseRow _tunli = WarehouseRow(
   ],
 );
 
-WarehouseCard _card(List<WarehouseRow> rows, {int hidden = 0}) => WarehouseCard(
+// 'price' — вне WarehouseCard.tableCommands: эти тесты проверяют список,
+// как и раньше ('where' теперь рисуется таблицей — ReplyTableView,
+// см. warehouse_card_table_test.dart и reply_table_view_test.dart).
+WarehouseCard _card(
+  List<WarehouseRow> rows, {
+  int hidden = 0,
+  String command = 'price',
+}) =>
+    WarehouseCard(
       connector: 'warehouse',
-      command: 'where',
+      command: command,
       title: 'Где лежит товар',
       say: '«тунли 67432»: 1 позиция, всего 1 шт.',
       rows: rows,
@@ -177,5 +185,69 @@ void main() {
       isNull,
       reason: 'ячейку склад по ссылке не открывает',
     );
+  });
+
+  testWidgets('command «where»: таблица вместо списка', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      WarehouseCardView(
+        card: _card(const <WarehouseRow>[_tunli], command: 'where'),
+      ),
+    );
+    expect(find.byKey(const ValueKey<String>('reply-table')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('warehouse-card-row-0')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('command вне списка со строками: список, как раньше', (
+    WidgetTester tester,
+  ) async {
+    await _pump(
+      tester,
+      WarehouseCardView(
+        card: _card(const <WarehouseRow>[_tunli], command: 'price'),
+      ),
+    );
+    expect(find.byKey(const ValueKey<String>('reply-table')), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('warehouse-card-row-0')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'command «where», onOpenLink null: таблица не падает, не нажимается',
+    (WidgetTester tester) async {
+      await _pump(
+        tester,
+        WarehouseCardView(
+          card: _card(const <WarehouseRow>[_tunli], command: 'where'),
+        ),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey<String>('reply-table-row-0')),
+      );
+      // Не падает — этого достаточно; onOpenLink не задан у этого WarehouseCardView.
+    },
+  );
+
+  testWidgets('command «unposted», onOpenLink задан: ссылка доходит до таблицы',
+      (WidgetTester tester) async {
+    final opened = <String>[];
+    await _pump(
+      tester,
+      WarehouseCardView(
+        card: _card(const <WarehouseRow>[_tunli], command: 'unposted'),
+        onOpenLink: (String kind, String id) => opened.add('$kind:$id'),
+      ),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('reply-table-row-0')),
+    );
+    expect(opened, <String>['sku:67432']);
   });
 }

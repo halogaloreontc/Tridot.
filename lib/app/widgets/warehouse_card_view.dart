@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/connectors/manifest/connection_texts.dart';
 import '../../core/models/warehouse_card.dart';
 import '../assistant_theme.dart';
+import 'reply_table_view.dart';
 import 'whole_word_text.dart';
 
 /// Карточка ответа склада под сообщением (ADR-031, оформление — ADR-027 и
@@ -75,6 +76,7 @@ final class _WarehouseCardViewState extends State<WarehouseCardView> {
         : card.rows.take(WarehouseCardView.folded).toList();
     final folded = card.rows.length - rows.length;
     final only = widget.onOpenLink == null ? null : card.onlyLink;
+    final table = card.asTable(rows);
     return Align(
       alignment: AlignmentDirectional.centerStart,
       child: ConstrainedBox(
@@ -132,10 +134,19 @@ final class _WarehouseCardViewState extends State<WarehouseCardView> {
                       ),
                     ),
                   const SizedBox(height: 8),
-                  for (var i = 0; i < rows.length; i++) ...<Widget>[
-                    if (i > 0) Divider(height: 1, color: colors.divider),
-                    _row(rows[i], i),
-                  ],
+                  if (table != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: ReplyTableView(
+                        table: table,
+                        onOpenLink: widget.onOpenLink,
+                      ),
+                    )
+                  else
+                    for (var i = 0; i < rows.length; i++) ...<Widget>[
+                      if (i > 0) Divider(height: 1, color: colors.divider),
+                      _row(rows[i], i),
+                    ],
                   if (folded > 0)
                     Align(
                       alignment: AlignmentDirectional.centerStart,
