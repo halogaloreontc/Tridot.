@@ -61,8 +61,9 @@ def holdout(tier: config.Tier, name: str) -> Path:
         export(model, Path(tmp), tier.per_channel)
         del model
         enc = Int8Encoder(Path(tmp), prefix=tier.prefix)
-        tr = enc.encode([r["text"] for r in rows])
-        ev = enc.encode([e["text"] for e in evals])
+        bs = 1 if tier.bs1_vectors else 32
+        tr = enc.encode([r["text"] for r in rows], bs=bs)
+        ev = enc.encode([e["text"] for e in evals], bs=bs)
     path = _out(tier) / "calib" / f"{name}.npz"
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -86,7 +87,8 @@ def build_model(tier: config.Tier) -> Path:
     minfo = export(model, d, tier.per_channel)
     del model
     enc = Int8Encoder(d, prefix=tier.prefix)
-    np.save(d / "train_emb.npy", enc.encode([r["text"] for r in rows]).astype(np.float16))
+    bs = 1 if tier.bs1_vectors else 32
+    np.save(d / "train_emb.npy", enc.encode([r["text"] for r in rows], bs=bs).astype(np.float16))
     data.write_jsonl(d / "train.jsonl", rows)
     minfo["train"] = info
     (d / "model_info.json").write_text(json.dumps(minfo, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -220,10 +222,11 @@ def verify(tier: config.Tier) -> dict:
     emb, labels = pack.read_index(pd / "index.bin", pd / "labels.json")
     md = _src(tier) / "model"
     enc = Int8Encoder(pd, prefix=tier.prefix, info_dir=md)
+    bs = 1 if tier.bs1_vectors else 32
     per_set = {}
     texts = []
     for name, ev in _sets(tier, lambda n: data.load_eval(n, tier.connectors)).items():
-        per_set[name] = (ev, knn.knn(emb, labels, enc.encode([e["text"] for e in ev])))
+        per_set[name] = (ev, knn.knn(emb, labels, enc.encode([e["text"] for e in ev], bs=bs)))
         texts += [e["text"] for e in ev]
     lat = {"1_thread": Int8Encoder(pd, threads=1, prefix=tier.prefix, info_dir=md).latency_ms(texts[:300])}
     honest = cal["honest"]["all"]
