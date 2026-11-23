@@ -1,3 +1,5 @@
+import 'reply_table.dart';
+
 /// Строка карточки склада: что, где, сколько.
 final class WarehouseRow {
   const WarehouseRow({
@@ -101,6 +103,68 @@ final class WarehouseCard {
   static const int maxRows = 30;
   static const int maxNested = 8;
   static const int maxText = 120;
+
+  /// Команды с однородным списком строк — им подходит табличный вид
+  /// (`asTable`); у остальных (действия, ответы про одну вещь) — список.
+  static const Set<String> tableCommands = <String>{
+    'where',
+    'count',
+    'cell',
+    'unposted',
+  };
+
+  /// Таблица для [rows] (уже свёрнутый список — тот же, что рисует
+  /// `WarehouseCardView`), если команда входит в [tableCommands] и строки
+  /// есть; иначе `null` — рисовать списком, как раньше. Не меняет и не
+  /// сохраняет ничего в карточке — чистый пересчёт из её полей.
+  ReplyTable? asTable(List<WarehouseRow> rows) {
+    if (!tableCommands.contains(command) || rows.isEmpty) return null;
+    const columns = <ReplyTableColumn>[
+      ReplyTableColumn('Что'),
+      ReplyTableColumn('Название'),
+      ReplyTableColumn('Где'),
+      ReplyTableColumn('Кол-во', numeric: true),
+    ];
+    final zebra = rows.length >= ReplyTable.zebraFrom;
+    final out = <ReplyTableRow>[];
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      final strip = zebra && i.isOdd;
+      final link = openKinds.contains(r.linkKind) ? r.linkKind : '';
+      if (r.rows.isEmpty) {
+        out.add(
+          ReplyTableRow(
+            cells: <String>[r.title, r.text, r.note, r.badge],
+            zebra: strip,
+            linkKind: link,
+            linkId: link.isEmpty ? '' : r.linkId,
+          ),
+        );
+        continue;
+      }
+      for (var j = 0; j < r.rows.length; j++) {
+        final cell = r.rows[j];
+        final where = <String>[cell.title, cell.text, cell.note]
+            .where((s) => s.isNotEmpty)
+            .join(' · ');
+        out.add(
+          ReplyTableRow(
+            cells: <String>[
+              j == 0 ? r.title : '',
+              j == 0 ? r.text : '',
+              where,
+              cell.badge,
+            ],
+            group: j == 0 ? ReplyTableGroup.start : ReplyTableGroup.continues,
+            zebra: strip,
+            linkKind: j == 0 ? link : '',
+            linkId: j == 0 && link.isNotEmpty ? r.linkId : '',
+          ),
+        );
+      }
+    }
+    return ReplyTable(columns: columns, rows: out);
+  }
 
   /// Что склад умеет открыть по ссылке из карточки: позицию (`sku`) и
   /// приход (`entry`). Ячейку — нет, она остаётся текстом.
