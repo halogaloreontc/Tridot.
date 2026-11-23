@@ -249,5 +249,12 @@ void main() {
       find.byKey(const ValueKey<String>('reply-table-row-0')),
     );
     expect(opened, <String>['sku:67432']);
+    final semantics = tester.ensureSemantics();
+    expect(
+      find.bySemanticsLabel(RegExp('^Открыть в складе: 67432')),
+      findsOneWidget,
+      reason: 'как у строки списка — своя роль кнопки и подпись для читалки',
+    );
+    semantics.dispose();
   });
 }
