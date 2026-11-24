@@ -45,7 +45,7 @@ def prepare(tier: config.Tier) -> list[dict]:
 
 def holdout(tier: config.Tier, name: str) -> Path:
     """Модель на снимке корпуса до разбора пробы `name` → векторы int8 снимка и пробы."""
-    from .model import Int8Encoder, degenerate, export, train
+    from .model import Int8Encoder, degenerate, export_checked, train
 
     if tier.model_from:
         raise SystemExit(f"Уровень {tier.name} берёт пробы уровня {tier.model_from}")
@@ -56,16 +56,20 @@ def holdout(tier: config.Tier, name: str) -> Path:
     rows, stats = data.prepare(data.train_files(tier.augment, snap), [e["text"] for e in evals])
     log(f"[{tier.name}/{name}] снимок {snap[:7]}: {stats['train_rows']} фраз, утечка убрана: {stats.get('removed_leak', 0)}")
     config.OUT.mkdir(parents=True, exist_ok=True)
-    # Обучение на CPU недетерминированно (параллельные редукции) и изредка
-    # схлопывается: все векторы почти одинаковы, kNN отвечает одной меткой
-    # на всё. Такое всё равно не пройдёт бюджет в verify — переобучаем сразу,
-    # до трёх попыток с разными seed.
+    # Обучение на CPU недетерминированно (параллельные редукции), а int8-
+    # квантование дообученной USER-base нестабильно: при здоровом loss
+    # векторы int8 иногда вырождаются. До трёх попыток с разными seed;
+    # квантование проверяется против fp32 в export_checked.
     for attempt in range(3):
         if attempt:
             log(f"[{tier.name}/{name}] модель схлопнулась, переобучение (seed {config.SEED + attempt})")
         model, info = train(tier, rows, seed=config.SEED + attempt)
         with tempfile.TemporaryDirectory(dir=config.OUT) as tmp:
-            export(model, Path(tmp), tier.per_channel)
+            try:
+                info, _ = export_checked(model, Path(tmp), tier, [e["text"] for e in evals])
+            except SystemExit as e:
+                log(f"[{tier.name}/{name}] {e}")
+                continue
             del model
             enc = Int8Encoder(Path(tmp), prefix=tier.prefix)
             bs = 1 if tier.bs1_vectors else 32
@@ -89,7 +93,7 @@ def holdout(tier: config.Tier, name: str) -> Path:
 
 def build_model(tier: config.Tier) -> Path:
     """Модель уровня на всём текущем корпусе (без отсева проб: это выпуск)."""
-    from .model import Int8Encoder, degenerate, export, train
+    from .model import Int8Encoder, degenerate, export_checked, train
 
     rows = prepare(tier)
     d = _out(tier) / "model"
@@ -103,7 +107,13 @@ def build_model(tier: config.Tier) -> Path:
             log(f"[{tier.name}] модель схлопнулась, переобучение (seed {config.SEED + attempt})")
         model, info = train(tier, rows, seed=config.SEED + attempt)
         tmp = Path(tempfile.mkdtemp(dir=config.OUT))
-        minfo = export(model, tmp, tier.per_channel)
+        try:
+            probes = [r["text"] for r in rows[:64]]
+            minfo, _ = export_checked(model, tmp, tier, probes)
+        except SystemExit as e:
+            log(f"[{tier.name}] {e}")
+            shutil.rmtree(tmp, ignore_errors=True)
+            continue
         del model
         enc = Int8Encoder(tmp, prefix=tier.prefix)
         emb = enc.encode([r["text"] for r in rows], bs=bs).astype(np.float16)

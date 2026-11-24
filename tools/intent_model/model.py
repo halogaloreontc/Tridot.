@@ -146,13 +146,9 @@ def pooling_of(model) -> str:
     return "unknown"
 
 
-def export(model, out_dir: Path, per_channel: bool) -> dict:
-    """ONNX (кодировщик + пулинг + нормировка) → динамический int8.
-
-    В out_dir остаются model.int8.onnx и файлы токенизатора; fp32 удаляется.
-    """
+def _export_fp32(model, out_dir: Path) -> dict:
+    """fp32 ONNX (кодировщик + пулинг + нормировка), токенизатор, model_info."""
     import torch
-    from onnxruntime.quantization import QuantType, quantize_dynamic
 
     out_dir.mkdir(parents=True, exist_ok=True)
     tok = model.tokenizer
@@ -171,19 +167,14 @@ def export(model, out_dir: Path, per_channel: bool) -> dict:
                 f["token_type_ids"] = token_type_ids
             return torch.nn.functional.normalize(self.st(f)["sentence_embedding"], dim=-1)
 
-    fp32 = out_dir / "model.fp32.onnx"
-    int8 = out_dir / "model.int8.onnx"
     dyn = {n: {0: "batch", 1: "seq"} for n in names}
     dyn["embedding"] = {0: "batch"}
     with torch.no_grad():
         torch.onnx.export(
-            Wrap(model), tuple(enc[n] for n in names), str(fp32), input_names=names,
-            output_names=["embedding"], dynamic_axes=dyn, opset_version=17, dynamo=False,
+            Wrap(model), tuple(enc[n] for n in names), str(out_dir / "model.fp32.onnx"),
+            input_names=names, output_names=["embedding"], dynamic_axes=dyn,
+            opset_version=17, dynamo=False,
         )
-    quantize_dynamic(str(fp32), str(int8), weight_type=QuantType.QInt8, per_channel=per_channel)
-    for f in list(out_dir.iterdir()):
-        if f.name != int8.name and (f.suffix in (".onnx", ".data") or f.name.endswith(".onnx.data")):
-            f.unlink()
     tmp = out_dir / "_tok"
     tok.save_pretrained(str(tmp))
     for f in TOKENIZER_FILES:
@@ -198,10 +189,134 @@ def export(model, out_dir: Path, per_channel: bool) -> dict:
         "normalized": True,
         "max_length": config.MAX_LEN,
         "opset": 17,
-        "quantization": "dynamic int8 (MatMulInteger), " + ("по каналам" if per_channel else "по тензору"),
     }
     (out_dir / "model_info.json").write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding="utf-8")
     return info
+
+
+def embeddings_fp32(model, texts: Sequence[str], prefix: str = "") -> np.ndarray:
+    """Векторы fp32 модели (torch) по одной фразе — эталон для проверки int8."""
+    import torch
+
+    out = []
+    with torch.no_grad():
+        for t in texts:
+            f = model.tokenize([prefix + t])
+            z = torch.nn.functional.normalize(model(f)["sentence_embedding"], dim=-1)
+            out.append(z[0].numpy())
+    return np.array(out, dtype=np.float32)
+
+
+def _cosines(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    return (a * b).sum(1) / (np.linalg.norm(a, axis=1) * np.linalg.norm(b, axis=1))
+
+
+def export(model, out_dir: Path, per_channel: bool) -> dict:
+    """ONNX → динамический int8 (без проверки качества; см. export_checked).
+
+    В out_dir остаются model.int8.onnx и файлы токенизатора; fp32 удаляется.
+    """
+    from onnxruntime.quantization import QuantType, quantize_dynamic
+
+    info = _export_fp32(model, out_dir)
+    fp32 = out_dir / "model.fp32.onnx"
+    int8 = out_dir / "model.int8.onnx"
+    quantize_dynamic(str(fp32), str(int8), weight_type=QuantType.QInt8, per_channel=per_channel)
+    fp32.unlink()
+    info["quantization"] = "dynamic int8 (MatMulInteger), " + ("по каналам" if per_channel else "по тензору")
+    (out_dir / "model_info.json").write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding="utf-8")
+    return info
+
+
+def export_checked(model, out_dir: Path, tier: config.Tier, probes: Sequence[str]) -> tuple[dict, np.ndarray]:
+    """Экспорт int8 с проверкой векторов против fp32 на пробных фразах.
+
+    Динамическое int8-квантование дообученной USER-base нестабильно: при
+    нормально сошедшемся обучении (loss ~1.3) int8-модель иногда выдаёт почти
+    одинаковые векторы на любые фразы (прогон 2026-11-24, accurate/fresh,
+    held3, затем и held2 со всеми seed). Базовая модель без дообучения
+    квантуется нормально — портит именно квантование дообученных весов.
+
+    Поэтому: считаем эталон fp32 (torch), пробуем варианты квантования и
+    берём первый, где int8 разумно совпадает с эталоном (средний косинус
+    >= 0.7) и векторы не вырождены. Планка 0.7, а не выше: у здоровой
+    USER-base динамический int8 даёт косинус с fp32 ~0.75-0.86 (замеры на
+    базовой модели 2026-11-25), а вырожденная отсеивается флагом degenerate.
+    Если fp32 сам вырожден — падаем сразу (надо переобучать, а не квантовать
+    по-другому). Все замеры — в model_info.json.
+    """
+    from onnxruntime.quantization import QuantType, quantize_dynamic
+
+    info = _export_fp32(model, out_dir)
+    ref = embeddings_fp32(model, probes, tier.prefix)
+    if degenerate(ref):
+        raise SystemExit("fp32 модель схлопнулась (средний межфразовый косинус > 0.95) — нужно переобучение")
+    fp32 = out_dir / "model.fp32.onnx"
+    int8 = out_dir / "model.int8.onnx"
+    tried = []
+
+    def assess(name: str) -> bool:
+        enc = Int8Encoder(out_dir, prefix=tier.prefix)
+        ev8 = enc.encode(probes, bs=1)
+        cos = _cosines(ev8, ref)
+        q = {"variant": name, "mean_cos": round(float(cos.mean()), 4),
+             "min_cos": round(float(cos.min()), 4), "degenerate": degenerate(ev8)}
+        tried.append(q)
+        log(f"  квантование {name}: косинус с fp32 mean {q['mean_cos']} min {q['min_cos']}, "
+            f"вырождение {q['degenerate']}")
+        return not q["degenerate"] and q["mean_cos"] >= 0.7
+
+    def chosen(name: str) -> tuple[dict, np.ndarray]:
+        info["quantization"] = name
+        info["quantization_check"] = {"probes": len(probes), "tried": tried}
+        (out_dir / "model_info.json").write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding="utf-8")
+        if fp32.exists():
+            fp32.unlink()
+        return info, ref
+
+    variants = [
+        (f"dynamic int8 (MatMulInteger), {'по каналам' if tier.per_channel else 'по тензору'}",
+         dict(per_channel=tier.per_channel)),
+        (f"dynamic int8 (MatMulInteger), {'по тензору' if tier.per_channel else 'по каналам'} (запасной вариант)",
+         dict(per_channel=not tier.per_channel)),
+        ("dynamic int8 (MatMulInteger), reduce_range", dict(per_channel=tier.per_channel, reduce_range=True)),
+    ]
+    for name, kw in variants:
+        if int8.exists():
+            int8.unlink()
+        try:
+            quantize_dynamic(str(fp32), str(int8), weight_type=QuantType.QInt8, **kw)
+            if assess(name):
+                return chosen(name)
+        except Exception as e:  # сам вариант не сработал — пробуем следующий
+            tried.append({"variant": name, "error": str(e)[-300:]})
+            log(f"  квантование {name}: ошибка {str(e)[-200:]}")
+
+    # Последний вариант: статическое квантование с калибровкой на пробах.
+    name = "static int8 (QDQ), калибровка MinMax по пробным фразам"
+    try:
+        from onnxruntime.quantization import CalibrationDataReader, QuantFormat, quantize_static
+
+        class _Reader(CalibrationDataReader):
+            def __init__(self, feeds):
+                self._it = iter(feeds)
+
+            def get_next(self):
+                return next(self._it, None)
+
+        enc = Int8Encoder(out_dir, prefix=tier.prefix)
+        feeds = [enc.feeds([t]) for t in probes]
+        if int8.exists():
+            int8.unlink()
+        quantize_static(str(fp32), str(int8), _Reader(feeds), quant_format=QuantFormat.QDQ,
+                        activation_type=QuantType.QUInt8, weight_type=QuantType.QInt8,
+                        per_channel=tier.per_channel)
+        if assess(name):
+            return chosen(name)
+    except Exception as e:
+        tried.append({"variant": name, "error": str(e)[-300:]})
+        log(f"  квантование {name}: ошибка {str(e)[-200:]}")
+    raise SystemExit(f"ни один вариант квантования не сохранил векторы: {tried}")
 
 
 class Int8Encoder:
