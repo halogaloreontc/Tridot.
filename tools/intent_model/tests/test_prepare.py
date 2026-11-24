@@ -171,8 +171,8 @@ def test_warehouse_aug_is_synthetic_and_not_leaked():
 
 
 def test_web_tier_layout():
-    web, light = config.tier("web"), config.tier("light")
-    assert web.source == "web" and web.base_model == light.base_model and web.revision == light.revision
+    web, accurate = config.tier("web"), config.tier("accurate")
+    assert web.source == "web" and web.base_model == accurate.base_model and web.revision == accurate.revision
     assert config.holdout_sets("web") == (*config.EVAL_SETS, config.WEB_SET)
     assert config.holdout_sets("light") == config.EVAL_SETS
     from tools.intent_model import pipeline
@@ -180,5 +180,5 @@ def test_web_tier_layout():
     names = [*config.EVAL_SETS, "warehouse.cal", "warehouse.test"]
     g = pipeline._groups(web, names)
     assert g["test"] == ["warehouse.test"] and "warehouse.test" not in g["dev"] and "warehouse.cal" in g["dev"]
-    g = pipeline._groups(light, list(config.EVAL_SETS))
+    g = pipeline._groups(config.tier("light"), list(config.EVAL_SETS))
     assert g["dev"] == ["fresh"] and g["test"] == ["held2", "held3"]
