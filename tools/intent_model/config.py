@@ -122,9 +122,13 @@ TIERS: dict[str, Tier] = {
     "web": Tier(
         name="web",
         title="Веб-помощник",
-        # Своя модель на основе «Лёгкой» (тот же размер): корпус и
-        # синтетические перефразы команд склада (aug/warehouse.jsonl).
-        base_from="light",
+        # Своя модель на основе «Точной» (USER-base, архив ~131 МБ):
+        # корпус и синтетические перефразы команд склада
+        # (aug/warehouse.jsonl). Прежняя основа — «Лёгкая» (rubert-tiny2):
+        # на складе она ловила заметно меньше, чем хотелось (решение
+        # владельца, 2026-11-24). Уровень наследует от «Точной» lr,
+        # эпохи, префикс «query: », поканальное int8 и bs1_vectors.
+        base_from="accurate",
         connectors=WEB_CONNECTORS,
         extra_sets=(WEB_SET,),
         augment=(WEB_SET,),
