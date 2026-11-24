@@ -45,7 +45,7 @@ def prepare(tier: config.Tier) -> list[dict]:
 
 def holdout(tier: config.Tier, name: str) -> Path:
     """Модель на снимке корпуса до разбора пробы `name` → векторы int8 снимка и пробы."""
-    from .model import Int8Encoder, export, train
+    from .model import Int8Encoder, degenerate, export, train
 
     if tier.model_from:
         raise SystemExit(f"Уровень {tier.name} берёт пробы уровня {tier.model_from}")
@@ -55,15 +55,27 @@ def holdout(tier: config.Tier, name: str) -> Path:
     evals = data.load_eval(name)
     rows, stats = data.prepare(data.train_files(tier.augment, snap), [e["text"] for e in evals])
     log(f"[{tier.name}/{name}] снимок {snap[:7]}: {stats['train_rows']} фраз, утечка убрана: {stats.get('removed_leak', 0)}")
-    model, info = train(tier, rows)
     config.OUT.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=config.OUT) as tmp:
-        export(model, Path(tmp), tier.per_channel)
-        del model
-        enc = Int8Encoder(Path(tmp), prefix=tier.prefix)
-        bs = 1 if tier.bs1_vectors else 32
-        tr = enc.encode([r["text"] for r in rows], bs=bs)
-        ev = enc.encode([e["text"] for e in evals], bs=bs)
+    # Обучение на CPU недетерминированно (параллельные редукции) и изредка
+    # схлопывается: все векторы почти одинаковы, kNN отвечает одной меткой
+    # на всё. Такое всё равно не пройдёт бюджет в verify — переобучаем сразу,
+    # до трёх попыток с разными seed.
+    for attempt in range(3):
+        if attempt:
+            log(f"[{tier.name}/{name}] модель схлопнулась, переобучение (seed {config.SEED + attempt})")
+        model, info = train(tier, rows, seed=config.SEED + attempt)
+        with tempfile.TemporaryDirectory(dir=config.OUT) as tmp:
+            export(model, Path(tmp), tier.per_channel)
+            del model
+            enc = Int8Encoder(Path(tmp), prefix=tier.prefix)
+            bs = 1 if tier.bs1_vectors else 32
+            tr = enc.encode([r["text"] for r in rows], bs=bs)
+            ev = enc.encode([e["text"] for e in evals], bs=bs)
+        if not degenerate(ev):
+            break
+    else:
+        raise SystemExit(f"[{tier.name}/{name}] модель схлопывается и после трёх обучений — нужен разбор гиперпараметров")
+    info["seed"] = config.SEED + attempt
     path = _out(tier) / "calib" / f"{name}.npz"
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -77,18 +89,33 @@ def holdout(tier: config.Tier, name: str) -> Path:
 
 def build_model(tier: config.Tier) -> Path:
     """Модель уровня на всём текущем корпусе (без отсева проб: это выпуск)."""
-    from .model import Int8Encoder, export, train
+    from .model import Int8Encoder, degenerate, export, train
 
     rows = prepare(tier)
-    model, info = train(tier, rows)
     d = _out(tier) / "model"
     if d.exists():
         shutil.rmtree(d)
-    minfo = export(model, d, tier.per_channel)
-    del model
-    enc = Int8Encoder(d, prefix=tier.prefix)
+    config.OUT.mkdir(parents=True, exist_ok=True)
     bs = 1 if tier.bs1_vectors else 32
-    np.save(d / "train_emb.npy", enc.encode([r["text"] for r in rows], bs=bs).astype(np.float16))
+    # Как и в holdout: схлопнувшуюся модель переобучаем с другим seed.
+    for attempt in range(3):
+        if attempt:
+            log(f"[{tier.name}] модель схлопнулась, переобучение (seed {config.SEED + attempt})")
+        model, info = train(tier, rows, seed=config.SEED + attempt)
+        tmp = Path(tempfile.mkdtemp(dir=config.OUT))
+        minfo = export(model, tmp, tier.per_channel)
+        del model
+        enc = Int8Encoder(tmp, prefix=tier.prefix)
+        emb = enc.encode([r["text"] for r in rows], bs=bs).astype(np.float16)
+        if degenerate(emb):
+            shutil.rmtree(tmp, ignore_errors=True)
+            continue
+        shutil.move(str(tmp), d)
+        break
+    else:
+        raise SystemExit(f"[{tier.name}] модель схлопывается и после трёх обучений — нужен разбор гиперпараметров")
+    info["seed"] = config.SEED + attempt
+    np.save(d / "train_emb.npy", emb)
     data.write_jsonl(d / "train.jsonl", rows)
     minfo["train"] = info
     (d / "model_info.json").write_text(json.dumps(minfo, ensure_ascii=False, indent=1), encoding="utf-8")

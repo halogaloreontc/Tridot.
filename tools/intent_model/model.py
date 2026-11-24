@@ -74,12 +74,12 @@ def batches(rows: Sequence[dict], steps: int, seed: int = config.SEED):
         yield idx
 
 
-def train(tier: config.Tier, rows: Sequence[dict], threads: int | None = None):
+def train(tier: config.Tier, rows: Sequence[dict], threads: int | None = None, seed: int = config.SEED):
     """Дообученная SentenceTransformer (в памяти, на диск не пишется)."""
     import torch
     from sentence_transformers import SentenceTransformer
 
-    torch.manual_seed(config.SEED)
+    torch.manual_seed(seed)
     torch.set_num_threads(threads or max(1, os.cpu_count() or 1))
     model = SentenceTransformer(base_path(tier), device="cpu")
     model.max_seq_length = config.MAX_LEN
@@ -97,10 +97,12 @@ def train(tier: config.Tier, rows: Sequence[dict], threads: int | None = None):
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_at)
     model.train()
     t0 = time.time()
-    for step, idx in enumerate(batches(rows, steps)):
+    for step, idx in enumerate(batches(rows, steps, seed=seed)):
         feats = model.tokenize([tier.prefix + rows[i]["text"] for i in idx])
         z = torch.nn.functional.normalize(model(feats)["sentence_embedding"], dim=-1)
         loss = _supcon(z, torch.tensor([lab_id[rows[i]["label"]] for i in idx]), config.TAU)
+        if not torch.isfinite(loss):
+            raise SystemExit(f"обучение разошлось: loss не конечен на шаге {step} (seed {seed})")
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
@@ -111,6 +113,23 @@ def train(tier: config.Tier, rows: Sequence[dict], threads: int | None = None):
     model.eval()
     log(f"  обучение: {steps} шагов, {time.time() - t0:.0f} с")
     return model, {"steps": steps, "train_sec": round(time.time() - t0), "rows": len(rows)}
+
+
+def degenerate(emb: np.ndarray, limit: float = 0.95) -> bool:
+    """Схлопнувшаяся модель: почти все векторы фраз почти одинаковы.
+
+    Обучение SupCon на CPU недетерминированно (параллельные редукции), и
+    изредка сходится в вырожденную точку: средний косинус между разными
+    фразами ~0.97+ против ~0.6 у здоровой модели, kNN подсказывает одну и
+    ту же метку на всём подряд (измерено на прогоне 2026-11-24). Такая
+    модель всё равно не пройдёт бюджет ошибок в verify — лучше узнать сразу
+    и переобучить с другим seed (holdout/build_model это делают сами).
+    """
+    v = np.asarray(emb, dtype=np.float32)
+    v = v / np.linalg.norm(v, axis=1, keepdims=True)
+    s = v @ v.T
+    off = s[~np.eye(len(v), dtype=bool)]
+    return bool(off.mean() > limit)
 
 
 def pooling_of(model) -> str:
