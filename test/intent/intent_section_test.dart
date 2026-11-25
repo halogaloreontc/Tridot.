@@ -38,15 +38,14 @@ final class _Rig {
   AppSettings settings = const AppSettings();
   final List<AppSettings> changes = <AppSettings>[];
 
-  /// Выпуск [version]: архивы обоих уровней, отдаётся [serve].
-  List<int> publish(String version, {String serve = 'light', String? sha}) {
-    final zips = <String, List<int>>{
-      'light': fakePackZip(version: version),
-      'accurate': fakePackZip(tier: 'accurate', version: version),
-    };
-    transport.latest(fakeLatestJson(version, zips, sha: sha));
-    downloader.bytes = zips[serve]!;
-    return zips[serve]!;
+  /// Выпуск [version] с архивом «Точной»; его и отдаёт загрузчик.
+  List<int> publish(String version, {String? sha}) {
+    final zip = fakePackZip(version: version);
+    transport.latest(
+      fakeLatestJson(version, <String, List<int>>{'accurate': zip}, sha: sha),
+    );
+    downloader.bytes = zip;
+    return zip;
   }
 }
 
@@ -140,7 +139,7 @@ void main() {
     await _pumpSection(tester, rig);
     expect(find.text('Понимание фраз'), findsOneWidget);
     expect(find.text('Выключено'), findsOneWidget);
-    expect(_subtitle(tester, IntentTier.light), contains('~32 МБ, быстрее'));
+    expect(find.byKey(const Key('intent-tier-light')), findsNothing);
     expect(
       _subtitle(tester, IntentTier.accurate),
       contains('~131 МБ, понимает больше'),
@@ -151,7 +150,7 @@ void main() {
     expect(rig.transport.requests, isEmpty, reason: 'без нажатия — без сети');
   });
 
-  testWidgets('«Лёгкая»: подтверждение, загрузка с ходом, затем работает',
+  testWidgets('«Точная»: подтверждение, загрузка с ходом, затем работает',
       (tester) async {
     final rig = await _rig(tester);
     rig.publish('1.0.0');
@@ -161,13 +160,12 @@ void main() {
       ..gateFrom = 1;
     await _pumpSection(tester, rig);
 
-    await tester.tap(find.byKey(const Key('intent-tier-light')));
+    await tester.tap(find.byKey(const Key('intent-tier-accurate')));
     await tester.pumpAndSettle();
-    expect(find.text('Скачать модель «Лёгкая»?'), findsOneWidget);
-    expect(find.textContaining('Wi‑Fi'), findsNothing);
+    expect(find.text('Скачать модель «Точная»?'), findsOneWidget);
     await tester.tap(find.byKey(const Key('intent-download-confirm')));
     await tester.pump();
-    expect(rig.settings.intentTier, IntentTier.light);
+    expect(rig.settings.intentTier, IntentTier.accurate);
 
     await _until(
       tester,
@@ -175,15 +173,15 @@ void main() {
     );
     await tester.pump();
     expect(find.byKey(const Key('intent-progress-bar')), findsOneWidget);
-    expect(find.textContaining('«Лёгкая» скачивается'), findsOneWidget);
+    expect(find.textContaining('«Точная» скачивается'), findsOneWidget);
     expect(find.byKey(const Key('intent-cancel')), findsOneWidget);
-    expect(_subtitle(tester, IntentTier.light), contains('скачивается'));
+    expect(_subtitle(tester, IntentTier.accurate), contains('скачивается'));
 
     gate.complete();
     await _until(tester, () => rig.kit.running);
     await tester.pump();
     expect(find.byKey(const Key('intent-progress-bar')), findsNothing);
-    expect(_subtitle(tester, IntentTier.light), contains('работает'));
+    expect(_subtitle(tester, IntentTier.accurate), contains('работает'));
     expect(find.byKey(const Key('intent-delete')), findsOneWidget);
     expect(find.byKey(const Key('intent-check')), findsOneWidget);
   });
@@ -191,7 +189,7 @@ void main() {
   testWidgets('«Точная» — совет про Wi‑Fi; «Отмена» возвращает прежний уровень',
       (tester) async {
     final rig = await _rig(tester);
-    rig.publish('1.0.0', serve: 'accurate');
+    rig.publish('1.0.0');
     final gate = Completer<void>();
     rig.downloader
       ..gate = gate
@@ -219,7 +217,7 @@ void main() {
     final rig = await _rig(tester);
     rig.publish('1.0.0', sha: 'a' * 64);
     await _pumpSection(tester, rig);
-    await tester.tap(find.byKey(const Key('intent-tier-light')));
+    await tester.tap(find.byKey(const Key('intent-tier-accurate')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('intent-download-confirm')));
     await tester.pump();
@@ -239,49 +237,38 @@ void main() {
     expect(find.byKey(const Key('intent-error')), findsNothing);
   });
 
-  testWidgets('установлена: смена уровня перезагружает модель', (tester) async {
+  testWidgets('установлена: выключить и включить без новой загрузки',
+      (tester) async {
     final rig = await _rig(tester);
     rig.publish('1.0.0');
-    await _install(tester, rig, IntentTier.light);
+    await _install(tester, rig, IntentTier.accurate);
     await _pumpSection(tester, rig);
-    expect(_subtitle(tester, IntentTier.light), contains('работает'));
+    expect(_subtitle(tester, IntentTier.accurate), contains('работает'));
 
     await tester.tap(find.byKey(const Key('intent-tier-off')));
     await _until(tester, () => !rig.kit.running);
     await tester.pump();
     expect(rig.host.unloads, 1);
-    expect(_subtitle(tester, IntentTier.light), contains('скачана'));
+    expect(_subtitle(tester, IntentTier.accurate), contains('скачана'));
 
-    await tester.tap(find.byKey(const Key('intent-tier-light')));
+    final downloads = rig.downloader.calls;
+    await tester.tap(find.byKey(const Key('intent-tier-accurate')));
     await _until(tester, () => rig.kit.running);
     await tester.pump();
     expect(
-      find.text('Скачать модель «Лёгкая»?'),
+      find.text('Скачать модель «Точная»?'),
       findsNothing,
       reason: 'скачанную не скачиваем',
     );
     expect(rig.host.loads, hasLength(2));
-
-    rig.publish('1.0.0', serve: 'accurate');
-    await tester.tap(find.byKey(const Key('intent-tier-accurate')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('intent-download-confirm')));
-    await tester.pump();
-    await _until(
-      tester,
-      () => rig.kit.installed?.tier == IntentTier.accurate && !rig.kit.isBusy,
-    );
-    await tester.pump();
-    expect(rig.host.loads.last, endsWith('accurate-1.0.0'));
-    expect(_subtitle(tester, IntentTier.accurate), contains('работает'));
-    expect(_subtitle(tester, IntentTier.light), isNot(contains('скачана')));
+    expect(rig.downloader.calls, downloads);
   });
 
   testWidgets('обновление: «Проверить» → «Доступна новая версия — N МБ»',
       (tester) async {
     final rig = await _rig(tester);
     rig.publish('1.0.0');
-    await _install(tester, rig, IntentTier.light);
+    await _install(tester, rig, IntentTier.accurate);
     await _pumpSection(tester, rig);
     final next = rig.publish('1.1.0');
     await tester.tap(find.byKey(const Key('intent-check')));
@@ -302,14 +289,14 @@ void main() {
     );
     await tester.pump();
     expect(find.byKey(const Key('intent-update')), findsNothing);
-    expect(rig.host.loads.last, endsWith('light-1.1.0'));
+    expect(rig.host.loads.last, endsWith('accurate-1.1.0'));
   });
 
   testWidgets('удалить модель: подтверждение, уровень выключен',
       (tester) async {
     final rig = await _rig(tester);
     rig.publish('1.0.0');
-    await _install(tester, rig, IntentTier.light);
+    await _install(tester, rig, IntentTier.accurate);
     await _pumpSection(tester, rig);
     await tester.tap(find.byKey(const Key('intent-delete')));
     await tester.pumpAndSettle();
@@ -458,7 +445,7 @@ void main() {
     });
   });
 
-  testWidgets('предложение «Лёгкой» — один раз, после первого «не понял»',
+  testWidgets('предложение нейромодуля — один раз, после первого «не понял»',
       (tester) async {
     final rig = await _rig(tester);
     final store = InMemorySettingsStore();
@@ -502,14 +489,16 @@ void main() {
     }
 
     await say('фывапролджэ');
-    expect(find.text('Понимать больше фраз?'), findsOneWidget);
+    expect(find.text('Включить нейромодуль?'), findsOneWidget);
+    expect(find.textContaining('~131 МБ'), findsOneWidget);
+    expect(find.textContaining('лучше скачивать по Wi‑Fi'), findsOneWidget);
     await tester.tap(find.byKey(const Key('intent-offer-later')));
     await tester.pumpAndSettle();
     expect((await store.load()).intentOffered, isTrue);
     expect((await store.load()).intentTier, IntentTier.off);
 
     await say('ячсмитьбю');
-    expect(find.text('Понимать больше фраз?'), findsNothing);
+    expect(find.text('Включить нейромодуль?'), findsNothing);
     expect(rig.transport.requests, isEmpty);
   });
 }

@@ -25,11 +25,10 @@ enum VoiceEngineChoice {
       };
 }
 
-/// Уровень модели понимания (ADR-045): «Выключено» (по умолчанию),
-/// «Лёгкая» или «Точная». Модель скачивается по выбору пользователя.
+/// Уровень модели понимания (ADR-045): «Выключено» (по умолчанию) или
+/// «Точная». Модель скачивается по выбору пользователя.
 enum IntentTier {
   off('off', 'Выключено'),
-  light('light', 'Лёгкая'),
   accurate('accurate', 'Точная');
 
   const IntentTier(this.id, this.title);
@@ -156,7 +155,10 @@ final class AppSettings {
       homeScreenShowText: json['widgets.show_text'] != false,
       // Понимание фраз (ADR-045): прежние настройки без этих ключей —
       // модель выключена, учёба и журнал включены.
-      intentTier: IntentTier.parse(json['intent.tier']),
+      // Уровня «Лёгкая» больше нет: его выбор становится «Точной».
+      intentTier: json['intent.tier'] == 'light'
+          ? IntentTier.accurate
+          : IntentTier.parse(json['intent.tier']),
       intentLearning: json['intent.learning'] != false,
       intentLogging: json['intent.logging'] != false,
       intentOffered: json['intent.offered'] == true,
@@ -401,7 +403,7 @@ final class AppSettings {
   /// «Собирать непонятые фразы»: локальный журнал. По умолчанию включено.
   final bool intentLogging;
 
-  /// Предложение скачать «Лёгкую» уже показано: больше само не появляется.
+  /// Предложение включить нейромодуль уже показано: больше само не появляется.
   final bool intentOffered;
 
   /// Текст задач уходит на виджет: включён показ и нет входа по отпечатку.

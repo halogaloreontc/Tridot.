@@ -80,7 +80,7 @@ class Tier:
     # тензору пакета (с паддингом), поэтому вектор фразы на CPU зависит от
     # соседей в пакете; на устройстве фраза кодируется одна. У USER-base
     # (accurate) это сдвигает вектор заметно (косинус bs=1 vs bs=32 — от
-    # ~0,84), у rubert-tiny2 (light) — почти незаметно (от ~0,997). Включает
+    # ~0,84), у прежней rubert-tiny2 — почти незаметно (от ~0,997). Включает
     # кодирование по одной фразе (без паддинга) в holdout/model/verify, чтобы
     # индекс и пробы совпадали с тем, что видит устройство.
     bs1_vectors: bool = False
@@ -92,15 +92,7 @@ class Tier:
 
 
 TIERS: dict[str, Tier] = {
-    "light": Tier(
-        name="light",
-        title="Лёгкая",
-        base_model="cointegrated/rubert-tiny2",
-        revision="e8ed3b0c8bbf4fb6984c3de043bf7d2f4e5969ae",
-        license="MIT",
-        lr=1e-4,
-        epochs=4,
-    ),
+    # «Лёгкая» (rubert-tiny2) снята 2026-11-25: остались «Точная» и web.
     "accurate": Tier(
         name="accurate",
         title="Точная",
@@ -124,7 +116,7 @@ TIERS: dict[str, Tier] = {
         title="Веб-помощник",
         # Своя модель на основе «Точной» (USER-base, архив ~131 МБ):
         # корпус и синтетические перефразы команд склада
-        # (aug/warehouse.jsonl). Прежняя основа — «Лёгкая» (rubert-tiny2):
+        # (aug/warehouse.jsonl). Прежняя основа — rubert-tiny2:
         # на складе она ловила заметно меньше, чем хотелось (решение
         # владельца, 2026-11-24). Уровень наследует от «Точной» lr,
         # эпохи, префикс «query: », поканальное int8 и bs1_vectors.

@@ -13,10 +13,9 @@ String intentMegabytes(int bytes) => (bytes / 1e6).round().toString();
 String intentTierSize(IntentKit intent, IntentTier tier) =>
     '~${intentMegabytes(intent.bytesOf(tier))} МБ';
 
-/// Что даёт уровень: «быстрее», «понимает больше».
+/// Что даёт уровень.
 String intentTierHint(IntentTier tier) => switch (tier) {
       IntentTier.off => 'Только правила',
-      IntentTier.light => 'быстрее',
       IntentTier.accurate => 'понимает больше',
     };
 
@@ -74,22 +73,26 @@ Future<bool> confirmIntentDownload(
   return download ?? false;
 }
 
-/// Однократное предложение скачать «Лёгкую» после первого «не понял».
-/// `true` — «Скачать».
+/// Однократное предложение включить нейромодуль после первого «не понял».
+/// `true` — «Включить».
 Future<bool> showIntentOffer(BuildContext context, IntentKit intent) async {
-  final size = intentTierSize(intent, IntentTier.light);
+  final bytes = intent.bytesOf(IntentTier.accurate);
+  final size = intentTierSize(intent, IntentTier.accurate);
+  final wifi = bytes > IntentKit.wifiHintBytes
+      ? ' Файл большой — лучше скачивать по Wi‑Fi.'
+      : '';
   final download = await showDialog<bool>(
     context: context,
     builder: (BuildContext context) => AppDialog(
       icon: Icons.lightbulb_outline,
       iconColor: context.colors.tileViolet,
       scrollable: true,
-      title: const WholeWordText('Понимать больше фраз?'),
+      title: const WholeWordText('Включить нейромодуль?'),
       content: Text(
-        'Когда Связной не понял фразу, модель на устройстве может предложить '
-        'догадку «Похоже, вы хотите…?». Модель «Лёгкая» ($size) скачается '
+        'Когда Связной не понял фразу, нейромодуль на устройстве может '
+        'предложить догадку «Похоже, вы хотите…?». Модель ($size) скачается '
         'один раз с сайта $intentHost. Ничего не отправляется — всё '
-        'считается на телефоне. Включить позже можно в «Настройки → '
+        'считается на телефоне.$wifi Включить позже можно в «Настройки → '
         'Понимание фраз».',
       ),
       actions: <Widget>[
@@ -101,7 +104,7 @@ Future<bool> showIntentOffer(BuildContext context, IntentKit intent) async {
         FilledButton(
           key: const Key('intent-offer-download'),
           onPressed: () => Navigator.of(context).pop(true),
-          child: const ActionLabel('Скачать'),
+          child: const ActionLabel('Включить'),
         ),
       ],
     ),

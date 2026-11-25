@@ -9,21 +9,32 @@ import 'package:local_assistant/core/settings/app_settings.dart';
 String _latest({
   String version = '1.0.0',
   String url =
-      'https://github.com/halogaloreontc/Tridot./releases/download/intent-latest/tridot-intent-light-1.0.0.zip',
-  Object size = 33000000,
+      'https://github.com/halogaloreontc/Tridot./releases/download/intent-latest/tridot-intent-accurate-1.0.0.zip',
+  Object size = 131000000,
   String sha = 'ab',
+  bool withLight = false,
 }) =>
     jsonEncode(<String, Object?>{
       'format': 'tridot-intent-latest/1',
       'version': version,
       'tiers': <String, Object?>{
-        'light': <String, Object?>{
+        if (withLight)
+          'light': <String, Object?>{
+            'url': 'https://github.com/halogaloreontc/Tridot./releases/'
+                'download/intent-latest/tridot-intent-light-1.0.0.zip',
+            'file': 'tridot-intent-light-1.0.0.zip',
+            'size': 33000000,
+            'sha256': 'cd' * 32,
+            'title': 'Лёгкая',
+            'threshold': 0.91,
+          },
+        'accurate': <String, Object?>{
           'url': url,
-          'file': 'tridot-intent-light-1.0.0.zip',
+          'file': 'tridot-intent-accurate-1.0.0.zip',
           'size': size,
           'sha256': sha == 'ab' ? 'AB' * 32 : sha,
-          'title': 'Лёгкая',
-          'threshold': 0.91,
+          'title': 'Точная',
+          'threshold': 0.895,
         },
       },
     });
@@ -33,11 +44,15 @@ void main() {
     test('формат шага 1 разбирается', () {
       final release = IntentRelease.parse(_latest());
       expect(release.version, '1.0.0');
-      final light = release.of(IntentTier.light)!;
-      expect(light.size, 33000000);
-      expect(light.sha256, 'ab' * 32);
-      expect(light.threshold, 0.91);
-      expect(release.of(IntentTier.accurate), isNull);
+      final accurate = release.of(IntentTier.accurate)!;
+      expect(accurate.size, 131000000);
+      expect(accurate.sha256, 'ab' * 32);
+      expect(accurate.threshold, 0.895);
+    });
+
+    test('прежний выпуск с «Лёгкой» тоже разбирается', () {
+      final release = IntentRelease.parse(_latest(withLight: true));
+      expect(release.of(IntentTier.accurate)?.size, 131000000);
     });
 
     test('чужой адрес, http, битые размер и сумма — отказ', () {

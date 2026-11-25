@@ -3214,8 +3214,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return PasswordPhrases.looksLike(Utterance.analyze(text, now: _now));
   }
 
-  /// Первое «не понял» без модели понимания: один раз предложить скачать
-  /// «Лёгкую» (ADR-045). Любой ответ — больше само не предлагается.
+  /// Первое «не понял» без модели понимания: один раз предложить включить
+  /// нейромодуль (ADR-045). Любой ответ — больше само не предлагается.
   Future<void> _offerIntent() async {
     final intent = widget.intent;
     if (intent == null ||
@@ -3230,8 +3230,8 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _changeSettings(_settings.copyWith(intentOffered: true));
     final download = await showIntentOffer(context, intent);
     if (!mounted || !download) return;
-    _changeSettings(_settings.copyWith(intentTier: IntentTier.light));
-    unawaited(intent.install(IntentTier.light));
+    _changeSettings(_settings.copyWith(intentTier: IntentTier.accurate));
+    unawaited(intent.install(IntentTier.accurate));
     _announce('Модель понимания скачивается. Ход загрузки — в «Настройки → '
         'Понимание фраз»');
   }

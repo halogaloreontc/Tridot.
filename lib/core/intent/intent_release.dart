@@ -44,7 +44,7 @@ final class IntentReleaseTier {
   /// Имя архива: `tridot-intent-light-1.0.0.zip`.
   final String file;
 
-  /// «Лёгкая», «Точная».
+  /// «Точная», «Веб-помощник».
   final String title;
   final double? threshold;
 }

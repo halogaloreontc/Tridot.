@@ -141,7 +141,7 @@ final class IntentManifest {
   /// `light`, `accurate`, `web`.
   final String tier;
 
-  /// «Лёгкая», «Точная».
+  /// «Точная», «Веб-помощник».
   final String title;
   final String version;
 
