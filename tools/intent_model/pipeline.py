@@ -108,7 +108,14 @@ def build_model(tier: config.Tier) -> Path:
         model, info = train(tier, rows, seed=config.SEED + attempt)
         tmp = Path(tempfile.mkdtemp(dir=config.OUT))
         try:
-            probes = [r["text"] for r in rows[:64]]
+            # У финальной модели проверяем не только первые строки корпуса:
+            # квантование может пройти на них и дать нулевой catch на пробах.
+            # Здесь модель уже видела разбор проб, поэтому это не честная
+            # метрика, а сторожок пригодности именно выпускаемого ONNX.
+            seen_texts = [e["text"] for ev in _sets(
+                tier, lambda n: data.load_eval(n, tier.connectors)
+            ).values() for e in ev]
+            probes = list(dict.fromkeys([r["text"] for r in rows[:64]] + seen_texts))
             minfo, _ = export_checked(model, tmp, tier, probes)
         except SystemExit as e:
             log(f"[{tier.name}] {e}")
@@ -191,6 +198,37 @@ def _report(tier: config.Tier, per_set: dict[str, tuple[list[dict], list[dict]]]
     return res
 
 
+def _pick_threshold(tier: config.Tier, per_set: dict[str, tuple[list[dict], list[dict]]]) -> float | None:
+    """Порог по dev; своя калибровочная проба уровня тоже должна быть в бюджете.
+
+    Суммарная dev размывает редкие ошибки: у web сотни общих «не команд»
+    скрывали 20 % ложных тревог на маленькой warehouse.cal. Поэтому для
+    каждой <проба>.cal отдельно действуют оба бюджета. После выбора даём
+    запас 0,01: таких калибровочных «не команд» мало, и соседняя фраза на
+    отложенной половине не должна сразу вывести выпуск за бюджет. Test в
+    выборе не участвует.
+    """
+    dev = _groups(tier, list(per_set))["dev"]
+    dev_rows = _merge(per_set, dev)
+    cal_names = [n for n in dev if n.endswith(".cal")]
+    candidates = []
+    for t in config.GRID:
+        m = knn.at_threshold(*dev_rows, t)
+        if not (m["catch"] > 0 and knn.within_budget(m)):
+            continue
+        if any(not knn.within_budget(knn.at_threshold(*per_set[n], t)) for n in cal_names):
+            continue
+        candidates.append((t, m["catch"]))
+    if not candidates:
+        return None
+    best_catch = max(c for _, c in candidates)
+    best_t = max(t for t, c in candidates if c == best_catch)
+    if not cal_names:
+        return best_t
+    i = config.GRID.index(best_t)
+    return config.GRID[min(i + 2, len(config.GRID) - 1)]
+
+
 def calibrate(tier: config.Tier) -> dict:
     """Порог на int8, честно: каждая проба — на модели снимка до её разбора.
 
@@ -200,7 +238,7 @@ def calibrate(tier: config.Tier) -> dict:
     """
     per_set = _honest_preds(tier)
     dev = _groups(tier, list(per_set))["dev"]
-    t = knn.pick_threshold(*_merge(per_set, dev))
+    t = _pick_threshold(tier, per_set)
     if t is None:
         raise SystemExit(f"[{tier.name}] на {'+'.join(dev)} нет порога в бюджете ошибок")
     grid = {}
@@ -267,21 +305,27 @@ def verify(tier: config.Tier) -> dict:
         texts += [e["text"] for e in ev]
     lat = {"1_thread": Int8Encoder(pd, threads=1, prefix=tier.prefix, info_dir=md).latency_ms(texts[:300])}
     honest = cal["honest"]["all"]
+    seen = _report(tier, per_set, t)
+    # Финальная модель видела эти разборы, поэтому seen не заменяет honest.
+    # Но нулевой catch здесь означает сломанный выпуск (например, неудачное
+    # квантование): такой пакет нельзя публиковать даже при хороших honest.
+    seen_ok = seen["all"]["catch"] > 0 and knn.within_budget(seen["all"])
     m = {
         "threshold": t,
         "k": config.K,
         "budget": {"max_wrong_of_suggested": config.MAX_WRONG_OF_SUGGESTED, "max_false_alarm": config.MAX_FALSE_ALARM},
         "honest": cal["honest"],
-        "seen": _report(tier, per_set, t),
+        "seen": seen,
         "latency_ms": lat,
         "sizes_mb": {p.name: round(p.stat().st_size / 1e6, 2) for p in sorted(pd.iterdir())},
         # web: в бюджете и все пробы вместе, и отложенная половина складской.
-        "ok": knn.within_budget(honest) and (not tier.extra_sets or knn.within_budget(cal["honest"]["test"])),
+        "ok": seen_ok and knn.within_budget(honest) and (not tier.extra_sets or knn.within_budget(cal["honest"]["test"])),
     }
     (_out(tier) / "metrics.json").write_text(json.dumps(m, ensure_ascii=False, indent=1), encoding="utf-8")
     log(
         f"[{tier.name}] проверка: честно catch {honest['catch']} %, неверных из подсказок {honest['wrong_of_suggested']} %, "
-        f"ложные тревоги {honest['false_alarm']} %; на текущем корпусе catch {m['seen']['all']['catch']} %; "
+        f"ложные тревоги {honest['false_alarm']} %; на текущем корпусе catch {seen['all']['catch']} % "
+        f"({'пригодна' if seen_ok else 'НЕПРИГОДНА'}); "
         f"задержка {lat['1_thread']['median']} мс — {'в бюджете' if m['ok'] else 'ВНЕ БЮДЖЕТА'}"
     )
     if tier.extra_sets:
@@ -316,7 +360,7 @@ def finish(tier: config.Tier, version: str, strict: bool = True) -> Path:
     index(tier)
     m = verify(tier)
     if strict and not m["ok"]:
-        raise SystemExit(f"[{tier.name}] честные метрики вне бюджета — пакет не собран (metrics.json)")
+        raise SystemExit(f"[{tier.name}] проверка выпуска не пройдена — пакет не собран (metrics.json)")
     return do_pack(tier, version)
 
 

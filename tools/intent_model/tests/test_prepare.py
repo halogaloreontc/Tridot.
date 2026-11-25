@@ -138,7 +138,7 @@ def test_split_half_balanced_and_stable():
 
 
 def test_split_ignores_web_restriction():
-    """Половины одинаковы для полного и урезанного набора меток."""
+    """Половины одинаковые для полного и урезанного набора меток."""
     full = data.load_eval(config.WEB_SET)
     web = data.load_eval(config.WEB_SET, config.WEB_CONNECTORS)
     assert [e["id"] for e in data.split_half(full)[1]] == [e["id"] for e in data.split_half(web)[1]]
@@ -182,3 +182,30 @@ def test_web_tier_layout():
     assert g["test"] == ["warehouse.test"] and "warehouse.test" not in g["dev"] and "warehouse.cal" in g["dev"]
     g = pipeline._groups(config.tier("light"), list(config.EVAL_SETS))
     assert g["dev"] == ["fresh"] and g["test"] == ["held2", "held3"]
+
+
+def test_web_threshold_keeps_own_calibration_in_budget_with_margin():
+    from tools.intent_model import pipeline
+
+    def ev(label, rule="ok"):
+        return {"label": label, "rule_outcome": rule}
+
+    def pr(label, sim):
+        return {"pred": label, "sim": sim, "second": None}
+
+    fresh_eval = [ev("warehouse:warehouse.where", "none"), ev("warehouse:warehouse.me", "none"), ev("warehouse:warehouse.price", "none")]
+    fresh_eval += [ev("none") for _ in range(100)]
+    fresh_pred = [pr("warehouse:warehouse.where", 0.8), pr("warehouse:warehouse.me", 0.94), pr("warehouse:warehouse.price", 0.99)]
+    fresh_pred += [pr("none", 0.99) for _ in range(100)]
+    # 2/20 = 10 % ложных тревог на cal при 0,8: общая dev этого скрывает.
+    cal_eval = [ev("none") for _ in range(20)]
+    cal_pred = [pr("warehouse:warehouse.where", 0.8), pr("warehouse:warehouse.me", 0.9)]
+    cal_pred += [pr("none", 0.99) for _ in range(18)]
+    per_set = {
+        "fresh": (fresh_eval, fresh_pred),
+        "warehouse.cal": (cal_eval, cal_pred),
+        # Значения test нарочно противоположные: выбор не должен их читать.
+        "warehouse.test": (cal_eval, [pr("none", 0.99) for _ in range(20)]),
+    }
+    assert knn.pick_threshold(*pipeline._merge(per_set, ["fresh", "warehouse.cal"])) == 0.8
+    assert pipeline._pick_threshold(config.tier("web"), per_set) == 0.95
