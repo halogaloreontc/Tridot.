@@ -264,12 +264,13 @@ final class IntentKit extends ChangeNotifier {
 
   File get _pointer => File(p.join(root, 'active.json'));
 
-  /// Папки пакетов; `light` — снятый уровень «Лёгкая», только для уборки.
+  /// Папки пакетов; `light` — снятая rubert-tiny2, только для уборки.
   static final RegExp _packName = RegExp(r'^(light|accurate)-\d+\.\d+\.\d+$');
 
   static final RegExp _retiredName = RegExp(r'^light-\d+\.\d+\.\d+');
 
-  /// На диске была «Лёгкая»: её убрали, «Точная» скачается сама.
+  /// На диске была rubert-tiny2 (`light`): её убрали, `accurate` скачается
+  /// сама.
   bool _retired = false;
 
   /// Состояние по диску: при запуске.
@@ -281,7 +282,7 @@ final class IntentKit extends ChangeNotifier {
     _notify();
   }
 
-  /// Удаляет пакеты, архивы и указатель «Лёгкой». `true` — что-то было.
+  /// Удаляет пакеты, архивы и указатель `light`. `true` — что-то было.
   Future<bool> _removeRetired() async {
     var found = false;
     try {
@@ -305,7 +306,7 @@ final class IntentKit extends ChangeNotifier {
         }
       }
     } on Object {
-      // Нет доступа — уберётся при установке «Точной».
+      // Нет доступа — уберётся при установке `accurate`.
     }
     return found;
   }

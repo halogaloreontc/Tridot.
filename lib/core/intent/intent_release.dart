@@ -44,7 +44,7 @@ final class IntentReleaseTier {
   /// Имя архива: `tridot-intent-light-1.0.0.zip`.
   final String file;
 
-  /// «Точная», «Веб-помощник».
+  /// «Лёгкая», «Веб-помощник».
   final String title;
   final double? threshold;
 }
@@ -125,7 +125,7 @@ final class IntentRelease {
     'objects.githubusercontent.com',
   };
 
-  /// Архив больше этого не скачивается: «Точная» — ~131 МБ.
+  /// Архив больше этого не скачивается: «Лёгкая» — ~131 МБ.
   static const int maxArchiveBytes = 512 * 1024 * 1024;
 
   static bool allowedUrl(Uri url) =>

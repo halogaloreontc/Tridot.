@@ -69,7 +69,7 @@ def test_pack_manifest_and_latest(tmp_path):
 def test_web_tier_has_accurate_base_and_own_connectors():
     web = config.tier("web")
     assert web.base_model == config.tier("accurate").base_model
-    # своя модель на основе «Точной» (с 2026-11-24; раньше — rubert-tiny2):
+    # своя модель на основе `accurate` (с 2026-11-24; раньше — rubert-tiny2):
     # дообучение со складской синтетикой
     assert web.source == "web" and web.augment == (config.WEB_SET,)
     assert set(web.connectors) == {"warehouse", "calc", "talk"}

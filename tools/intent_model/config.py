@@ -92,10 +92,11 @@ class Tier:
 
 
 TIERS: dict[str, Tier] = {
-    # «Лёгкая» (rubert-tiny2) снята 2026-11-25: остались «Точная» и web.
+    # rubert-tiny2 (`light`) снята 2026-11-25; с того же дня `accurate`
+    # называется «Лёгкая» (раньше — «Точная»).
     "accurate": Tier(
         name="accurate",
-        title="Точная",
+        title="Лёгкая",
         base_model="deepvk/USER-base",
         revision="e8446472f6024df155a04b2f0911b6044cabc51f",
         license="Apache-2.0",
@@ -114,11 +115,11 @@ TIERS: dict[str, Tier] = {
     "web": Tier(
         name="web",
         title="Веб-помощник",
-        # Своя модель на основе «Точной» (USER-base, архив ~131 МБ):
+        # Своя модель на основе `accurate` (USER-base, архив ~131 МБ):
         # корпус и синтетические перефразы команд склада
         # (aug/warehouse.jsonl). Прежняя основа — rubert-tiny2:
         # на складе она ловила заметно меньше, чем хотелось (решение
-        # владельца, 2026-11-24). Уровень наследует от «Точной» lr,
+        # владельца, 2026-11-24). Уровень наследует от `accurate` lr,
         # эпохи, префикс «query: », поканальное int8 и bs1_vectors.
         base_from="accurate",
         connectors=WEB_CONNECTORS,

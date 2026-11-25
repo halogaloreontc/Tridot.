@@ -44,7 +44,7 @@ void main() {
         ..sort())
       : <String>[];
 
-  /// Выпуск [version] с архивом «Точной»; его и отдаёт загрузчик.
+  /// Выпуск [version] с архивом `accurate`; его и отдаёт загрузчик.
   List<int> publish(
     String version, {
     String? sha,
@@ -63,7 +63,7 @@ void main() {
     return zip;
   }
 
-  /// «Лёгкая», оставшаяся на диске от прежней версии приложения.
+  /// rubert-tiny2 (`light`), оставшаяся на диске от прежней версии приложения.
   void retiredLightOnDisk() {
     final pack = Directory(p.join(root, 'light-1.0.0'))
       ..createSync(recursive: true);
@@ -209,14 +209,14 @@ void main() {
     expect(kit.installed, isNull);
   });
 
-  test('«Лёгкая» с диска удаляется, «Точная» скачивается сама', () async {
+  test('rubert-tiny2 с диска удаляется, `accurate` скачивается сама', () async {
     publish('1.0.0');
     retiredLightOnDisk();
     await kit.refresh();
-    expect(kit.installed, isNull, reason: 'пакет «Лёгкой» не загружается');
+    expect(kit.installed, isNull, reason: 'пакет `light` не загружается');
     expect(kit.hasPartial, isFalse);
     expect(entries(), isEmpty);
-    // Настройки с «light» читаются как «Точная».
+    // Настройки с `light` читаются как `accurate`.
     final settings = AppSettings.fromJson(const {'intent.tier': 'light'});
     expect(settings.intentTier, IntentTier.accurate);
     await kit.apply(settings);
@@ -232,7 +232,7 @@ void main() {
     expect(downloader.calls, calls);
   });
 
-  test('«Лёгкая» на диске, но модель выключена — ничего не скачивается',
+  test('rubert-tiny2 на диске, но модель выключена — ничего не скачивается',
       () async {
     publish('1.0.0');
     retiredLightOnDisk();

@@ -8,10 +8,10 @@ import 'bert_chars.g.dart';
 /// tokenizers с усечением до [IntentTokenizer.encode] `maxLength`.
 ///
 /// Два вида — по `model.type` в `tokenizer.json` пакета:
-/// - [WordPieceTokenizer] (была у снятой «Лёгкой»): BertNormalizer
+/// - [WordPieceTokenizer] (была у снятой rubert-tiny2): BertNormalizer
 ///   (clean_text, без нижнего регистра и снятия ударений), BertPreTokenizer,
 ///   `##`;
-/// - [ByteBpeTokenizer] («Точная» и `web`): byte-level BPE в духе RoBERTa.
+/// - [ByteBpeTokenizer] (USER-base: «Лёгкая» и `web`): byte-level BPE в духе RoBERTa.
 ///
 /// Чистый Dart без ввода-вывода: тот же код работает в приложении и в
 /// веб-помощнике.

@@ -25,7 +25,7 @@ String _latest({
             'file': 'tridot-intent-light-1.0.0.zip',
             'size': 33000000,
             'sha256': 'cd' * 32,
-            'title': 'Лёгкая',
+            'title': 'Лёгкая (rubert-tiny2)',
             'threshold': 0.91,
           },
         'accurate': <String, Object?>{
@@ -33,7 +33,7 @@ String _latest({
           'file': 'tridot-intent-accurate-1.0.0.zip',
           'size': size,
           'sha256': sha == 'ab' ? 'AB' * 32 : sha,
-          'title': 'Точная',
+          'title': 'Лёгкая',
           'threshold': 0.895,
         },
       },
@@ -50,7 +50,7 @@ void main() {
       expect(accurate.threshold, 0.895);
     });
 
-    test('прежний выпуск с «Лёгкой» тоже разбирается', () {
+    test('прежний выпуск с `light` тоже разбирается', () {
       final release = IntentRelease.parse(_latest(withLight: true));
       expect(release.of(IntentTier.accurate)?.size, 131000000);
     });

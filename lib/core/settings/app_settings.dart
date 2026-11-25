@@ -26,10 +26,11 @@ enum VoiceEngineChoice {
 }
 
 /// Уровень модели понимания (ADR-045): «Выключено» (по умолчанию) или
-/// «Точная». Модель скачивается по выбору пользователя.
+/// «Лёгкая» (USER-base; id `accurate` остался от прежнего названия «Точная»).
+/// Модель скачивается по выбору пользователя.
 enum IntentTier {
   off('off', 'Выключено'),
-  accurate('accurate', 'Точная');
+  accurate('accurate', 'Лёгкая');
 
   const IntentTier(this.id, this.title);
 
@@ -155,7 +156,8 @@ final class AppSettings {
       homeScreenShowText: json['widgets.show_text'] != false,
       // Понимание фраз (ADR-045): прежние настройки без этих ключей —
       // модель выключена, учёба и журнал включены.
-      // Уровня «Лёгкая» больше нет: его выбор становится «Точной».
+      // Прежней «Лёгкой» (rubert-tiny2, id `light`) больше нет: её выбор
+      // становится нынешней «Лёгкой» (`accurate`).
       intentTier: json['intent.tier'] == 'light'
           ? IntentTier.accurate
           : IntentTier.parse(json['intent.tier']),

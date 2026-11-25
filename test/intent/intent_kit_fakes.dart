@@ -93,7 +93,7 @@ List<int> fakePackZip({
   final manifest = <String, Object?>{
     'format': IntentManifest.format,
     'tier': manifestTier ?? tier,
-    'title': tier == 'web' ? 'Веб-помощник' : 'Точная',
+    'title': tier == 'web' ? 'Веб-помощник' : 'Лёгкая',
     'version': version,
     'threshold': 0.9,
     'k': 5,
@@ -143,7 +143,7 @@ String fakeLatestJson(
             'file': 'tridot-intent-$key-$version.zip',
             'size': value.length,
             'sha256': sha ?? crypto.sha256.convert(value).toString(),
-            'title': key == 'web' ? 'Веб-помощник' : 'Точная',
+            'title': key == 'web' ? 'Веб-помощник' : 'Лёгкая',
             'threshold': 0.9,
           },
       },

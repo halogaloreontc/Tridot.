@@ -54,7 +54,7 @@ Float32List webVector(Map<String, double> weights) {
   return v;
 }
 
-/// Токенизатор поддельного пакета — урезанный словарь «Лёгкой».
+/// Токенизатор поддельного пакета — урезанный словарь прежней rubert-tiny2.
 String webTokenizerJson() =>
     File('test/fixtures/intent/tokenizer_light_mini.json').readAsStringSync();
 

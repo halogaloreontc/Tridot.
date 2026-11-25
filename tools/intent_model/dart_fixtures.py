@@ -3,7 +3,7 @@
     python -m tools.intent_model.dart_fixtures --packs <папка с распакованным
         пакетом accurate/>
 
-Эталоны снятой «Лёгкой» (WordPiece, `tokenizer_light_mini.json`) остаются как
+Эталоны снятой rubert-tiny2 (WordPiece, `tokenizer_light_mini.json`) остаются как
 есть: без пакета `light/` они не пересобираются.
 
 - `test/fixtures/intent/tokenizer_golden.json` — номера токенов HF tokenizers

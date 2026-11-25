@@ -10,7 +10,7 @@ import 'package:local_assistant/core/intent/intent_io.dart';
 
 import 'local_packs.dart';
 
-/// Настоящая модель «Точной» через ONNX Runtime (ADR-045), если пакет
+/// Настоящая модель `accurate` («Лёгкая») через ONNX Runtime (ADR-045), если пакет
 /// собран и распакован локально, библиотека onnxruntime находится и есть
 /// эталон:
 ///

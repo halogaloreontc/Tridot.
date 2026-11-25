@@ -38,7 +38,7 @@ final class _Rig {
   AppSettings settings = const AppSettings();
   final List<AppSettings> changes = <AppSettings>[];
 
-  /// Выпуск [version] с архивом «Точной»; его и отдаёт загрузчик.
+  /// Выпуск [version] с архивом `accurate`; его и отдаёт загрузчик.
   List<int> publish(String version, {String? sha}) {
     final zip = fakePackZip(version: version);
     transport.latest(
@@ -150,7 +150,7 @@ void main() {
     expect(rig.transport.requests, isEmpty, reason: 'без нажатия — без сети');
   });
 
-  testWidgets('«Точная»: подтверждение, загрузка с ходом, затем работает',
+  testWidgets('«Лёгкая»: подтверждение, загрузка с ходом, затем работает',
       (tester) async {
     final rig = await _rig(tester);
     rig.publish('1.0.0');
@@ -162,7 +162,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('intent-tier-accurate')));
     await tester.pumpAndSettle();
-    expect(find.text('Скачать модель «Точная»?'), findsOneWidget);
+    expect(find.text('Скачать модель «Лёгкая»?'), findsOneWidget);
     await tester.tap(find.byKey(const Key('intent-download-confirm')));
     await tester.pump();
     expect(rig.settings.intentTier, IntentTier.accurate);
@@ -173,7 +173,7 @@ void main() {
     );
     await tester.pump();
     expect(find.byKey(const Key('intent-progress-bar')), findsOneWidget);
-    expect(find.textContaining('«Точная» скачивается'), findsOneWidget);
+    expect(find.textContaining('«Лёгкая» скачивается'), findsOneWidget);
     expect(find.byKey(const Key('intent-cancel')), findsOneWidget);
     expect(_subtitle(tester, IntentTier.accurate), contains('скачивается'));
 
@@ -186,7 +186,7 @@ void main() {
     expect(find.byKey(const Key('intent-check')), findsOneWidget);
   });
 
-  testWidgets('«Точная» — совет про Wi‑Fi; «Отмена» возвращает прежний уровень',
+  testWidgets('«Лёгкая» — совет про Wi‑Fi; «Отмена» возвращает прежний уровень',
       (tester) async {
     final rig = await _rig(tester);
     rig.publish('1.0.0');
@@ -256,7 +256,7 @@ void main() {
     await _until(tester, () => rig.kit.running);
     await tester.pump();
     expect(
-      find.text('Скачать модель «Точная»?'),
+      find.text('Скачать модель «Лёгкая»?'),
       findsNothing,
       reason: 'скачанную не скачиваем',
     );
