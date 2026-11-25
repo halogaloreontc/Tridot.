@@ -76,6 +76,8 @@ class Tier:
     base_from: str = ""
     # Дополнительные синтетические фразы обучения (aug/<имя>.jsonl).
     augment: tuple[str, ...] = field(default_factory=tuple)
+    # Голое время до модели не доходит (веб-помощник, data.bare_time).
+    time_guard: bool = False
     # Динамическое int8-квантование считает масштаб активаций по всему
     # тензору пакета (с паддингом), поэтому вектор фразы на CPU зависит от
     # соседей в пакете; на устройстве фраза кодируется одна. У USER-base
@@ -132,6 +134,7 @@ TIERS: dict[str, Tier] = {
         connectors=WEB_CONNECTORS,
         extra_sets=(WEB_SET,),
         augment=(WEB_SET,),
+        time_guard=True,
     ),
 }
 
@@ -158,6 +161,7 @@ def tier(name: str) -> Tier:
             extra_sets=t.extra_sets,
             base_from=t.base_from,
             augment=t.augment,
+            time_guard=t.time_guard,
         )
     return t
 

@@ -167,3 +167,28 @@
 {"id": "aug-wh-165", "text": "что-то спина болит", "connector": "warehouse", "intent": "unknown", "route": "none"}
 {"id": "aug-wh-166", "text": "остаток пути пешком", "connector": "warehouse", "intent": "unknown", "route": "none"}
 {"id": "aug-wh-167", "text": "приход нового начальника", "connector": "warehouse", "intent": "unknown", "route": "none"}
+{"id": "aug-wh-168", "text": "19:20", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-169", "text": "21:05", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-170", "text": "9:40", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-171", "text": "13:10", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-172", "text": "5:55", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-173", "text": "22:35", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-174", "text": "16:50", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-175", "text": "10:25", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-176", "text": "в 6", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-177", "text": "к 8", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-178", "text": "к 14", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-179", "text": "в 17", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-180", "text": "около 7", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-181", "text": "в 23", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-182", "text": "часам к 5", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-183", "text": "к 9:20", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-184", "text": "в 8:10", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-185", "text": "на 6:40", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-186", "text": "в полвосьмого", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-187", "text": "в половине девятого", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-188", "text": "к четверти седьмого", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-189", "text": "в 10 вечера", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-190", "text": "к 6 вечера", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-191", "text": "в 15:45", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}
+{"id": "aug-wh-192", "text": "без пятнадцати восемь", "connector": "calc", "intent": "unknown", "route": "none", "note": "голое время — не пример"}

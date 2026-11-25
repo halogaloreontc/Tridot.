@@ -17,6 +17,7 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 
@@ -43,6 +44,18 @@ def prepare(tier: config.Tier) -> list[dict]:
     return rows
 
 
+def _probe_texts(rows: Sequence[dict], n: int = 128) -> list[str]:
+    """Пробные фразы для проверки квантования — из обучающих, равномерно по корпусу.
+
+    В holdout пробы проверки (evals) сюда не попадают: по ним считается
+    честная метрика, и ни выбор варианта квантования, ни калибровка
+    статического int8 не должны их видеть.
+    """
+    texts = [r["text"] for r in rows]
+    step = max(1, len(texts) // n)
+    return list(dict.fromkeys(texts[::step]))[:n]
+
+
 def holdout(tier: config.Tier, name: str) -> Path:
     """Модель на снимке корпуса до разбора пробы `name` → векторы int8 снимка и пробы."""
     from .model import Int8Encoder, degenerate, export_checked, train
@@ -60,26 +73,33 @@ def holdout(tier: config.Tier, name: str) -> Path:
     # квантование дообученной USER-base нестабильно: при здоровом loss
     # векторы int8 иногда вырождаются. До трёх попыток с разными seed;
     # квантование проверяется против fp32 в export_checked.
+    probes = _probe_texts(rows)
+    why = ""
     for attempt in range(3):
         if attempt:
-            log(f"[{tier.name}/{name}] модель схлопнулась, переобучение (seed {config.SEED + attempt})")
+            log(f"[{tier.name}/{name}] {why}, переобучение (seed {config.SEED + attempt})")
         model, info = train(tier, rows, seed=config.SEED + attempt)
         with tempfile.TemporaryDirectory(dir=config.OUT) as tmp:
             try:
-                info, _ = export_checked(model, Path(tmp), tier, [e["text"] for e in evals])
+                qinfo, _ = export_checked(model, Path(tmp), tier, probes)
             except SystemExit as e:
                 log(f"[{tier.name}/{name}] {e}")
+                why = "модель не прошла экспорт и квантование"
                 continue
             del model
             enc = Int8Encoder(Path(tmp), prefix=tier.prefix)
             bs = 1 if tier.bs1_vectors else 32
             tr = enc.encode([r["text"] for r in rows], bs=bs)
             ev = enc.encode([e["text"] for e in evals], bs=bs)
+        # Только сторож пригодности: метки проб не читаются.
         if not degenerate(ev):
             break
+        why = "векторы проб int8 схлопнулись"
     else:
         raise SystemExit(f"[{tier.name}/{name}] модель схлопывается и после трёх обучений — нужен разбор гиперпараметров")
-    info["seed"] = config.SEED + attempt
+    # Статистика обучения (steps, train_sec, rows) остаётся; квантование — рядом.
+    info = {**info, "seed": config.SEED + attempt, "quantization": qinfo.get("quantization"),
+            "quantization_check": qinfo.get("quantization_check")}
     path = _out(tier) / "calib" / f"{name}.npz"
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -102,9 +122,10 @@ def build_model(tier: config.Tier) -> Path:
     config.OUT.mkdir(parents=True, exist_ok=True)
     bs = 1 if tier.bs1_vectors else 32
     # Как и в holdout: схлопнувшуюся модель переобучаем с другим seed.
+    why = ""
     for attempt in range(3):
         if attempt:
-            log(f"[{tier.name}] модель схлопнулась, переобучение (seed {config.SEED + attempt})")
+            log(f"[{tier.name}] {why}, переобучение (seed {config.SEED + attempt})")
         model, info = train(tier, rows, seed=config.SEED + attempt)
         tmp = Path(tempfile.mkdtemp(dir=config.OUT))
         try:
@@ -120,12 +141,14 @@ def build_model(tier: config.Tier) -> Path:
         except SystemExit as e:
             log(f"[{tier.name}] {e}")
             shutil.rmtree(tmp, ignore_errors=True)
+            why = "модель не прошла экспорт и квантование"
             continue
         del model
         enc = Int8Encoder(tmp, prefix=tier.prefix)
         emb = enc.encode([r["text"] for r in rows], bs=bs).astype(np.float16)
         if degenerate(emb):
             shutil.rmtree(tmp, ignore_errors=True)
+            why = "векторы корпуса int8 схлопнулись"
             continue
         shutil.move(str(tmp), d)
         break
@@ -174,7 +197,7 @@ def _honest_preds(tier: config.Tier) -> dict[str, tuple[list[dict], list[dict]]]
         if ids != [e["id"] for e in evals]:
             raise SystemExit(f"{path}: фразы пробы {name} изменились — пересоберите holdout")
         labels = [data.restrict(str(x), tier.connectors) for x in z["labels"]]
-        preds = knn.knn(z["train"], labels, z["eval"])
+        preds = _guard(tier, evals, knn.knn(z["train"], labels, z["eval"]))
         if name in tier.extra_sets:
             by_id = {e["id"]: p for e, p in zip(evals, preds)}
             cal, test = data.split_half(evals)
@@ -183,6 +206,13 @@ def _honest_preds(tier: config.Tier) -> dict[str, tuple[list[dict], list[dict]]]
         else:
             out[name] = (evals, preds)
     return out
+
+
+def _guard(tier: config.Tier, evals: list[dict], preds: list[dict]) -> list[dict]:
+    """Фразы, которые помощник до модели не пускает (голое время), — без подсказки."""
+    if not tier.time_guard:
+        return preds
+    return [{**p, "pred": "none"} if data.bare_time(e["text"]) else p for e, p in zip(evals, preds)]
 
 
 def _merge(per_set: dict[str, tuple[list[dict], list[dict]]], names: list[str]) -> tuple[list[dict], list[dict]]:
@@ -225,8 +255,15 @@ def _pick_threshold(tier: config.Tier, per_set: dict[str, tuple[list[dict], list
     best_t = max(t for t, c in candidates if c == best_catch)
     if not cal_names:
         return best_t
+    # Запас строже, но и он обязан пройти те же бюджеты: доля неверных
+    # считается от подсказок и при строгом пороге может вырасти, а catch —
+    # упасть до нуля. Не прошёл запас +0,01 — пробуем +0,005, иначе best_t.
+    ok = {t for t, _ in candidates}
     i = config.GRID.index(best_t)
-    return config.GRID[min(i + 2, len(config.GRID) - 1)]
+    for j in (i + 2, i + 1):
+        if j < len(config.GRID) and config.GRID[j] in ok:
+            return config.GRID[j]
+    return best_t
 
 
 def calibrate(tier: config.Tier) -> dict:
@@ -301,7 +338,7 @@ def verify(tier: config.Tier) -> dict:
     per_set = {}
     texts = []
     for name, ev in _sets(tier, lambda n: data.load_eval(n, tier.connectors)).items():
-        per_set[name] = (ev, knn.knn(emb, labels, enc.encode([e["text"] for e in ev], bs=bs)))
+        per_set[name] = (ev, _guard(tier, ev, knn.knn(emb, labels, enc.encode([e["text"] for e in ev], bs=bs))))
         texts += [e["text"] for e in ev]
     lat = {"1_thread": Int8Encoder(pd, threads=1, prefix=tier.prefix, info_dir=md).latency_ms(texts[:300])}
     honest = cal["honest"]["all"]

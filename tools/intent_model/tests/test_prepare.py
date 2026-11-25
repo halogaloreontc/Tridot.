@@ -1,6 +1,7 @@
 """Подготовка данных и метрики — без моделей и сети."""
 
 import json
+import re
 
 import numpy as np
 import pytest
@@ -209,3 +210,59 @@ def test_web_threshold_keeps_own_calibration_in_budget_with_margin():
     }
     assert knn.pick_threshold(*pipeline._merge(per_set, ["fresh", "warehouse.cal"])) == 0.8
     assert pipeline._pick_threshold(config.tier("web"), per_set) == 0.95
+
+
+def test_web_threshold_margin_falls_back_when_it_breaks_budget():
+    """Запас +0,01 строже, но доля неверных среди подсказок там больше бюджета — остаётся выбранный порог."""
+    from tools.intent_model import pipeline
+
+    def ev(label, rule="none"):
+        return {"label": label, "rule_outcome": rule}
+
+    def pr(label, sim):
+        return {"pred": label, "sim": sim, "second": None}
+
+    lab = "warehouse:warehouse.where"
+    fresh_eval = [ev(lab) for _ in range(21)]
+    # 10 верных на 0,80 и 10 на 0,95, одна неверная на 0,96: при 0,80 неверных 1/21 (4,8 %),
+    # строже 0,80 — 1/11 (9,1 %), уже вне бюджета.
+    fresh_pred = [pr(lab, 0.80) for _ in range(10)] + [pr(lab, 0.95) for _ in range(10)] + [pr("warehouse:warehouse.me", 0.96)]
+    cal_eval = [ev("none", "ok") for _ in range(20)]
+    cal_pred = [pr("none", 0.99) for _ in range(20)]
+    per_set = {"fresh": (fresh_eval, fresh_pred), "warehouse.cal": (cal_eval, cal_pred), "warehouse.test": (cal_eval, cal_pred)}
+    assert pipeline._pick_threshold(config.tier("web"), per_set) == 0.8
+
+
+def test_holdout_probes_are_training_texts_only():
+    from tools.intent_model import pipeline
+
+    rows = [{"text": f"фраза {i}", "label": "x"} for i in range(1000)]
+    probes = pipeline._probe_texts(rows)
+    assert len(probes) == 128 and set(probes) <= {r["text"] for r in rows}
+    assert probes == pipeline._probe_texts(rows)
+    assert pipeline._probe_texts(rows[:5]) == [r["text"] for r in rows[:5]]
+
+
+def test_warehouse_aug_teaches_bare_times_are_not_calc():
+    rows, _ = data.prepare(list(data.aug_files([config.WEB_SET])))
+    times = [r for r in rows if re.fullmatch(r"(?:в|к|на|около)?\s*\d{1,2}(?::\d{2})?", r["text"])]
+    assert len(times) >= 10 and all(r["label"] == "none" for r in times)
+
+
+# Те же случаи — test/intent/bare_time_test.dart (разбор один в Dart и здесь).
+BARE_TIME_YES = ["7:30", "в 9", "нет, на 6:45", "к 6 вечера", "часам к 5", "около 7", "18:30", "в 10."]
+BARE_TIME_NO = ["15", "7+30", "2*9", "в 9 разбуди", "12.11", "сколько будет 7:30", "в 25", "7:75", ""]
+
+
+def test_bare_time_guard():
+    from tools.intent_model import pipeline
+
+    assert all(data.bare_time(t) for t in BARE_TIME_YES)
+    assert not any(data.bare_time(t) for t in BARE_TIME_NO)
+    assert config.tier("web").time_guard
+    assert not config.tier("light").time_guard and not config.tier("accurate").time_guard
+    evals = [{"text": "7:30"}, {"text": "где 100200"}]
+    preds = [{"pred": "calc:calc.eval", "sim": 0.99, "second": None}, {"pred": "warehouse:warehouse.where", "sim": 0.9, "second": None}]
+    got = pipeline._guard(config.tier("web"), evals, preds)
+    assert [p["pred"] for p in got] == ["none", "warehouse:warehouse.where"]
+    assert pipeline._guard(config.tier("light"), evals, preds) == preds
