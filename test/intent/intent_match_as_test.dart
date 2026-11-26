@@ -13,6 +13,7 @@ import 'package:local_assistant/core/skills/converter/converter_connector.dart';
 import 'package:local_assistant/core/skills/data/data_connector.dart';
 import 'package:local_assistant/core/skills/files/files_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
+import 'package:local_assistant/core/skills/table/table_connector.dart';
 import 'package:local_assistant/core/skills/weather/weather_connector.dart';
 import 'package:local_assistant/core/skills/ytdl/ytdl_connector.dart';
 import 'package:local_assistant/core/skills/ytdl/ytdl_unavailable.dart';
@@ -52,6 +53,7 @@ void main() {
       backend: WeatherService.memory(clock: clock),
       clock: clock,
     ),
+    TableConnector(read: (_) async => null, model: () async => null),
   ];
   Connector byId(String id) =>
       connectors.firstWhere((Connector c) => c.info.id == id);
