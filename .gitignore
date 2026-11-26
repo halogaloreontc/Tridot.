@@ -39,3 +39,7 @@ __pycache__/
 # tool/widget_release/release_core.dart); в репозитории — только лицензия.
 web/ort/*.mjs
 web/ort/*.wasm
+
+# Исходники llama.cpp (tool/fetch_llama.sh) и сборка обёртки
+third_party/llama.cpp/
+build/tridot_llama/
