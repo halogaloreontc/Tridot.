@@ -11,7 +11,7 @@ import '../widgets/whole_word_text.dart';
 import 'gen_kit.dart';
 
 /// Раздел «Продвинутая» в настройках (ADR-046): переключатель, загрузка
-/// модели (~2,5 ГБ) с ходом и «Отменой», обновление, удаление. Устройству
+/// модели (~2,9 ГБ) с ходом и «Отменой», обновление, удаление. Устройству
 /// с памятью меньше 8 ГБ модель не предлагается.
 final class GenSettingsSection extends StatelessWidget {
   const GenSettingsSection({

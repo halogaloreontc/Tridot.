@@ -103,7 +103,7 @@ final class GenKit extends ChangeNotifier {
   final Future<String> Function(File file) _hasher;
 
   /// Примерный размер, пока `latest.json` не прочитан.
-  static const int approxBytes = 2500 * 1000 * 1000;
+  static const int approxBytes = 2900 * 1000 * 1000;
 
   GenKitPhase _phase = GenKitPhase.idle;
   GenKitError? _error;
@@ -170,6 +170,10 @@ final class GenKit extends ChangeNotifier {
 
   static final RegExp _modelName = RegExp(r'^gen-\d+\.\d+\.\d+\.gguf$');
 
+  /// Недокачанное: склеенное начало и части.
+  static final RegExp _pieceName =
+      RegExp(r'^gen-\d+\.\d+\.\d+\.gguf\.(part|\d{3})$');
+
   /// Состояние по диску и память устройства: при запуске.
   Future<void> refresh() async {
     if (!_ramKnown) {
@@ -209,7 +213,7 @@ final class GenKit extends ChangeNotifier {
       final dir = Directory(root);
       if (!await dir.exists()) return false;
       await for (final e in dir.list(followLinks: false)) {
-        if (e is File && e.path.endsWith('.gguf.part')) return true;
+        if (e is File && _pieceName.hasMatch(p.basename(e.path))) return true;
       }
     } on Object {
       // Нет доступа.
@@ -345,26 +349,59 @@ final class GenKit extends ChangeNotifier {
       return;
     }
     final name = 'gen-${release.version}.gguf';
+    // Склеенное начало модели; части качаются по одной в `<имя>.NNN` и
+    // дописываются сюда, как только прошли проверку.
     final part = File(p.join(root, '$name.part'));
     final target = File(p.join(root, name));
     try {
       await Directory(root).create(recursive: true);
-      await _deleteOther(keepPart: part.path);
-      _received = await part.exists() ? await part.length() : 0;
+      await _deleteOther(keep: name, keepPrefix: '$name.');
+      var done = await part.exists() ? await part.length() : 0;
+      _received = done;
       _total = release.size;
       _set(GenKitPhase.downloading);
-      await for (final progress in downloader.download(
-        release.url,
-        part,
-        expectedBytes: release.size,
-        cancel: cancel,
-      )) {
-        _received = progress.received;
-        _total = progress.total;
-        _notify();
-      }
-      if (cancel.isCancelled) {
-        throw const DownloadException(DownloadError.cancelled);
+      var start = 0;
+      for (final (i, piece) in release.parts.indexed) {
+        final end = start + piece.size;
+        if (done >= end) {
+          start = end;
+          continue;
+        }
+        if (done != start) {
+          // Склеенное не на границе части: начать заново.
+          await _deleteQuietly(part);
+          done = 0;
+          _hasPartial = false;
+          _set(GenKitPhase.error, error: GenKitError.checksum);
+          return;
+        }
+        final file =
+            File(p.join(root, '$name.${(i + 1).toString().padLeft(3, '0')}'));
+        await for (final progress in downloader.download(
+          piece.url,
+          file,
+          expectedBytes: piece.size,
+          cancel: cancel,
+        )) {
+          _received = start + progress.received;
+          _notify();
+        }
+        if (cancel.isCancelled) {
+          throw const DownloadException(DownloadError.cancelled);
+        }
+        if (await file.length() != piece.size ||
+            (await _hasher(file)).toLowerCase() != piece.sha256) {
+          await _deleteQuietly(file);
+          _set(GenKitPhase.error, error: GenKitError.checksum);
+          return;
+        }
+        final sink = part.openWrite(mode: FileMode.append);
+        await sink.addStream(file.openRead());
+        await sink.flush();
+        await sink.close();
+        await _deleteQuietly(file);
+        done = end;
+        start = end;
       }
       _set(GenKitPhase.verifying);
       if (await part.length() != release.size ||
@@ -395,7 +432,7 @@ final class GenKit extends ChangeNotifier {
       await _deleteOther(keep: name);
       _set(GenKitPhase.idle);
     } on DownloadException catch (e) {
-      _hasPartial = await _exists(part);
+      _hasPartial = await _anyPartial();
       switch (e.error) {
         case DownloadError.cancelled:
           _set(GenKitPhase.idle);
@@ -404,16 +441,16 @@ final class GenKit extends ChangeNotifier {
         case DownloadError.storage:
           _set(GenKitPhase.error, error: GenKitError.storage);
         case DownloadError.tooLarge || DownloadError.sizeMismatch:
-          await _deleteQuietly(part);
+          await _deleteOther(keep: target.path);
           _hasPartial = false;
           _set(GenKitPhase.error, error: GenKitError.tooLarge);
         case DownloadError.checksumMismatch:
-          await _deleteQuietly(part);
+          await _deleteOther(keep: target.path);
           _hasPartial = false;
           _set(GenKitPhase.error, error: GenKitError.checksum);
       }
     } on FileSystemException {
-      _hasPartial = await _exists(part);
+      _hasPartial = await _anyPartial();
       _set(GenKitPhase.error, error: GenKitError.storage);
     }
   }
@@ -434,24 +471,19 @@ final class GenKit extends ChangeNotifier {
     _set(GenKitPhase.idle);
   }
 
-  /// Удаляет модели и недокачанное, кроме [keep] и [keepPart].
-  Future<void> _deleteOther({String? keep, String? keepPart}) async {
+  /// Удаляет модели и недокачанное, кроме [keep] и файлов, начинающихся
+  /// с [keepPrefix] (недокачанное той же версии).
+  Future<void> _deleteOther({String? keep, String? keepPrefix}) async {
     final dir = Directory(root);
     if (!await dir.exists()) return;
     await for (final e in dir.list(followLinks: false)) {
       final name = p.basename(e.path);
-      if (e.path == keepPart || name == keep) continue;
-      if (_modelName.hasMatch(name) || name.endsWith('.gguf.part')) {
+      if (name == keep || (keepPrefix != null && name.startsWith(keepPrefix))) {
+        continue;
+      }
+      if (_modelName.hasMatch(name) || _pieceName.hasMatch(name)) {
         await _deleteQuietly(e);
       }
-    }
-  }
-
-  static Future<bool> _exists(File f) async {
-    try {
-      return await f.exists();
-    } on Object {
-      return false;
     }
   }
 

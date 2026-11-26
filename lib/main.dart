@@ -333,7 +333,7 @@ Future<void> main() async {
     links: LinkOpener(platform: currentJobPlatform()),
   );
   await weather.load();
-  // «Продвинутая» (ADR-046): модель (~2,5 ГБ) скачивается только по
+  // «Продвинутая» (ADR-046): модель (~2,9 ГБ) скачивается только по
   // кнопке в «Настройки → Продвинутая», загружается при первом вопросе к
   // таблице. Вложения читаются из папки чатов.
   final gen = GenSetup(attachments: IoAttachmentStore(chatsPath));

@@ -1,0 +1,4 @@
+# Перевод весов в GGUF (tools/gen_model/release.py convert): поверх
+# tools/intent_model/requirements.txt (torch, transformers, safetensors).
+# convert_hf_to_gguf.py импортирует sentencepiece даже для BPE-моделей.
+sentencepiece==0.2.3

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart' as crypto;
@@ -9,7 +8,7 @@ import 'package:local_assistant/core/gen/gen_model.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
 import 'package:path/path.dart' as p;
 
-import '../support/fake_voice.dart';
+import 'gen_fakes.dart';
 
 final class _Transport implements HttpTransport {
   String? body;
@@ -54,24 +53,11 @@ final class _Model implements GenModel, Closeable {
   Future<void> close() async => closed = true;
 }
 
-String latest(String version, List<int> bytes, {String? sha, int? ram}) =>
-    jsonEncode(<String, Object?>{
-      'format': GenRelease.format,
-      'version': version,
-      'model': <String, Object?>{
-        'url': '${GenRelease.latestUrl.resolve('tridot-gen-$version.gguf')}',
-        'size': bytes.length,
-        'sha256': sha ?? crypto.sha256.convert(bytes).toString(),
-        'title': 'Qwen3-4B-Instruct-2507',
-        if (ram != null) 'min_ram_mb': ram,
-      },
-    });
-
 void main() {
   late Directory temp;
   late String root;
   late _Transport transport;
-  late FakeFileDownloader downloader;
+  late PartsDownloader downloader;
   late List<_Model> opened;
   late int? ram;
 
@@ -99,18 +85,29 @@ void main() {
     temp = await Directory.systemTemp.createTemp('gen_kit_test');
     root = p.join(temp.path, 'gen');
     transport = _Transport();
-    downloader = FakeFileDownloader(const <int>[]);
+    downloader = PartsDownloader();
     opened = <_Model>[];
     ram = 16000;
   });
 
   tearDown(() => temp.delete(recursive: true));
 
-  List<int> publish(String version, {String? sha, int? minRam}) {
+  List<int> publish(
+    String version, {
+    int? minRam,
+    int? badPart,
+    String? wholeSha,
+  }) {
     final bytes =
         List<int>.generate(4000, (i) => (i * 13 + version.length) % 256);
-    transport.body = latest(version, bytes, sha: sha, ram: minRam);
-    downloader.bytes = bytes;
+    transport.body = publishGen(
+      downloader,
+      version,
+      bytes,
+      minRam: minRam,
+      badPart: badPart,
+      wholeSha: wholeSha,
+    );
     return bytes;
   }
 
@@ -171,28 +168,55 @@ void main() {
     expect(g.error, GenKitError.lowMemory);
   });
 
-  test('сумма не совпала — файл удалён', () async {
+  test('сумма части не совпала — часть удалена, склеенное начало цело',
+      () async {
     final g = kit();
     addTearDown(g.dispose);
-    publish('1.0.0', sha: 'a' * 64);
+    publish('1.0.0', badPart: 2);
     await g.install();
     expect(g.error, GenKitError.checksum);
     expect(g.installed, isNull);
+    expect(entries(), <String>['gen-1.0.0.gguf.part']);
+    expect(File(p.join(root, 'gen-1.0.0.gguf.part')).lengthSync(), 1500);
+  });
+
+  test('сумма целого файла не совпала — всё удалено', () async {
+    final g = kit();
+    addTearDown(g.dispose);
+    publish('1.0.0', wholeSha: 'b' * 64);
+    await g.install();
+    expect(g.error, GenKitError.checksum);
     expect(entries(), isEmpty);
   });
 
-  test('обрыв — продолжение с места', () async {
+  test('части склеиваются по порядку, на диске — только модель', () async {
     final g = kit();
     addTearDown(g.dispose);
     final bytes = publish('1.0.0');
-    downloader.dropAfter = 2;
+    await g.install();
+    expect(downloader.calls, 3);
+    expect(File(p.join(root, 'gen-1.0.0.gguf')).readAsBytesSync(), bytes);
+    expect(entries(), <String>['active.json', 'gen-1.0.0.gguf']);
+  });
+
+  test('обрыв — продолжение с места, готовые части не качаются снова',
+      () async {
+    final g = kit();
+    addTearDown(g.dispose);
+    final bytes = publish('1.0.0');
+    downloader.dropAfter = 4; // часть 1 (3 куска) и кусок части 2
     await g.install();
     expect(g.error, GenKitError.network);
     expect(g.hasPartial, isTrue);
     downloader.dropAfter = null;
+    downloader.offsets.clear();
     await g.install();
-    expect(downloader.lastOffset, inExclusiveRange(0, bytes.length));
-    expect(g.installed?.version, '1.0.0');
+    expect(
+      downloader.offsets,
+      <int>[500, 0],
+      reason: 'часть 2 — с места, часть 3 — с нуля',
+    );
+    expect(File(p.join(root, 'gen-1.0.0.gguf')).readAsBytesSync(), bytes);
   });
 
   test('обновление: новая версия, старая удалена, модель перезагружается',
@@ -225,7 +249,7 @@ void main() {
   test('чужой адрес и битый latest.json — «недоступна»', () async {
     final g = kit();
     addTearDown(g.dispose);
-    transport.body = latest('1.0.0', <int>[1]).replaceAll(
+    transport.body = publishGen(downloader, '1.0.0', <int>[1, 2, 3]).replaceAll(
       GenRelease.latestUrl.host,
       'example.com',
     );

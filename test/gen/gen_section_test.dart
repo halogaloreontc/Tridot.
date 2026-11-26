@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart' as crypto;
@@ -12,7 +11,7 @@ import 'package:local_assistant/core/connectors/http_transport.dart';
 import 'package:local_assistant/core/settings/app_settings.dart';
 import 'package:path/path.dart' as p;
 
-import '../support/fake_voice.dart';
+import 'gen_fakes.dart';
 
 final class _Transport implements HttpTransport {
   String? body;
@@ -31,21 +30,15 @@ final class _Rig {
 
   final GenKit kit;
   final _Transport transport;
-  final FakeFileDownloader downloader;
+  final PartsDownloader downloader;
   AppSettings settings = const AppSettings();
 
   void publish() {
-    final bytes = List<int>.generate(3000, (i) => i % 251);
-    downloader.bytes = bytes;
-    transport.body = jsonEncode(<String, Object?>{
-      'format': GenRelease.format,
-      'version': '1.0.0',
-      'model': <String, Object?>{
-        'url': '${GenRelease.latestUrl.resolve('tridot-gen-1.0.0.gguf')}',
-        'size': bytes.length,
-        'sha256': crypto.sha256.convert(bytes).toString(),
-      },
-    });
+    transport.body = publishGen(
+      downloader,
+      '1.0.0',
+      List<int>.generate(3000, (i) => i % 251),
+    );
   }
 }
 
@@ -53,7 +46,7 @@ Future<_Rig> _rig(WidgetTester tester, {int? ram = 16000}) async {
   final temp = Directory.systemTemp.createTempSync('gen_section_test');
   addTearDown(() => temp.deleteSync(recursive: true));
   final transport = _Transport();
-  final downloader = FakeFileDownloader(const <int>[]);
+  final downloader = PartsDownloader();
   final kit = GenKit(
     transport: transport,
     downloader: downloader,

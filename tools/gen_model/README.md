@@ -120,3 +120,33 @@ CPU контейнера: 4 ядра x86, 4 потока; телефон буд�
   текстов пересказ почти не меряет. Нужны длинные тексты.
 - Время — CPU контейнера, 4 потока; на телефоне медленнее.
 
+## Выпуск (2026-11-26)
+
+`release.py` и GitHub → Actions → «Выпуск модели «Продвинутой»» → версия.
+Официальные веса `Qwen/Qwen3-4B-Instruct-2507` (ревизия закреплена) →
+bf16 GGUF (`convert_hf_to_gguf.py` из `tool/fetch_llama.sh`, окружение
+`.venv-intent` + `requirements-convert.txt`) → Q5_K_M (llama-cpp-python) →
+проба таблиц (не меньше 22 из 24, иначе выпуска нет) → части по 1900 МиБ
+(GitHub не принимает файлы выпуска больше 2 ГиБ) → `gen-v<версия>` и
+`gen-latest` (`latest.json`: размер и sha256 частей и целого файла).
+
+```bash
+tool/fetch_llama.sh
+.venv-intent/bin/pip install -r tools/gen_model/requirements-convert.txt
+.venv-gen/bin/python   -m tools.gen_model.release weights
+.venv-intent/bin/python -m tools.gen_model.release convert
+.venv-gen/bin/python   -m tools.gen_model.release quantize --version 1.0.0
+.venv-gen/bin/python   -m tools.gen_model.release verify   --version 1.0.0
+.venv-gen/bin/python   -m tools.gen_model.release split    --version 1.0.0
+```
+
+Своя сборка из официальных весов, проба таблиц (CPU контейнера, 4 потока):
+
+| квантование | файл | таблицы | генерация |
+|---|---|---|---|
+| Q4_K_M | 2,50 ГБ | 22 из 24 (сумма вместо количества — дважды) | 6,6 ток/с |
+| **Q5_K_M** | 2,89 ГБ | **24 из 24** | 5,2 ток/с |
+
+Готовое квантование unsloth (Q4_K_M с матрицей важности) — 23 из 24;
+своя Q4_K_M без матрицы — ровно на пороге, поэтому выпуск — Q5_K_M.
+
