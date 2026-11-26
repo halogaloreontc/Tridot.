@@ -7,8 +7,8 @@
 - **Таблицы** (`eval/tables.jsonl`, `eval/tables/*.csv`): модель только
   переводит вопрос в запрос (`op`, `column`, `filters`), считает код —
   `run_query`. Метрика — доля верных ответов.
-- **Пересказ** (`eval/summary.jsonl`): доля сохранённых фактов и пересказы
-  с числами, которых нет в тексте.
+- **Пересказ** (`eval/summary.jsonl`): доля сохранённых фактов, пересказы
+  с числами, которых нет в тексте, и длина пересказа к тексту.
 
 Все данные синтетические.
 """
@@ -173,7 +173,9 @@ _NUM = re.compile(r"\d+(?:[.,:]\d+)?")
 
 def summary_score(rows: list[dict], outs: list[str]) -> dict:
     kept = total = invented = 0
+    ratio = 0.0
     for r, o in zip(rows, outs):
+        ratio += len(o) / len(r["text"])
         low = o.lower()
         for fact in r["facts"]:
             total += 1
@@ -183,5 +185,7 @@ def summary_score(rows: list[dict], outs: list[str]) -> dict:
     return {
         "facts_kept": round(100 * kept / total, 1),
         "with_invented_numbers": round(100 * invented / len(rows), 1),
+        # Длина пересказа к тексту: близко к 1 — пересказа нет, это копия.
+        "length_ratio": round(ratio / len(rows), 2),
         "texts": len(rows),
     }

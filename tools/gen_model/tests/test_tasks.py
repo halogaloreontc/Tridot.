@@ -68,6 +68,7 @@ def test_fields_score():
 
 def test_summary_score_flags_invented_numbers():
     rows = [{"text": "Пришло 40 коробок, 6 с браком.", "facts": ["40", "6"]}]
-    assert tasks.summary_score(rows, ["Пришло 40 коробок, 6 с браком."])["with_invented_numbers"] == 0.0
+    copy = tasks.summary_score(rows, ["Пришло 40 коробок, 6 с браком."])
+    assert copy["with_invented_numbers"] == 0.0 and copy["length_ratio"] == 1.0
     s = tasks.summary_score(rows, ["Пришло 41 коробка."])
     assert s["with_invented_numbers"] == 100.0 and s["facts_kept"] == pytest.approx(0.0)
