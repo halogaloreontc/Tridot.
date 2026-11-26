@@ -1,0 +1,14 @@
+// Вопросы к приложенной таблице (ADR-046): только с указанием на таблицу —
+// match не видит вложений. Считает Dart по запросу «Продвинутой».
+{"id":"table-001","text":"сколько всего единиц в таблице?","connector":"table","intent":"table.ask","source":"manual"}
+{"id":"table-002","text":"по таблице: на какую сумму поставила Ромашка?","connector":"table","intent":"table.ask","source":"manual"}
+{"id":"table-003","text":"посмотри в таблице, сколько поставок было 19 ноября","connector":"table","intent":"table.ask","source":"manual"}
+{"id":"table-004","text":"какая средняя цена в таблице","connector":"table","intent":"table.ask","source":"manual"}
+{"id":"table-005","text":"в таблице кто поставлял сок?","connector":"table","intent":"table.ask","source":"manual"}
+{"id":"table-006","text":"сколько строк в таблице","connector":"table","intent":"table.ask","source":"manual"}
+{"id":"table-007","text":"найди в таблице остаток кефира","connector":"table","intent":"table.ask","source":"manual"}
+{"id":"table-008","text":"из таблицы: какая самая крупная поставка по сумме","connector":"table","intent":"table.ask","source":"manual"}
+{"id":"table-009","text":"сколько стоит сок по таблице?","connector":"table","intent":"table.ask","source":"manual"}
+{"id":"table-010","text":"посчитай по таблице общую сумму поставок","connector":"table","intent":"table.ask","source":"manual"}
+{"id":"table-011","text":"напомни завтра заполнить таблицу","intent":"createTask","title":"Заполнить таблицу","source":"manual","note":"просьба про таблицу без вопроса к ней — задача"}
+{"id":"table-012","text":"купить стол и таблицу умножения","intent":"createTask","title":"Купить стол и таблицу умножения","source":"manual","note":"слово «таблица» без «в/по/из таблице» — не вопрос к таблице"}

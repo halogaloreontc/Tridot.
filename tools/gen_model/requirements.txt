@@ -1,0 +1,7 @@
+# Замеры «Продвинутой» (ADR-046). llama-cpp-python собирается из исходников
+# (cmake, компилятор C++); CMAKE_ARGS="-DGGML_NATIVE=ON" — под этот процессор.
+llama-cpp-python==0.3.38
+numpy==2.5.5
+pyyaml==6.0.3
+psutil==7.2.2
+pytest==8.4.2

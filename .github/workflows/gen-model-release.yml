@@ -1,0 +1,159 @@
+# Выпуск «Продвинутой» (ADR-046): Qwen3-4B-Instruct-2507 в GGUF Q5_K_M.
+#
+# Actions → «Выпуск модели «Продвинутой»» → Run workflow → версия.
+# Официальные веса с закреплённой ревизией (tools/gen_model/release.py) →
+# bf16 GGUF скриптом llama.cpp той же версии, что обёртка приложения
+# (tool/fetch_llama.sh) → Q5_K_M → проба таблиц (не уложились — выпуска
+# нет) → выпуск gen-v<версия> и постоянный предвыпуск gen-latest: сначала
+# модель, потом latest.json. Подробно: tools/gen_model/README.md.
+#
+# GitHub не принимает файлы выпуска больше 2 ГиБ, а модель ~2,9 ГБ:
+# выкладывается частями по 1900 МиБ (у каждой и у целого файла — sha256
+# в latest.json), приложение склеивает их само.
+#
+# Секретов нет: только GITHUB_TOKEN. Действия закреплены по коммиту, токен
+# checkout не остаётся в .git/config.
+name: Выпуск модели «Продвинутой»
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия — три числа, больше прежней: 1.0.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gen-model-release
+  cancel-in-progress: false
+
+env:
+  VERSION: ${{ inputs.version }}
+  TAG: gen-v${{ inputs.version }}
+  PYTHONUNBUFFERED: '1'
+  HF_HUB_DISABLE_TELEMETRY: '1'
+  GEN_MODEL_CACHE: ${{ github.workspace }}/.gen-cache
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Проверка версии
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          fail() {
+            echo "::error title=$1::$2"
+            printf '### %s\n\n%s\n' "$1" "$2" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          if ! [[ "$VERSION" =~ ^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$ ]]; then
+            fail 'Версия' 'Версия — три числа через точку, например 1.0.0.'
+          fi
+          refs="$(gh api "repos/$GH_REPO/git/matching-refs/tags/gen-v" --paginate --jq '.[].ref')"
+          if grep -qxF "refs/tags/$TAG" <<< "$refs"; then
+            fail 'Такой выпуск уже есть' "Тег $TAG уже есть. Укажите версию больше."
+          fi
+          last="$(sed -n 's#^refs/tags/gen-v##p' <<< "$refs" \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          if [[ -n "$last" && "$(printf '%s\n%s\n' "$last" "$VERSION" | sort -V | tail -n 1)" != "$VERSION" ]]; then
+            fail 'Версия меньше прежней' "Последний выпуск — $last. Новая версия должна быть больше."
+          fi
+
+      # Веса (~8 ГБ), bf16 (~8 ГБ) и модель (~2,9 ГБ) не помещаются рядом с
+      # предустановленным на раннере.
+      - name: Место на диске
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h "$GITHUB_WORKSPACE"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          set -euo pipefail
+          python -m pip install -q -r tools/intent_model/requirements.txt
+          python -m pip install -q -r tools/gen_model/requirements-convert.txt
+          CMAKE_ARGS="-DGGML_NATIVE=OFF" python -m pip install -q -r tools/gen_model/requirements.txt
+          tool/fetch_llama.sh
+
+      - name: Тесты сборки
+        run: python -m pytest -q tools/gen_model/tests
+
+      - name: Веса, перевод, квантование
+        run: |
+          set -euo pipefail
+          python -m tools.gen_model.release weights
+          python -m tools.gen_model.release convert
+          python -m tools.gen_model.release quantize --version "$VERSION"
+          rm -f tools/gen_model/out/release/model-bf16.gguf
+          rm -rf "$GEN_MODEL_CACHE"/weights-*
+
+      # Не уложились в порог пробы таблиц — шаг падает, выпуска нет.
+      - name: Проба таблиц и части
+        run: |
+          set -euo pipefail
+          python -m tools.gen_model.release verify --version "$VERSION"
+          python -m tools.gen_model.release split --version "$VERSION"
+          rm -f "tools/gen_model/out/release/tridot-gen-$VERSION.gguf"
+
+      - name: Итоги
+        if: always()
+        run: |
+          set -euo pipefail
+          f=tools/gen_model/out/release/verify.json
+          [[ -f "$f" ]] || exit 0
+          jq -r '"### Проба\n\n- таблицы: \(.tables_correct) из \(.tables_total) (порог \(.min_tables))\n- файл: \(.file), \((.size / 1048576 | floor)) МБ\n- sha256: `\(.sha256)`\n- основа: \(.base_model)@\(.base_revision[0:12]), \(.quant)"' "$f" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Выпуск в GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          out=tools/gen_model/out/release
+          parts=("$out"/parts/tridot-gen-"$VERSION".gguf.*)
+          dl="$GITHUB_SERVER_URL/$GH_REPO/releases/download"
+          mkdir -p "$RUNNER_TEMP/v" "$RUNNER_TEMP/latest"
+          python -m tools.gen_model.release latest --version "$VERSION" --base-url "$dl/$TAG" --out "$RUNNER_TEMP/v/latest.json"
+          python -m tools.gen_model.release latest --version "$VERSION" --base-url "$dl/gen-latest" --out "$RUNNER_TEMP/latest/latest.json"
+          {
+            echo "«Продвинутая» $VERSION (ADR-046): Qwen3-4B-Instruct-2507 (Apache-2.0), GGUF Q5_K_M."
+            echo
+            echo 'Собрана из официальных весов Qwen с закреплённой ревизией (tools/gen_model/release.py). Файл — частями до 2 ГиБ (предел GitHub); приложение берёт их из gen-latest по нажатию «Скачать», склеивает и проверяет по sha256 из latest.json.'
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" "${parts[@]}" "$RUNNER_TEMP/v/latest.json" \
+            --title "«Продвинутая» $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --target "$GITHUB_SHA"
+          if ! gh release view gen-latest >/dev/null 2>&1; then
+            gh release create gen-latest --prerelease --target "$GITHUB_SHA" \
+              --title '«Продвинутая»: последний выпуск' \
+              --notes 'Отсюда приложение берёт «Продвинутую» и её обновления. Выпуски по версиям — gen-v<версия>.'
+          fi
+          for f in "${parts[@]}"; do
+            gh release upload gen-latest "$f" --clobber
+          done
+          gh release upload gen-latest "$RUNNER_TEMP/latest/latest.json" --clobber
+          keep=" latest.json $(for f in "${parts[@]}"; do printf '%s ' "$(basename "$f")"; done)"
+          gh release view gen-latest --json assets --jq '.assets[].name' | while read -r name; do
+            if [[ "$keep" != *" $name "* ]]; then
+              gh release delete-asset gen-latest "$name" --yes
+            fi
+          done
+          echo "- Releases → [$TAG]($GITHUB_SERVER_URL/$GH_REPO/releases/tag/$TAG)" >> "$GITHUB_STEP_SUMMARY"

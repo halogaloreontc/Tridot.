@@ -1,0 +1,24 @@
+{"id":"tb-01","table":"stock","question":"сколько всего единиц на остатке?","answer":192}
+{"id":"tb-02","table":"stock","question":"какой остаток у кефира?","answer":12}
+{"id":"tb-03","table":"stock","question":"сколько товаров с нулевым остатком?","answer":1}
+{"id":"tb-04","table":"stock","question":"сколько стоит сок?","answer":110}
+{"id":"tb-05","table":"stock","question":"сколько единиц лежит в ячейке B1?","answer":55}
+{"id":"tb-06","table":"stock","question":"сколько позиций дороже 100 рублей?","answer":2}
+{"id":"tb-07","table":"stock","question":"какая самая высокая цена?","answer":120}
+{"id":"tb-08","table":"stock","question":"средняя цена товаров?","answer":75}
+{"id":"tb-09","table":"stock","question":"в какой ячейке вода?","answer":"C2"}
+{"id":"tb-10","table":"stock","question":"сколько позиций, у которых остаток меньше 10?","answer":2}
+{"id":"tb-11","table":"stock","question":"сколько единиц лежит в ячейке A1","answer":52}
+{"id":"tb-12","table":"stock","question":"какой товар с артикулом B-203?","answer":"Сушки"}
+{"id":"tb-13","table":"deliveries","question":"на какую сумму поставила ООО Ромашка?","answer":15500}
+{"id":"tb-14","table":"deliveries","question":"сколько было поставок?","answer":7}
+{"id":"tb-15","table":"deliveries","question":"сколько поставок от ИП Сидоров?","answer":2}
+{"id":"tb-16","table":"deliveries","question":"сколько штук воды привезли?","answer":200}
+{"id":"tb-17","table":"deliveries","question":"какая самая крупная поставка по сумме?","answer":8900}
+{"id":"tb-18","table":"deliveries","question":"общая сумма всех поставок","answer":31570}
+{"id":"tb-19","table":"deliveries","question":"сколько поставок было 19 ноября?","answer":2}
+{"id":"tb-20","table":"deliveries","question":"кто поставлял сок?","answer":"ООО Родник"}
+{"id":"tb-21","table":"deliveries","question":"средняя сумма поставки","answer":4510}
+{"id":"tb-22","table":"deliveries","question":"сколько поставок на сумму больше 3000?","answer":3}
+{"id":"tb-23","table":"deliveries","question":"сколько единиц товара привёз Родник?","answer":224}
+{"id":"tb-24","table":"deliveries","question":"минимальное количество в поставке","answer":24}

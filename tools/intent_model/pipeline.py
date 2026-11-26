@@ -30,7 +30,7 @@ def _out(tier: config.Tier) -> Path:
 
 
 def _src(tier: config.Tier) -> Path:
-    """Папка уровня, чья модель и пробы используются (web → light)."""
+    """Папка уровня, чья модель и пробы используются (у web — своя)."""
     return config.tier_dir(tier.source)
 
 
@@ -175,7 +175,7 @@ def _sets(tier: config.Tier, evals_of) -> dict[str, list[dict]]:
 def _groups(tier: config.Tier, names: list[str]) -> dict[str, list[str]]:
     """dev — где выбирается порог, test — честная проверка, all — всё.
 
-    У light/accurate: dev = fresh, test = held2 + held3. У уровня со своими
+    У accurate: dev = fresh, test = held2 + held3. У уровня со своими
     пробами (web): dev = fresh + held2 + held3 + <проба>.cal, test =
     <проба>.test — половина, которая в подбор не попадает.
     """
@@ -269,7 +269,7 @@ def _pick_threshold(tier: config.Tier, per_set: dict[str, tuple[list[dict], list
 def calibrate(tier: config.Tier) -> dict:
     """Порог на int8, честно: каждая проба — на модели снимка до её разбора.
 
-    light/accurate: выбор на fresh (наибольший catch в бюджете), проверка —
+    accurate: выбор на fresh (наибольший catch в бюджете), проверка —
     held2+held3. web: выбор на fresh+held2+held3 и половине cal складской
     пробы, проверка — на её половине test.
     """

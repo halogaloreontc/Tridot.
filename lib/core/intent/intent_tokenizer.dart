@@ -8,9 +8,10 @@ import 'bert_chars.g.dart';
 /// tokenizers с усечением до [IntentTokenizer.encode] `maxLength`.
 ///
 /// Два вида — по `model.type` в `tokenizer.json` пакета:
-/// - [WordPieceTokenizer] («Лёгкая» и `web`): BertNormalizer (clean_text, без
-///   нижнего регистра и снятия ударений), BertPreTokenizer, `##`;
-/// - [ByteBpeTokenizer] («Точная»): byte-level BPE в духе RoBERTa.
+/// - [WordPieceTokenizer] (была у снятой rubert-tiny2): BertNormalizer
+///   (clean_text, без нижнего регистра и снятия ударений), BertPreTokenizer,
+///   `##`;
+/// - [ByteBpeTokenizer] (USER-base: «Лёгкая» и `web`): byte-level BPE в духе RoBERTa.
 ///
 /// Чистый Dart без ввода-вывода: тот же код работает в приложении и в
 /// веб-помощнике.
@@ -206,7 +207,7 @@ final class WordPieceTokenizer implements IntentTokenizer {
     if (normalizer is Map<String, Object?> &&
         (normalizer['lowercase'] == true ||
             normalizer['strip_accents'] == true)) {
-      // Пакеты «Лёгкой» регистр сохраняют; иначе нужен другой разбор.
+      // Пакеты WordPiece регистр сохраняют; иначе нужен другой разбор.
       throw const FormatException(
         'tokenizer.json: нижний регистр и снятие ударений не поддержаны',
       );

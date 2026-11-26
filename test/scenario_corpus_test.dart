@@ -25,6 +25,7 @@ import 'package:local_assistant/core/skills/data/data_connector.dart';
 import 'package:local_assistant/core/skills/files/files_connector.dart';
 import 'package:local_assistant/core/skills/passwords/passwords_connector.dart';
 import 'package:local_assistant/core/skills/talk/talk_connector.dart';
+import 'package:local_assistant/core/skills/table/table_connector.dart';
 import 'package:local_assistant/core/skills/weather/weather_connector.dart';
 import 'package:local_assistant/core/skills/ytdl/ytdl_connector.dart';
 import 'package:local_assistant/core/storage/in_memory_task_repository.dart';
@@ -249,6 +250,11 @@ final Map<String, Connector Function(DateTime now, bool connected)>
   WeatherConnector.id: (DateTime now, bool connected) => WeatherConnector(
         backend: WeatherService.memory(clock: FixedClock(now)),
         clock: FixedClock(now),
+      ), // Вопросы к таблице (ADR-046): только с «в/по/из таблице» — «заполнить
+  // таблицу» остаётся задачей. `match` не читает файлов и не зовёт модель.
+  TableConnector.id: (DateTime now, bool connected) => TableConnector(
+        read: (_) async => null,
+        model: () async => null,
       ),
 };
 

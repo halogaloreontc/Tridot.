@@ -1,7 +1,10 @@
 """Эталоны для Dart-токенизаторов запасного слоя (ADR-045, шаг 2).
 
-    python -m tools.intent_model.dart_fixtures --packs <папка с распакованными
-        пакетами light/ и accurate/>
+    python -m tools.intent_model.dart_fixtures --packs <папка с распакованным
+        пакетом accurate/>
+
+Эталоны снятой rubert-tiny2 (WordPiece, `tokenizer_light_mini.json`) остаются как
+есть: без пакета `light/` они не пересобираются.
 
 - `test/fixtures/intent/tokenizer_golden.json` — номера токенов HF tokenizers
   (полные словари, усечение до 64) для синтетических фраз
@@ -59,9 +62,16 @@ def golden(packs: Path) -> None:
     from tokenizers import Tokenizer
 
     texts = phrases()
+    old_path = FIXTURES / "tokenizer_golden.json"
+    old = json.loads(old_path.read_text(encoding="utf-8")) if old_path.exists() else {}
     result: dict = {"phrases": texts}
     for tier in ("light", "accurate"):
         path = packs / tier / "tokenizer.json"
+        if not path.exists():
+            if old.get("phrases") != texts or tier not in old:
+                raise SystemExit(f"{tier}: нет пакета, а прежний эталон не подходит к фразам")
+            result[tier] = old[tier]
+            continue
         tok = Tokenizer.from_file(str(path))
         tok.enable_truncation(max_length=64)
         result[tier] = [tok.encode(t).ids for t in texts]

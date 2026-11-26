@@ -141,7 +141,7 @@ final class IntentManifest {
   /// `light`, `accurate`, `web`.
   final String tier;
 
-  /// «Лёгкая», «Точная».
+  /// «Лёгкая», «Веб-помощник».
   final String title;
   final String version;
 
@@ -163,7 +163,7 @@ final class IntentManifest {
   /// Выход модели — нормированный вектор.
   final String output;
 
-  /// Подсказка модели перед фразой (`query: ` у «Точной»).
+  /// Подсказка модели перед фразой (`query: ` у USER-base).
   final String prefix;
 
   /// Навыки, которые знает индекс; пусто — все.

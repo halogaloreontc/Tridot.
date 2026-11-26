@@ -150,7 +150,6 @@ final class IntentKit extends ChangeNotifier {
 
   /// Примерные размеры архивов, пока `latest.json` не прочитан.
   static const Map<IntentTier, int> approxBytes = <IntentTier, int>{
-    IntentTier.light: 32 * 1000 * 1000,
     IntentTier.accurate: 131 * 1000 * 1000,
   };
 
@@ -265,14 +264,51 @@ final class IntentKit extends ChangeNotifier {
 
   File get _pointer => File(p.join(root, 'active.json'));
 
+  /// Папки пакетов; `light` — снятая rubert-tiny2, только для уборки.
   static final RegExp _packName = RegExp(r'^(light|accurate)-\d+\.\d+\.\d+$');
+
+  static final RegExp _retiredName = RegExp(r'^light-\d+\.\d+\.\d+');
+
+  /// На диске была rubert-tiny2 (`light`): её убрали, `accurate` скачается
+  /// сама.
+  bool _retired = false;
 
   /// Состояние по диску: при запуске.
   Future<void> refresh() async {
     if (isBusy) return;
+    if (await _removeRetired()) _retired = true;
     _installed = await _readInstalled();
     _hasPartial = await _anyPartial();
     _notify();
+  }
+
+  /// Удаляет пакеты, архивы и указатель `light`. `true` — что-то было.
+  Future<bool> _removeRetired() async {
+    var found = false;
+    try {
+      if (await _pointer.exists()) {
+        final json = jsonDecode(await _pointer.readAsString());
+        if (json is Map<String, Object?> && json['tier'] == 'light') {
+          found = true;
+          await _deleteQuietly(_pointer);
+        }
+      }
+    } on Object {
+      // Битый указатель прочитает _readInstalled.
+    }
+    final dir = Directory(root);
+    try {
+      if (!await dir.exists()) return found;
+      await for (final entity in dir.list(followLinks: false)) {
+        if (_retiredName.hasMatch(p.basename(entity.path))) {
+          found = true;
+          await _deleteQuietly(entity);
+        }
+      }
+    } on Object {
+      // Нет доступа — уберётся при установке `accurate`.
+    }
+    return found;
   }
 
   Future<IntentInstalled?> _readInstalled() async {
@@ -345,6 +381,12 @@ final class IntentKit extends ChangeNotifier {
     if (_desired != settings.intentTier) {
       _desired = settings.intentTier;
       _notify();
+    }
+    if (_retired) {
+      _retired = false;
+      if (_desired == IntentTier.accurate && _installed == null && !isBusy) {
+        unawaited(install(IntentTier.accurate));
+      }
     }
     await _sync();
   }

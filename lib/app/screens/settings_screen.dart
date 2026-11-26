@@ -14,6 +14,8 @@ import '../extensions/weather_kit.dart';
 import '../extensions/ytdl_kit.dart';
 import '../homescreen/home_screen_channel.dart';
 import '../homescreen/home_screen_section.dart';
+import '../gen/gen_kit.dart';
+import '../gen/gen_section.dart';
 import '../intent/intent_kit.dart';
 import '../intent/intent_section.dart';
 import '../passwords/passwords_kit.dart';
@@ -47,6 +49,7 @@ class SettingsScreen extends StatelessWidget {
     this.onOpenStorage,
     this.voice,
     this.intent,
+    this.gen,
     this.ffmpeg,
     this.nativeMedia = NativeMediaCaps.none,
     this.ytdl,
@@ -96,6 +99,9 @@ class SettingsScreen extends StatelessWidget {
 
   /// Модель понимания (ADR-045); `null` — раздела «Понимание фраз» нет.
   final IntentKit? intent;
+
+  /// «Продвинутая» (ADR-046); `null` — раздела нет.
+  final GenKit? gen;
 
   /// ffmpeg конвертера: «Настроить» в плитке «Конвертер».
   final ToolKit? ffmpeg;
@@ -219,6 +225,12 @@ class SettingsScreen extends StatelessWidget {
                     settings: settings,
                     onChanged: onChanged,
                     intent: kit,
+                  ),
+                if (gen case final GenKit kit)
+                  GenSettingsSection(
+                    settings: settings,
+                    onChanged: onChanged,
+                    gen: kit,
                   ),
                 if (appLock case final AppLockController lock)
                   SecuritySection(

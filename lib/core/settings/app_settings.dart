@@ -25,12 +25,12 @@ enum VoiceEngineChoice {
       };
 }
 
-/// Уровень модели понимания (ADR-045): «Выключено» (по умолчанию),
-/// «Лёгкая» или «Точная». Модель скачивается по выбору пользователя.
+/// Уровень модели понимания (ADR-045): «Выключено» (по умолчанию) или
+/// «Лёгкая» (USER-base; id `accurate` остался от прежнего названия «Точная»).
+/// Модель скачивается по выбору пользователя.
 enum IntentTier {
   off('off', 'Выключено'),
-  light('light', 'Лёгкая'),
-  accurate('accurate', 'Точная');
+  accurate('accurate', 'Лёгкая');
 
   const IntentTier(this.id, this.title);
 
@@ -107,6 +107,7 @@ final class AppSettings {
     this.intentLearning = true,
     this.intentLogging = true,
     this.intentOffered = false,
+    this.genEnabled = false,
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -156,10 +157,15 @@ final class AppSettings {
       homeScreenShowText: json['widgets.show_text'] != false,
       // Понимание фраз (ADR-045): прежние настройки без этих ключей —
       // модель выключена, учёба и журнал включены.
-      intentTier: IntentTier.parse(json['intent.tier']),
+      // Прежней «Лёгкой» (rubert-tiny2, id `light`) больше нет: её выбор
+      // становится нынешней «Лёгкой» (`accurate`).
+      intentTier: json['intent.tier'] == 'light'
+          ? IntentTier.accurate
+          : IntentTier.parse(json['intent.tier']),
       intentLearning: json['intent.learning'] != false,
       intentLogging: json['intent.logging'] != false,
       intentOffered: json['intent.offered'] == true,
+      genEnabled: json['gen.enabled'] == true,
     );
   }
 
@@ -401,8 +407,12 @@ final class AppSettings {
   /// «Собирать непонятые фразы»: локальный журнал. По умолчанию включено.
   final bool intentLogging;
 
-  /// Предложение скачать «Лёгкую» уже показано: больше само не появляется.
+  /// Предложение включить нейромодуль уже показано: больше само не появляется.
   final bool intentOffered;
+
+  /// «Продвинутая» (ADR-046) включена: модель скачивается по выбору
+  /// пользователя. По умолчанию выключено.
+  final bool genEnabled;
 
   /// Текст задач уходит на виджет: включён показ и нет входа по отпечатку.
   bool get homeScreenText => homeScreenShowText && !appLock;
@@ -440,6 +450,7 @@ final class AppSettings {
     bool? intentLearning,
     bool? intentLogging,
     bool? intentOffered,
+    bool? genEnabled,
   }) =>
       AppSettings(
         appearance: appearance ?? this.appearance,
@@ -475,6 +486,7 @@ final class AppSettings {
         intentLearning: intentLearning ?? this.intentLearning,
         intentLogging: intentLogging ?? this.intentLogging,
         intentOffered: intentOffered ?? this.intentOffered,
+        genEnabled: genEnabled ?? this.genEnabled,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -534,6 +546,7 @@ final class AppSettings {
         if (!intentLearning) 'intent.learning': false,
         if (!intentLogging) 'intent.logging': false,
         if (intentOffered) 'intent.offered': true,
+        if (genEnabled) 'gen.enabled': true,
       };
 }
 

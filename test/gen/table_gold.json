@@ -1,0 +1,338 @@
+[
+ {
+  "id": "tb-01",
+  "table": "stock",
+  "query": {
+   "op": "sum",
+   "column": "остаток",
+   "filters": []
+  },
+  "answer": 192
+ },
+ {
+  "id": "tb-02",
+  "table": "stock",
+  "query": {
+   "op": "list",
+   "column": "остаток",
+   "filters": [
+    {
+     "column": "товар",
+     "cmp": "contains",
+     "value": "кефир"
+    }
+   ]
+  },
+  "answer": 12
+ },
+ {
+  "id": "tb-03",
+  "table": "stock",
+  "query": {
+   "op": "count",
+   "column": null,
+   "filters": [
+    {
+     "column": "остаток",
+     "cmp": "eq",
+     "value": 0
+    }
+   ]
+  },
+  "answer": 1
+ },
+ {
+  "id": "tb-04",
+  "table": "stock",
+  "query": {
+   "op": "list",
+   "column": "цена",
+   "filters": [
+    {
+     "column": "товар",
+     "cmp": "contains",
+     "value": "сок"
+    }
+   ]
+  },
+  "answer": 110
+ },
+ {
+  "id": "tb-05",
+  "table": "stock",
+  "query": {
+   "op": "sum",
+   "column": "остаток",
+   "filters": [
+    {
+     "column": "ячейка",
+     "cmp": "eq",
+     "value": "B1"
+    }
+   ]
+  },
+  "answer": 55
+ },
+ {
+  "id": "tb-06",
+  "table": "stock",
+  "query": {
+   "op": "count",
+   "column": null,
+   "filters": [
+    {
+     "column": "цена",
+     "cmp": "gt",
+     "value": 100
+    }
+   ]
+  },
+  "answer": 2
+ },
+ {
+  "id": "tb-07",
+  "table": "stock",
+  "query": {
+   "op": "max",
+   "column": "цена",
+   "filters": []
+  },
+  "answer": 120
+ },
+ {
+  "id": "tb-08",
+  "table": "stock",
+  "query": {
+   "op": "avg",
+   "column": "цена",
+   "filters": []
+  },
+  "answer": 75
+ },
+ {
+  "id": "tb-09",
+  "table": "stock",
+  "query": {
+   "op": "list",
+   "column": "ячейка",
+   "filters": [
+    {
+     "column": "товар",
+     "cmp": "contains",
+     "value": "вода"
+    }
+   ]
+  },
+  "answer": "C2"
+ },
+ {
+  "id": "tb-10",
+  "table": "stock",
+  "query": {
+   "op": "count",
+   "column": null,
+   "filters": [
+    {
+     "column": "остаток",
+     "cmp": "lt",
+     "value": 10
+    }
+   ]
+  },
+  "answer": 2
+ },
+ {
+  "id": "tb-11",
+  "table": "stock",
+  "query": {
+   "op": "sum",
+   "column": "остаток",
+   "filters": [
+    {
+     "column": "ячейка",
+     "cmp": "eq",
+     "value": "A1"
+    }
+   ]
+  },
+  "answer": 52
+ },
+ {
+  "id": "tb-12",
+  "table": "stock",
+  "query": {
+   "op": "list",
+   "column": "товар",
+   "filters": [
+    {
+     "column": "артикул",
+     "cmp": "eq",
+     "value": "B-203"
+    }
+   ]
+  },
+  "answer": "Сушки"
+ },
+ {
+  "id": "tb-13",
+  "table": "deliveries",
+  "query": {
+   "op": "sum",
+   "column": "сумма",
+   "filters": [
+    {
+     "column": "поставщик",
+     "cmp": "contains",
+     "value": "Ромашка"
+    }
+   ]
+  },
+  "answer": 15500
+ },
+ {
+  "id": "tb-14",
+  "table": "deliveries",
+  "query": {
+   "op": "count",
+   "column": null,
+   "filters": []
+  },
+  "answer": 7
+ },
+ {
+  "id": "tb-15",
+  "table": "deliveries",
+  "query": {
+   "op": "count",
+   "column": null,
+   "filters": [
+    {
+     "column": "поставщик",
+     "cmp": "contains",
+     "value": "Сидоров"
+    }
+   ]
+  },
+  "answer": 2
+ },
+ {
+  "id": "tb-16",
+  "table": "deliveries",
+  "query": {
+   "op": "sum",
+   "column": "количество",
+   "filters": [
+    {
+     "column": "товар",
+     "cmp": "contains",
+     "value": "вода"
+    }
+   ]
+  },
+  "answer": 200
+ },
+ {
+  "id": "tb-17",
+  "table": "deliveries",
+  "query": {
+   "op": "max",
+   "column": "сумма",
+   "filters": []
+  },
+  "answer": 8900
+ },
+ {
+  "id": "tb-18",
+  "table": "deliveries",
+  "query": {
+   "op": "sum",
+   "column": "сумма",
+   "filters": []
+  },
+  "answer": 31570
+ },
+ {
+  "id": "tb-19",
+  "table": "deliveries",
+  "query": {
+   "op": "count",
+   "column": null,
+   "filters": [
+    {
+     "column": "дата",
+     "cmp": "eq",
+     "value": "2026-11-19"
+    }
+   ]
+  },
+  "answer": 2
+ },
+ {
+  "id": "tb-20",
+  "table": "deliveries",
+  "query": {
+   "op": "list",
+   "column": "поставщик",
+   "filters": [
+    {
+     "column": "товар",
+     "cmp": "contains",
+     "value": "сок"
+    }
+   ]
+  },
+  "answer": "ООО Родник"
+ },
+ {
+  "id": "tb-21",
+  "table": "deliveries",
+  "query": {
+   "op": "avg",
+   "column": "сумма",
+   "filters": []
+  },
+  "answer": 4510
+ },
+ {
+  "id": "tb-22",
+  "table": "deliveries",
+  "query": {
+   "op": "count",
+   "column": null,
+   "filters": [
+    {
+     "column": "сумма",
+     "cmp": "gt",
+     "value": 3000
+    }
+   ]
+  },
+  "answer": 3
+ },
+ {
+  "id": "tb-23",
+  "table": "deliveries",
+  "query": {
+   "op": "sum",
+   "column": "количество",
+   "filters": [
+    {
+     "column": "поставщик",
+     "cmp": "contains",
+     "value": "Родник"
+    }
+   ]
+  },
+  "answer": 224
+ },
+ {
+  "id": "tb-24",
+  "table": "deliveries",
+  "query": {
+   "op": "min",
+   "column": "количество",
+   "filters": []
+  },
+  "answer": 24
+ }
+]

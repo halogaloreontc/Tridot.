@@ -10,29 +10,33 @@ import 'package:local_assistant/core/intent/intent_io.dart';
 
 import 'local_packs.dart';
 
-/// Настоящая модель «Лёгкой» через ONNX Runtime (ADR-045), если пакет
-/// собран и распакован локально, а библиотека onnxruntime находится:
+/// Настоящая модель `accurate` («Лёгкая») через ONNX Runtime (ADR-045), если пакет
+/// собран и распакован локально, библиотека onnxruntime находится и есть
+/// эталон:
 ///
 /// ```bash
-/// TRIDOT_INTENT_PACKS=<папка с light/> \
+/// TRIDOT_INTENT_PACKS=<папка с accurate/> \
 /// LD_LIBRARY_PATH=~/.pub-cache/hosted/pub.dev/onnxruntime_v2-1.23.2+2/linux \
 ///   flutter test --no-pub test/intent/onnx_real_model_test.dart
 /// ```
 ///
-/// В CI пакета нет — тест пропускается. Эталон — Python-сборка шага 1
-/// (`test/fixtures/intent/light_expect.json`): тот же пакет, onnxruntime на
-/// CPU, kNN из tools/intent_model/knn.py.
+/// В CI пакета нет — тест пропускается. Эталон — Python-сборка
+/// (`test/fixtures/intent/accurate_expect.json`): тот же пакет, onnxruntime
+/// на CPU, kNN из tools/intent_model/knn.py.
 void main() {
-  final dir = localPackDir('light');
+  final dir = localPackDir('accurate');
   final library = _nativeLibrary();
+  final fixture = File('test/fixtures/intent/accurate_expect.json');
   final skip = dir == null
-      ? 'пакет light не распакован (TRIDOT_INTENT_PACKS)'
+      ? 'пакет accurate не распакован (TRIDOT_INTENT_PACKS)'
       : library == null
           ? 'нет libonnxruntime (LD_LIBRARY_PATH)'
-          : false;
-  final expected = jsonDecode(
-    File('test/fixtures/intent/light_expect.json').readAsStringSync(),
-  ) as Map<String, Object?>;
+          : !fixture.existsSync()
+              ? 'нет эталона accurate_expect.json'
+              : false;
+  final expected = fixture.existsSync()
+      ? jsonDecode(fixture.readAsStringSync()) as Map<String, Object?>
+      : const <String, Object?>{'rows': <Object?>[]};
   final rows =
       (expected['rows']! as List<Object?>).cast<Map<String, Object?>>();
 

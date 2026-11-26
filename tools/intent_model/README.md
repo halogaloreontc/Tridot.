@@ -12,11 +12,16 @@
 
 | уровень | в настройках | основа | лицензия | архив |
 |---|---|---|---|---|
-| `light` | «Лёгкая» | `cointegrated/rubert-tiny2` | MIT | ~33 МБ |
-| `accurate` | «Точная» | `deepvk/USER-base` | Apache-2.0 | ~133 МБ |
+| `accurate` | «Лёгкая» | `deepvk/USER-base` | Apache-2.0 | ~133 МБ |
 | `web` | веб-помощник склада | основа `accurate`, своя модель | Apache-2.0 | ~133 МБ |
 
-`web` — своя модель на основе «Точной» (USER-base, тот же размер):
+Прежний уровень `light` (`cointegrated/rubert-tiny2`, ~33 МБ, в настройках
+тоже звался «Лёгкая») снят 2026-11-25 (ADR-045, дополнение): приложение
+переводит его на `accurate`. С того же дня `accurate` в настройках
+называется «Лёгкая» (раньше — «Точная»); id прежний. Ниже уровни названы
+по id, числа `light` оставлены для истории.
+
+`web` — своя модель на основе `accurate` (USER-base, тот же размер):
 дообучение на корпусе и синтетических перефразах команд склада
 (`aug/warehouse.jsonl`), а индекс знает только навыки, которые веб-помощник
 выполняет сам (`warehouse`, `calc`, `talk` —
@@ -24,11 +29,11 @@
 `none`. Порог подбирается на fresh/held2/held3 и половине `cal` складской
 пробы `eval/warehouse.jsonl`, вторая половина (`test`) — только честная
 проверка (см. «Обучение и порог»). Модель проверяется в onnxruntime-web
-(WASM) — `webcheck`. До 2026-11-24 уровень строился на основе «Лёгкой»
+(WASM) — `webcheck`. До 2026-11-24 уровень строился на основе `light`
 (rubert-tiny2, архив ~32 МБ): на проверочном складе она ловила заметно
-меньше, чем хотелось, и владелец перевёл веб на «Точную» ценой более
+меньше, чем хотелось, и владелец перевёл веб на `accurate` ценой более
 тяжёлой закачки (~131 МБ вместо ~32; браузер кладёт файлы в кэш, но первый
-запуск на слабом канале заметен). Уровень наследует от «Точной» скорость
+запуск на слабом канале заметен). Уровень наследует от `accurate` скорость
 обучения, эпохи, префикс `query: `, поканальное int8 и кодирование по одной
 фразе (`bs1_vectors`).
 
@@ -39,7 +44,6 @@
 ```bash
 python3.12 -m venv .venv-intent
 .venv-intent/bin/pip install -r tools/intent_model/requirements.txt
-.venv-intent/bin/python -m tools.intent_model build --tier light       # ~4 мин на 4 ядрах
 .venv-intent/bin/python -m tools.intent_model build --tier accurate    # ~38 мин на 4 ядрах
 .venv-intent/bin/python -m tools.intent_model build --tier web         # ~35 мин на 4 ядрах
 (cd tools/intent_model/webcheck && npm ci) && \
@@ -61,7 +65,7 @@ python3.12 -m venv .venv-intent
 | `prepare` | корпус → `data/train.jsonl`: метка `<навык>:<команда>` или `none`; без `known_gap`, реплик с `after`, «не понял» с маршрутом в навык, навыка «Пароли» и приватных фраз; дубликаты — один раз |
 | `holdout --set fresh\|held2\|held3\|warehouse` | модель на снимке корпуса до разбора пробы (`eval/snapshots.json`), выгрузка в int8, векторы снимка и пробы → `calib/<проба>.npz`; `warehouse` — только у `web` |
 | `model` | дообучение на всём корпусе, ONNX (кодировщик + пулинг + нормировка), динамический int8, токенизатор, векторы примеров |
-| `calibrate` | порог на int8, честно: каждая проба — на модели своего снимка; light/accurate — выбор на fresh, проверка на held2 + held3; web — выбор на fresh + held2 + held3 + `warehouse.cal`, проверка на `warehouse.test` |
+| `calibrate` | порог на int8, честно: каждая проба — на модели своего снимка; accurate — выбор на fresh, проверка на held2 + held3; web — выбор на fresh + held2 + held3 + `warehouse.cal`, проверка на `warehouse.test` |
 | `index` | `index.bin`, `labels.json`, файлы пакета |
 | `verify` | `metrics.json`: честные метрики, прогон собранного пакета, задержка, размеры; вне бюджета (у web — ещё и на `warehouse.test`) — ошибка |
 | `pack --version` | `manifest.json` и архив |
@@ -72,10 +76,10 @@ python3.12 -m venv .venv-intent
 ## Обучение и порог
 
 - **Дообучение** — SupCon (τ = 0,05), пакет — 16 меток по 4 фразы,
-  метки с весом √(число фраз), AdamW, разогрев 10 %. «Лёгкая» —
-  lr 1e-4, 4 эпохи; «Точная» — 3e-5, 3 эпохи и подсказка модели
+  метки с весом √(число фраз), AdamW, разогрев 10 %. `accurate` —
+  lr 3e-5, 3 эпохи и подсказка модели
   `query: ` перед фразой (в обучении и на устройстве — `prefix` в
-  манифесте); `web` — те же параметры, что у «Точной». Фразы не длиннее
+  манифесте); `web` — те же параметры, что у `accurate`. Фразы не длиннее
   64 токенов.
 - **Подсказка** — победила не `none` и сходство лучшего примера
   победившей метки ≥ порога.
@@ -104,12 +108,11 @@ python3.12 -m venv .venv-intent
   достаточно, чтобы честные метрики менялись на несколько пунктов, —
   `Tier.bs1_vectors = True` (`config.py`) заставляет `holdout`, `model` и
   `verify` кодировать индекс и пробы по одной фразе без паддинга, как
-  будет на устройстве. `web` строится на основе «Точной» и наследует
+  будет на устройстве. `web` строится на основе `accurate` и наследует
   `bs1_vectors`; `light` оставлен как есть. Проверить и воспроизвести
   измерение (после `model --tier <уровень>`):
 
   ```bash
-  .venv-intent/bin/python -m tools.intent_model.bs_compare light
   .venv-intent/bin/python -m tools.intent_model.bs_compare accurate
   ```
 
@@ -181,7 +184,7 @@ python3.12 -m venv .venv-intent
 Все пробы вместе: поймано 33,2 % (было 4,7 %), неверных 4,4 % подсказок,
 ложных тревог 1,5 %; архив 32 МБ, 0,55 мс на фразу. Проба и перефразы
 написаны по одним описаниям команд — 61 % скорее верхняя оценка.
-С 2026-11-24 уровень `web` строится на основе «Точной» (USER-base):
+С 2026-11-24 уровень `web` строится на основе `accurate` (USER-base):
 числа выше относятся к прежней основе и оставлены для истории; новые
 замеры появятся с первым выпуском на новой основе.
 
@@ -213,18 +216,18 @@ python3.12 -m venv .venv-intent
 ## Выпуск
 
 GitHub → Actions → «Выпуск модели понимания» → Run workflow → версия
-(`1.0.0`, больше прежней). Секретов не нужно. Пробы (2 уровня × 3) и
-модели идут параллельно, каждая задача — 5–20 минут; затем порог,
-проверка бюджета, `webcheck`, выпуск `intent-v<версия>` (три архива и
-`latest.json`) и постоянный предвыпуск `intent-latest`: сначала архивы,
+(`1.0.0`, больше прежней). Секретов не нужно. Пробы (`accurate` × 3,
+`web` × 4) и модели идут параллельно, каждая задача — 5–20 минут; затем
+порог, проверка бюджета, `webcheck`, выпуск `intent-v<версия>` (два архива
+и `latest.json`) и постоянный предвыпуск `intent-latest`: сначала архивы,
 потом `latest.json` — приложение берёт его по адресу
 `…/releases/download/intent-latest/latest.json`:
 
 ```json
 {"format": "tridot-intent-latest/1", "version": "1.0.0",
- "tiers": {"light": {"url": "…/tridot-intent-light-1.0.0.zip", "size": 0,
-                     "sha256": "…", "threshold": 0.9, "k": 5, "dims": 312, …},
-           "accurate": {…}, "web": {…}}}
+ "tiers": {"accurate": {"url": "…/tridot-intent-accurate-1.0.0.zip", "size": 0,
+                        "sha256": "…", "threshold": 0.9, "k": 5, "dims": 768, …},
+           "web": {…}}}
 ```
 
 ## Эталоны для Dart
@@ -233,16 +236,17 @@ GitHub → Actions → «Выпуск модели понимания» → Run 
 сверяются с HuggingFace tokenizers:
 
 ```bash
-.venv-intent/bin/python -m tools.intent_model.dart_fixtures --packs <папка с распакованными light/ и accurate/>
+.venv-intent/bin/python -m tools.intent_model.dart_fixtures --packs <папка с распакованным accurate/>
 ```
 
 пишет `test/fixtures/intent/` (номера токенов для синтетических фраз
 `phrases.txt` и урезанные `tokenizer.json` — только нужные этим фразам
 токены и слияния) и `lib/core/intent/bert_chars.g.dart` (классы знаков
-BertNormalizer и BertPreTokenizer по всем кодовым точкам).
-`test/fixtures/intent/light_expect.json` — векторы и подсказки «Лёгкой»
-0.1.0 для `test/intent/onnx_real_model_test.dart` (тот пропускается без
-распакованного пакета).
+BertNormalizer и BertPreTokenizer по всем кодовым точкам). Эталоны снятой
+`light` (WordPiece) без её пакета не пересобираются, а переносятся как
+есть. `test/fixtures/intent/accurate_expect.json` — векторы и подсказки
+`accurate` для `test/intent/onnx_real_model_test.dart`; файла пока нет, тест
+пропускается без него и без распакованного пакета.
 
 ## Приватность
 

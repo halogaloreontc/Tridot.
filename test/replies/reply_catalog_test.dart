@@ -107,7 +107,11 @@ const Map<String, String> facts = <String, String>{
   'streak': '3',
   'days': '7',
   // Уточняющий вопрос с вариантами.
-  'options': '«Пароли» или «Все данные»',
+  'options': '«Пароли» или «Все данные»', // Вопрос к таблице (ADR-046).
+  'answer': '15 500',
+  'how': 'сумма «сумма», где «поставщик» содержит «Ромашка»',
+  'columns': 'дата, поставщик, сумма',
+  'file': 'поставки.csv',
 };
 
 /// Подстановки-числа с формами слова: проверяются при 1, 2, 3, 5, 11, 21.
@@ -117,6 +121,7 @@ const Set<String> countFacts = <String>{
   'overdue',
   'total',
   'places',
+  'rows',
 };
 const List<String> countSamples = <String>['1', '2', '3', '5', '11', '21'];
 

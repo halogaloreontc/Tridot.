@@ -7,6 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'core/chats/attachments.dart';
+import 'app/gen/gen_kit.dart';
+import 'app/gen/gen_setup.dart';
+import 'core/skills/table/table_connector.dart';
 import 'app/assistant_theme.dart';
 import 'app/extensions/tool_kit.dart';
 import 'app/extensions/weather_kit.dart';
@@ -329,6 +333,20 @@ Future<void> main() async {
     links: LinkOpener(platform: currentJobPlatform()),
   );
   await weather.load();
+  // «Продвинутая» (ADR-046): модель (~2,9 ГБ) скачивается только по
+  // кнопке в «Настройки → Продвинутая», загружается при первом вопросе к
+  // таблице. Вложения читаются из папки чатов.
+  final gen = GenSetup(attachments: IoAttachmentStore(chatsPath));
+  final genKit = GenKit(
+    transport: transport,
+    downloader: IoFileDownloader(
+      allowedRedirectHosts: IntentRelease.redirectHosts,
+    ),
+    root: p.join(support.path, 'assistant', 'gen'),
+    opener: GenSetup.open,
+    devModel: GenSetup.devModelPath,
+  );
+  await genKit.refresh();
   // Один путь сборки коннекторов — при запуске и после «Подключить» /
   // «Удалить» приложение (ADR-043): реестр пересобирается между ходами.
   final assembly = ConnectorAssembly(
@@ -358,6 +376,9 @@ Future<void> main() async {
       ConverterConnector(environment: converterEnvironment),
       // Погода (ADR-030): ведёт Связной; сеть — только с разрешения.
       WeatherConnector(backend: weatherService, clock: clock),
+      // Вопросы к таблице CSV (ADR-046): запрос пишет «Продвинутая» на
+      // устройстве, считает Dart; без модели — честная подсказка.
+      TableConnector(read: gen.read, model: genKit.model),
       // Будильник и таймер (ADR-029): открывает «Часы» с заполненным
       // будильником, человек подтверждает там. Ведёт Нода (оповещения).
       AlarmConnector(setter: NotifyAlarmSetter(notify)),
@@ -460,6 +481,7 @@ Future<void> main() async {
       passwords: passwords,
       voice: voice,
       intent: intent,
+      gen: genKit,
       fileOpener: opener,
       ffmpeg: ffmpeg,
       nativeMedia: nativeMedia,
@@ -584,6 +606,7 @@ final class AssistantApp extends StatefulWidget {
     this.passwords,
     this.voice,
     this.intent,
+    this.gen,
     this.fileOpener,
     this.ffmpeg,
     this.nativeMedia,
@@ -626,6 +649,9 @@ final class AssistantApp extends StatefulWidget {
 
   /// Модель понимания (ADR-045); `null` — раздела «Понимание фраз» нет.
   final IntentKit? intent;
+
+  /// «Продвинутая» (ADR-046); `null` — раздела нет.
+  final GenKit? gen;
 
   /// «Открыть» у результата карточки расширения; `null` — по умолчанию.
   final FileOpener? fileOpener;
@@ -702,6 +728,7 @@ final class _AssistantAppState extends State<AssistantApp> {
       passwords: widget.passwords,
       voice: widget.voice,
       intent: widget.intent,
+      gen: widget.gen,
       fileOpener: widget.fileOpener,
       ffmpeg: widget.ffmpeg,
       nativeMedia: widget.nativeMedia,

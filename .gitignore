@@ -27,6 +27,11 @@ tools/intent_model/out/
 tools/intent_model/webcheck/node_modules/
 .venv-intent/
 .hf-cache/
+
+# Замеры «Продвинутой» (ADR-046): модели и прогоны не коммитятся
+tools/gen_model/out/
+tools/gen_model/err-*.log
+.venv-gen/
 __pycache__/
 
 # onnxruntime-web для веб-помощника: раскладывает
@@ -34,3 +39,7 @@ __pycache__/
 # tool/widget_release/release_core.dart); в репозитории — только лицензия.
 web/ort/*.mjs
 web/ort/*.wasm
+
+# Исходники llama.cpp (tool/fetch_llama.sh) и сборка обёртки
+third_party/llama.cpp/
+build/tridot_llama/
