@@ -4,6 +4,8 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val llamaSources = rootProject.file("../third_party/llama.cpp/CMakeLists.txt")
+
 android {
     namespace = "com.example.local_assistant"
     compileSdk = flutter.compileSdkVersion
@@ -58,6 +60,38 @@ android {
                     .forEach { excludes += "lib/$it/**" }
             }
         }
+    }
+
+    // «Продвинутая» (ADR-046): обёртка llama.cpp native/tridot_llama —
+    // libtridot_llama.so для arm64-v8a, Dart грузит её через dart:ffi.
+    // Исходники llama.cpp — tool/fetch_llama.sh; без них APK собирается без
+    // «Продвинутой» (раздел в настройках честно скажет, что модель не
+    // запустилась).
+    if (llamaSources.exists()) {
+        externalNativeBuild {
+            cmake {
+                path = file("../../native/tridot_llama/CMakeLists.txt")
+                version = "3.22.1"
+            }
+        }
+        defaultConfig {
+            externalNativeBuild {
+                cmake {
+                    arguments += listOf(
+                        "-DANDROID_STL=c++_static",
+                        "-DGGML_NATIVE=OFF",
+                        // ARMv8.2 с dotprod и fp16: у всех телефонов от 8 ГБ.
+                        "-DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16",
+                    )
+                    targets += "tridot_llama"
+                }
+            }
+            ndk {
+                abiFilters += "arm64-v8a"
+            }
+        }
+    } else {
+        logger.warn("tridot: нет third_party/llama.cpp (tool/fetch_llama.sh) — APK без «Продвинутой»")
     }
 
     // Тесты виджетов рабочего стола (ADR-034) на Robolectric: ресурсы
