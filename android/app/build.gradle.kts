@@ -84,10 +84,10 @@ android {
                         "-DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16",
                     )
                     targets += "tridot_llama"
+                    // Только arm64: флаги ARMv8.2 другим ABI не подходят, а
+                    // 32-битных телефонов с 8 ГБ нет.
+                    abiFilters += "arm64-v8a"
                 }
-            }
-            ndk {
-                abiFilters += "arm64-v8a"
             }
         }
     } else {
