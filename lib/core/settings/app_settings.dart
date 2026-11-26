@@ -107,6 +107,7 @@ final class AppSettings {
     this.intentLearning = true,
     this.intentLogging = true,
     this.intentOffered = false,
+    this.genEnabled = false,
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -164,6 +165,7 @@ final class AppSettings {
       intentLearning: json['intent.learning'] != false,
       intentLogging: json['intent.logging'] != false,
       intentOffered: json['intent.offered'] == true,
+      genEnabled: json['gen.enabled'] == true,
     );
   }
 
@@ -408,6 +410,10 @@ final class AppSettings {
   /// Предложение включить нейромодуль уже показано: больше само не появляется.
   final bool intentOffered;
 
+  /// «Продвинутая» (ADR-046) включена: модель скачивается по выбору
+  /// пользователя. По умолчанию выключено.
+  final bool genEnabled;
+
   /// Текст задач уходит на виджет: включён показ и нет входа по отпечатку.
   bool get homeScreenText => homeScreenShowText && !appLock;
 
@@ -444,6 +450,7 @@ final class AppSettings {
     bool? intentLearning,
     bool? intentLogging,
     bool? intentOffered,
+    bool? genEnabled,
   }) =>
       AppSettings(
         appearance: appearance ?? this.appearance,
@@ -479,6 +486,7 @@ final class AppSettings {
         intentLearning: intentLearning ?? this.intentLearning,
         intentLogging: intentLogging ?? this.intentLogging,
         intentOffered: intentOffered ?? this.intentOffered,
+        genEnabled: genEnabled ?? this.genEnabled,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -538,6 +546,7 @@ final class AppSettings {
         if (!intentLearning) 'intent.learning': false,
         if (!intentLogging) 'intent.logging': false,
         if (intentOffered) 'intent.offered': true,
+        if (genEnabled) 'gen.enabled': true,
       };
 }
 

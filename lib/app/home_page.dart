@@ -99,6 +99,7 @@ import 'shell/session_hero.dart';
 import 'shell/today_panel.dart';
 import 'extensions/weather_kit.dart';
 import 'extensions/weather_screen.dart';
+import 'gen/gen_kit.dart';
 import 'intent/intent_kit.dart';
 import 'intent/intent_views.dart';
 import 'voice/voice_kit.dart';
@@ -192,6 +193,7 @@ final class HomePage extends StatefulWidget {
     this.attachmentPicker = const FileSelectorAttachmentPicker(),
     this.voice,
     this.intent,
+    this.gen,
     this.jobRunner,
     this.jobPicker = const FileSelectorJobPicker(),
     this.fileOpener,
@@ -249,6 +251,9 @@ final class HomePage extends StatefulWidget {
   /// Модель понимания (ADR-045): «Настройки → Понимание фраз»; `null` —
   /// раздела нет.
   final IntentKit? intent;
+
+  /// «Продвинутая» (ADR-046); `null` — раздела нет.
+  final GenKit? gen;
 
   /// Исполнитель задач расширений (архиватор); по умолчанию — изоляты.
   final JobRunner? jobRunner;
@@ -1705,6 +1710,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     widget.onReduceMotionChanged?.call(settings.reduceMotion);
     widget.voice?.choice = settings.voiceEngine;
     unawaited(widget.intent?.apply(settings));
+    unawaited(widget.gen?.apply(settings));
     setState(() {
       _settings = settings;
       _settingsLoaded = true;
@@ -1799,6 +1805,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
     widget.voice?.choice = settings.voiceEngine;
     unawaited(widget.intent?.apply(settings));
+    unawaited(widget.gen?.apply(settings));
     setState(() => _settings = settings);
     unawaited(_settingsStore.save(settings));
     _preloadVoice();
@@ -4643,6 +4650,7 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         passwords: widget.passwords,
         voice: widget.voice,
         intent: widget.intent,
+        gen: widget.gen,
         ffmpeg: widget.ffmpeg,
         nativeMedia: widget.nativeMedia?.caps ?? NativeMediaCaps.none,
         ytdl: widget.ytdl,

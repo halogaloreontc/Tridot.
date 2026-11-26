@@ -6,20 +6,16 @@ import '../../core/gen/gen_model.dart';
 import '../../core/jobs/extension_card.dart';
 import 'llama_gen_model.dart';
 
-/// «Продвинутая» в приложении (ADR-046, шаг 2): откуда модель и как навык
-/// «Таблица» читает вложения.
+/// «Продвинутая» в приложении (ADR-046): как открыть модель и как навык
+/// «Таблица» читает вложения. Скачивание и переключатель — `GenKit`.
 ///
-/// Модель пока — только для разработки: `TRIDOT_GEN_MODEL` (переменная
-/// окружения или `--dart-define`) — путь к GGUF; библиотека обёртки —
-/// `TRIDOT_LLAMA_LIB` или имя по платформе. Скачивание и настройки —
-/// следующий шаг. Модель загружается при первом вопросе и остаётся в
-/// памяти.
+/// Для разработки: `TRIDOT_GEN_MODEL` (переменная окружения или
+/// `--dart-define`) — путь к GGUF, работает без загрузки; библиотека
+/// обёртки — `TRIDOT_LLAMA_LIB` или имя по платформе.
 final class GenSetup {
   GenSetup({required this.attachments});
 
   final AttachmentStore attachments;
-
-  Future<GenModel?>? _model;
 
   static String? _env(String name, String defined) {
     if (defined.isNotEmpty) return defined;
@@ -27,31 +23,29 @@ final class GenSetup {
     return value == null || value.isEmpty ? null : value;
   }
 
-  static String? get devModelPath => _env(
-        'TRIDOT_GEN_MODEL',
-        const String.fromEnvironment('TRIDOT_GEN_MODEL'),
-      );
+  static String? get devModelPath {
+    final path = _env(
+      'TRIDOT_GEN_MODEL',
+      const String.fromEnvironment('TRIDOT_GEN_MODEL'),
+    );
+    return path != null && File(path).existsSync() ? path : null;
+  }
 
   static String? get libraryPath => _env(
         'TRIDOT_LLAMA_LIB',
         const String.fromEnvironment('TRIDOT_LLAMA_LIB'),
       );
 
-  /// Модель или `null`: нет файла, библиотеки или не загрузилась.
-  Future<GenModel?> model() => _model ??= _open();
-
-  Future<GenModel?> _open() async {
-    final path = devModelPath;
-    if (path == null || !File(path).existsSync()) return null;
+  /// Модель из файла GGUF или `null`: нет библиотеки, не загрузилась.
+  static Future<GenModel?> open(String path) async {
     try {
       return await LlamaGenModel.open(path, library: libraryPath);
     } on GenModelException {
-      _model = null;
       return null;
     }
   }
 
-  /// Байты вложения или файла с диска; больше [maxBytes] — `null`.
+  /// Вложение больше этого не читается.
   static const int maxBytes = 5 * 1024 * 1024;
 
   Future<Uint8List?> read(JobFile file) async {

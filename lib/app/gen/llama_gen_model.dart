@@ -5,12 +5,13 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 
 import '../../core/gen/gen_model.dart';
+import 'gen_kit.dart' show Closeable;
 
 /// «Продвинутая» (ADR-046) через llama.cpp: обёртка `native/tridot_llama`
 /// по dart:ffi в своём изоляте — разбор запроса и генерация не держат поток
 /// интерфейса. Запросы идут по одному; общее начало соседних запросов
 /// обёртка не пересчитывает.
-final class LlamaGenModel implements GenModel {
+final class LlamaGenModel implements GenModel, Closeable {
   LlamaGenModel._(this._isolate, this._requests, this._replies, this._cancel);
 
   final Isolate _isolate;
@@ -91,6 +92,7 @@ final class LlamaGenModel implements GenModel {
   /// Прервать текущий ответ: [complete] завершится [GenModelException].
   void cancel() => _cancel.value = 1;
 
+  @override
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
