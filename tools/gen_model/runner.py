@@ -119,3 +119,21 @@ class Runner:
             "gen_tok_per_s": round(len(out) / gen_s, 1) if out else 0.0,
             "text": self.llm.detokenize(out).decode("utf-8", "replace"),
         }
+
+    def complete(self, system: str, user: str, schema: dict | None = None, max_tokens: int = 200) -> str:
+        """Ответ по ChatML, жадно; со `schema` — JSON под грамматикой."""
+        import json
+
+        from llama_cpp import LlamaGrammar
+
+        think = "<think>\n\n</think>\n\n" if self.model.empty_think else ""
+        text = (
+            f"<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{user}<|im_end|>\n"
+            f"<|im_start|>assistant\n{think}"
+        )
+        grammar = LlamaGrammar.from_json_schema(json.dumps(schema), verbose=False) if schema else None
+        out = self.llm.create_completion(
+            text, max_tokens=max_tokens, temperature=0.0, grammar=grammar, stop=["<|im_end|>"]
+        )
+        return out["choices"][0]["text"].strip()
+

@@ -4,6 +4,9 @@
   intent  честная проверка подсказки при «не понял» → out/<модель>/intent.json
           (--shots N: N фраз на команду из снимка корпуса → intent-shotsN.json)
   bench   скорость, память, пример ответа → out/<модель>/bench.json
+  tasks   поля в карточку, таблицы, пересказ → out/<модель>/tasks.json
+  agree   согласие с «Лёгкой» (нужны пробы holdout tools/intent_model)
+          → out/<модель>/agree-<tag>.json; --tag intent|intent-shots3
 """
 
 from __future__ import annotations
@@ -34,17 +37,86 @@ def fetch(m: config.Model) -> None:
     print(m.path)
 
 
+def run_tasks(runner) -> dict:
+    import time
+
+    from . import tasks
+
+    def timed(fn):
+        started = time.perf_counter()
+        value = fn()
+        return value, time.perf_counter() - started
+
+    log: list[dict] = []
+    fields = tasks.read_jsonl("fields.jsonl")
+    outs, secs = [], []
+    for r in fields:
+        raw, s = timed(lambda: runner.complete(tasks.FIELDS_SYSTEM, r["text"], tasks.FIELDS_SCHEMA))
+        secs.append(s)
+        try:
+            outs.append(json.loads(raw))
+        except json.JSONDecodeError:
+            outs.append(None)
+        log.append({"task": "fields", "id": r["id"], "out": raw})
+    result = {"fields": tasks.fields_score(fields, outs) | {"seconds_median": round(sorted(secs)[len(secs) // 2], 2)}}
+
+    questions = tasks.read_jsonl("tables.jsonl")
+    ok, secs = 0, []
+    for r in questions:
+        rows = tasks.load_table(r["table"])
+        schema = tasks.table_schema(list(rows[0]))
+        raw, s = timed(lambda: runner.complete(tasks.table_system(rows), r["question"], schema))
+        secs.append(s)
+        try:
+            got = tasks.run_query(rows, json.loads(raw))
+        except (json.JSONDecodeError, KeyError, TypeError):
+            got = None
+        good = tasks.answer_ok(got, r["answer"])
+        ok += good
+        log.append({"task": "tables", "id": r["id"], "out": raw, "got": got, "ok": good})
+    result["tables"] = {
+        "correct": round(100 * ok / len(questions), 1),
+        "questions": len(questions),
+        "seconds_median": round(sorted(secs)[len(secs) // 2], 2),
+    }
+
+    texts = tasks.read_jsonl("summary.jsonl")
+    outs, secs = [], []
+    for r in texts:
+        raw, s = timed(lambda: runner.complete(tasks.SUMMARY_SYSTEM, r["text"], max_tokens=160))
+        secs.append(s)
+        outs.append(raw)
+        log.append({"task": "summary", "id": r["id"], "out": raw})
+    result["summary"] = tasks.summary_score(texts, outs) | {"seconds_median": round(sorted(secs)[len(secs) // 2], 2)}
+    result["log"] = log
+    return result
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("step", choices=["fetch", "intent", "bench"])
+    ap.add_argument("step", choices=["fetch", "intent", "bench", "tasks", "agree"])
     ap.add_argument("--model", required=True, choices=sorted(config.MODELS))
     ap.add_argument("--threads", type=int, default=config.THREADS)
     ap.add_argument("--shots", type=int, default=0)
+    ap.add_argument("--tag", default="intent-shots3")
     args = ap.parse_args(argv)
     m = config.model(args.model)
     out = config.OUT / m.name
     if args.step == "fetch":
         fetch(m)
+        return
+    if args.step == "agree":
+        from tools.intent_model import config as intent_config
+
+        from . import agree
+
+        result = agree.run(
+            out / f"{args.tag}_preds.jsonl",
+            intent_config.OUT / "accurate" / "calib",
+            out / f"agree-{args.tag}.json",
+        )
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=1)
+        print()
         return
     from . import intent_eval
     from .runner import Runner, rss_mb
@@ -67,6 +139,11 @@ def main(argv: list[str] | None = None) -> None:
         result["prefix_seconds"] = round(runner.prefix_seconds, 1)
         result["threads"] = args.threads
         (out / f"{tag}.json").write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+    elif args.step == "tasks":
+        result = run_tasks(runner)
+        result["model"] = m.name
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "tasks.json").write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     else:
         result = {
             "model": m.name,
