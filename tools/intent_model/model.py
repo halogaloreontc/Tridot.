@@ -304,7 +304,9 @@ def export_checked(model, out_dir: Path, tier: config.Tier, probes: Sequence[str
             def get_next(self):
                 return next(self._it, None)
 
-        enc = Int8Encoder(out_dir, prefix=tier.prefix)
+        # Только токенизатор: model.int8.onnx от прошлого варианта может не
+        # существовать (его квантование упало), а статическому он не нужен.
+        enc = Int8Encoder(out_dir, prefix=tier.prefix, session=False)
         feeds = [enc.feeds([t]) for t in probes]
         if int8.exists():
             int8.unlink()
@@ -323,7 +325,10 @@ class Int8Encoder:
     """Кодирование фраз выгруженной моделью: токенизатор только из tokenizer.json
     (как будет на устройстве), onnxruntime на CPU."""
 
-    def __init__(self, model_dir: Path, threads: int = 0, prefix: str = "", info_dir: Path | None = None):
+    def __init__(
+        self, model_dir: Path, threads: int = 0, prefix: str = "", info_dir: Path | None = None, session: bool = True
+    ):
+        """session=False — только токенизатор (feeds), без model.int8.onnx."""
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
@@ -337,6 +342,9 @@ class Int8Encoder:
             pad_id = tok.token_to_id("<pad>") or 0
         tok.enable_padding(pad_id=pad_id)
         self.tok = tok
+        self.sess = None
+        if not session:
+            return
         so = ort.SessionOptions()
         so.intra_op_num_threads = threads or max(1, os.cpu_count() or 1)
         so.inter_op_num_threads = 1
