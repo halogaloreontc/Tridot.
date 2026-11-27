@@ -283,7 +283,7 @@ void main() {
     final h = await _pump(tester);
     await _say(tester, 'перенеси всё на выходные');
     final checklist = h.assistant.pendingChecklist!;
-    await openSettings(tester);
+    await openSettingsCategory(tester, 'data');
     final clear = find.byKey(const ValueKey<String>('clear-chat'));
     await tester.ensureVisible(clear);
     await tester.pumpAndSettle();

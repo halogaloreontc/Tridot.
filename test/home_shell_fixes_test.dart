@@ -137,7 +137,7 @@ void main() {
     final task = await tasks.create(title: 'Сверить накладные');
     await tasks.complete(task.id);
     await _say(tester, 'привет');
-    await openSettings(tester);
+    await openSettingsCategory(tester, 'data');
     await tester.ensureVisible(
       find.byKey(const ValueKey<String>('settings-storage')),
     );
@@ -258,7 +258,7 @@ void main() {
     await tester.tap(find.byKey(const Key('my-relay-tab-settings')));
     await tester.pumpAndSettle();
     expect(
-      find.byKey(const ValueKey<String>('settings-storage')),
+      find.byKey(const ValueKey<String>('settings-cat-data')),
       findsWidgets,
     );
     // Статистика — только в «Сводке»: над другими вкладками её нет.

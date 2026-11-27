@@ -1,4 +1,4 @@
-// Настоящие шрифты приложения (Golos Text, JetBrains Mono, Cormorant Unicase)
+// Настоящие шрифты приложения (Golos Text, JetBrains Mono, Cormorant SC)
 // для тестов, где важна ширина текста: тестовый шрифт рисует каждую букву
 // квадратом, и подписи в нём заметно шире, чем на устройстве.
 import 'dart:io';
@@ -19,8 +19,8 @@ Future<void> loadAppFonts() async {
   await (FontLoader('JetBrains Mono')
         ..addFont(read('assets/fonts/JetBrainsMonoVariable.ttf')))
       .load();
-  await (FontLoader('Cormorant Unicase')
-        ..addFont(read('assets/fonts/CormorantUnicase-SemiBold.ttf')))
+  await (FontLoader('Cormorant SC')
+        ..addFont(read('assets/fonts/CormorantSC-SemiBold.ttf')))
       .load();
   _loaded = true;
 }

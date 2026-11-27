@@ -45,6 +45,8 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
       - run: flutter pub get
+      # «Продвинутая» (ADR-046): исходники llama.cpp для native/tridot_llama.
+      - run: tool/fetch_llama.sh
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4
         with:

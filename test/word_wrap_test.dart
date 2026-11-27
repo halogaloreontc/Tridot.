@@ -547,7 +547,11 @@ void main() {
         await openMyRelay(tester, tab);
         await _checkScrolling(tester, '$label: $tab');
       }
-      // «Настройки» → «Очистить историю сессий?» и «Данные».
+      // «Настройки» → «Данные и история» → «Очистить историю сессий?» и
+      // «Данные».
+      await tester.tap(find.byKey(const ValueKey<String>('settings-cat-data')));
+      await tester.pumpAndSettle();
+      await _checkScrolling(tester, '$label: данные и история');
       final clear = find.byKey(const ValueKey<String>('clear-chat'));
       await tester.ensureVisible(clear);
       await tester.pumpAndSettle();
@@ -566,7 +570,7 @@ void main() {
 
     _phones('оформление', (tester, label) async {
       await _pumpHome(tester);
-      await openMyRelay(tester, 'settings');
+      await openSettingsCategory(tester, 'interface');
       final row = find.byKey(const ValueKey<String>('setting-appearance'));
       await tester.ensureVisible(row);
       await tester.pumpAndSettle();

@@ -3728,6 +3728,9 @@ final class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
       counts: _sectionCounts(now),
       extensions: _extensionEntries(),
+      extensionsOpen: _settings.drawerExtensionsOpen,
+      onExtensionsOpenChanged: (bool open) =>
+          _changeSettings(_settings.copyWith(drawerExtensionsOpen: open)),
       onOpenMyRelay: () => _openMyRelay(MyRelayTab.summary),
       onTasks: () => _goTo(AppSection.tasks),
       onProjects: () => _goTo(AppSection.projects),

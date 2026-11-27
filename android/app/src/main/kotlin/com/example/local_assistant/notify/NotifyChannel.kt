@@ -25,8 +25,8 @@ import io.flutter.plugin.common.MethodChannel
  *
  * Ничего не уходит в сеть. Системе отдаётся только расписание (название
  * задачи, время, имя помощника). Будильник ставит не Tridot, а «Часы»:
- * открываются с заполненным будильником, человек подтверждает там
- * (EXTRA_SKIP_UI = false). USE_EXACT_ALARM не запрашивается: Google Play
+ * после «Да» в чате — без своего экрана (EXTRA_SKIP_UI = true); «Часы»,
+ * которые так не умеют, просто откроются с заполненным будильником. USE_EXACT_ALARM не запрашивается: Google Play
  * разрешает его только будильникам и календарям.
  */
 class NotifyChannel(
@@ -213,7 +213,7 @@ class NotifyChannel(
         val intent = Intent(AlarmClock.ACTION_SET_ALARM)
             .putExtra(AlarmClock.EXTRA_HOUR, hour)
             .putExtra(AlarmClock.EXTRA_MINUTES, minute)
-            .putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+            .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
         call.argument<String>("label")?.take(40)?.let {
             intent.putExtra(AlarmClock.EXTRA_MESSAGE, it)
         }
@@ -230,7 +230,7 @@ class NotifyChannel(
         if (seconds !in 1..86400) return false
         val intent = Intent(AlarmClock.ACTION_SET_TIMER)
             .putExtra(AlarmClock.EXTRA_LENGTH, seconds)
-            .putExtra(AlarmClock.EXTRA_SKIP_UI, false)
+            .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
         call.argument<String>("label")?.take(40)?.let {
             intent.putExtra(AlarmClock.EXTRA_MESSAGE, it)
         }

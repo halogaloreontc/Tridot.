@@ -281,7 +281,14 @@ final class RelayDrawer extends StatefulWidget {
     this.projects = const <ProjectEntry>[],
     this.onOpenProject,
     this.onNewProject,
+    this.extensionsOpen = true,
+    this.onExtensionsOpenChanged,
   });
+
+  /// «Расширения» раскрыты; [onExtensionsOpenChanged] запоминает выбор
+  /// (меню на телефоне создаётся заново при каждом открытии).
+  final bool extensionsOpen;
+  final ValueChanged<bool>? onExtensionsOpenChanged;
 
   /// Проекты-папки: строки под «Проектами» ([onOpenProject]), не больше
   /// [projectsShown]; остальные — на экране «Проекты».
@@ -359,7 +366,7 @@ final class _RelayDrawerState extends State<RelayDrawer> {
   final TextEditingController _query = TextEditingController();
   FocusNode? _ownFocus;
   bool _searching = false;
-  bool _extensionsOpen = true;
+  late bool _extensionsOpen = widget.extensionsOpen;
   Timer? _debounce;
   int _generation = 0;
   List<ChatSearchHit>? _hits;
@@ -586,7 +593,11 @@ final class _RelayDrawerState extends State<RelayDrawer> {
   }
 
   Widget _buildExtensions() {
-    void toggle() => setState(() => _extensionsOpen = !_extensionsOpen);
+    void toggle() {
+      setState(() => _extensionsOpen = !_extensionsOpen);
+      widget.onExtensionsOpenChanged?.call(_extensionsOpen);
+    }
+
     return Column(
       key: const Key('drawer-extensions'),
       crossAxisAlignment: CrossAxisAlignment.stretch,

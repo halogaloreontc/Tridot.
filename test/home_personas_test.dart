@@ -544,7 +544,7 @@ void main() {
       expect(_history(tester).last, startsWith('sado: '));
 
       await _say(tester, 'Нода, 2+2');
-      await openSettings(tester);
+      await openSettingsCategory(tester, 'data');
       await _tapSetting(tester, 'clear-chat');
       await tester
           .tap(find.byKey(const ValueKey<String>('clear-chat-confirm')));

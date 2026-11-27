@@ -51,6 +51,13 @@ enum VaultErrorCode {
 
   /// Слишком много неверных вводов: пауза ([VaultRateLimited.until]).
   rateLimited,
+
+  /// Защищённое хранилище ключей устройства (Android Keystore, DPAPI) не
+  /// создало ключ или не ответило. Файл сейфа ни при чём.
+  deviceKey,
+
+  /// Непредвиденная ошибка внутри сейфа (не файл и не ключ устройства).
+  internal,
 }
 
 /// Ошибка хранилища. Только код (и для паузы — время следующей попытки).
@@ -67,6 +74,8 @@ sealed class VaultError implements Exception {
   static const VaultError deviceKeyLost =
       VaultFailure(VaultErrorCode.deviceKeyLost);
   static const VaultError pinLocked = VaultFailure(VaultErrorCode.pinLocked);
+  static const VaultError deviceKey = VaultFailure(VaultErrorCode.deviceKey);
+  static const VaultError internal = VaultFailure(VaultErrorCode.internal);
 
   VaultErrorCode get code;
 

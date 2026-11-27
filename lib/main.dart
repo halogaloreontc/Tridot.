@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'core/chats/attachments.dart';
+import 'app/downloads/download_keeper.dart';
 import 'app/gen/gen_kit.dart';
 import 'app/gen/gen_setup.dart';
 import 'core/skills/table/table_connector.dart';
@@ -79,7 +80,7 @@ import 'core/voice/voice_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Лицензии шрифтов Golos Text, JetBrains Mono и Cormorant Unicase (SIL OFL) —
+  // Лицензии шрифтов Golos Text, JetBrains Mono и Cormorant SC (SIL OFL) —
   // в «Настройки → Лицензии».
   LicenseRegistry.addLicense(() async* {
     final text = await rootBundle.loadString('assets/fonts/GolosText-OFL.txt');
@@ -88,8 +89,8 @@ Future<void> main() async {
         await rootBundle.loadString('assets/fonts/JetBrainsMono-OFL.txt');
     yield LicenseEntryWithLineBreaks(<String>['JetBrains Mono'], mono);
     final display =
-        await rootBundle.loadString('assets/fonts/CormorantUnicase-OFL.txt');
-    yield LicenseEntryWithLineBreaks(<String>['Cormorant Unicase'], display);
+        await rootBundle.loadString('assets/fonts/CormorantSC-OFL.txt');
+    yield LicenseEntryWithLineBreaks(<String>['Cormorant SC'], display);
     // Словари навыка «Пароли»: EFF large (CC BY 3.0 US), SecLists (MIT).
     final words = await rootBundle.loadString('assets/passwords/NOTICE.txt');
     yield LicenseEntryWithLineBreaks(
@@ -458,6 +459,29 @@ Future<void> main() async {
     root: intentSetup.root,
   );
   await intent.refresh();
+  // Загрузка моделей в фоне (ADR-046): на Android служба переднего плана
+  // держит процесс, пока «Лёгкая» или «Продвинутая» скачивается.
+  if (AndroidBackgroundDownloads.current() case final service?) {
+    DownloadKeeper(
+      <KeptDownload>[
+        KeptDownload(
+          listenable: genKit,
+          title: 'Скачивается «Продвинутая»',
+          active: () => genKit.phase == GenKitPhase.downloading,
+          received: () => genKit.received,
+          total: () => genKit.total,
+        ),
+        KeptDownload(
+          listenable: intent,
+          title: 'Скачивается модель понимания',
+          active: () => intent.phase == IntentKitPhase.downloading,
+          received: () => intent.received,
+          total: () => intent.total,
+        ),
+      ],
+      service,
+    );
+  }
   // Вход в приложение по отпечатку / Face ID (ADR-025): включён — экран
   // закрыт с первого кадра, до загрузки остального интерфейса.
   final settingsStore = JsonSettingsStore(p.join(folder, 'settings.json'));

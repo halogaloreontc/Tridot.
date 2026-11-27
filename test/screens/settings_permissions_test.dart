@@ -27,6 +27,7 @@ Future<List<AppSettings>> _pump(
           messageCount: 0,
           onOpenAssistants: () {},
           notify: notify,
+          category: 'notifications',
         ),
       ),
     ),

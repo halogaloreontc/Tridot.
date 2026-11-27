@@ -63,7 +63,7 @@ flutter:
   assets:
     - assets/fonts/GolosText-OFL.txt
     - assets/fonts/JetBrainsMono-OFL.txt
-    - assets/fonts/CormorantUnicase-OFL.txt
+    - assets/fonts/CormorantSC-OFL.txt
     # Встроенные паки (docs/EXTENSIONS.md): только данные, без кода.
     - assets/packs/
     # Каталоги ответов по стилям (docs/REPLIES.md). Ядро читает их копию
@@ -90,7 +90,7 @@ flutter:
       fonts:
         - asset: assets/fonts/JetBrainsMonoVariable.ttf
     # Название «Tridot» и проектов (ADR-021): только начертание SemiBold.
-    - family: Cormorant Unicase
+    - family: Cormorant SC
       fonts:
-        - asset: assets/fonts/CormorantUnicase-SemiBold.ttf
+        - asset: assets/fonts/CormorantSC-SemiBold.ttf
           weight: 600

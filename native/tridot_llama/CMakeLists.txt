@@ -26,3 +26,7 @@ add_subdirectory("${LLAMA_SOURCE_DIR}" llama.cpp EXCLUDE_FROM_ALL)
 add_library(tridot_llama SHARED tridot_llama.cpp)
 target_link_libraries(tridot_llama PRIVATE llama)
 set_target_properties(tridot_llama PROPERTIES CXX_VISIBILITY_PRESET hidden)
+if(ANDROID)
+    # Android 15+: страницы 16 КБ.
+    target_link_options(tridot_llama PRIVATE "-Wl,-z,max-page-size=16384")
+endif()

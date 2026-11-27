@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
+import com.example.local_assistant.downloads.DownloadsChannel
 import com.example.local_assistant.homescreen.HomeScreenChannel
 import com.example.local_assistant.homescreen.HomeScreenWidgets
 import com.example.local_assistant.media.MediaChannel
@@ -70,6 +71,9 @@ class MainActivity : FlutterActivity() {
         // Голосовой ввод распознаванием телефона (ADR-023): только
         // createOnDeviceSpeechRecognizer, звук не уходит с устройства.
         disposeVoice = VoiceChannel.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        // Загрузка моделей в фоне (ADR-046): служба держит процесс, пока
+        // Dart качает модель.
+        DownloadsChannel(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         // «Открыть» у результата карточки расширения (ADR-024): копия во
         // временной папке и FileProvider только на чтение. Путь вне папок
         // приложения не открывается.

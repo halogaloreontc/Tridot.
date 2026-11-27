@@ -128,6 +128,7 @@ Future<_Calls> _pump(
   List<ProjectEntry> projects = const <ProjectEntry>[],
   String? activeSection,
   ThemeData? theme,
+  bool extensionsOpen = true,
 }) async {
   final calls = _Calls();
   tester.view.physicalSize = size;
@@ -144,6 +145,9 @@ Future<_Calls> _pump(
           wide: wide,
           onCollapse: onCollapse,
           reduceMotion: true,
+          extensionsOpen: extensionsOpen,
+          onExtensionsOpenChanged: (bool open) =>
+              calls.log.add('extensions-open:$open'),
           groups: groups ?? _groups,
           counts: counts,
           onSessionAction: (String id, SessionAction action) =>
@@ -324,11 +328,22 @@ void main() {
     }
   });
 
-  testWidgets('дерево расширений сворачивается', (tester) async {
-    await _pump(tester);
+  testWidgets('дерево расширений сворачивается и сообщает выбор',
+      (tester) async {
+    final calls = await _pump(tester);
     await tester.tap(find.byKey(const Key('drawer-extensions-toggle')));
     await tester.pump();
     expect(find.byKey(const Key('drawer-extension-passwords')), findsNothing);
+    expect(calls.log, contains('extensions-open:false'));
+  });
+
+  testWidgets('свёрнутое дерево открывается свёрнутым', (tester) async {
+    final calls = await _pump(tester, extensionsOpen: false);
+    expect(find.byKey(const Key('drawer-extension-passwords')), findsNothing);
+    await tester.tap(find.byKey(const Key('drawer-extensions-toggle')));
+    await tester.pump();
+    expect(find.byKey(const Key('drawer-extension-passwords')), findsOneWidget);
+    expect(calls.log, contains('extensions-open:true'));
   });
 
   testWidgets('без расширений — без раздела', (tester) async {
