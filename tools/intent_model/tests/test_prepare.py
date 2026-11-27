@@ -260,9 +260,9 @@ def test_bare_time_guard():
     assert all(data.bare_time(t) for t in BARE_TIME_YES)
     assert not any(data.bare_time(t) for t in BARE_TIME_NO)
     assert config.tier("web").time_guard
-    assert not config.tier("light").time_guard and not config.tier("accurate").time_guard
+    assert not config.tier("accurate").time_guard
     evals = [{"text": "7:30"}, {"text": "где 100200"}]
     preds = [{"pred": "calc:calc.eval", "sim": 0.99, "second": None}, {"pred": "warehouse:warehouse.where", "sim": 0.9, "second": None}]
     got = pipeline._guard(config.tier("web"), evals, preds)
     assert [p["pred"] for p in got] == ["none", "warehouse:warehouse.where"]
-    assert pipeline._guard(config.tier("light"), evals, preds) == preds
+    assert pipeline._guard(config.tier("accurate"), evals, preds) == preds

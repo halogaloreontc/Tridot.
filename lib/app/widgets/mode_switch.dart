@@ -59,9 +59,9 @@ final class ModeSwitch extends StatelessWidget {
   static const double _track = 44;
   static const double _inset = 2;
   static const double _segment = _track - 2 * _inset;
-  static const double _pad = 12;
+  static const double _pad = 10;
   static const double _icon = 17;
-  static const double _gap = 8;
+  static const double _gap = 6;
 
   /// Помещаются ли подписи целиком в нижнюю строку поля ввода ширины
   /// [rowWidth]: «+» и отправка по 44, зазоры, два сегмента по длинной
