@@ -228,6 +228,58 @@ def export(model, out_dir: Path, per_channel: bool) -> dict:
     return info
 
 
+def quantize_weight_only(src: Path, dst: Path, min_size: int = 1024) -> int:
+    """int8 только для весов-констант MatMul/Gather (симметрично, по
+    выходным каналам) + DequantizeLinear; вычисления остаются fp32.
+
+    Нужен веб-помощнику: onnxruntime-web считает DynamicQuantizeLinear/
+    MatMulInteger не так, как CPU, а с этим вариантом векторы совпадают.
+    Возвращает число квантованных весов.
+    """
+    import onnx
+    from onnx import helper, numpy_helper
+
+    m = onnx.load(str(src))
+    g = m.graph
+    inits = {i.name: i for i in g.initializer}
+    users: dict[str, list] = {}
+    for n in g.node:
+        for x in n.input:
+            users.setdefault(x, []).append(n)
+    new_inits, new_nodes, done = [], [], set()
+    for n in g.node:
+        if n.op_type == "MatMul" and n.input[1] in inits:
+            name, axis = n.input[1], 1
+        elif n.op_type == "Gather" and n.input[0] in inits:
+            name, axis = n.input[0], 0
+        else:
+            continue
+        if name in done or any(u.op_type not in ("MatMul", "Gather") for u in users[name]):
+            continue
+        w = numpy_helper.to_array(inits[name])
+        if w.dtype != np.float32 or w.ndim != 2 or w.size < min_size:
+            continue
+        done.add(name)
+        scale = np.abs(w).max(axis=0 if axis == 1 else 1) / 127.0
+        scale[scale == 0] = 1.0
+        q = np.clip(np.round(w / (scale if axis == 1 else scale[:, None])), -127, 127).astype(np.int8)
+        new_inits += [
+            numpy_helper.from_array(q, name + "_q"),
+            numpy_helper.from_array(scale.astype(np.float32), name + "_s"),
+            numpy_helper.from_array(np.zeros(scale.shape, np.int8), name + "_z"),
+        ]
+        new_nodes.append(helper.make_node(
+            "DequantizeLinear", [name + "_q", name + "_s", name + "_z"], [name], axis=axis, name=name + "_dq"))
+    keep = [i for i in g.initializer if i.name not in done]
+    del g.initializer[:]
+    g.initializer.extend(keep + new_inits)
+    nodes = new_nodes + list(g.node)
+    del g.node[:]
+    g.node.extend(nodes)
+    onnx.save(m, str(dst))
+    return len(done)
+
+
 def export_checked(model, out_dir: Path, tier: config.Tier, probes: Sequence[str]) -> tuple[dict, np.ndarray]:
     """Экспорт int8 с проверкой векторов против fp32 на пробных фразах.
 
@@ -281,10 +333,17 @@ def export_checked(model, out_dir: Path, tier: config.Tier, probes: Sequence[str
          dict(per_channel=not tier.per_channel)),
         ("dynamic int8 (MatMulInteger), reduce_range", dict(per_channel=tier.per_channel, reduce_range=True)),
     ]
+    if tier.quant == "weight_only":
+        variants.insert(0, ("weight-only int8 (DequantizeLinear), по каналам", None))
     for name, kw in variants:
         if int8.exists():
             int8.unlink()
         try:
+            if kw is None:
+                quantize_weight_only(fp32, int8)
+                if assess(name):
+                    return chosen(name)
+                continue
             quantize_dynamic(str(fp32), str(int8), weight_type=QuantType.QInt8, **kw)
             if assess(name):
                 return chosen(name)

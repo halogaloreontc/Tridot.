@@ -1980,3 +1980,11 @@ WorkManager с загрузкой в Kotlin — второй загрузчик 
    семья и лицензия (SIL OFL, Cormorant Project Authors), кириллица
    полная. Шрифт — `assets/fonts/CormorantSC-SemiBold.ttf` (Google Fonts,
    v19).
+
+**Дополнение к ADR-045 (2026-11-27): квантование веб-уровня.** Выпуск падал
+на webcheck: динамическое int8 (DynamicQuantizeLinear + MatMulInteger) у
+onnxruntime-web считает иначе, чем на CPU — у USER-base косинус web/CPU
+0,92–0,97 при планке 0,999. Статическое QDQ ломает модель (косинус с fp32
+~0). Веб-уровень теперь квантует только веса (`Tier.quant = "weight_only"`:
+int8 по каналам + DequantizeLinear, счёт в fp32): web/CPU ≥ 0,9997, архив
+~125 МБ. Приложение (`accurate`) остаётся на динамическом int8.

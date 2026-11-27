@@ -86,6 +86,12 @@ class Tier:
     # кодирование по одной фразе (без паддинга) в holdout/model/verify, чтобы
     # индекс и пробы совпадали с тем, что видит устройство.
     bs1_vectors: bool = False
+    # Способ квантования: «dynamic» — MatMulInteger с квантованием активаций
+    # на лету; «weight_only» — int8 только веса (DequantizeLinear), счёт в
+    # fp32. Динамическое int8 у onnxruntime-web (WASM) считает иначе, чем на
+    # CPU (USER-base: косинус web/CPU до 0,92–0,97), а weight-only совпадает
+    # (≥ 0,9997, замер 2026-11-27) — поэтому веб-уровень берёт его.
+    quant: str = "dynamic"
 
     @property
     def source(self) -> str:
@@ -128,6 +134,7 @@ TIERS: dict[str, Tier] = {
         extra_sets=(WEB_SET,),
         augment=(WEB_SET,),
         time_guard=True,
+        quant="weight_only",
     ),
 }
 
@@ -155,6 +162,7 @@ def tier(name: str) -> Tier:
             base_from=t.base_from,
             augment=t.augment,
             time_guard=t.time_guard,
+            quant=t.quant,
         )
     return t
 
