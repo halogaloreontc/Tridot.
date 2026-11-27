@@ -724,7 +724,7 @@ void main() {
       await _say(tester, 'Добавь задачу «Купить хлеб»');
       await _tap(tester, find.byKey(const Key('new-session')));
       await _say(tester, 'покажи задачи');
-      await openSettings(tester);
+      await openSettingsCategory(tester, 'data');
       final clear = find.byKey(const ValueKey<String>('clear-chat'));
       await _tap(tester, clear);
       await _tap(

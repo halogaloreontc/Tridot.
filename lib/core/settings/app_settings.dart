@@ -108,6 +108,7 @@ final class AppSettings {
     this.intentLogging = true,
     this.intentOffered = false,
     this.genEnabled = false,
+    this.drawerExtensionsOpen = true,
   });
 
   /// Неизвестные или неверного типа значения заменяются значениями по
@@ -166,6 +167,7 @@ final class AppSettings {
       intentLogging: json['intent.logging'] != false,
       intentOffered: json['intent.offered'] == true,
       genEnabled: json['gen.enabled'] == true,
+      drawerExtensionsOpen: json['ui.drawer_extensions_open'] != false,
     );
   }
 
@@ -414,6 +416,10 @@ final class AppSettings {
   /// пользователя. По умолчанию выключено.
   final bool genEnabled;
 
+  /// «Расширения» в меню раскрыты: как оставил человек, между открытиями
+  /// меню и запусками. Впервые — раскрыты.
+  final bool drawerExtensionsOpen;
+
   /// Текст задач уходит на виджет: включён показ и нет входа по отпечатку.
   bool get homeScreenText => homeScreenShowText && !appLock;
 
@@ -451,6 +457,7 @@ final class AppSettings {
     bool? intentLogging,
     bool? intentOffered,
     bool? genEnabled,
+    bool? drawerExtensionsOpen,
   }) =>
       AppSettings(
         appearance: appearance ?? this.appearance,
@@ -487,6 +494,7 @@ final class AppSettings {
         intentLogging: intentLogging ?? this.intentLogging,
         intentOffered: intentOffered ?? this.intentOffered,
         genEnabled: genEnabled ?? this.genEnabled,
+        drawerExtensionsOpen: drawerExtensionsOpen ?? this.drawerExtensionsOpen,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -547,6 +555,7 @@ final class AppSettings {
         if (!intentLogging) 'intent.logging': false,
         if (intentOffered) 'intent.offered': true,
         if (genEnabled) 'gen.enabled': true,
+        if (!drawerExtensionsOpen) 'ui.drawer_extensions_open': false,
       };
 }
 

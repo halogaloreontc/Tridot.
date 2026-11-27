@@ -151,7 +151,7 @@ void main() {
     );
     await tester.pump();
 
-    await openSettings(tester);
+    await openSettingsCategory(tester, 'interface');
     final row = find.byKey(const ValueKey<String>('setting-appearance'));
     await tester.ensureVisible(row);
     await tester.pumpAndSettle();
@@ -185,8 +185,7 @@ void main() {
     );
 
     // Назад в сессию: поле ввода на месте, с тем же текстом.
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+    await closePages(tester);
     final input = find.byKey(const Key('assistant-input'));
     if (input.hitTestable().evaluate().isEmpty) {
       await tapInDrawer(tester, const Key('new-session'));

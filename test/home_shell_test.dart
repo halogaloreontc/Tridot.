@@ -705,6 +705,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('my-relay-tab-settings')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('settings-storage')), findsOneWidget);
+    expect(find.byKey(const Key('settings-cat-data')), findsOneWidget);
   });
 }

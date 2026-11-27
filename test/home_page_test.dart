@@ -848,7 +848,7 @@ void main() {
 
   group('расширения включаются и выключаются без сброса', () {
     Future<void> toggleCalculator(WidgetTester tester) async {
-      await openSettings(tester);
+      await openSettingsCategory(tester, 'extensions');
       final tile = find.byKey(const ValueKey<String>('extension-calc'));
       await tester.ensureVisible(tile);
       await tester.pumpAndSettle();
@@ -927,7 +927,7 @@ void main() {
 
     testWidgets('задачи выключить нельзя', (tester) async {
       await _pump(tester, calculator: true);
-      await openSettings(tester);
+      await openSettingsCategory(tester, 'extensions');
       final tile = tester.widget<SwitchListTile>(
         find.byKey(const ValueKey<String>('extension-tasks')),
       );

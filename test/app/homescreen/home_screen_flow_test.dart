@@ -265,7 +265,7 @@ void main() {
       );
       final fake = home.homeScreen;
       expect(fake.titles, <String>['Тайное дело']);
-      await openSettings(tester);
+      await openSettingsCategory(tester, 'widgets');
       final toggle = find.byKey(const ValueKey<String>('homescreen-show-text'));
       await tester.ensureVisible(toggle);
       await tester.pumpAndSettle();

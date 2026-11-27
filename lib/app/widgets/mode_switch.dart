@@ -21,37 +21,59 @@ final class ModeSwitch extends StatelessWidget {
   final ValueChanged<AssistantViewMode> onChanged;
   final bool labels;
 
-  /// Ширина обеих подписей при текущем шрифте и его масштабе.
-  static double labelsWidth(BuildContext context) {
-    var total = 0.0;
-    for (final label in const <String>['Диалог', 'Документ']) {
-      final painter = TextPainter(
-        text: TextSpan(
-          text: label,
-          style: DefaultTextStyle.of(context).style.merge(
-                const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-              ),
-        ),
-        textDirection: TextDirection.ltr,
-        textScaler: MediaQuery.textScalerOf(context),
-        maxLines: 1,
-      )..layout();
-      total += painter.width;
-      painter.dispose();
-    }
-    return total;
+  static const List<String> _labels = <String>['Диалог', 'Документ'];
+
+  static const TextStyle _labelStyle =
+      TextStyle(fontSize: 14, fontWeight: FontWeight.w500);
+
+  /// Ширина подписи [label] при текущем шрифте и его масштабе.
+  static double _labelWidth(BuildContext context, String label) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: DefaultTextStyle.of(context).style.merge(_labelStyle),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
   }
 
+  /// Ширина обеих подписей при текущем шрифте и его масштабе.
+  static double labelsWidth(BuildContext context) =>
+      _labels.fold(0.0, (sum, l) => sum + _labelWidth(context, l));
+
+  /// Сегменты одной ширины — по длинной подписи: бегунок не меняет размер.
+  static double _segmentWidth(BuildContext context, bool labels) {
+    // Без подписей — по цели нажатия: бегунок 48×40.
+    if (!labels) return AppSize.minTap;
+    final longest = _labels
+        .map((l) => _labelWidth(context, l))
+        .reduce((a, b) => a > b ? a : b);
+    return (2 * _pad + _icon + _gap + longest).ceilToDouble();
+  }
+
+  static const double _track = 44;
+  static const double _inset = 2;
+  static const double _segment = _track - 2 * _inset;
+  static const double _pad = 12;
+  static const double _icon = 17;
+  static const double _gap = 8;
+
   /// Помещаются ли подписи целиком в нижнюю строку поля ввода ширины
-  /// [rowWidth]: «+» и отправка по 44, зазоры, у каждого сегмента поля
-  /// 12 + иконка 17 + зазор 6 + подпись по её реальной ширине + 12.
+  /// [rowWidth]: «+» и отправка по 44, зазоры, два сегмента по длинной
+  /// подписи и отступы дорожки.
   static bool labelsFit(BuildContext context, double rowWidth) =>
-      rowWidth >= 2 * 44 + 16 + 2 * (24 + 17 + 6) + labelsWidth(context);
+      rowWidth >= 2 * 44 + 16 + 2 * _segmentWidth(context, true) + 2 * _inset;
 
   @override
   Widget build(BuildContext context) {
-    // Видимая капсула — 44 (сегменты 40), а цель нажатия у каждого
-    // сегмента — 48 (`AppSize.minTap`): дорожка рисуется позади.
+    final width = _segmentWidth(context, labels);
+    // Дорожка 44, бегунок 40: отступ 2 со всех сторон. Цель нажатия по
+    // высоте — 48 (`AppSize.minTap`), дорожка рисуется позади.
     return Stack(
       alignment: Alignment.center,
       children: <Widget>[
@@ -59,7 +81,7 @@ final class ModeSwitch extends StatelessWidget {
           left: 0,
           right: 0,
           child: Container(
-            height: 44,
+            height: _track,
             // Сегменты заливкой, без рамок (ADR-027). Дорожка — внутри
             // панели поля: чуть темнее её, выбранный сегмент — светлее.
             decoration: BoxDecoration(
@@ -71,7 +93,7 @@ final class ModeSwitch extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.symmetric(horizontal: _inset),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
@@ -81,6 +103,7 @@ final class ModeSwitch extends StatelessWidget {
                 Icons.chat_bubble_outline,
                 AssistantViewMode.dialogue,
                 'mode-dialogue',
+                width,
               ),
               _button(
                 context,
@@ -88,6 +111,7 @@ final class ModeSwitch extends StatelessWidget {
                 Icons.edit_document,
                 AssistantViewMode.document,
                 'mode-document',
+                width,
               ),
             ],
           ),
@@ -102,6 +126,7 @@ final class ModeSwitch extends StatelessWidget {
     IconData icon,
     AssistantViewMode value,
     String key,
+    double width,
   ) {
     final active = mode == value;
     final color = active ? context.colors.textStrong : context.colors.muted;
@@ -118,22 +143,17 @@ final class ModeSwitch extends StatelessWidget {
           key: Key(key),
           onTap: () => onChanged(value),
           borderRadius: BorderRadius.circular(999),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              minHeight: AppSize.minTap,
-              minWidth: AppSize.minTap,
-            ),
-            child: Center(
-              widthFactor: 1,
-              child: _segment(context, label, icon, active, color),
-            ),
+          child: SizedBox(
+            width: width,
+            height: AppSize.minTap,
+            child: Center(child: _thumb(context, label, icon, active, color)),
           ),
         ),
       ),
     );
   }
 
-  Widget _segment(
+  Widget _thumb(
     BuildContext context,
     String label,
     IconData icon,
@@ -142,9 +162,8 @@ final class ModeSwitch extends StatelessWidget {
   ) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 160),
-      constraints: const BoxConstraints(minHeight: 40, minWidth: 44),
+      height: _segment,
       alignment: Alignment.center,
-      padding: EdgeInsets.symmetric(horizontal: labels ? 12 : 8),
       decoration: BoxDecoration(
         // Выбранный сегмент — «бегунок», как у вкладок «Мой Связной»: тот
         // же цвет и, в светлой теме, лёгкая тень (ADR-027).
@@ -155,17 +174,12 @@ final class ModeSwitch extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(icon, size: 17, color: color),
+          Icon(icon, size: _icon, color: color),
           if (labels) ...<Widget>[
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 14,
-                fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-              ),
-            ),
+            const SizedBox(width: _gap),
+            // Вес один у обоих: выбор меняет только цвет, текст не
+            // сдвигается.
+            Text(label, style: _labelStyle.copyWith(color: color)),
           ],
         ],
       ),

@@ -490,7 +490,7 @@ void main() {
       (WidgetTester tester) async {
     await setUpHome();
     await pumpHome(tester);
-    await openSettings(tester);
+    await openSettingsCategory(tester, 'extensions');
     final status =
         find.byKey(const ValueKey<String>('extension-status-passwords'));
     await tester.ensureVisible(status);

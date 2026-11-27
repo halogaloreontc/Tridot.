@@ -31,6 +31,7 @@ Widget host({
   VoidCallback? onClearChat,
   int messageCount = 5,
   ExtensionRegistry? extensions,
+  String? category,
 }) {
   return MaterialApp(
     theme: AssistantTheme.dark(),
@@ -41,6 +42,7 @@ Widget host({
         onClearChat: onClearChat ?? () {},
         messageCount: messageCount,
         extensions: extensions,
+        category: category,
       ),
     ),
   );
@@ -77,6 +79,7 @@ Widget stateful(ExtensionRegistry extensions, List<AppSettings> changes) {
     builder: (context, setState) => host(
       settings: settings,
       extensions: extensions,
+      category: 'extensions',
       onChanged: (value) {
         changes.add(value);
         extensions.apply(
@@ -96,19 +99,19 @@ Finder tile(String id) => find.byKey(ValueKey<String>('extension-$id'));
 const clearKey = ValueKey<String>('clear-chat');
 
 void main() {
-  testWidgets('shows sections and switch values', (tester) async {
+  testWidgets('категории списком; «Оформление» — свои строки', (tester) async {
     await tester.pumpWidget(host());
     expect(find.text('Настройки'), findsOneWidget);
+    for (final id in <String>['interface', 'voice', 'data', 'about']) {
+      expect(find.byKey(ValueKey<String>('settings-cat-$id')), findsOneWidget);
+    }
+    expect(find.text('Уменьшить анимацию'), findsNothing, reason: 'внутри');
+    await tester
+        .tap(find.byKey(const ValueKey<String>('settings-cat-interface')));
+    await tester.pumpAndSettle();
     expect(find.text('Уменьшить анимацию'), findsOneWidget);
     expect(find.text('Кубик и переходы без движения'), findsOneWidget);
     expect(find.text('Время у каждого сообщения'), findsOneWidget);
-    expect(
-      find.text(
-        '${AppInfo.name} · приложение с помощниками, локально, без интернета и '
-        'языковой модели',
-      ),
-      findsOneWidget,
-    );
     final reduce = tester.widget<SwitchListTile>(
       find.byKey(const ValueKey<String>('setting-reduce-motion')),
     );
@@ -120,9 +123,42 @@ void main() {
     expect(stamps.value, isFalse);
   });
 
+  testWidgets('страница категории видит изменения сразу', (tester) async {
+    var settings = const AppSettings();
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) => host(
+          settings: settings,
+          onChanged: (v) => setState(() => settings = v),
+        ),
+      ),
+    );
+    await tester
+        .tap(find.byKey(const ValueKey<String>('settings-cat-interface')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Уменьшить анимацию'));
+    await tester.pumpAndSettle();
+    final reduce = tester.widget<SwitchListTile>(
+      find.byKey(const ValueKey<String>('setting-reduce-motion')),
+    );
+    expect(reduce.value, isTrue);
+  });
+
+  testWidgets('«О приложении»: описание и версия', (tester) async {
+    await tester.pumpWidget(host(category: 'about'));
+    expect(
+      find.text(
+        '${AppInfo.name} · приложение с помощниками, на устройстве, без '
+        'интернета',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('switches report updated settings', (tester) async {
     final changes = <AppSettings>[];
-    await tester.pumpWidget(host(onChanged: changes.add));
+    await tester
+        .pumpWidget(host(onChanged: changes.add, category: 'interface'));
     await tester.tap(find.text('Уменьшить анимацию'));
     await tester.tap(find.text('Время у каждого сообщения'));
     await tester.pump();
@@ -134,7 +170,7 @@ void main() {
   });
 
   testWidgets('clear chat is disabled without messages', (tester) async {
-    await tester.pumpWidget(host(messageCount: 0));
+    await tester.pumpWidget(host(messageCount: 0, category: 'data'));
     // Строка-действие цветом ошибки в группе «Сессии» (ADR-027).
     final row = tester.widget<GroupedRow>(find.byKey(clearKey));
     expect(row.onTap, isNull);
@@ -143,7 +179,7 @@ void main() {
 
   testWidgets('clear chat is enabled from the first message', (tester) async {
     // Приветствия-сообщения нет: одно сообщение — уже история.
-    await tester.pumpWidget(host(messageCount: 1));
+    await tester.pumpWidget(host(messageCount: 1, category: 'data'));
     final row = tester.widget<GroupedRow>(find.byKey(clearKey));
     expect(row.onTap, isNotNull);
   });
@@ -151,7 +187,8 @@ void main() {
   testWidgets('clear chat asks for confirmation; cancel keeps history',
       (tester) async {
     var cleared = 0;
-    await tester.pumpWidget(host(onClearChat: () => cleared++));
+    await tester
+        .pumpWidget(host(onClearChat: () => cleared++, category: 'data'));
     // Раздел «Помощники» выше: кнопка может оказаться ниже экрана.
     await tester.ensureVisible(find.byKey(clearKey));
     await tester.pumpAndSettle();
@@ -172,7 +209,7 @@ void main() {
   });
 
   testWidgets('licenses button opens the license page', (tester) async {
-    await tester.pumpWidget(host());
+    await tester.pumpWidget(host(category: 'about'));
     await tester.ensureVisible(find.byKey(const ValueKey<String>('licenses')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey<String>('licenses')));
@@ -187,6 +224,9 @@ void main() {
     addTearDown(tester.view.reset);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const ValueKey<String>('settings-cat-data')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.ensureVisible(find.byKey(clearKey));
@@ -209,12 +249,16 @@ void main() {
   group('Расширения', () {
     testWidgets('без реестра раздела нет', (tester) async {
       await tester.pumpWidget(host());
-      expect(find.text('Расширения'), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('settings-cat-extensions')),
+        findsNothing,
+      );
     });
 
     testWidgets('группы, строки, бейджи, обязательные задачи', (tester) async {
       final extensions = await tester.runAsync(registry);
-      await tester.pumpWidget(host(extensions: extensions));
+      await tester
+          .pumpWidget(host(extensions: extensions, category: 'extensions'));
       for (final title in <String>['Расширения', 'Навыки', 'Подключения']) {
         expect(find.text(title), findsOneWidget, reason: title);
       }
@@ -539,7 +583,7 @@ void main() {
       expect(find.text('Роли'), findsNothing);
       // Строки-перехода нет, пока экран не знает, куда вести.
       expect(
-        find.byKey(const ValueKey<String>('settings-assistants')),
+        find.byKey(const ValueKey<String>('settings-cat-assistants')),
         findsNothing,
       );
     });
@@ -680,14 +724,16 @@ void main() {
       find.byKey(const ValueKey<String>('main-persona-noda')),
       findsNothing,
     );
-    expect(find.text('Сессии'), findsOneWidget);
-    expect(find.text('Очистить историю сессий'), findsOneWidget);
-    final link = find.byKey(const ValueKey<String>('settings-assistants'));
+    final link = find.byKey(const ValueKey<String>('settings-cat-assistants'));
     expect(find.text('Помощники и роли'), findsOneWidget);
     await tester.ensureVisible(link);
     await tester.pumpAndSettle();
     await tester.tap(link);
     expect(assistants, 1);
+    await tester.tap(find.byKey(const ValueKey<String>('settings-cat-data')));
+    await tester.pumpAndSettle();
+    expect(find.text('Сессии'), findsOneWidget);
+    expect(find.text('Очистить историю сессий'), findsOneWidget);
     final row = find.byKey(const ValueKey<String>('settings-storage'));
     await tester.ensureVisible(row);
     await tester.pumpAndSettle();
@@ -746,6 +792,7 @@ void main() {
                 onClearChat: () {},
                 messageCount: 1,
                 voice: voice,
+                category: 'voice',
               ),
             ),
           ),
@@ -914,7 +961,7 @@ void main() {
         tester.widget<SwitchListTile>(find.byKey(Key(key)));
 
     testWidgets('без движка — только пояснение', (tester) async {
-      await tester.pumpWidget(host());
+      await tester.pumpWidget(host(category: 'voice'));
       expect(find.byKey(const Key('voice-unsupported')), findsOneWidget);
       expect(find.byKey(const Key('setting-voice')), findsNothing);
 

@@ -50,6 +50,18 @@ Future<void> openMyRelay(WidgetTester tester, [String tab = 'summary']) async {
 Future<void> openSettings(WidgetTester tester) =>
     openMyRelay(tester, 'settings');
 
+/// Категория настроек (`interface`, `voice`, `understanding`, `extensions`,
+/// `security`, `data`, `about`, `notifications`, `widgets`): «Мой Связной»
+/// → «Настройки» → категория.
+Future<void> openSettingsCategory(WidgetTester tester, String id) async {
+  await openSettings(tester);
+  final row = find.byKey(Key('settings-cat-$id'));
+  await tester.ensureVisible(row);
+  await tester.pumpAndSettle();
+  await tester.tap(row);
+  await tester.pumpAndSettle();
+}
+
 /// Пункты сессий (не чатов задач) в меню, свежие сверху.
 Finder sessionEntries() => find.byWidgetPredicate(
       (Widget w) =>
@@ -77,6 +89,7 @@ Future<void> openSessionTitled(WidgetTester tester, String title) async {
 /// Обратно в сессию: «назад» из «Мой Связной», иначе самая свежая сессия в
 /// меню (обычно та, где писали команды).
 Future<void> backToSession(WidgetTester tester) async {
+  await closePages(tester);
   final back = find.byKey(const Key('my-relay-back'));
   if (back.evaluate().isNotEmpty) {
     await tester.tap(back);
@@ -181,4 +194,15 @@ Future<void> revealAssistantSetting(WidgetTester tester, String key) async {
   await tester.pumpAndSettle();
   await tester.tap(opener);
   await tester.pumpAndSettle();
+}
+
+/// Закрыть открытые поверх страницы (категории настроек, «Тема»): «Назад»,
+/// пока он есть.
+Future<void> closePages(WidgetTester tester) async {
+  for (var i = 0; i < 5; i++) {
+    final back = find.byType(BackButton).hitTestable();
+    if (back.evaluate().isEmpty) return;
+    await tester.tap(back.first);
+    await tester.pumpAndSettle();
+  }
 }

@@ -428,7 +428,7 @@ final List<_Case> _cases = <_Case>[
     'настройки: добавить пак',
     (tester) async {
       await _home(tester);
-      await openSettings(tester);
+      await openSettingsCategory(tester, 'extensions');
       await tester.ensureVisible(_value('pack-add'));
       await tester.pumpAndSettle();
       await tester.tap(_value('pack-add'));

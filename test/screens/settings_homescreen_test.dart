@@ -30,6 +30,7 @@ Future<List<AppSettings>> _pump(
           onClearChat: () {},
           messageCount: 0,
           homeScreen: homeScreen,
+          category: 'widgets',
         ),
       ),
     ),
