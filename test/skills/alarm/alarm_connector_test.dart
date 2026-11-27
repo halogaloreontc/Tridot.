@@ -63,15 +63,14 @@ void main() {
     }
   });
 
-  test('будильник: вопрос с кнопками, «Поставить» открывает «Часы»', () async {
+  test('будильник: вопрос с кнопками, «Поставить» ставит в «Часах»', () async {
     final setter = _Setter();
     final (:assistant, tasks: _) = _make(setter);
     final ask = await assistant.handle('поставь будильник на 7 по будням');
     expect(ask.status, AssistantStatus.needsClarification);
     expect(ask.intent, AlarmPhrases.setCommand);
     // Нода говорит дружеским стилем: «Ставлю будильник на 7:00…?».
-    expect(ask.message, contains('будильник на 7:00 по будням?'));
-    expect(ask.message, contains('Откроются «Часы»'));
+    expect(ask.message, contains('будильник на 7:00 по будням в «Часах»?'));
     // Будильник — зона оповещений: в Трио отвечает Нода.
     expect(ask.personaId, 'noda');
     final options = assistant.pendingClarification!.options;
