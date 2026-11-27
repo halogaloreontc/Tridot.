@@ -27,6 +27,10 @@
          с заполненным будильником, человек подтверждает там. Обычное
          разрешение, без вопроса. -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM"/>
+    <!-- Загрузка моделей в фоне (ADR-046): служба переднего плана dataSync
+         с уведомлением о ходе, только пока идёт загрузка. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <!-- Сканер QR склада (ADR-031): камера — только пока открыта шторка
          «Сканировать QR»; код распознаётся на телефоне встроенной моделью,
          кадры не сохраняются и никуда не отправляются. Разрешение
@@ -44,6 +48,10 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         tools:targetApi="31">
+        <service
+            android:name=".downloads.DownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

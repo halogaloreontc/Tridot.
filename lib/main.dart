@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'core/chats/attachments.dart';
+import 'app/downloads/download_keeper.dart';
 import 'app/gen/gen_kit.dart';
 import 'app/gen/gen_setup.dart';
 import 'core/skills/table/table_connector.dart';
@@ -458,6 +459,29 @@ Future<void> main() async {
     root: intentSetup.root,
   );
   await intent.refresh();
+  // Загрузка моделей в фоне (ADR-046): на Android служба переднего плана
+  // держит процесс, пока «Лёгкая» или «Продвинутая» скачивается.
+  if (AndroidBackgroundDownloads.current() case final service?) {
+    DownloadKeeper(
+      <KeptDownload>[
+        KeptDownload(
+          listenable: genKit,
+          title: 'Скачивается «Продвинутая»',
+          active: () => genKit.phase == GenKitPhase.downloading,
+          received: () => genKit.received,
+          total: () => genKit.total,
+        ),
+        KeptDownload(
+          listenable: intent,
+          title: 'Скачивается модель понимания',
+          active: () => intent.phase == IntentKitPhase.downloading,
+          received: () => intent.received,
+          total: () => intent.total,
+        ),
+      ],
+      service,
+    );
+  }
   // Вход в приложение по отпечатку / Face ID (ADR-025): включён — экран
   // закрыт с первого кадра, до загрузки остального интерфейса.
   final settingsStore = JsonSettingsStore(p.join(folder, 'settings.json'));
