@@ -1953,7 +1953,7 @@ final class Vault {
           const VaultFailure(VaultErrorCode.bioCanceled),
         DeviceKeyFailure.lockout =>
           const VaultFailure(VaultErrorCode.bioLockedOut),
-        DeviceKeyFailure.unavailable => VaultError.io,
+        DeviceKeyFailure.unavailable => VaultError.deviceKey,
       };
 
   /// «Начать заново» (5.11): мастер-пароль не нужен — кто держит
@@ -4195,7 +4195,8 @@ final class Vault {
     } on StateError catch (error) {
       throw StateError(error.message);
     } catch (_) {
-      throw VaultError.io;
+      // Файл — уже VaultError.io из хранилища; остальное — не файл.
+      throw VaultError.internal;
     }
   }
 

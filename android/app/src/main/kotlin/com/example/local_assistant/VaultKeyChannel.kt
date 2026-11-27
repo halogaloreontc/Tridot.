@@ -13,7 +13,6 @@ import android.os.Looper
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
-import android.security.keystore.StrongBoxUnavailableException
 import android.security.keystore.UserNotAuthenticatedException
 import android.view.WindowManager
 import io.flutter.plugin.common.BinaryMessenger
@@ -94,17 +93,36 @@ class VaultKeyChannel(
         val alias = "tridot-vault-" + UUID.randomUUID().toString()
         val strongBox = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
             activity.packageManager.hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)
-        try {
-            generate(alias, userAuth, strongBox)
-        } catch (error: Exception) {
-            if (!strongBox || !isStrongBoxError(error)) throw error
-            generate(alias, userAuth, false)
+        if (strongBox) {
+            // StrongBox у многих телефонов не держит HMAC-SHA256: ключ не
+            // создаётся (ProviderException, не только
+            // StrongBoxUnavailableException) или создаётся, но не считает.
+            // Тогда — ключ в TEE: он тоже не покидает защищённое железо.
+            try {
+                generate(alias, userAuth, true)
+                if (userAuth || works(alias)) return alias
+            } catch (error: Exception) {
+                // Ниже — без StrongBox.
+            }
+            try {
+                keyStore().deleteEntry(alias)
+            } catch (error: Exception) {
+                // Ключа нет — нечего удалять.
+            }
         }
+        generate(alias, userAuth, false)
         return alias
     }
 
-    private fun isStrongBoxError(error: Exception): Boolean =
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && error is StrongBoxUnavailableException
+    /** Ключ без проверки личности считает HMAC: пробное сообщение. */
+    private fun works(alias: String): Boolean = try {
+        val key = keyStore().getKey(alias, null) as SecretKey
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(key)
+        mac.doFinal(ByteArray(32)).size == 32
+    } catch (error: Exception) {
+        false
+    }
 
     private fun generate(alias: String, userAuth: Boolean, strongBox: Boolean) {
         val builder = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)

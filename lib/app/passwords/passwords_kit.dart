@@ -1094,6 +1094,11 @@ String vaultErrorText(VaultErrorCode code, {bool recovery = false}) =>
       VaultErrorCode.tooNew =>
         'Сейф создан более новой версией приложения — обновите его.',
       VaultErrorCode.io => 'Не удалось прочитать или записать файл сейфа.',
+      VaultErrorCode.deviceKey =>
+        'Защищённая память ключей телефона не ответила. Данные не тронуты — '
+            'попробуйте ещё раз.',
+      VaultErrorCode.internal =>
+        'Внутренняя ошибка сейфа. Данные не тронуты — попробуйте ещё раз.',
       VaultErrorCode.locked => 'Сейф заперт.',
     };
 

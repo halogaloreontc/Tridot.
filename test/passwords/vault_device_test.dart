@@ -193,11 +193,11 @@ void main() {
       final (vault, store, device, _, _) = await protectedVault();
       vault.lock();
       final alias = device.aliases.single;
-      // Временный сбой (DPAPI, Keystore занят) — io, слот на месте.
+      // Временный сбой (DPAPI, Keystore занят) — deviceKey, слот на месте.
       device.nextMac = DeviceKeyFailure.unavailable;
       await expectLater(
         testVault(store, crypto, deviceKey: device).unlockDevice(),
-        throwsA(VaultError.io),
+        throwsA(VaultError.deviceKey),
       );
       final info = await testVault(store, crypto, deviceKey: device).lockInfo();
       expect(info!.device, isTrue);
