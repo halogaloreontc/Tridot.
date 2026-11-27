@@ -564,11 +564,11 @@ class FilledFieldBorder extends OutlineInputBorder {
 
 /// Шрифты приложения (ADR-021, ADR-027). Основной — Golos Text (тема);
 /// моноширинный JetBrains Mono — только пароли и коды восстановления;
-/// Cormorant Unicase SemiBold — название «Tridot» и названия проектов.
+/// Cormorant SC SemiBold (капитель) — название «Tridot» и названия проектов.
 abstract final class AppFonts {
   static const String text = 'Golos Text';
   static const String mono = 'JetBrains Mono';
-  static const String display = 'Cormorant Unicase';
+  static const String display = 'Cormorant SC';
 }
 
 /// Метаданные: подписи, футеры, версия. 13 — минимум (ADR-027).
@@ -598,8 +598,9 @@ const monoTextStyle = TextStyle(
   fontFamilyFallback: <String>['monospace'],
 );
 
-/// Название приложения и проектов: Cormorant Unicase SemiBold. Буквы у
-/// него одной высоты и мельче Golos Text того же кегля — размер задаёт место.
+/// Название приложения и проектов: Cormorant SC SemiBold — капитель: все
+/// буквы заглавные, строчные — заглавными меньшего размера («Tridot» →
+/// T и мелкие RIDOT). Мельче Golos Text того же кегля — размер задаёт место.
 /// Цвета нет — он из палитры.
 const displayTextStyle = TextStyle(
   fontFamily: AppFonts.display,

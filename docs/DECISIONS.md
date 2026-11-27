@@ -1974,3 +1974,9 @@ WorkManager с загрузкой в Kotlin — второй загрузчик 
 3. **«Расширения» в меню** — свёрнуты или раскрыты, как оставил человек
    (`ui.drawer_extensions_open`, впервые — раскрыты), между открытиями меню
    и запусками.
+4. **Название — капитель** (решение владельца): Cormorant SC SemiBold
+   вместо Cormorant Unicase (ADR-021): все буквы заглавные, строчные —
+   заглавными меньшего размера («Tridot» → T и мелкие RIDOT). Та же
+   семья и лицензия (SIL OFL, Cormorant Project Authors), кириллица
+   полная. Шрифт — `assets/fonts/CormorantSC-SemiBold.ttf` (Google Fonts,
+   v19).

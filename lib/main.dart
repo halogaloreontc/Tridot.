@@ -80,7 +80,7 @@ import 'core/voice/voice_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Лицензии шрифтов Golos Text, JetBrains Mono и Cormorant Unicase (SIL OFL) —
+  // Лицензии шрифтов Golos Text, JetBrains Mono и Cormorant SC (SIL OFL) —
   // в «Настройки → Лицензии».
   LicenseRegistry.addLicense(() async* {
     final text = await rootBundle.loadString('assets/fonts/GolosText-OFL.txt');
@@ -89,8 +89,8 @@ Future<void> main() async {
         await rootBundle.loadString('assets/fonts/JetBrainsMono-OFL.txt');
     yield LicenseEntryWithLineBreaks(<String>['JetBrains Mono'], mono);
     final display =
-        await rootBundle.loadString('assets/fonts/CormorantUnicase-OFL.txt');
-    yield LicenseEntryWithLineBreaks(<String>['Cormorant Unicase'], display);
+        await rootBundle.loadString('assets/fonts/CormorantSC-OFL.txt');
+    yield LicenseEntryWithLineBreaks(<String>['Cormorant SC'], display);
     // Словари навыка «Пароли»: EFF large (CC BY 3.0 US), SecLists (MIT).
     final words = await rootBundle.loadString('assets/passwords/NOTICE.txt');
     yield LicenseEntryWithLineBreaks(

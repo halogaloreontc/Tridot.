@@ -1,6 +1,6 @@
 // Шрифты и шкала текста (ADR-021, ADR-027 и поправка «плотнее»): Golos
 // Text — весь текст, шкала 16/14/13, ничего мельче 13; JetBrains Mono — только пароли и коды
-// восстановления; Cormorant Unicase — «Tridot» и названия проектов. Команды
+// восстановления; Cormorant SC — «Tridot» и названия проектов. Команды
 // в ленте — обычный текст, в поле ввода выделен только глагол.
 import 'dart:io';
 
@@ -182,29 +182,29 @@ void main() {
       });
     }
 
-    test('моноширинный — JetBrains Mono, название — Cormorant Unicase 600', () {
+    test('моноширинный — JetBrains Mono, название — Cormorant SC 600', () {
       expect(monoTextStyle.fontFamily, 'JetBrains Mono');
-      expect(displayTextStyle.fontFamily, 'Cormorant Unicase');
+      expect(displayTextStyle.fontFamily, 'Cormorant SC');
       expect(displayTextStyle.fontWeight, FontWeight.w600);
       expect(displayTextStyle.color, isNull);
       expect(
         projectNameStyle(color: AppPalette.light.textStrong).fontFamily,
-        'Cormorant Unicase',
+        'Cormorant SC',
       );
     });
 
     test('шрифт названия подключён в pubspec, лицензия — в main.dart', () {
       final pubspec = File('pubspec.yaml').readAsStringSync();
-      expect(pubspec, contains('family: Cormorant Unicase'));
-      expect(pubspec, contains('assets/fonts/CormorantUnicase-SemiBold.ttf'));
-      expect(pubspec, contains('assets/fonts/CormorantUnicase-OFL.txt'));
+      expect(pubspec, contains('family: Cormorant SC'));
+      expect(pubspec, contains('assets/fonts/CormorantSC-SemiBold.ttf'));
+      expect(pubspec, contains('assets/fonts/CormorantSC-OFL.txt'));
       expect(
-        File('assets/fonts/CormorantUnicase-SemiBold.ttf').existsSync(),
+        File('assets/fonts/CormorantSC-SemiBold.ttf').existsSync(),
         isTrue,
       );
       final main = File('lib/main.dart').readAsStringSync();
-      expect(main, contains("'assets/fonts/CormorantUnicase-OFL.txt'"));
-      expect(main, contains("<String>['Cormorant Unicase']"));
+      expect(main, contains("'assets/fonts/CormorantSC-OFL.txt'"));
+      expect(main, contains("<String>['Cormorant SC']"));
     });
 
     test('шрифт текста — Golos Text: pubspec, файлы, лицензия; Inter нет', () {
